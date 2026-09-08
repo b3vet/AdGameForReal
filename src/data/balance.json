@@ -1,0 +1,60 @@
+{
+  "squad": {
+    "runSpeed": 5,
+    "lateralSpeed": 8,
+    "fireRate": 2,
+    "damage": 1,
+    "maxCount": 500
+  },
+  "projectiles": {
+    "speed": 24,
+    "range": 34,
+    "max": 400
+  },
+  "road": {
+    "laneWidth": 2,
+    "halfWidth": 3,
+    "clampX": 2.6
+  },
+  "enemies": {
+    "activationDistance": 26,
+    "contactDistance": 1.2,
+    "grunt": {
+      "hpPerUnit": 3,
+      "speed": 3,
+      "footprint": 0.9
+    },
+    "brute": {
+      "hpPerUnit": 30,
+      "speed": 2,
+      "footprint": 1.1
+    },
+    "boss": {
+      "hpPerUnit": 10,
+      "speed": 1.6,
+      "footprint": 2.2,
+      "stompInterval": 2.5,
+      "stompRange": 7,
+      "stompKills": 3,
+      "contactKillsPerSecond": 6
+    }
+  },
+  "level": {
+    "rowSpacing": 18,
+    "bossOffset": 22
+  },
+  "gates": {
+    "caps": {
+      "add": 250,
+      "fireRate": 1.0
+    },
+    "hitStep": {
+      "add": 1,
+      "sub": 1,
+      "fireRate": 0.02
+    }
+  },
+  "input": {
+    "sensitivity": 6
+  }
+}

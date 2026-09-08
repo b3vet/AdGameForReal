@@ -1,0 +1,332 @@
+[
+  {
+    "index": 1,
+    "seed": 1137,
+    "rows": 8,
+    "startCount": 5,
+    "hpScale": 1,
+    "boss": {
+      "hp": 120
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 2
+      },
+      "add": {
+        "min": 3,
+        "max": 8
+      },
+      "sub": {
+        "min": 2,
+        "max": 4
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 2,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 2,
+    "seed": 1274,
+    "rows": 8,
+    "startCount": 5,
+    "hpScale": 1.3,
+    "boss": {
+      "hp": 190
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 2
+      },
+      "add": {
+        "min": 3,
+        "max": 10
+      },
+      "sub": {
+        "min": 2,
+        "max": 6
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 2,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 3,
+    "seed": 1411,
+    "rows": 9,
+    "startCount": 6,
+    "hpScale": 1.6,
+    "boss": {
+      "hp": 280
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 2
+      },
+      "add": {
+        "min": 3,
+        "max": 12
+      },
+      "sub": {
+        "min": 2,
+        "max": 8
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 3,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 4,
+    "seed": 1548,
+    "rows": 9,
+    "startCount": 6,
+    "hpScale": 1.9,
+    "boss": {
+      "hp": 390
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 3,
+        "max": 14
+      },
+      "sub": {
+        "min": 2,
+        "max": 10
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 3,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 5,
+    "seed": 1685,
+    "rows": 10,
+    "startCount": 7,
+    "hpScale": 2.3,
+    "boss": {
+      "hp": 520
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 3,
+        "max": 16
+      },
+      "sub": {
+        "min": 2,
+        "max": 12
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 4,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 6,
+    "seed": 1822,
+    "rows": 11,
+    "startCount": 8,
+    "hpScale": 2.7,
+    "boss": {
+      "hp": 680
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 3,
+        "max": 18
+      },
+      "sub": {
+        "min": 2,
+        "max": 14
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 4,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 7,
+    "seed": 1959,
+    "rows": 11,
+    "startCount": 9,
+    "hpScale": 3.1,
+    "boss": {
+      "hp": 860
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 4
+      },
+      "add": {
+        "min": 3,
+        "max": 20
+      },
+      "sub": {
+        "min": 2,
+        "max": 16
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 5,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 8,
+    "seed": 2096,
+    "rows": 12,
+    "startCount": 10,
+    "hpScale": 3.6,
+    "boss": {
+      "hp": 1070
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 4
+      },
+      "add": {
+        "min": 3,
+        "max": 22
+      },
+      "sub": {
+        "min": 2,
+        "max": 18
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 5,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 9,
+    "seed": 2233,
+    "rows": 13,
+    "startCount": 11,
+    "hpScale": 4,
+    "boss": {
+      "hp": 1280
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 4
+      },
+      "add": {
+        "min": 3,
+        "max": 24
+      },
+      "sub": {
+        "min": 2,
+        "max": 20
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 6,
+      "mixed": 3
+    }
+  },
+  {
+    "index": 10,
+    "seed": 2370,
+    "rows": 14,
+    "startCount": 12,
+    "hpScale": 4.5,
+    "boss": {
+      "hp": 1500
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 5
+      },
+      "add": {
+        "min": 3,
+        "max": 26
+      },
+      "sub": {
+        "min": 2,
+        "max": 22
+      },
+      "fireRate": {
+        "min": 0.05,
+        "max": 0.2
+      }
+    },
+    "rowWeights": {
+      "gate": 5,
+      "enemy": 6,
+      "mixed": 3
+    }
+  }
+]

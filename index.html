@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Arcane Rush: a portrait lane-defense auto-shooter." />
+    <title>Arcane Rush</title>
+  </head>
+  <body>
+    <canvas id="game-canvas" touch-action="none"></canvas>
+
+    <div id="overlay-root">
+      <!-- Title. scripts/smoke.mjs clicks #play-button; keep that id stable. -->
+      <section id="title-screen" class="screen">
+        <div class="screen__top">
+          <h1 class="screen__title">Arcane&nbsp;Rush</h1>
+          <p class="screen__hint">Drag to move. Your squad fires by itself.</p>
+        </div>
+        <div class="screen__actions">
+          <button id="play-button" class="button" type="button">Play</button>
+        </div>
+      </section>
+
+      <!-- HUD: squad count, level label, boss bar (Phase B3). -->
+      <section id="hud" class="screen" hidden></section>
+
+      <!-- Result: survivors, peak count, Retry / Next (Phase B3). -->
+      <section id="result-screen" class="screen" hidden></section>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,106 @@
+/**
+ * Pointer and keyboard steering.
+ *
+ * `onDeltaX` receives a horizontal delta in **CSS pixels**. Converting pixels to
+ * road meters is the caller's job, because the conversion factor
+ * (`balance.input.sensitivity`) is tuning data and tuning lives in `src/data`
+ * (CLAUDE.md).
+ *
+ * No tap-to-move: a tap with no drag produces no delta, so the UI buttons
+ * layered over the canvas stay usable.
+ */
+
+export type DetachInput = () => void;
+
+/** CSS pixels per second of held key, matched to a brisk drag. */
+const KEY_SPEED = 900;
+
+export function attachInput(
+  canvas: HTMLCanvasElement,
+  onDeltaX: (deltaXPixels: number) => void,
+): DetachInput {
+  let activePointerId: number | null = null;
+  let lastX = 0;
+
+  const heldKeys = new Set<string>();
+  let keyRafId: number | null = null;
+  let keyLastTime = 0;
+
+  const onPointerDown = (event: PointerEvent): void => {
+    if (activePointerId !== null) return;
+    activePointerId = event.pointerId;
+    lastX = event.clientX;
+    canvas.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== activePointerId) return;
+    const delta = event.clientX - lastX;
+    lastX = event.clientX;
+    if (delta !== 0) onDeltaX(delta);
+  };
+
+  const endPointer = (event: PointerEvent): void => {
+    if (event.pointerId !== activePointerId) return;
+    activePointerId = null;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  };
+
+  const stepKeys = (time: number): void => {
+    const dt = keyLastTime === 0 ? 0 : Math.min(0.05, (time - keyLastTime) / 1000);
+    keyLastTime = time;
+
+    let direction = 0;
+    if (heldKeys.has('ArrowLeft') || heldKeys.has('KeyA')) direction -= 1;
+    if (heldKeys.has('ArrowRight') || heldKeys.has('KeyD')) direction += 1;
+    if (direction !== 0 && dt > 0) onDeltaX(direction * KEY_SPEED * dt);
+
+    if (heldKeys.size === 0) {
+      keyRafId = null;
+      keyLastTime = 0;
+      return;
+    }
+    keyRafId = requestAnimationFrame(stepKeys);
+  };
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (!isSteerKey(event.code)) return;
+    event.preventDefault();
+    heldKeys.add(event.code);
+    if (keyRafId === null) keyRafId = requestAnimationFrame(stepKeys);
+  };
+
+  const onKeyUp = (event: KeyboardEvent): void => {
+    heldKeys.delete(event.code);
+  };
+
+  const onBlur = (): void => {
+    heldKeys.clear();
+  };
+
+  // Passive: the page never scrolls (the canvas fills the viewport and
+  // `touch-action: none` is set in CSS), so there is nothing to preventDefault.
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: true });
+  canvas.addEventListener('pointermove', onPointerMove, { passive: true });
+  canvas.addEventListener('pointerup', endPointer, { passive: true });
+  canvas.addEventListener('pointercancel', endPointer, { passive: true });
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
+
+  return function detach(): void {
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', endPointer);
+    canvas.removeEventListener('pointercancel', endPointer);
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur);
+    if (keyRafId !== null) cancelAnimationFrame(keyRafId);
+    heldKeys.clear();
+  };
+}
+
+function isSteerKey(code: string): boolean {
+  return code === 'ArrowLeft' || code === 'ArrowRight' || code === 'KeyA' || code === 'KeyD';
+}
