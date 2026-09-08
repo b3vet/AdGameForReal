@@ -20,4 +20,6 @@ Index:
 | `03-milestone-1-plan.md` | Milestone 1 spec: greybox playable, module contracts, team plan |
 | `04-milestone-1-log.md` | Milestone 1 process log (append-only) |
 | `05-milestone-2-plan-draft.md` | Milestone 2 draft plan v1, awaiting playtest feedback; final plan will be 06 |
+| `06-milestone-2-plan.md` | Milestone 2 plan, approved: characters, physics, weapons, audio, biome, difficulty retune |
+| `07-milestone-2-log.md` | Milestone 2 process log (append-only) |
 | `DECISIONS.md` | Decision ledger (append-only) |

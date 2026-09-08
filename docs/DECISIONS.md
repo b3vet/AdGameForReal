@@ -19,3 +19,8 @@
 | D15 | 2026-09-08 | The squad's x clamp tapers by formation half-width with a floor of ±1 m so the crowd never overhangs the road. | 04 (Phase D) |
 | D16 | 2026-09-08 | Playtest delivery is the standalone HTML file until hosting is resolved; the hosted artifact route is blocked by a service-side misclassification of the bundle (supersedes the hosted half of D11). | 04 (Phase D) |
 | D17 | 2026-09-08 | Hosted playtest links use `npm run build:hosted`: only the game code is inlined and Babylon core and GUI load from jsdelivr as UMD globals. The fully inlined build stays for standalone files. Supersedes D16. | 04 (post-close) |
+| D18 | 2026-09-08 | Milestone 2 approved. Physics (Havok) is presentation-only: it consumes sim events and never feeds back into the sim. | 06 |
+| D19 | 2026-09-08 | Gate shoot-to-grow is a rate per second scaled by the fraction of squad fire hitting the gate, capped per gate, replacing +1 per hit. | 06 |
+| D20 | 2026-09-08 | Difficulty targets: a good player ends with 35 to 65 percent of peak; boss fights last 20 to 30 s; curses start small enough to be shot down. | 06 |
+| D21 | 2026-09-08 | Tone is epic and heavy: sound, palette, camera shake, boss weight, UI copy. Staffs are Ember, Storm, Frost. | 06 |
+| D22 | 2026-09-08 | Single-file builds inline every asset and the Havok WASM as data because the page host blocks runtime fetches; dev and production builds load assets by URL. | 06 |

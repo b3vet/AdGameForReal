@@ -19,7 +19,7 @@ iOS and Android later.
 
 - Babylon.js 9 (`@babylonjs/core`, `@babylonjs/gui`), TypeScript strict, Vite,
   Vitest, Playwright 1.56.1 (pinned: the browser at `/opt/pw-browsers` is 1194).
-- No physics engine yet (Havok arrives in Milestone 2).
+- Physics: Havok (`@babylonjs/havok`) as a presentation-only layer in `src/physics` from Milestone 2; the sim never reads it.
 - No ads, no IAP, no analytics SDKs. Do not add any.
 
 ## Commands
@@ -43,6 +43,9 @@ src/data/     JSON tuning and level generation config
 src/render/   Babylon scene, camera, meshes, labels, effects
 src/core/     app state machine, input, save data, debug handle
 src/ui/       HTML/CSS overlays: title, HUD, result
+src/physics/  presentation-only Havok layer: ragdolls, shards, debris (M2)
+src/audio/    audio engine, event-to-sound map (M2)
+assets/       glTF, baked animation textures, audio, textures (M2)
 src/main.ts   boot
 scripts/      build-artifact, smoke test
 docs/         plans, decisions, logs (see docs/README.md)
