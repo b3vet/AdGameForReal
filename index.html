@@ -19,7 +19,9 @@
         <div class="screen__inner">
           <div class="screen__top">
             <h1 class="screen__title">Arcane&nbsp;Rush</h1>
-            <p class="screen__hint">Drag to move. Your squad fires by itself.</p>
+            <p class="screen__hint">
+              Drag to steer the line. Your apprentices cast without being told.
+            </p>
           </div>
 
           <div class="screen__middle">
@@ -32,6 +34,22 @@
             <button id="play-button" class="button" type="button">Play</button>
           </div>
         </div>
+
+        <!-- Mute lives on the title and in the HUD corner; both drive the save. -->
+        <button
+          id="mute-title"
+          class="mute mute--title"
+          type="button"
+          aria-label="Sound"
+          aria-pressed="false"
+        >
+          <svg class="mute__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="mute__horn" d="M4 9h4l5-4v14l-5-4H4z" />
+            <path class="mute__wave" d="M16.2 8.4a5 5 0 0 1 0 7.2" />
+            <path class="mute__wave" d="M18.6 6a8.5 8.5 0 0 1 0 12" />
+            <path class="mute__slash" d="M4 3.5 21 20.5" />
+          </svg>
+        </button>
       </section>
 
       <!-- HUD: informational only, so it never eats a drag (pointer-events: none). -->
@@ -40,12 +58,33 @@
           <div class="hud__stack">
             <div class="hud__top">
               <div id="hud-level" class="hud__level">Level 1</div>
-              <div id="hud-count" class="hud__count">0</div>
+
+              <!-- The badge is absolutely placed so the count stays optically
+                   centred however long the staff name is. -->
+              <div class="hud__countwrap">
+                <div id="hud-count" class="hud__count">0</div>
+                <span id="hud-staff" class="hud__staff" data-staff="ember">Ember</span>
+              </div>
+
+              <button
+                id="mute-hud"
+                class="mute mute--hud"
+                type="button"
+                aria-label="Sound"
+                aria-pressed="false"
+              >
+                <svg class="mute__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path class="mute__horn" d="M4 9h4l5-4v14l-5-4H4z" />
+                  <path class="mute__wave" d="M16.2 8.4a5 5 0 0 1 0 7.2" />
+                  <path class="mute__wave" d="M18.6 6a8.5 8.5 0 0 1 0 12" />
+                  <path class="mute__slash" d="M4 3.5 21 20.5" />
+                </svg>
+              </button>
             </div>
 
             <div id="boss-bar" class="boss" hidden>
               <div class="boss__head">
-                <span class="boss__label">Boss</span>
+                <span id="boss-bar-label" class="boss__label">Boss</span>
                 <span id="boss-bar-value" class="boss__value">0 / 0</span>
               </div>
               <div class="boss__track"><div id="boss-bar-fill" class="boss__fill"></div></div>
@@ -60,14 +99,17 @@
             <b class="legend__rate">&#9889;rate</b>
           </p>
         </div>
+
+        <!-- Staff swap announcement; hidden until a weapon gate fires. -->
+        <p id="staff-flash" class="staff-flash" data-staff="ember" hidden>Ember Staff</p>
       </section>
 
-      <!-- Result: survivors, peak count, Retry / Next. -->
+      <!-- Result: survivors, peak count, Ascend / Again / Levels. -->
       <section id="result-screen" class="screen screen--menu" hidden>
         <div class="screen__inner">
           <div class="screen__top">
-            <p id="result-kicker" class="result__kicker">Run over</p>
-            <h2 id="result-title" class="screen__title screen__title--result">Defeated</h2>
+            <p id="result-kicker" class="result__kicker">The horde is slain</p>
+            <h2 id="result-title" class="screen__title screen__title--result">Level 1</h2>
           </div>
 
           <div class="screen__middle">
@@ -84,14 +126,17 @@
           </div>
 
           <div class="screen__actions">
-            <button id="next-button" class="button" type="button" hidden>Next</button>
-            <button id="retry-button" class="button button--ghost" type="button">Retry</button>
+            <button id="next-button" class="button" type="button" hidden>Ascend</button>
+            <button id="retry-button" class="button button--ghost" type="button">Again</button>
             <button id="levels-button" class="button button--ghost" type="button">Levels</button>
           </div>
         </div>
       </section>
 
-      <!-- ?debug only. Monospace, top-left, never interactive. -->
+      <!-- Win confetti. Last before the debug panel so it paints over the result. -->
+      <canvas id="confetti" hidden></canvas>
+
+      <!-- ?debug only. Monospace, bottom-left, never interactive. -->
       <pre id="debug-panel" class="debug" hidden></pre>
     </div>
 

@@ -79,6 +79,10 @@ body {
 }
 
 .screen {
+  /* Positioned so the mute button and the staff flash can be placed against the
+     screen's own box rather than the overlay root's, which is inset by the
+     safe area and would double-count it. */
+  position: relative;
   display: flex;
   justify-content: center;
   min-height: 0;
@@ -286,5 +290,162 @@ body {
 
   .screen__top {
     margin-top: 0;
+  }
+}
+
+/* --- Defeat: the scene drains of colour before the result screen ---------- */
+
+/*
+ * A filter on the canvas rather than a post-process in the scene: it costs the
+ * renderer nothing, it cannot fight the render agent's pipeline, and it fades
+ * with the same easing on every device. `App` adds the class when a run is lost
+ * and removes it when the next one starts.
+ */
+#game-canvas {
+  transition: filter 500ms linear;
+}
+
+#game-canvas.is-defeated {
+  filter: saturate(0.12) brightness(0.86) contrast(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #game-canvas {
+    transition-duration: 1ms;
+  }
+}
+
+/* --- Mute ---------------------------------------------------------------- */
+
+/*
+ * Two instances of the same control: one on the title, one in the HUD's top
+ * right. Both write `muted` to the save, so whichever the player finds first
+ * is the one that matters.
+ */
+.mute {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(10, 7, 22, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(164, 140, 255, 0.28);
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  /* The overlay is click-through; its controls are not. */
+  pointer-events: auto;
+}
+
+.mute:active {
+  transform: translateY(1px);
+}
+
+.mute--title {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.9rem;
+}
+
+.mute__icon {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.mute__horn {
+  fill: currentColor;
+}
+
+.mute__wave,
+.mute__slash {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+}
+
+.mute__slash {
+  display: none;
+  stroke: var(--danger);
+}
+
+.mute[aria-pressed='true'] {
+  color: var(--ink-dim);
+}
+
+.mute[aria-pressed='true'] .mute__wave {
+  display: none;
+}
+
+.mute[aria-pressed='true'] .mute__slash {
+  display: inline;
+}
+
+/* --- Staff swap announcement --------------------------------------------- */
+
+/*
+ * Fires on `weaponChanged`. It sits over the road rather than in the HUD stack
+ * because a staff swap is a moment, not a readout, and the top of the screen is
+ * already carrying the count and the boss bar.
+ */
+.staff-flash {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30%;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.4rem, 7vw, 2rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--staff-color, var(--accent-bright));
+  -webkit-text-stroke: 0.14rem rgba(6, 4, 14, 0.85);
+  paint-order: stroke fill;
+  text-shadow: 0 0 1.6rem var(--staff-color, var(--accent-bright));
+  pointer-events: none;
+}
+
+.staff-flash[data-staff='ember'] {
+  --staff-color: #ff9d5c;
+}
+.staff-flash[data-staff='storm'] {
+  --staff-color: #a48cff;
+}
+.staff-flash[data-staff='frost'] {
+  --staff-color: #7fe6ff;
+}
+
+.staff-flash--show {
+  animation: staff-flash 1100ms ease-out forwards;
+}
+
+@keyframes staff-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  35% {
+    transform: scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .staff-flash--show {
+    animation-duration: 900ms;
   }
 }

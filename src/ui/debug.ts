@@ -1,9 +1,12 @@
 /**
- * `?debug` panel: FPS, squad count, live projectiles, enemies alive and the
- * last few sim events, as a monospace block in the top-left corner.
+ * `?debug` panel: frame cost, squad count, live projectiles, enemies alive,
+ * physics, audio, draw calls, time scale and the last few sim events, as a
+ * monospace block in the bottom-left corner.
  *
  * Development-only, but it ships in the bundle so a hosted playtest link can be
- * debugged with a query parameter instead of a new build.
+ * debugged with a query parameter instead of a new build. Nothing in here runs
+ * while the panel is hidden — not even building an event's string, which is a
+ * per-event allocation the game does not otherwise make.
  */
 
 import type { GateKind, RunState, SimEvent } from '@/sim';
@@ -25,13 +28,25 @@ interface LogEntry {
 }
 
 /**
- * What one frame cost, in milliseconds: the whole `Run.tick` sequence and the
- * whole `Renderer.update` including `scene.render`. The app owns one instance
- * and overwrites it every frame, so nothing here may hold on to it.
+ * What the app knows about the frame it just ran. The app owns one instance and
+ * overwrites it every frame, so nothing here may hold on to it.
  */
-export interface FrameTimings {
+export interface DebugStats {
+  /** The whole `Run.tick` sequence, in milliseconds. */
   simMs: number;
+  /** The whole `Renderer.update`, including `scene.render`. */
   renderMs: number;
+  /** `PhysicsLayer.onEvents` plus `update`. */
+  physicsMs: number;
+  /** From the renderer's instrumentation; 0 when it has none yet. */
+  drawCalls: number;
+  /** The app-level time scale: 1 normal, 0 during hit-stop. */
+  timeScale: number;
+  ragdolls: number;
+  shards: number;
+  physicsQuality: number;
+  /** `off`, `loading`, `locked` or `unlocked`, plus a mute marker. */
+  audio: string;
 }
 
 export class DebugPanel {
@@ -42,10 +57,16 @@ export class DebugPanel {
   private fps = 0;
   private simMs = 0;
   private renderMs = 0;
+  private physicsMs = 0;
   private sinceRefresh = REFRESH_INTERVAL;
 
   constructor(element: HTMLElement) {
     this.element = element;
+  }
+
+  /** The app skips gathering panel-only numbers when this is false. */
+  get isEnabled(): boolean {
+    return this.enabled;
   }
 
   setEnabled(enabled: boolean): void {
@@ -58,7 +79,7 @@ export class DebugPanel {
     events: readonly SimEvent[],
     dt: number,
     phase: string,
-    timings: FrameTimings,
+    stats: DebugStats,
   ): void {
     if (!this.enabled) return;
 
@@ -66,8 +87,9 @@ export class DebugPanel {
     // a phone's hot spot shows up as a rising average, not as one bad frame.
     if (dt > 0) {
       this.fps += (1 / dt - this.fps) * AVERAGE_WEIGHT;
-      this.simMs += (timings.simMs - this.simMs) * AVERAGE_WEIGHT;
-      this.renderMs += (timings.renderMs - this.renderMs) * AVERAGE_WEIGHT;
+      this.simMs += (stats.simMs - this.simMs) * AVERAGE_WEIGHT;
+      this.renderMs += (stats.renderMs - this.renderMs) * AVERAGE_WEIGHT;
+      this.physicsMs += (stats.physicsMs - this.physicsMs) * AVERAGE_WEIGHT;
     }
 
     for (const event of events) this.push(describe(event));
@@ -76,13 +98,17 @@ export class DebugPanel {
     if (this.sinceRefresh < REFRESH_INTERVAL) return;
     this.sinceRefresh = 0;
 
-    this.element.textContent = this.compose(state, phase);
+    this.element.textContent = this.compose(state, phase, stats);
   }
 
-  private compose(state: Readonly<RunState> | null, phase: string): string {
+  private compose(state: Readonly<RunState> | null, phase: string, stats: DebugStats): string {
     const lines = [
-      `fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}`,
+      `fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}  x${stats.timeScale.toFixed(2)}`,
       `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms`,
+      `phys ${this.physicsMs.toFixed(2)}ms  draws ${String(stats.drawCalls)}`,
+      `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
+        `  q${String(stats.physicsQuality)}`,
+      `audio ${stats.audio}`,
     ];
 
     if (state === null) {
@@ -99,7 +125,8 @@ export class DebugPanel {
       const boss = state.boss;
       if (boss !== null) {
         lines.push(
-          `boss ${boss.hp.toFixed(0)}/${boss.maxHp.toFixed(0)} ${boss.active ? 'active' : 'idle'}`,
+          `boss ${boss.hp.toFixed(0)}/${boss.maxHp.toFixed(0)} ${boss.active ? 'active' : 'idle'}` +
+            (boss.enraged === true ? ' ENRAGED' : ''),
         );
       }
     }
@@ -142,7 +169,10 @@ function describe(event: SimEvent): string {
     case 'gateHit':
       return `gateHit ${event.kind} ${gateValue(event.kind, event.value)}`;
     case 'gatePassed':
-      return `gate ${event.kind} ${gateValue(event.kind, event.value)} ${String(event.countBefore)}>${String(event.countAfter)}`;
+      return (
+        `gate ${event.kind} ${gateValue(event.kind, event.value)} ` +
+        `${String(event.countBefore)}>${String(event.countAfter)}`
+      );
     case 'enemyActivated':
       return `activate #${String(event.enemyId)}`;
     case 'enemyHit':

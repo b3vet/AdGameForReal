@@ -121,3 +121,70 @@
   `loadLevel` rebuilds the road collider; quality 0 skips the WASM entirely.
 - Open: 64 shards are 64 draw calls worst case; debris does not collide with
   live enemies or the squad; ragdolls use the minion model for brutes too.
+
+## 2026-09-08 — Phase B4: audio, juice, physics wiring, stress scene (verified; committed with B2)
+
+- Physics wired into `App`: Havok init starts after the title screen shows so
+  the 2 MB WASM never blocks boot; a failed init drops to quality 0 and the
+  game continues. Frame order: sim ticks, `renderer.update` with scaled dt,
+  `physics.onEvents`, `physics.update` with unscaled frame time. Under turbo
+  the five event kinds physics consumes are copied through a pool because
+  the sim reuses its event objects.
+- Audio: Babylon audio engine v2, 17 clips, unlocked on any button tap,
+  silent until the context runs, every failure a warning. Throttled event
+  map (shots 8 per 100 ms with pitch variation, gate tick only when the
+  displayed integer changes, positive and negative gate passes, boss stomp,
+  hit, death, fanfare, sting, UI tap). Volumes in `src/audio/mix.ts` for
+  now; to move into data in Phase C. `muted` added to the save.
+- Time scale: hit-stop 40 ms (one per 250 ms) on block kills, 0.3× for 0.6 s
+  on boss kill, defeat holds 0.5× with a desaturation filter, camera shake
+  0.35 m on stomp and 0.8 m on boss kill. Time effects are disabled under
+  turbo because a turbo frame is seconds of sim time. The result countdown
+  now runs on wall time.
+- Copy in the epic register: "THE HORDE IS SLAIN" / "Ascend" / "Again" and
+  "OVERWHELMED". Staff badge and name flash, ENRAGED boss bar state,
+  confetti and count-up with ticks.
+- Build: `assetsDir` renamed to `bundle` and `assets/` copied into `dist/`,
+  so production serves models, VAT, audio and the Havok WASM.
+- Stress scene (`?scene=stress`, `dev/stress-test.html`): 500 mages, 40
+  skeletons, a kill per second. Measured under SwiftShader: 37 to 51 draw
+  calls, render median 9.8 ms; tripwire 125 ms.
+- Smoke adds `boss.png` and `stress.png`, runs at 1× device pixels to stay
+  under five minutes (4 m 37 s). Tests 131 → 142.
+- Open: the hosted build's bare-specifier guard trips on `@babylonjs/loaders`
+  (Phase C: externalize loaders via a third CDN script or inline); each live
+  ragdoll is a draw call (51 worst case against a 40 budget); `App.ts` is
+  527 lines; the stress crowd draws at full unit scale.
+
+## 2026-09-08 — Phase B2: characters, biome, effects (verified and committed with B4)
+
+- Squad: one `VatCrowd` per staff, all three preloaded, the active one drawn;
+  run with one unit in three casting, idle when stopped, cast in the arena,
+  cheer on a win. Unit scale 0.66 m (0.78 merged hat brims at the sim's
+  spacing, 0.62 lost the staff). Grunt 0.72, brute 0.92, boss 3.0.
+- Enemies: boxes gone; each block is `units` skeletons scattered inside its
+  footprint, thinning as HP drops, walking when active and frozen on a
+  per-block frame when idle through a new `speed` argument on
+  `VatCrowd.setInstance` (speed 0 makes the offset the frame, which also
+  gives hand-driven one-shots). Frost ring on slow, instant hide on shatter.
+- Boss: the demon with Idle, Walk, Punch on stomp, HitReact throttled,
+  Death then sink; enrage is a red pulse and 1.35× clip speed; clip speed
+  follows the app's time scale. Bug fixed: one-shots shorter than a frame
+  were cancelled before drawing.
+- Weapons: three bolts with trails, per-weapon impacts, muzzle flashes,
+  splash ring, chain bar, all pooled thin instances (24 live), glow layer at
+  quarter resolution with `setGlow`. No particle systems.
+- Gates: draw-range culling at three rows (60 panels were 60 draw calls); a
+  weapon gate floats the real staff prop cloned from the mage glb.
+- Biome: procedural stone tile, four instanced rune strips with a pulse,
+  seeded Halloween props every 6 to 10 m, gradient sky dome riding the
+  camera, fog into the haze band, warm key plus cool fill.
+- Bug fixed: an empty thin-instance mesh falls off Babylon's instanced path
+  and draws one full-size copy at the origin (a giant mage in the stress
+  scene); commits disable the mesh at count 0.
+- Draw calls: 37 peak at level 10 with physics off, 33 to 37 at 500 units in
+  the render test, 45 in the stress scene, 66 at level 1 with 352 physics
+  bodies alive (one call per shard or ragdoll, the B3 known issue).
+- Tech lead review of the frames: the crowd reads as dark discs from the
+  camera's pitch, the stomp ring is far too large and bright, the boss bar is
+  missing in `boss.png` while present in `t6.png`. All three go to Phase C.

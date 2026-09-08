@@ -40,7 +40,6 @@
  * contrast: a dark stroke painted behind the fill plus a soft drop shadow.
  */
 .hud__count {
-  grid-column: 2;
   font-size: clamp(2.6rem, 14vw, 3.6rem);
   font-weight: 900;
   line-height: 1;
@@ -161,4 +160,130 @@
 }
 .legend__rate {
   color: var(--gate-rate);
+}
+
+/* --- Staff badge and the count wrapper ------------------------------------ */
+
+/*
+ * The count keeps the grid's centre column to itself and the badge hangs off
+ * its right edge, absolutely placed: a badge in the flow would push the number
+ * off the screen's centre line every time the staff name changed length.
+ */
+.hud__countwrap {
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.hud__staff {
+  position: absolute;
+  left: calc(100% + 0.4rem);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.5rem;
+  background: rgba(10, 7, 22, 0.6);
+  box-shadow: inset 0 0 0 1px currentcolor;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--staff-color, var(--accent-bright));
+}
+
+.hud__staff[data-staff='ember'] {
+  --staff-color: #ff9d5c;
+}
+.hud__staff[data-staff='storm'] {
+  --staff-color: #a48cff;
+}
+.hud__staff[data-staff='frost'] {
+  --staff-color: #7fe6ff;
+}
+
+.hud__staff--swap {
+  animation: hud-staff-swap 700ms ease-out;
+}
+
+@keyframes hud-staff-swap {
+  0% {
+    transform: translateY(-50%) scale(1.9);
+    box-shadow: inset 0 0 0 2px currentcolor;
+  }
+  100% {
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* The mute button takes the third column, opposite the level chip. */
+.mute--hud {
+  grid-column: 3;
+  justify-self: end;
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+/* --- Boss bar: hit shake and the enrage state ----------------------------- */
+
+.boss--hit {
+  animation: boss-shake 180ms ease-out;
+}
+
+@keyframes boss-shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-0.28rem);
+  }
+  55% {
+    transform: translateX(0.24rem);
+  }
+  80% {
+    transform: translateX(-0.12rem);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/*
+ * Enraged: the plan's 30 percent phase. The bar goes hot and keeps a slow pulse
+ * so the state reads even when the boss is between stomps.
+ */
+.boss--enraged {
+  background: rgba(48, 8, 18, 0.72);
+  box-shadow: 0 0 1.2rem rgba(255, 84, 112, 0.45);
+}
+
+.boss--enraged .boss__label {
+  color: var(--danger);
+  animation: boss-enraged-pulse 900ms ease-in-out infinite;
+}
+
+.boss--enraged .boss__fill {
+  background: linear-gradient(90deg, var(--danger), #ff2d55);
+}
+
+@keyframes boss-enraged-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boss--hit,
+  .hud__staff--swap {
+    animation-duration: 1ms;
+  }
+
+  .boss--enraged .boss__label {
+    animation: none;
+  }
 }

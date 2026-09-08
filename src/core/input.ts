@@ -9,6 +9,10 @@
  * No tap-to-move: a tap with no drag produces no delta, so the UI buttons
  * layered over the canvas stay usable.
  *
+ * Multi-touch: one finger steers, but every finger on the glass is tracked, so
+ * when the steering one lifts the newest of the rest takes over on the spot
+ * (docs/06-milestone-2-plan.md, carried over from Milestone 1).
+ *
  * Gestures over the canvas are swallowed (`preventDefault` plus
  * `touch-action: none`) so a drag never scrolls, rubber-bands or zooms the page
  * on a phone.
@@ -32,36 +36,49 @@ export function attachInput(
   onDeltaX: (deltaXPixels: number) => void,
   options: InputOptions,
 ): DetachInput {
+  /**
+   * Every finger currently on the glass, in the order it landed, mapped to
+   * where it last was. Only one of them steers — two fingers dragging opposite
+   * ways would fight over `targetX` — but the others are tracked so that when
+   * the steering finger lifts, the newest finger still down takes over without
+   * the player having to lift and re-place it.
+   */
+  const pointers = new Map<number, number>();
   let activePointerId: number | null = null;
-  let lastX = 0;
 
   const heldKeys = new Set<string>();
   let keyRafId: number | null = null;
   let keyLastTime = 0;
 
+  /** Hands steering to the most recently placed finger that is still down. */
+  const promoteNewestPointer = (): void => {
+    activePointerId = null;
+    for (const pointerId of pointers.keys()) activePointerId = pointerId;
+  };
+
   const onPointerDown = (event: PointerEvent): void => {
     // Even when steering is disabled: this is what stops the page from scrolling.
     event.preventDefault();
-    // One finger steers. A second one is swallowed, not tracked: two fingers
-    // dragging opposite ways would fight over `targetX`.
-    if (activePointerId !== null) return;
-    activePointerId = event.pointerId;
-    lastX = event.clientX;
+    pointers.set(event.pointerId, event.clientX);
+    if (activePointerId === null) activePointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent): void => {
-    if (event.pointerId !== activePointerId) return;
+    const lastX = pointers.get(event.pointerId);
+    if (lastX === undefined) return;
     event.preventDefault();
 
+    pointers.set(event.pointerId, event.clientX);
+    if (event.pointerId !== activePointerId) return;
+
     const delta = event.clientX - lastX;
-    lastX = event.clientX;
     if (delta !== 0 && options.enabled()) onDeltaX(delta);
   };
 
   const endPointer = (event: PointerEvent): void => {
-    if (event.pointerId !== activePointerId) return;
-    activePointerId = null;
+    if (!pointers.delete(event.pointerId)) return;
+    if (event.pointerId === activePointerId) promoteNewestPointer();
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   };
 
@@ -71,7 +88,8 @@ export function attachInput(
    * every later touch is ignored, which reads as the controls dying.
    */
   const onLostCapture = (event: PointerEvent): void => {
-    if (event.pointerId === activePointerId) activePointerId = null;
+    if (!pointers.delete(event.pointerId)) return;
+    if (event.pointerId === activePointerId) promoteNewestPointer();
   };
 
   // iOS Safari still honours `touchmove` defaults in some gesture states even
@@ -141,6 +159,8 @@ export function attachInput(
     window.removeEventListener('blur', onBlur);
     if (keyRafId !== null) cancelAnimationFrame(keyRafId);
     heldKeys.clear();
+    pointers.clear();
+    activePointerId = null;
   };
 }
 
