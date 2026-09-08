@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-artifact/
+dist-hosted/
 artifacts/
 .vite/
 *.log

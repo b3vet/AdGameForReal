@@ -12,7 +12,8 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
-    "build:artifact": "node scripts/build-artifact.mjs"
+    "build:artifact": "node scripts/build-artifact.mjs",
+    "build:hosted": "node scripts/build-hosted.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "9.25.0",

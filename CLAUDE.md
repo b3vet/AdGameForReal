@@ -32,6 +32,7 @@ npm run lint         # eslint
 npm run test         # vitest run
 npm run smoke        # build, then Playwright opens the game headless, screenshots to artifacts/smoke/
 npm run build:artifact  # single-file HTML to dist-artifact/arcane-rush.html (for hosted playtest links)
+npm run build:hosted    # dist-hosted/arcane-rush.html: our code inline, Babylon from jsdelivr (for hosts that reject the inlined engine)
 ```
 
 ## Layout and ownership
