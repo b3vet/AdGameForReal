@@ -15,21 +15,83 @@
 
     <div id="overlay-root">
       <!-- Title. scripts/smoke.mjs clicks #play-button; keep that id stable. -->
-      <section id="title-screen" class="screen">
-        <div class="screen__top">
-          <h1 class="screen__title">Arcane&nbsp;Rush</h1>
-          <p class="screen__hint">Drag to move. Your squad fires by itself.</p>
-        </div>
-        <div class="screen__actions">
-          <button id="play-button" class="button" type="button">Play</button>
+      <section id="title-screen" class="screen screen--menu">
+        <div class="screen__inner">
+          <div class="screen__top">
+            <h1 class="screen__title">Arcane&nbsp;Rush</h1>
+            <p class="screen__hint">Drag to move. Your squad fires by itself.</p>
+          </div>
+
+          <div class="screen__middle">
+            <p class="picker__caption">Level</p>
+            <!-- Filled by src/ui/overlay.ts from the save's unlocked level. -->
+            <div id="level-picker" class="picker"></div>
+          </div>
+
+          <div class="screen__actions">
+            <button id="play-button" class="button" type="button">Play</button>
+          </div>
         </div>
       </section>
 
-      <!-- HUD: squad count, level label, boss bar (Phase B3). -->
-      <section id="hud" class="screen" hidden></section>
+      <!-- HUD: informational only, so it never eats a drag (pointer-events: none). -->
+      <section id="hud" class="screen screen--hud" hidden>
+        <div class="screen__inner">
+          <div class="hud__stack">
+            <div class="hud__top">
+              <div id="hud-level" class="hud__level">Level 1</div>
+              <div id="hud-count" class="hud__count">0</div>
+            </div>
 
-      <!-- Result: survivors, peak count, Retry / Next (Phase B3). -->
-      <section id="result-screen" class="screen" hidden></section>
+            <div id="boss-bar" class="boss" hidden>
+              <div class="boss__head">
+                <span class="boss__label">Boss</span>
+                <span id="boss-bar-value" class="boss__value">0 / 0</span>
+              </div>
+              <div class="boss__track"><div id="boss-bar-fill" class="boss__fill"></div></div>
+            </div>
+          </div>
+
+          <p id="gate-legend" class="legend" hidden>
+            Shoot gates to grow them:
+            <b class="legend__add">+add</b>
+            <b class="legend__mul">&times;mul</b>
+            <b class="legend__sub">&minus;sub</b>
+            <b class="legend__rate">&#9889;rate</b>
+          </p>
+        </div>
+      </section>
+
+      <!-- Result: survivors, peak count, Retry / Next. -->
+      <section id="result-screen" class="screen screen--menu" hidden>
+        <div class="screen__inner">
+          <div class="screen__top">
+            <p id="result-kicker" class="result__kicker">Run over</p>
+            <h2 id="result-title" class="screen__title screen__title--result">Defeated</h2>
+          </div>
+
+          <div class="screen__middle">
+            <dl class="stats">
+              <div class="stats__row">
+                <dt class="stats__key">Survivors</dt>
+                <dd id="result-survivors" class="stats__value">0</dd>
+              </div>
+              <div class="stats__row">
+                <dt class="stats__key">Peak squad</dt>
+                <dd id="result-peak" class="stats__value">0</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="screen__actions">
+            <button id="next-button" class="button" type="button" hidden>Next</button>
+            <button id="retry-button" class="button button--ghost" type="button">Retry</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ?debug only. Monospace, top-left, never interactive. -->
+      <pre id="debug-panel" class="debug" hidden></pre>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

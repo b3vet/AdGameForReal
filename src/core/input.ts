@@ -8,9 +8,22 @@
  *
  * No tap-to-move: a tap with no drag produces no delta, so the UI buttons
  * layered over the canvas stay usable.
+ *
+ * Gestures over the canvas are swallowed (`preventDefault` plus
+ * `touch-action: none`) so a drag never scrolls, rubber-bands or zooms the page
+ * on a phone.
  */
 
 export type DetachInput = () => void;
+
+export interface InputOptions {
+  /**
+   * Polled on every event. `false` swallows the gesture but emits no delta —
+   * which is how `?bot=` mode locks the player out without letting the page
+   * start scrolling under their finger.
+   */
+  enabled: () => boolean;
+}
 
 /** CSS pixels per second of held key, matched to a brisk drag. */
 const KEY_SPEED = 900;
@@ -18,6 +31,7 @@ const KEY_SPEED = 900;
 export function attachInput(
   canvas: HTMLCanvasElement,
   onDeltaX: (deltaXPixels: number) => void,
+  options: InputOptions,
 ): DetachInput {
   let activePointerId: number | null = null;
   let lastX = 0;
@@ -27,6 +41,8 @@ export function attachInput(
   let keyLastTime = 0;
 
   const onPointerDown = (event: PointerEvent): void => {
+    // Even when steering is disabled: this is what stops the page from scrolling.
+    event.preventDefault();
     if (activePointerId !== null) return;
     activePointerId = event.pointerId;
     lastX = event.clientX;
@@ -35,15 +51,23 @@ export function attachInput(
 
   const onPointerMove = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
+    event.preventDefault();
+
     const delta = event.clientX - lastX;
     lastX = event.clientX;
-    if (delta !== 0) onDeltaX(delta);
+    if (delta !== 0 && options.enabled()) onDeltaX(delta);
   };
 
   const endPointer = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
     activePointerId = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  };
+
+  // iOS Safari still honours `touchmove` defaults in some gesture states even
+  // with `touch-action: none`, so the canvas swallows those too.
+  const swallow = (event: Event): void => {
+    event.preventDefault();
   };
 
   const stepKeys = (time: number): void => {
@@ -53,7 +77,7 @@ export function attachInput(
     let direction = 0;
     if (heldKeys.has('ArrowLeft') || heldKeys.has('KeyA')) direction -= 1;
     if (heldKeys.has('ArrowRight') || heldKeys.has('KeyD')) direction += 1;
-    if (direction !== 0 && dt > 0) onDeltaX(direction * KEY_SPEED * dt);
+    if (direction !== 0 && dt > 0 && options.enabled()) onDeltaX(direction * KEY_SPEED * dt);
 
     if (heldKeys.size === 0) {
       keyRafId = null;
@@ -78,12 +102,14 @@ export function attachInput(
     heldKeys.clear();
   };
 
-  // Passive: the page never scrolls (the canvas fills the viewport and
-  // `touch-action: none` is set in CSS), so there is nothing to preventDefault.
-  canvas.addEventListener('pointerdown', onPointerDown, { passive: true });
-  canvas.addEventListener('pointermove', onPointerMove, { passive: true });
+  // Not passive: these listeners exist partly to call `preventDefault`.
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+  canvas.addEventListener('pointermove', onPointerMove, { passive: false });
   canvas.addEventListener('pointerup', endPointer, { passive: true });
   canvas.addEventListener('pointercancel', endPointer, { passive: true });
+  canvas.addEventListener('touchmove', swallow, { passive: false });
+  canvas.addEventListener('contextmenu', swallow);
+  canvas.addEventListener('dragstart', swallow);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
@@ -93,6 +119,9 @@ export function attachInput(
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', endPointer);
     canvas.removeEventListener('pointercancel', endPointer);
+    canvas.removeEventListener('touchmove', swallow);
+    canvas.removeEventListener('contextmenu', swallow);
+    canvas.removeEventListener('dragstart', swallow);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', onBlur);

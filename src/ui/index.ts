@@ -1,2 +1,2 @@
 export { Overlay } from './overlay';
-export type { OverlayCallbacks } from './overlay';
+export type { OverlayCallbacks, ResultView, TitleView } from './overlay';

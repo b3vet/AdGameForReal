@@ -1,6 +1,12 @@
 /*
  * Portrait-first overlay. Milestone 1 uses a system font stack only: no web
  * fonts, so the single-file artifact stays self-contained and loads instantly.
+ *
+ * Layout rules that matter beyond looks:
+ *   - The canvas fills the viewport; overlays are a centred column so landscape
+ *     and desktop do not stretch a phone UI across 2000 px.
+ *   - Overlays are `pointer-events: none` except buttons, so a drag that starts
+ *     anywhere on screen still steers the squad.
  */
 
 :root {
@@ -9,10 +15,17 @@
   --panel: rgba(18, 14, 34, 0.82);
   --accent: #7b5cff;
   --accent-bright: #a48cff;
+  --danger: #ff5470;
+  --gate-add: #57e08a;
+  --gate-mul: #62b8ff;
+  --gate-sub: #ff6a7f;
+  --gate-rate: #ffcc55;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+  /* One column, phone-shaped, whatever the viewport is. */
+  --column: 520px;
 
   color-scheme: dark;
   font-family:
@@ -67,39 +80,82 @@ body {
 
 .screen {
   display: flex;
+  justify-content: center;
+  min-height: 0;
+  text-align: center;
+}
+
+/* The phone-shaped column every screen lays itself out inside. */
+.screen__inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: min(100%, var(--column));
+  /* Without this a wide child (the legend) would widen the column and shove
+     the "centred" squad count off the screen's centre line. */
+  min-width: 0;
+  height: 100%;
+  padding: 5vh 1.25rem calc(4vh + 0.5rem);
+}
+
+/* Title and result dim the scene behind them; the HUD never does. */
+.screen--menu {
+  background: radial-gradient(120% 80% at 50% 0%, rgba(29, 20, 58, 0.72), rgba(6, 4, 14, 0.94));
+}
+
+.screen--hud {
+  background: none;
+}
+
+.screen--hud .screen__inner {
+  padding: 0.75rem 1rem calc(2.5vh + 0.5rem);
+}
+
+.screen__top {
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  pointer-events: auto;
-  padding: 6vh 6vw calc(6vh + var(--safe-bottom));
-  background: radial-gradient(120% 80% at 50% 0%, rgba(29, 20, 58, 0.6), rgba(6, 4, 14, 0.92));
-  text-align: center;
+  margin-top: 4vh;
+}
+
+.screen__middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  /* Groups the picker with the buttons instead of stranding it mid-screen. */
+  margin-top: auto;
+  margin-bottom: 1.75rem;
 }
 
 .screen__title {
   margin: 0;
-  font-size: clamp(2.2rem, 12vw, 3.6rem);
+  font-size: clamp(2.2rem, 12vw, 3.4rem);
   font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1.05;
+  text-shadow: 0 0.25rem 1.5rem rgba(123, 92, 255, 0.55);
+}
+
+.screen__title--result {
+  font-size: clamp(1.8rem, 9vw, 2.6rem);
 }
 
 .screen__hint {
   margin: 0.75rem 0 0;
   max-width: 22rem;
-  font-size: clamp(0.95rem, 4.2vw, 1.15rem);
+  font-size: clamp(0.95rem, 4.2vw, 1.1rem);
   color: var(--ink-dim);
-}
-
-.screen__top {
-  margin-top: 8vh;
 }
 
 /* All buttons live in the bottom third: reachable one-handed in portrait. */
 .screen__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.6rem;
   width: min(100%, 22rem);
 }
 
@@ -107,9 +163,9 @@ body {
   appearance: none;
   border: none;
   border-radius: 1.25rem;
-  padding: 1.1rem 1.5rem;
+  padding: 1.05rem 1.5rem;
   font: inherit;
-  font-size: clamp(1.05rem, 4.5vw, 1.3rem);
+  font-size: clamp(1.05rem, 4.5vw, 1.25rem);
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--ink);
@@ -118,6 +174,8 @@ body {
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
+  /* The only interactive things in the overlay. */
+  pointer-events: auto;
 }
 
 .button:active {
@@ -125,24 +183,108 @@ body {
   box-shadow: 0 0.25rem 0.75rem rgba(80, 50, 200, 0.4);
 }
 
-/*
- * HUD is informational only: taps must fall through to the canvas, and it must
- * not tint the 3D scene, so it overrides `.screen`'s backdrop entirely.
- */
-#hud {
+.button--ghost {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(164, 140, 255, 0.5);
+  color: var(--ink);
+}
+
+/* --- Title: level picker ------------------------------------------------- */
+
+.picker__caption {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  width: min(100%, 22rem);
+}
+
+.picker__level {
+  appearance: none;
+  border: none;
+  border-radius: 0.85rem;
+  padding: 0.7rem 0;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(164, 140, 255, 0.28);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.picker__level[aria-pressed='true'] {
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 0.25rem 0.9rem rgba(80, 50, 200, 0.5);
+}
+
+.picker__level:disabled {
+  color: rgba(179, 170, 205, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  cursor: default;
   pointer-events: none;
-  background: none;
-  justify-content: flex-start;
-  padding: calc(1rem + var(--safe-top)) 1rem calc(1rem + var(--safe-bottom));
 }
 
-#result-screen {
-  background: rgba(6, 4, 14, 0.88);
-  backdrop-filter: blur(6px);
+/* --- Result -------------------------------------------------------------- */
+
+.result__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
 }
 
-.panel {
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  width: min(100%, 22rem);
+}
+
+.stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.7rem 1rem;
+  border-radius: 0.85rem;
   background: var(--panel);
-  border-radius: 1rem;
-  padding: 1rem 1.25rem;
+}
+
+.stats__key {
+  font-size: 0.95rem;
+  color: var(--ink-dim);
+}
+
+.stats__value {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Landscape and desktop: the column stays phone-shaped and centred. */
+@media (orientation: landscape) and (min-width: 700px) {
+  .screen__inner {
+    padding-top: 3vh;
+    padding-bottom: 3vh;
+  }
+
+  .screen__top {
+    margin-top: 0;
+  }
 }

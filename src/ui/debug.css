@@ -1,0 +1,21 @@
+/*
+ * `?debug` panel styling. Imported by `debug.ts`; see the note in `hud.css`
+ * about why the overlay CSS is split across files.
+ */
+
+.debug {
+  justify-self: start;
+  align-self: start;
+  /* Clears the HUD's level chip, which owns the very top-left corner. */
+  margin: 3rem 0.5rem 0.5rem;
+  padding: 0.5rem 0.6rem;
+  max-width: min(60vw, 20rem);
+  border-radius: 0.5rem;
+  background: rgba(6, 4, 14, 0.78);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #9dffc9;
+  white-space: pre;
+  pointer-events: none;
+}
