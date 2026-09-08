@@ -224,7 +224,13 @@ export class GateView {
   }
 
   dispose(): void {
-    for (const slot of this.slots) slot.panel.dispose();
+    // The material too: `Mesh.dispose` leaves it behind by default, and a
+    // renderer that is torn down and rebuilt (the dev scenes, a hot reload)
+    // would otherwise leak sixty of them per cycle.
+    for (const slot of this.slots) {
+      slot.material.dispose();
+      slot.panel.dispose();
+    }
     this.slots.length = 0;
     this.byGateId.clear();
     for (const staff of this.staffs.values()) staff.dispose();

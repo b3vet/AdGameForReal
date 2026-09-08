@@ -176,10 +176,39 @@ export function staffLane(gates: ReadonlyArray<GateDef | null>): number {
   if (growers > 1 && add >= 0) return add;
   if (curses > 1 && sub >= 0) return sub;
   // No lane to spare: most late rows are one curse and one grower, and neither
-  // may go. A level whose every row looks like that carries no staff gate —
-  // the plan's budget is a ceiling, not a quota, and a row that gave up its
-  // `add` cost the greedy bot two levels of the ten when it was tried.
+  // may go. Handing over the `add` cost the greedy bot two levels of the ten
+  // when it was tried, so this row keeps everything it has and `emptyLane`
+  // below is what the level falls back on.
   return -1;
+}
+
+/**
+ * An empty lane of a row that already carries gates, or -1.
+ *
+ * The fallback behind `staffLane`. A row of two gates leaves one lane clear for
+ * the player to walk through, and putting the staff there takes nothing away —
+ * the row keeps its grower, its curse and its pressure, and the walk-through
+ * lane becomes an offer rather than a shrug. Nine of the forty-five level-seed
+ * pairs in the balance set had no row `staffLane` would touch (every row one
+ * curse and one grower) and therefore no staff gate at all; with this every
+ * level from `gen.weaponFromLevel` on carries one.
+ *
+ * Enemy rows are not candidates even though all three of their lanes are empty:
+ * their whole job is to be a wall the player picks a way through, and a panel
+ * standing in one of those lanes narrows the gap rather than widening a choice.
+ */
+export function emptyLane(gates: ReadonlyArray<GateDef | null>): number {
+  let empty = -1;
+  let carriesGates = false;
+  for (let i = 0; i < gates.length; i++) {
+    const gate = gates[i];
+    if (gate === null || gate === undefined) {
+      if (empty < 0) empty = i;
+      continue;
+    }
+    carriesGates = true;
+  }
+  return carriesGates ? empty : -1;
 }
 
 /** The staff gate itself: not shootable, changes no counts. */

@@ -9,7 +9,7 @@
  * much of the expected squad one block is worth.
  */
 
-import { growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
+import { emptyLane, growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
 import type { RowBudget } from './gateGen';
 import { enemyRow, gateRow, mixedRow } from './rows';
 import type { RowDef, RowEnemyDef, RowPermits } from './rows';
@@ -216,6 +216,53 @@ function weaponBudget(index: number): number {
   return index >= gen.weaponGateManyFromLevel ? gen.weaponGatesLate : gen.weaponGatesEarly;
 }
 
+/** One lane of one row a staff gate could take over. */
+interface StaffSlot {
+  row: number;
+  lane: number;
+}
+
+/**
+ * Lanes of rows past the first that `pick` says a staff may take, shuffled.
+ * Never the first row: the plan's rule, and the player has not seen a staff
+ * work yet when they are asked to trade for another one.
+ */
+function staffCandidates(
+  rows: readonly RowDef[],
+  rng: Rng,
+  pick: (gates: ReadonlyArray<GateDef | null>) => number,
+): StaffSlot[] {
+  const candidates: StaffSlot[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row === undefined) continue;
+    const lane = pick(row.gates);
+    if (lane >= 0) candidates.push({ row: i, lane });
+  }
+  shuffle(rng, candidates);
+  return candidates;
+}
+
+/** Converts lanes to staff gates until the budget is spent. Returns how many. */
+function convert(
+  rows: RowDef[],
+  candidates: readonly StaffSlot[],
+  rng: Rng,
+  budget: number,
+): number {
+  let placed = 0;
+  for (const candidate of candidates) {
+    if (placed >= budget) break;
+    const row = rows[candidate.row];
+    // One staff per row (plan, "Weapons"): the second tier may offer a row the
+    // first tier has already taken.
+    if (row === undefined || row.gates.some((gate) => gate?.kind === 'weapon')) continue;
+    row.gates[candidate.lane] = weaponGate(rng);
+    placed++;
+  }
+  return placed;
+}
+
 /**
  * Turns up to `weaponBudget` spare lanes into staff gates, on a stream of its
  * own.
@@ -224,11 +271,18 @@ function weaponBudget(index: number): number {
  * already laid out, so every other gate value, block size and row kind is the
  * one the balance model was tuned against, and turning staff gates on moves
  * only the lanes it converts. And it can see the finished row, so it converts
- * what the row can spare — a `fireRate` bonus, a second grower, a second curse
- * (`staffLane`) — leaving every row with a way to grow and with its pressure
- * intact. Dealing the staff inside the row (Phase B1) could do neither: it
- * bought the staff out of the row's curse budget and shifted every subsequent
- * random draw in the level.
+ * what the row can spare, leaving every row with a way to grow and with its
+ * pressure intact. Dealing the staff inside the row (Phase B1) could do
+ * neither: it bought the staff out of the row's curse budget and shifted every
+ * subsequent random draw in the level.
+ *
+ * Two tiers, in order. First a lane the row can give up — a `fireRate` bonus, a
+ * second grower, a second curse (`staffLane`). Then, only if the budget is not
+ * spent, a lane that is already empty (`emptyLane`), which costs the row
+ * nothing at all. The second tier exists because nine of the forty-five
+ * level-seed pairs in the balance set had no row of the first kind — every row
+ * one curse and one grower — and shipped with no staff gate on the level, so
+ * the run could never see two of its three staffs (Phase C open item).
  */
 function placeWeaponGates(rows: RowDef[], index: number, seed: number): void {
   const budget = weaponBudget(index);
@@ -237,23 +291,9 @@ function placeWeaponGates(rows: RowDef[], index: number, seed: number): void {
   // A separate stream, salted, so the level's own sequence is untouched.
   const rng = mulberry32((seed ^ WEAPON_STREAM_SALT) >>> 0);
 
-  // Never the first row: the plan's rule, and the player has not seen a staff
-  // work yet when they are asked to trade for another one.
-  const candidates: { row: number; lane: number }[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row === undefined) continue;
-    const lane = staffLane(row.gates);
-    if (lane >= 0) candidates.push({ row: i, lane });
-  }
-
-  shuffle(rng, candidates);
-  for (let i = 0; i < candidates.length && i < budget; i++) {
-    const candidate = candidates[i];
-    const row = candidate === undefined ? undefined : rows[candidate.row];
-    if (candidate === undefined || row === undefined) continue;
-    row.gates[candidate.lane] = weaponGate(rng);
-  }
+  const placed = convert(rows, staffCandidates(rows, rng, staffLane), rng, budget);
+  if (placed >= budget) return;
+  convert(rows, staffCandidates(rows, rng, emptyLane), rng, budget - placed);
 }
 
 /**

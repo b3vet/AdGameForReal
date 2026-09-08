@@ -13,7 +13,12 @@
      panel is up (`Hud.setDebugEnabled`), so the panel can use the whole edge. */
   margin: 0.5rem;
   padding: 0.5rem 0.6rem;
-  max-width: min(60vw, 20rem);
+  /* Wide enough for the longest line the panel composes — about forty
+     monospace characters at 10px, which is the cost row (`sim / render /
+     phys`). `white-space: pre` does not wrap, so a narrower box does not
+     reflow, it clips: the numbers this panel exists to report were running off
+     the right edge on a 390 px phone. */
+  max-width: min(88vw, 22rem);
   border-radius: 0.5rem;
   background: rgba(6, 4, 14, 0.78);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

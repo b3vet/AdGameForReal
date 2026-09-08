@@ -49,6 +49,16 @@ export class GameAudio {
 
   private loading = false;
   private unlocked = false;
+  /**
+   * A gesture asked for the context before the engine existed.
+   *
+   * `load` is started without being awaited so twenty clips cannot hold up the
+   * title screen, and a player can tap Play well before it resolves — on a cold
+   * cache, every time. `unlock` then had nothing to unlock and the whole run
+   * was silent, because nothing asks again until the next button. The request
+   * is remembered here and replayed at the end of `load` instead.
+   */
+  private unlockWanted = false;
   private mutedFlag: boolean;
   private disposed = false;
 
@@ -114,6 +124,10 @@ export class GameAudio {
     } finally {
       this.loading = false;
       this.syncVolume();
+      // The tap that asked for this happened while it was in flight. Browsers
+      // allow a resume shortly after a gesture, and the worst case is a context
+      // that stays suspended until the next button — which is where we were.
+      if (this.unlockWanted) this.unlock();
     }
   }
 
@@ -122,8 +136,10 @@ export class GameAudio {
    * Play tap — or the browser leaves it suspended.
    */
   unlock(): void {
+    if (this.disposed) return;
+    this.unlockWanted = true;
     const engine = this.engine;
-    if (engine === null || this.disposed) return;
+    if (engine === null) return;
     engine.unlockAsync().then(
       () => {
         this.unlocked = engine.state === 'running';

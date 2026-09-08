@@ -54,6 +54,13 @@ interface Corpse {
   age: number;
   /** The crowd scale this unit died at, so it shrinks from the size it had. */
   scale: number;
+  /**
+   * The formation slot this unit stood in. Its yaw and animation phase are
+   * derived from it, and the ring compacts as corpses expire, so deriving them
+   * from the *slot in the ring* instead would swing a dying mage's facing every
+   * time an older one finished.
+   */
+  index: number;
 }
 
 export class SquadView {
@@ -76,7 +83,7 @@ export class SquadView {
   constructor(scene: Scene) {
     this.scene = scene;
     for (let i = 0; i < POOL.dyingUnits; i++) {
-      this.corpses.push({ x: 0, z: 0, age: 0, scale: 1 });
+      this.corpses.push({ x: 0, z: 0, age: 0, scale: 1, index: 0 });
     }
   }
 
@@ -223,12 +230,12 @@ export class SquadView {
       for (let i = count; i < previous; i++) {
         const offset = offsets[i];
         if (offset === undefined) continue;
-        this.pushCorpse(x + offset.x, z + offset.z, crowd);
+        this.pushCorpse(x + offset.x, z + offset.z, crowd, i);
       }
     }
   }
 
-  private pushCorpse(x: number, z: number, scale: number): void {
+  private pushCorpse(x: number, z: number, scale: number, index: number): void {
     if (this.corpseCount >= POOL.dyingUnits) return;
     const corpse = this.corpses[this.corpseCount];
     if (corpse === undefined) return;
@@ -236,6 +243,7 @@ export class SquadView {
     corpse.z = z;
     corpse.age = 0;
     corpse.scale = scale;
+    corpse.index = index;
     this.corpseCount++;
   }
 
@@ -258,10 +266,10 @@ export class SquadView {
         corpse.x,
         0,
         corpse.z,
-        yawOf(i),
+        yawOf(corpse.index),
         corpse.scale * MAGE_SCALE * fade,
         'idle',
-        timeOffsetOf(i),
+        timeOffsetOf(corpse.index),
       );
 
       const kept = this.corpses[write];
@@ -270,6 +278,7 @@ export class SquadView {
         kept.z = corpse.z;
         kept.age = corpse.age;
         kept.scale = corpse.scale;
+        kept.index = corpse.index;
       }
       write++;
     }

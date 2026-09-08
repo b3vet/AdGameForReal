@@ -72,12 +72,17 @@ export class FrameDriver {
     renderMs: 0,
     physicsMs: 0,
     drawCalls: 0,
+    drawCallsPeak: 0,
     timeScale: 1,
     ragdolls: 0,
     shards: 0,
+    physicsBodies: 0,
     physicsQuality: 0,
     qualityRung: 0,
+    pixelRatio: 0,
+    devicePixelRatio: 1,
     audio: 'off',
+    audioClips: 0,
   };
 
   private readonly host: FrameHost;
@@ -241,10 +246,15 @@ export class FrameDriver {
 
     const physics = host.physics();
     this.stats.drawCalls = host.renderer.drawCalls;
+    this.stats.drawCallsPeak = this.peak;
     this.stats.ragdolls = physics?.stats.ragdolls ?? 0;
     this.stats.shards = physics?.stats.shards ?? 0;
+    this.stats.physicsBodies = physics?.stats.bodies ?? 0;
     this.stats.physicsQuality = physics?.stats.quality ?? 0;
+    this.stats.pixelRatio = host.renderer.pixelRatio;
+    this.stats.devicePixelRatio = host.renderer.devicePixelRatio;
     this.stats.audio = host.audio.muted ? `${host.audio.status} muted` : host.audio.status;
+    this.stats.audioClips = host.audio.loadedCount;
 
     host.overlay.updateDebug(state, events, dt, host.phaseName(), this.stats);
   }

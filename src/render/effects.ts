@@ -47,6 +47,15 @@ const IMPACT_Y = 0.7;
 const MUZZLE_Y = 0.72;
 const CHAIN_Y = 0.8;
 
+/**
+ * The boss's death: one ring and a circle of bursts around the body. Three
+ * metres, not five: the ring is additive and bloomed, and the Phase B2 frames
+ * had it filling the arena over the body it was celebrating.
+ */
+const BOSS_DEATH_RING = 3;
+const BOSS_DEATH_BURSTS = 8;
+const BOSS_DEATH_SPREAD = 1.4;
+
 interface Burst {
   x: number;
   z: number;
@@ -192,6 +201,23 @@ export class EffectsView {
     chain.yaw = Math.atan2(dx, dz);
     chain.age = 0;
     this.chainCount++;
+  }
+
+  /**
+   * The one moment the scene is allowed to shout: a ring and a circle of bursts
+   * around the body. Still pooled geometry rather than a particle system — a
+   * boss dies once a level and the draw-call budget is for every frame.
+   */
+  onBossDeath(weaponId: WeaponId, x: number, z: number): void {
+    this.onSplash(x, z, BOSS_DEATH_RING);
+    for (let i = 0; i < BOSS_DEATH_BURSTS; i++) {
+      const angle = (i / BOSS_DEATH_BURSTS) * Math.PI * 2;
+      this.onImpact(
+        weaponId,
+        x + Math.cos(angle) * BOSS_DEATH_SPREAD,
+        z + Math.sin(angle) * BOSS_DEATH_SPREAD,
+      );
+    }
   }
 
   reset(): void {

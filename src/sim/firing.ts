@@ -11,7 +11,7 @@ import { enemyFootprint } from './enemies';
 import type { EventBuffer } from './events';
 import { formationOffsets } from './formation';
 import { applyGateGrowth } from './gates';
-import { laneCenter } from './level';
+import { laneCenter, laneOf } from './level';
 import type { TargetList, Target } from './targeting';
 import type { EnemyState, Lane, ProjectileState, RunState } from './types';
 import { blockGap, weaponDef, weaponOf } from './weapons';
@@ -126,7 +126,7 @@ export class Firing {
       if (id === undefined) {
         // Cap reached: the rest of this step's shots become hitscan, batched per
         // lane so a 400-unit squad still costs three sweeps instead of hundreds.
-        const slot = this.laneOf(x) + 1;
+        const slot = laneOf(x, this.balance.road.laneWidth) + 1;
         this.laneBatch[slot] = (this.laneBatch[slot] ?? 0) + 1;
         continue;
       }
@@ -154,6 +154,7 @@ export class Firing {
       if (state.status !== 'running') return;
     }
   }
+
 
   private recycle(state: RunState, index: number): void {
     const live = state.projectiles;
@@ -278,6 +279,19 @@ export class Firing {
     target: Target | null,
     slow: WeaponSlow | undefined,
   ): void {
+    // A block killed earlier in this same step by a splash or a chain keeps its
+    // entry in the target list — only a *direct* kill clears it — so a later
+    // shot of the same volley can still land on the corpse. It is absorbed
+    // exactly as it was before, because the damage economy is balanced around
+    // that, but the block must not die twice: a second `enemyKilled` is a
+    // second ragdoll burst, a second kill sound and a second hit-stop for one
+    // block. Rare (two of 715 kills across the balance seed set) and entirely
+    // cosmetic, which is why it survived to Phase D.
+    if (!enemy.alive) {
+      if (target !== null) target.live = false;
+      return;
+    }
+
     const wasSlowed = (enemy.slowUntil ?? 0) > state.time;
     if (slow !== undefined) {
       enemy.slowUntil = state.time + slow.seconds;
@@ -305,16 +319,5 @@ export class Firing {
       this.events.bossKilled();
       this.onBossKilled();
     }
-  }
-
-  /**
-   * Which lane a point stands in. Rounded on `|x|` so the two boundaries are
-   * mirror images: plain `Math.round` breaks ties toward `+infinity`, which put
-   * `x = +1` in the right lane but `x = -1` in the middle one — visible the
-   * moment a wide squad is clamped to exactly `±road.clampMin`.
-   */
-  private laneOf(x: number): Lane {
-    const raw = Math.sign(x) * Math.round(Math.abs(x) / this.balance.road.laneWidth);
-    return Math.min(1, Math.max(-1, raw)) as Lane;
   }
 }

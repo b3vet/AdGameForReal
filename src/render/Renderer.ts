@@ -50,15 +50,6 @@ const DEFAULT_MAX_PIXEL_RATIO = 2;
 const ROAD_START_Z = -10;
 const ROAD_PAST_ARENA = 70;
 
-/**
- * The boss's death: one ring and a circle of bursts around the body. Three
- * metres, not five: the ring is additive and bloomed, and the Phase B2 frames
- * had it filling the arena over the body it was celebrating.
- */
-const BOSS_DEATH_RING = 3;
-const BOSS_DEATH_BURSTS = 8;
-const BOSS_DEATH_SPREAD = 1.4;
-
 /** Scratch for the position lookups in `applyEvents`, which must not allocate. */
 const scratchFrom = { x: 0, z: 0 };
 const scratchTo = { x: 0, z: 0 };
@@ -171,6 +162,23 @@ export class Renderer {
     return this.instrumentation?.drawCallsCounter.current ?? 0;
   }
 
+  /**
+   * Backing-store pixels per CSS pixel, and what the screen offers. The pair,
+   * because on the product owner's phone the two together are what say whether
+   * a frame-rate reading came from a degraded rung or a full-resolution one
+   * (docs/06-milestone-2-plan.md, definition of done 9).
+   */
+  get pixelRatio(): number {
+    const engine = this.engine;
+    if (engine === null) return 0;
+    const scaling = engine.getHardwareScalingLevel();
+    return scaling > 0 ? 1 / scaling : 0;
+  }
+
+  get devicePixelRatio(): number {
+    return typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+  }
+
   /** Kicks the camera; see `CameraRig.shake`. */
   shake(strength: number, seconds: number): void {
     this.rig?.shake(strength, seconds);
@@ -217,6 +225,11 @@ export class Renderer {
     this.boss?.reset();
     this.bossId = -1;
     this.bossBurstDone = false;
+    // Every run starts on `startWeapon`, and the views only learn about a staff
+    // from a `weaponChanged` event — which the new run has not emitted. Without
+    // this the first frames of the level after a frost run draw frost bolts and
+    // cyan muzzle flashes for a squad holding ember.
+    this.setWeapon(startWeapon);
     this.rig?.reset();
   }
 
@@ -323,9 +336,10 @@ export class Renderer {
           break;
         case 'chain':
           // The event carries block ids, not positions: the view that draws
-          // them is the one that knows where they are.
+          // them is the one that knows where they are. A block that has already
+          // been taken away — killed by the same volley, or shattered — has no
+          // position any more, and the arc to it is simply not drawn.
           if (
-            enemies !== undefined &&
             enemies !== null &&
             enemies.positionOf(event.from, scratchFrom) &&
             enemies.positionOf(event.to, scratchTo)
@@ -334,10 +348,7 @@ export class Renderer {
           }
           break;
         case 'weaponChanged':
-          this.lastWeapon = event.to;
-          this.squad?.setWeapon(event.to);
-          this.projectiles?.setWeapon(event.to);
-          effects?.setWeapon(event.to);
+          this.setWeapon(event.to);
           break;
         case 'gateHit':
           this.gates?.onHit(event.gateId);
@@ -391,25 +402,22 @@ export class Renderer {
     }
   }
 
+  /** Points every view that has a per-staff look at the same staff. */
+  private setWeapon(weaponId: WeaponId): void {
+    this.lastWeapon = weaponId;
+    this.squad?.setWeapon(weaponId);
+    this.projectiles?.setWeapon(weaponId);
+    this.effects?.setWeapon(weaponId);
+  }
+
   /**
-   * The one moment the scene is allowed to shout: rings and a ring of bursts
-   * around the body. Still pooled geometry rather than a particle system —
-   * a boss dies once a level and the draw-call budget is for every frame.
+   * A boss death reaches us as `enemyKilled` and then `bossKilled`; the burst
+   * belongs to whichever arrives first, and the latch is what keeps it to one.
    */
   private bossDeathBurst(x: number, z: number): void {
-    const effects = this.effects;
-    if (effects === null) return;
     if (this.bossBurstDone) return;
     this.bossBurstDone = true;
-    effects.onSplash(x, z, BOSS_DEATH_RING);
-    for (let i = 0; i < BOSS_DEATH_BURSTS; i++) {
-      const angle = (i / BOSS_DEATH_BURSTS) * Math.PI * 2;
-      effects.onImpact(
-        this.lastWeapon,
-        x + Math.cos(angle) * BOSS_DEATH_SPREAD,
-        z + Math.sin(angle) * BOSS_DEATH_SPREAD,
-      );
-    }
+    this.effects?.onBossDeath(this.lastWeapon, x, z);
   }
 
   /**

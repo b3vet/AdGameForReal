@@ -5,11 +5,15 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { createBot } from '../bots';
 import { effectiveSpeed } from '../contact';
+import { generateLevel } from '../level';
 import type { RowEnemyDef } from '../level';
+import { Run } from '../Run';
 import type { EnemyState, SimEvent } from '../types';
 import { expectedDps, weaponDef, weaponIds, weaponOf } from '../weapons';
 import { level, play, row, runOf, staffRow } from './fixtures';
+import { balance, levelConfig, levelCount } from '@/data';
 
 /** A squad small enough that every shot leaves the middle lane. */
 const SMALL = 3;
@@ -247,5 +251,39 @@ describe('staff gates', () => {
 
   it('changes what the squad fires: frost projectiles are slower than storm', () => {
     expect(weaponDef('frost').projectileSpeed).toBeLessThan(weaponDef('storm').projectileSpeed);
+  });
+});
+
+/**
+ * Splash and chain kill blocks the target list has not been told about: only a
+ * *direct* kill clears a target's `live` flag, so a block killed as a
+ * neighbour stays shootable for the rest of the step. That is deliberate — the
+ * damage economy is balanced around a shot being absorbed by whatever is in
+ * front of it — but a corpse must only die once, because everything downstream
+ * of `enemyKilled` (ragdolls, the kill sound, hit-stop) fires again if it does
+ * not. Two of the 715 kills in this sweep did before Phase D.
+ */
+describe('death events', () => {
+  it('reports each block dead exactly once, across the whole campaign', () => {
+    for (let index = 1; index <= levelCount; index++) {
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const run = new Run(generateLevel(index, levelConfig(index), seed), balance);
+        const bot = createBot('greedy', seed * 7919 + index);
+        const dead = new Set<number>();
+        const twice: number[] = [];
+
+        for (let step = 0; step < 240 * 60 && run.state.status === 'running'; step++) {
+          run.setTargetX(bot(run.state));
+          for (const event of run.tick(1 / 60)) {
+            if (event.type !== 'enemyKilled') continue;
+            if (dead.has(event.enemyId)) twice.push(event.enemyId);
+            dead.add(event.enemyId);
+          }
+        }
+
+        const where = `L${String(index)} s${String(seed)}`;
+        expect(`${where}: ${twice.join(',')}`).toBe(`${where}: `);
+      }
+    }
   });
 });

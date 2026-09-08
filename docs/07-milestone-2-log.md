@@ -223,3 +223,53 @@
 - Open: two of five level-10 seeds carry no staff gate because every row
   there is one curse and one grower; the generator should guarantee one
   spare lane per level (sim owner).
+
+## 2026-09-08 — Phase D: review and hardening (verified and committed)
+
+- Fixed: tapping Play before the audio engine finished loading left a run
+  permanently silent (unlock request is now latched and replayed; new test);
+  splash and chain kills did not clear the target's live flag so a later shot
+  in the same step emitted a second `enemyKilled` (second ragdoll burst, sound
+  and hit-stop; regression test); the run after a Frost run drew Frost bolts
+  for an Ember squad (`loadLevel` resets the weapon views); the physics layer
+  stepped every pool slot on every title-screen frame (early return when
+  pools are empty); duplicated `laneOf`; corpse yaw jumping as older corpses
+  expired; 60 materials leaked per renderer teardown; a throw inside the
+  frame loop at ragdoll cap 0; debug panel clipping at 390 px.
+- Deferred (low): one-frame muzzle tint after shattering off Frost; the VAT
+  settings buffer uploads its full size each frame; the formation offset
+  cache is large but bounded; a per-frame map iteration in gates; a 64-entry
+  shatter scratch under extreme turbo; smoke frame drift by one turbo frame.
+- Checked clean: turbo event handling, time-scale edges, physics lifecycle,
+  sim determinism (staff placement is a salted seeded stream), save
+  migration, screen-cycle leaks, manifest coverage of `assets/`, and an
+  artifact probe with every request but the document aborted.
+- Generator: staff gates now fall back to a walk-through lane of a gate row,
+  so all 45 level-seed pairs carry a staff gate (was 36). Bots unchanged:
+  greedy 0 losses at 0.54 survivor share, random 9.6, worst 10.
+- Splits: `smoke.mjs` into `smoke-browser.mjs`; boss-death burst moved into
+  the effects view. `?debug` now shows fps, phase, time scale, sim, render
+  and physics ms, draw calls current and peak, rung, pixel ratio, physics
+  counts, audio state and clip count.
+- Tests 143 → 152. Draw-call peaks 44 / 46 / 47; stress 37.
+
+## Milestone 2 status
+
+| Definition of done | Status |
+|---|---|
+| 1. All checks pass; smoke has stress and physics coverage | Done (physics covered through the game runs and the stress scene) |
+| 2. Balance tests pass the new targets | Done: greedy 0 losses at 54 percent survivors, random 9.6, worst 10, boss 19 to 23 s |
+| 3. Animated mage squad via VAT, one draw call per staff | Done, 0.66 m units |
+| 4. Animated enemy units with ragdolls, frost shatter, animated boss | Done |
+| 5. Three staffs, weapon gates from level 2, bots value them | Done, every level carries a staff gate |
+| 6. Sound for every event class, unlock on tap, persisted mute | Done |
+| 7. Biome 1 dressed | Done |
+| 8. Juice checklist | Done except damage numbers, which the plan listed as optional |
+| 9. 55 fps on the product owner's iPhone at 300 units | Pending the product owner's measurement with `?debug` |
+| 10. Hosted under 12 MB and standalone under 16 MB, offline | Done: 9.28 MB and 12.78 MB, both verified offline at physics quality 2 |
+| 11. `docs/ASSETS.md` and this log | Done |
+
+Carried forward: the six deferred low findings above, the plan's rung for
+brute ragdolls using the minion model, debris not colliding with live
+enemies, and gate growth worth about 4 to 5 units at any squad size (a feel
+question for the product owner).

@@ -1,6 +1,10 @@
 /**
  * Smoke test: build, serve, drive the game in headless Chromium, screenshot.
  *
+ * This file is the plan: which runs are played, what each frame is waiting for,
+ * and what counts as a failure. The browser plumbing behind it — the static
+ * server, Chromium, the page, the blank-frame check — is `./smoke-browser.mjs`.
+ *
  * Proves the whole pipeline end to end — that the bundle loads, that Babylon
  * gets a WebGL context under SwiftShader, and that the frames are not blank.
  * See docs/03-milestone-1-plan.md.
@@ -8,16 +12,21 @@
  *   npm run smoke
  */
 
-import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, readFile, stat } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
+import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
 import { build } from 'vite';
 
-import { decodePng, luminanceStats } from './png.mjs';
+import {
+  SCREENSHOT_TIMEOUT_MS,
+  assertNotBlank,
+  launchBrowser,
+  openPage,
+  serveDist,
+  sleep,
+} from './smoke-browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
@@ -96,6 +105,14 @@ function describeShot(frame) {
 }
 
 /**
+ * How close a staff gate has to be before its frame is taken, in metres. Wider
+ * than a turbo frame's fifteen metres of road, or the squad steps over the
+ * window between two frames and the gate is never photographed; not much wider,
+ * or the panel is a smudge in the fog and its staff prop is three pixels.
+ */
+const STAFF_SHOT_RANGE = 18;
+
+/**
  * The boss frame is taken on the first frame where the boss is down to this
  * share of its health — half way through the fight, so the demon has walked
  * into the squad and has a stomp on the ground, with the bar and its HP label
@@ -108,15 +125,6 @@ function describeShot(frame) {
  * (the bar follows `boss.alive`) and the world HP label is gone with the body,
  * which read as two missing-UI bugs and was one timing bug.
  */
-/**
- * How close a staff gate has to be before its frame is taken, in metres. Wider
- * than a turbo frame's fifteen metres of road, or the squad steps over the
- * window between two frames and the gate is never photographed; not much wider,
- * or the panel is a smudge in the fog and its staff prop is three pixels.
- */
-const STAFF_SHOT_RANGE = 18;
-
-/** Share of its health the boss has to have lost before the frame is taken. */
 const BOSS_SHOT_HP_SHARE = 0.5;
 /** Ceiling on one shot's wait, so a run that never gets there still ends. */
 const SHOT_TIMEOUT_MS = Number(process.env.SMOKE_SHOT_TIMEOUT_MS ?? 120_000);
@@ -165,139 +173,6 @@ const RESULT_SETTLE_MS = 20_000;
  * `src/physics/tuning.ts` are what hold this line.
  */
 const DRAW_CALL_LIMIT = Number(process.env.SMOKE_DRAW_CALLS ?? 52);
-
-/** The frame we assert on. A live scene is far above these floors. */
-const BLANK_STD_DEV_FLOOR = 3;
-const BLANK_BUCKET_FLOOR = 6;
-
-/**
- * Playwright asks the compositor for a fresh frame and waits for it. A crowd
- * scene under SwiftShader can take over a second to draw, so the default 30 s
- * is not the comfortable margin it looks like.
- */
-const SCREENSHOT_TIMEOUT_MS = 90_000;
-
-const VIEWPORT = { width: 390, height: 844 };
-
-/**
- * One device pixel per CSS pixel, where Milestone 1 shot at two.
- *
- * SwiftShader is fill-rate bound on this scene: at 2x the same run takes half
- * again as long, for a screenshot that is only bigger, not more informative.
- * 390x844 is a phone frame either way.
- */
-const DEVICE_SCALE_FACTOR = 1;
-
-/** SwiftShader: headless Chromium has no GPU, so force the software rasteriser. */
-const CHROMIUM_ARGS = [
-  '--use-angle=swiftshader',
-  '--enable-unsafe-swiftshader',
-  '--ignore-gpu-blocklist',
-];
-
-const CHROMIUM_FALLBACKS = [
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell',
-];
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.wasm': 'application/wasm',
-  '.woff2': 'font/woff2',
-  // `assets/` is copied into dist by vite.config.ts; these are its types.
-  '.glb': 'model/gltf-binary',
-  '.gltf': 'model/gltf+json',
-  '.wav': 'audio/wav',
-  '.bin': 'application/octet-stream',
-};
-
-function serveDist(root) {
-  const server = createServer((req, res) => {
-    const requested = decodeURIComponent((req.url ?? '/').split('?')[0]);
-    const relative = requested === '/' ? 'index.html' : requested.replace(/^\/+/, '');
-    const resolved = path.resolve(root, relative);
-
-    // Never serve outside dist/, whatever the request path claims.
-    const filePath =
-      resolved.startsWith(root + path.sep) || resolved === root
-        ? resolved
-        : path.join(root, 'index.html');
-
-    const target = existsSync(filePath) ? filePath : path.join(root, 'index.html');
-
-    res.writeHead(200, {
-      'content-type': MIME[path.extname(target)] ?? 'application/octet-stream',
-      'cache-control': 'no-store',
-    });
-    createReadStream(target).pipe(res);
-  });
-
-  return new Promise((resolve, reject) => {
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      resolve({ server, port: server.address().port });
-    });
-  });
-}
-
-function resolveChromiumPath() {
-  try {
-    const fromPlaywright = chromium.executablePath();
-    if (existsSync(fromPlaywright)) return fromPlaywright;
-  } catch {
-    // Fall through to the preinstalled browser.
-  }
-  const fallback = CHROMIUM_FALLBACKS.find((candidate) => existsSync(candidate));
-  if (fallback === undefined) {
-    throw new Error(
-      `Chromium not found. Looked in Playwright's cache and:\n  ${CHROMIUM_FALLBACKS.join('\n  ')}`,
-    );
-  }
-  return fallback;
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function assertNotBlank(file, label) {
-  const stats = luminanceStats(decodePng(await readFile(file)));
-  const summary =
-    `mean ${stats.mean.toFixed(1)}, ` +
-    `stdDev ${stats.stdDev.toFixed(2)}, ` +
-    `${stats.distinctBuckets} luminance buckets`;
-
-  if (stats.stdDev < BLANK_STD_DEV_FLOOR || stats.distinctBuckets < BLANK_BUCKET_FLOOR) {
-    throw new Error(`${label} looks blank (${summary}). Nothing rendered.`);
-  }
-  console.log(`  ${label}: ${summary}`);
-}
-
-async function openPage(browser, failures, overrides = {}) {
-  const context = await browser.newContext({
-    viewport: VIEWPORT,
-    deviceScaleFactor: DEVICE_SCALE_FACTOR,
-    isMobile: true,
-    hasTouch: true,
-    ...overrides,
-  });
-  const page = await context.newPage();
-
-  page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console error: ${message.text()}`);
-  });
-  page.on('pageerror', (error) => {
-    failures.push(`page error: ${error.message}`);
-  });
-
-  return page;
-}
 
 /** Resolves when the run reaches `won` or `lost`. */
 function waitForRunEnd(page) {
@@ -541,10 +416,7 @@ async function main() {
   const { server, port } = await serveDist(DIST);
   console.log(`[smoke] serving dist/ at http://127.0.0.1:${port}`);
 
-  const executablePath = resolveChromiumPath();
-  console.log(`[smoke] chromium: ${executablePath}`);
-
-  const browser = await chromium.launch({ executablePath, args: CHROMIUM_ARGS });
+  const browser = await launchBrowser();
   const failures = [];
   const written = [];
 

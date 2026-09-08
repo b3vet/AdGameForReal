@@ -40,15 +40,25 @@ export interface DebugStats {
   physicsMs: number;
   /** From the renderer's instrumentation; 0 when it has none yet. */
   drawCalls: number;
+  /** Worst draw-call count since the run started; the smoke's budget is on this. */
+  drawCallsPeak: number;
   /** The app-level time scale: 1 normal, 0 during hit-stop. */
   timeScale: number;
   ragdolls: number;
   shards: number;
+  /** Live Havok bodies behind those: eleven per ragdoll, one per shard. */
+  physicsBodies: number;
   physicsQuality: number;
   /** Which rung of the app's degrade ladder is in force; 0 is everything on. */
   qualityRung: number;
+  /** Backing-store pixels per CSS pixel, which the ladder's top rungs lower. */
+  pixelRatio: number;
+  /** What the screen offers, so a lowered `pixelRatio` reads as a decision. */
+  devicePixelRatio: number;
   /** `off`, `loading`, `locked` or `unlocked`, plus a mute marker. */
   audio: string;
+  /** Clips decoded and playable, so a silent game says which kind of silent. */
+  audioClips: number;
 }
 
 export class DebugPanel {
@@ -103,14 +113,23 @@ export class DebugPanel {
     this.element.textContent = this.compose(state, phase, stats);
   }
 
+  /**
+   * The block the product owner reads off a phone in one glance
+   * (docs/06-milestone-2-plan.md, definition of done 9): frame rate, where the
+   * frame went, what it cost to draw, which rung of the degrade ladder is in
+   * force at what resolution, what physics is alive, and whether sound is on.
+   */
   private compose(state: Readonly<RunState> | null, phase: string, stats: DebugStats): string {
     const lines = [
       `fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}  x${stats.timeScale.toFixed(2)}`,
-      `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms`,
-      `phys ${this.physicsMs.toFixed(2)}ms  draws ${String(stats.drawCalls)}`,
+      `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms` +
+        `  phys ${this.physicsMs.toFixed(2)}ms`,
+      `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
+        `  rung ${String(stats.qualityRung)}` +
+        `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
       `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
-        `  physq${String(stats.physicsQuality)}  rung ${String(stats.qualityRung)}`,
-      `audio ${stats.audio}`,
+        `  bodies ${String(stats.physicsBodies)}  physq ${String(stats.physicsQuality)}`,
+      `audio ${stats.audio} ${String(stats.audioClips)} clips`,
     ];
 
     if (state === null) {

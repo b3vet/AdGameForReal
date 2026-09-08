@@ -159,6 +159,7 @@ export class RagdollPool {
     spin: number,
   ): void {
     const slot = this.acquire();
+    if (slot === null) return;
     Matrix.RotationYToRef(yaw, scratchYaw);
     Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, scratchQuaternion);
     scratchVelocity.set(dx, up, dz);
@@ -267,8 +268,14 @@ export class RagdollPool {
   /**
    * A free slot, or the one that has been on the ground longest — which is the
    * live cap being enforced rather than a failure.
+   *
+   * Null when the cap is zero and nothing is down to recycle. The callers never
+   * ask in that state (`RAGDOLLS_PER_KILL[0]` is 0 and `onEvents` returns early
+   * at quality 0), but this is presentation running inside the frame loop:
+   * a corpse that cannot be spawned is a corpse nobody sees, not an exception
+   * that takes the frame with it.
    */
-  private acquire(): Slot {
+  private acquire(): Slot | null {
     const underCap = this.liveCount < this.liveCap;
     let oldest: Slot | undefined;
     for (const slot of this.slots) {
@@ -276,7 +283,7 @@ export class RagdollPool {
       if (!slot.live) continue;
       if (oldest === undefined || slot.spawned < oldest.spawned) oldest = slot;
     }
-    if (oldest === undefined) throw new Error('ragdoll pool is empty');
+    if (oldest === undefined) return null;
     this.liveCount--;
     return oldest;
   }

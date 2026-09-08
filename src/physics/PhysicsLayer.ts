@@ -222,6 +222,20 @@ export class PhysicsLayer {
   /** Ages both pools. Call before `scene.render`. */
   update(dt: number): void {
     if (this.disposed) return;
+
+    // Nothing is live, so there is nothing to age, sink or upload — and the
+    // frame that parked the last body already committed both instance buffers
+    // to zero. Worth the check because this is called on every frame of the
+    // title screen and every frame of a run with no debris in the air, which is
+    // most of them: 8 ragdoll slots, 64 shard slots and three buffer commits.
+    if ((this.ragdolls?.count ?? 0) === 0 && (this.shards?.count ?? 0) === 0) {
+      this.stats.ragdolls = 0;
+      this.stats.shards = 0;
+      this.stats.bodies = 0;
+      this.stats.quality = this.quality;
+      return;
+    }
+
     this.ragdolls?.update(dt);
     this.shards?.update(dt);
 

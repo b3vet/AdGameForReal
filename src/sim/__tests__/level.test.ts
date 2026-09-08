@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { emptyLane, staffLane } from '../gateGen';
 import { generateLevel, laneCenter, laneOf, rowOffersGrowth, squadCurve, BOSS_Z_OFFSET } from '../level';
 import type { LevelDef, RowDef } from '../level';
 import type { GateDef } from '../types';
@@ -354,6 +355,61 @@ describe('staff gates', () => {
           expect(row.gates.filter((g) => g?.kind === 'weapon').length).toBeLessThanOrEqual(1);
         }
       });
+    });
+  });
+
+  /**
+   * Phase C shipped nine of the forty-five level-seed pairs with no staff gate
+   * at all — every row there was one curse and one grower, so `staffLane` found
+   * nothing it could take. A run on one of those levels could never see two of
+   * its three staffs. `placeWeaponGates` now falls back to a lane that is
+   * already empty, which costs the row nothing.
+   */
+  it('gives every level from level 2 on at least one staff gate, on every seed', () => {
+    everyLevel((level, index, seed) => {
+      if (index < balance.gen.weaponFromLevel) return;
+      const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
+      const where = `L${String(index)} s${String(seed)}`;
+      expect(`${where}: ${String(staffs.length > 0)}`).toBe(`${where}: true`);
+    });
+  });
+
+  /**
+   * The fallback takes an empty lane, and an enemy row's three lanes are all
+   * empty — but that row's whole job is to be a wall the player picks a way
+   * through, and a panel standing in the gap narrows it.
+   */
+  it('only ever converts a lane of a row that already carries gates', () => {
+    everyLevel((level) => {
+      for (const row of level.rows) {
+        if (!row.gates.some((g) => g?.kind === 'weapon')) continue;
+        expect(row.gates.some((g) => g !== null && g.kind !== 'weapon')).toBe(true);
+      }
+    });
+  });
+
+  describe('the lane a staff may take', () => {
+    const add: GateDef = { kind: 'add', value: 5, cap: 9 };
+    const sub: GateDef = { kind: 'sub', value: 5, cap: 9 };
+    const rate: GateDef = { kind: 'fireRate', value: 0.05, cap: 0.1 };
+
+    it('spends a bonus before a duplicate, and a duplicate before nothing', () => {
+      expect(staffLane([rate, add, sub])).toBe(0);
+      expect(staffLane([add, add, sub])).toBe(1);
+      expect(staffLane([sub, sub, add])).toBe(1);
+      // One curse and one grower: neither may go. This is the row that left
+      // nine level-seed pairs with no staff gate at all.
+      expect(staffLane([sub, null, add])).toBe(-1);
+    });
+
+    it('falls back to an empty lane, but never on a row with no gates', () => {
+      expect(emptyLane([sub, null, add])).toBe(1);
+      expect(emptyLane([null, sub, add])).toBe(0);
+      expect(emptyLane([sub, add, null])).toBe(2);
+      // Full row: nothing to spare here either.
+      expect(emptyLane([sub, add, rate])).toBe(-1);
+      // An enemy row. Its lanes are the gap the player runs through.
+      expect(emptyLane([null, null, null])).toBe(-1);
     });
   });
 });
