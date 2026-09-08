@@ -310,7 +310,7 @@
     "seed": 2370,
     "rows": 14,
     "startCount": 12,
-    "peakTarget": 480,
+    "peakTarget": 450,
     "hpScale": 1.5,
     "boss": {
       "hp": 10800
@@ -326,7 +326,7 @@
       },
       "sub": {
         "min": 2,
-        "max": 500
+        "max": 160
       },
       "fireRate": {
         "min": 0.05,

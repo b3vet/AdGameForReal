@@ -67,10 +67,13 @@ export function applyGateHits(gate: GateState, hits: number, balance: Balance): 
     return;
   }
 
+  // `Math.max(value, ...)` and not just `Math.min(cap, ...)`: a gate that
+  // already offers more than the cap is a gate the level author wanted that
+  // big, and shooting a bonus must never make it smaller.
   if (gate.kind === 'add') {
-    gate.value = Math.min(cap, gate.value + hits * step.add);
+    gate.value = Math.max(gate.value, Math.min(cap, gate.value + hits * step.add));
     return;
   }
 
-  gate.value = Math.min(cap, gate.value + hits * step.fireRate);
+  gate.value = Math.max(gate.value, Math.min(cap, gate.value + hits * step.fireRate));
 }

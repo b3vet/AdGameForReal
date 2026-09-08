@@ -15,7 +15,8 @@
   "road": {
     "laneWidth": 2,
     "halfWidth": 3,
-    "clampX": 2.6
+    "clampX": 2.6,
+    "clampMin": 1
   },
   "enemies": {
     "activationDistance": 26,

@@ -84,6 +84,14 @@ export class App {
   private lastFrameTime = 0;
   private endCountdown: number | null = null;
 
+  /**
+   * Whether the title screen's frame still needs drawing. The preview run never
+   * ticks, so once the camera has eased into place the scene is identical frame
+   * to frame and `scene.render` is pure heat; anything that can change it
+   * (a new preview, a resize) arms this again.
+   */
+  private previewDirty = true;
+
   /** Re-used every frame: the debug panel reads it, nothing else may write it. */
   private readonly timings: FrameTimings = { simMs: 0, renderMs: 0 };
 
@@ -199,9 +207,12 @@ export class App {
     this.preview = new Run(level, balance);
     this.renderer.loadLevel(level);
     this.renderer.update(this.preview.state, NO_EVENTS, 0);
+    this.previewDirty = true;
   }
 
   private startRun(): void {
+    // The next title screen draws a fresh preview whatever happens here.
+    this.previewDirty = true;
     const level = this.buildLevel();
     const seed = level.seed;
 
@@ -235,7 +246,10 @@ export class App {
     const run = this.run;
     if (run === null) {
       const preview = this.preview;
-      if (preview !== null) this.renderer.update(preview.state, NO_EVENTS, dt);
+      if (preview !== null && this.previewDirty) {
+        this.renderer.update(preview.state, NO_EVENTS, dt);
+        this.previewDirty = !this.renderer.isSettled();
+      }
       this.overlay.updateDebug(null, NO_EVENTS, dt, this.phase, this.timings);
       return;
     }
@@ -313,6 +327,8 @@ export class App {
 
   private readonly onResize = (): void => {
     this.renderer.resize();
+    // The canvas just changed size, so whatever is on it is stale.
+    this.previewDirty = true;
   };
 
   /**

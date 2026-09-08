@@ -204,6 +204,85 @@ function emptyGates(): [GateDef | null, GateDef | null, GateDef | null] {
   return [null, null, null];
 }
 
+/** What the player reads off a panel: two gates printing this are one choice. */
+function gateKey(def: GateDef): string {
+  return `${def.kind}:${String(def.value)}`;
+}
+
+/** The smallest step that visibly separates two gates of this kind: one shot. */
+function nudgeStep(kind: GateKind): number {
+  const step = balance.gates.hitStep;
+  if (kind === 'fireRate') return step.fireRate;
+  if (kind === 'sub') return step.sub;
+  return step.add;
+}
+
+/** Rounded the way `makeGate` rounds this kind, so the nudge stays printable. */
+function roundValue(kind: GateKind, value: number): number {
+  return kind === 'fireRate' ? Math.round(value * 100) / 100 : Math.round(value);
+}
+
+/**
+ * Moves `def` off any value already taken on this row.
+ *
+ * Two panels printing `+3` side by side are not a choice, they are a wasted
+ * row, so the second one steps away by a shot's worth at a time — outward while
+ * the kind's range allows it, inward once it does not. Purely arithmetic: it
+ * draws no randomness, so the level stays a function of its seed.
+ */
+function makeDistinct(def: GateDef, taken: ReadonlySet<string>, config: LevelGenConfig): void {
+  if (!taken.has(gateKey(def))) return;
+
+  const range = config.gateValues[def.kind];
+  const step = nudgeStep(def.kind);
+  const original = def.value;
+
+  for (const direction of [1, -1]) {
+    for (let i = 1; i <= 3; i++) {
+      const candidate = roundValue(def.kind, original + direction * i * step);
+      if (candidate < range.min || candidate > range.max) break;
+      def.value = candidate;
+      if (!taken.has(gateKey(def))) {
+        // For `add`, `mul` and `fireRate` the cap bounds this very number, so it
+        // has to follow the nudge up. A `sub` gate's cap is what it pays *after*
+        // it flips, which has nothing to do with the penalty printed now.
+        if (def.cap !== undefined && def.kind !== 'sub') {
+          def.cap = Math.max(def.cap, def.value);
+        }
+        return;
+      }
+    }
+  }
+
+  // A range too narrow to separate them (level 1's `mul` is a single value):
+  // leave the gate as it was rather than pushing it outside its own range.
+  def.value = original;
+}
+
+/** Builds one row's gates, keeping the numbers on it distinct. */
+function rowGates(
+  rng: Rng,
+  config: LevelGenConfig,
+  estimate: number,
+  lanes: readonly Lane[],
+  kinds: readonly GateKind[],
+): [GateDef | null, GateDef | null, GateDef | null] {
+  const gates = emptyGates();
+  const taken = new Set<string>();
+
+  for (let i = 0; i < lanes.length; i++) {
+    const lane = lanes[i];
+    const kind = kinds[i];
+    if (lane === undefined || kind === undefined) continue;
+    const def = makeGate(kind, rng, config, estimate);
+    makeDistinct(def, taken, config);
+    taken.add(gateKey(def));
+    gates[lane + 1] = def;
+  }
+
+  return gates;
+}
+
 /** Lanes that carry a gate this row, in ascending lane order. */
 function pickLanes(rng: Rng, count: number): Lane[] {
   const lanes = [...LANES];
@@ -236,15 +315,7 @@ function gateRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number):
   const lanes = pickLanes(rng, slots);
   const kinds = rowGateKinds(rng, config.index, slots);
 
-  const gates = emptyGates();
-  for (let i = 0; i < lanes.length; i++) {
-    const lane = lanes[i];
-    const kind = kinds[i];
-    if (lane === undefined || kind === undefined) continue;
-    gates[lane + 1] = makeGate(kind, rng, config, estimate);
-  }
-
-  return { z, gates, enemies: [] };
+  return { z, gates: rowGates(rng, config, estimate, lanes, kinds), enemies: [] };
 }
 
 /**
@@ -270,16 +341,13 @@ function enemyRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number)
 function mixedRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number): RowDef {
   const lanes = pickLanes(rng, 2);
   const kinds = rowGateKinds(rng, config.index, 2);
+  const gates = rowGates(rng, config, estimate, lanes, kinds);
 
-  const gates = emptyGates();
   let guardedLane: Lane = lanes[0] ?? 0;
   let guardedWorth = -Infinity;
-  for (let i = 0; i < lanes.length; i++) {
-    const lane = lanes[i];
-    const kind = kinds[i];
-    if (lane === undefined || kind === undefined) continue;
-    const def = makeGate(kind, rng, config, estimate);
-    gates[lane + 1] = def;
+  for (const lane of lanes) {
+    const def = gates[lane + 1];
+    if (def === null || def === undefined) continue;
     // The block guards the lane a player actually wants, so the good gate costs
     // something to take.
     const worth = gateWorth(def, estimate);

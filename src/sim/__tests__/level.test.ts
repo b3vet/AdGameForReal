@@ -62,17 +62,40 @@ describe('generateLevel', () => {
     });
   });
 
-  it('never puts two mul gates or an all-negative choice on one row', () => {
+  it('never puts two mul gates on one row', () => {
     everyLevel((level) => {
       for (const row of level.rows) {
         const gates = row.gates.filter((g): g is GateDef => g !== null);
-        if (gates.length === 0) continue;
         expect(gates.filter((g) => g.kind === 'mul').length).toBeLessThanOrEqual(1);
-        // An empty lane is itself a non-negative choice, so only a full row of
-        // three gates can trap the player.
-        if (gates.length === 3) {
-          expect(gates.some((g) => g.kind !== 'sub')).toBe(true);
-        }
+      }
+    });
+  });
+
+  it('never builds a row whose every gate is a penalty', () => {
+    // Not only the three-gate rows: a two-gate row of two penalties is just as
+    // much of a trap, because the player still has to pick one of them.
+    everyLevel((level, index, seed) => {
+      for (const row of level.rows) {
+        const gates = row.gates.filter((g): g is GateDef => g !== null);
+        if (gates.length === 0) continue;
+        const where = `L${String(index)} seed ${String(seed)} row z=${String(row.z)}`;
+        const kinds = gates.map((g) => g.kind).join(',');
+        expect(`${where}: ${String(gates.some((g) => g.kind !== 'sub'))}`).toBe(`${where}: true`);
+        expect(kinds.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  it('never prints the same number twice on one row', () => {
+    // Two lanes offering `+3` are not a choice, they are a wasted row.
+    everyLevel((level, index, seed) => {
+      for (const row of level.rows) {
+        const keys = row.gates
+          .filter((g): g is GateDef => g !== null)
+          .map((g) => `${g.kind}:${String(g.value)}`);
+        expect(`L${String(index)} s${String(seed)} z${String(row.z)}: ${new Set(keys).size}`).toBe(
+          `L${String(index)} s${String(seed)} z${String(row.z)}: ${keys.length}`,
+        );
       }
     });
   });

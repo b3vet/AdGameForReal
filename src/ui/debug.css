@@ -9,9 +9,9 @@
      and a panel over the boss bar hides the number the fight is about. The
      overlay root already insets by the safe area, so 0.5rem clears the notch. */
   align-self: end;
-  /* The extra bottom margin clears the level-1 gate legend, which shares this
-     edge of the screen for the first few seconds of a run. */
-  margin: 0.5rem 0.5rem 3rem;
+  /* The level-1 legend used to share this corner; it now stands down while the
+     panel is up (`Hud.setDebugEnabled`), so the panel can use the whole edge. */
+  margin: 0.5rem;
   padding: 0.5rem 0.6rem;
   max-width: min(60vw, 20rem);
   border-radius: 0.5rem;

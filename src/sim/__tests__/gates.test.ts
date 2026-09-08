@@ -71,6 +71,12 @@ describe('shoot to grow', () => {
     expect(g.value).toBe(0);
   });
 
+  it('never shrinks a gate that already pays more than the cap', () => {
+    const g = gate('add', 400);
+    applyGateHits(g, 5, balance);
+    expect(g.value).toBe(400);
+  });
+
   it('leaves mul gates alone: shots pass through them', () => {
     const g = gate('mul', 2);
     applyGateHits(g, 50, balance);

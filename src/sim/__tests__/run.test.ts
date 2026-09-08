@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { halfWidth } from '../formation';
+import type { GateDef } from '../types';
 import { level, play, row, runOf, testBalance } from './fixtures';
 
 describe('enemies', () => {
@@ -189,7 +191,9 @@ describe('projectiles', () => {
 describe('lifecycle', () => {
   it('moves the squad toward the target without leaving the road', () => {
     const balance = testBalance();
-    const run = runOf(level({ rows: [] }), balance);
+    // One unit: the crowd has no width to speak of, so the plan's flat clamp
+    // is what limits it.
+    const run = runOf(level({ startCount: 1, rows: [] }), balance);
     run.setTargetX(99);
     play(run, 2);
     expect(run.state.squad.x).toBeCloseTo(balance.road.clampX, 6);
@@ -197,6 +201,109 @@ describe('lifecycle', () => {
     run.setTargetX(-99);
     play(run, 2);
     expect(run.state.squad.x).toBeCloseTo(-balance.road.clampX, 6);
+  });
+
+  it('keeps a growing crowd on the road by tapering its clamp', () => {
+    const balance = testBalance();
+    for (const count of [1, 10, 40, 80]) {
+      const run = runOf(level({ startCount: count, rows: [] }), balance);
+      run.setTargetX(99);
+      play(run, 2);
+
+      const x = run.state.squad.x;
+      // Above the taper's floor the rule is exact: the outermost unit stands on
+      // the road's edge, not past it.
+      expect(x).toBeLessThanOrEqual(balance.road.clampX + 1e-9);
+      expect(x + halfWidth(count)).toBeLessThanOrEqual(balance.road.halfWidth + 1e-9);
+    }
+  });
+
+  it('never clamps the squad tighter than the side lanes', () => {
+    const balance = testBalance();
+    // A crowd of 500 is wider than the road can hold, so the taper bottoms out
+    // on its floor instead of pinning the squad to the middle lane: reaching a
+    // side gate matters more than the last few centimetres of overhang.
+    const run = runOf(level({ startCount: balance.squad.maxCount, rows: [] }), balance);
+    run.setTargetX(99);
+    play(run, 2);
+
+    expect(run.state.squad.x).toBeCloseTo(balance.road.clampMin, 6);
+    expect(balance.road.clampMin).toBeLessThanOrEqual(balance.road.laneWidth);
+    const overhang =
+      balance.road.clampMin + halfWidth(balance.squad.maxCount) - balance.road.halfWidth;
+    expect(overhang).toBeLessThan(0.4);
+  });
+
+  it('lets even the widest squad take a gate in either side lane', () => {
+    const balance = testBalance();
+    for (const [lane, targetX] of [
+      [0, -99],
+      [2, 99],
+    ] as const) {
+      const gates: [GateDef | null, GateDef | null, GateDef | null] = [null, null, null];
+      gates[lane] = { kind: 'add', value: 7 };
+      const def = level({ startCount: 400, rows: [row(30, gates)] });
+      const run = runOf(def, balance);
+      const events = play(run, 8, targetX);
+      const passed = events.find((e) => e.type === 'gatePassed');
+      // The floor sits on the lane boundary, and the boundary belongs to the
+      // side lane on both sides of the road — not just the right-hand one.
+      expect(passed?.type).toBe('gatePassed');
+    }
+  });
+
+  it('pulls a squad that just grew back off the verge', () => {
+    const balance = testBalance();
+    const def = level({
+      startCount: 4,
+      rows: [row(20, [null, null, { kind: 'mul', value: 60 }])],
+    });
+    const run = runOf(def, balance);
+    play(run, 3, 99);
+    const before = run.state.squad.x;
+    play(run, 2, 99);
+
+    // The clamp follows the count, not only the player's finger: a squad that
+    // multiplied at the road's edge is walked back in on the next step.
+    expect(run.state.squad.count).toBeGreaterThan(200);
+    expect(run.state.squad.x).toBeLessThan(before);
+    expect(run.state.squad.x).toBeCloseTo(balance.road.clampMin, 6);
+  });
+
+  it('makes runEnded the last event of its tick', () => {
+    // The run used to keep firing after the boss died, so the frame that ended
+    // the run handed the UI events from a run that was already over.
+    const def = level({ startCount: 100, rows: [], arenaZ: 4, boss: { hp: 300, units: 30 } });
+    const run = runOf(def);
+
+    for (let i = 0; i < 12 * 60; i++) {
+      const events = run.tick(1 / 60);
+      const endIndex = events.findIndex((e) => e.type === 'runEnded');
+      if (endIndex < 0) continue;
+      expect(endIndex).toBe(events.length - 1);
+      return;
+    }
+    throw new Error('the run never ended');
+  });
+
+  it('reports the peak the squad reached, even if it lost it the same step', () => {
+    // Two rows a hair apart: the squad walks a +400 gate and a wipe in one step.
+    const def = level({
+      startCount: 10,
+      rows: [
+        row(20, [null, { kind: 'add', value: 400 }, null]),
+        row(20.001, [null, { kind: 'sub', value: 100_000 }, null]),
+      ],
+    });
+    const run = runOf(def);
+    const events = play(run, 6, 0);
+
+    const ended = events.find((e) => e.type === 'runEnded');
+    if (ended?.type !== 'runEnded') throw new Error('the run never ended');
+    expect(run.state.status).toBe('lost');
+    // 10 + the gate's own 400, plus whatever the squad shot into it on the way.
+    expect(run.state.peakCount).toBeGreaterThanOrEqual(410);
+    expect(ended.peakCount).toBe(run.state.peakCount);
   });
 
   it('is a no-op once the run is over', () => {

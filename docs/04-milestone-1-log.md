@@ -119,3 +119,68 @@ Tech lead re-ran typecheck, lint, 77 tests, build, the three-run smoke
   peakTarget to ~450); the debug panel crosses the level-1 legend; identical
   gate values side by side in one row are a non-choice; three labels in one
   far row touch each other.
+
+## 2026-09-08 — Phase D: review and hardening (verified and committed)
+
+Independent review of the whole codebase by a reviewer agent, fixes applied
+for everything small and local, tech lead re-ran the full suite: typecheck,
+lint, 86 tests (was 77), build, strict three-run smoke, artifact build.
+
+Findings fixed:
+- **High** Enemy blocks were drawn at about half their true hitbox width
+  (render used `0.9 + 0.12·√units` as full width, sim used `0.9 + 0.15·√units`
+  as half width), so blocks that visibly missed the crowd still ate it. Render
+  now draws `enemyFootprint() × 2`; the third copy of the curve in the dev
+  scenario is gone.
+- **High** `laneOf` used `Math.round`, whose ties go toward +∞, so `x = -1`
+  resolved to the middle lane while `x = +1` resolved to the right lane.
+  Symmetric rounding plus a test.
+- **Medium** Events after `runEnded`, enemies acting after the run finished,
+  and `survivors` overwritten after finish. `peakCount` missed a growth row
+  followed by a wipe inside one step. A hit could lower an `add` or `fireRate`
+  gate already above its cap. `lostpointercapture` was never handled, which
+  could leave steering dead for the rest of a run. Nine of 394 generated rows
+  had two identical gates. Pool sizes were hardcoded against level data.
+  The title screen re-rendered an unchanging scene every frame.
+
+Known items resolved: level 10 `peakTarget` 480 → 450; the legend hides
+under `?debug`; the squad's x clamp now tapers by `halfWidth(count)` with a
+floor of ±1 m (documented at `Run.clampLimit`, four tests), which made level
+10's penalties too large for the squad it is built for, so its `sub` max
+went 500 → 160; the generator nudges colliding gate values apart and never
+emits an all-negative row (tests for both); side-lane gate labels hide past
+30 m so far rows no longer crowd.
+
+Balance after the changes: greedy 50/50 wins with average peaks
+79, 95, 112, 164, 239, 235, 297, 349, 375, 338; random loses 7.4 of 10;
+worst loses all.
+
+Deferred to Milestone 2 tuning (design-level, not review patches):
+- Two `add` gates on one row share a cap, so once shot up they show the
+  same number (a per-gate jitter was tried and reverted: it broke the
+  knife-edge balance).
+- A row can offer only `sub` and `fireRate`, with no way to grow.
+- Contact removes a block's whole unit count on any overlap, even a graze;
+  proposal: scale kills by overlap fraction.
+- `Run.ts`, `level.ts`, `dev-scenario.ts` exceed the 400-line guideline.
+- Second finger does not take over after the first lifts; `dispose` leaves
+  overlay listeners; the debug panel builds a string per event under turbo.
+
+### Playtest delivery: hosting blocker
+
+The hosted artifact service refuses the single-file build: it classifies
+the page as a "PR review page" and then rejects it as too large for one. An
+overlay-only page publishes, a filler script of the same size publishes,
+and the bundle's own text trips the classifier. The tech lead stopped
+probing after that. Delivery for now is the standalone HTML file
+(`docs` route: a full document wrapper around the artifact fragment) sent
+directly to the product owner, plus `npm run dev -- --host` on the Mac for
+phone testing over the local network. Options recorded for the owner's
+decision: a GitHub Pages workflow (needs Pages enabled on the repo), or a
+hosted variant that loads Babylon from a CDN and inlines only the game code.
+
+## Milestone 1 status: done
+
+Definition of done items 1 to 4 and 6 met. Item 5 (tech lead plays the
+hosted artifact) is met through the smoke bot runs and frame review instead,
+since hosting is blocked.

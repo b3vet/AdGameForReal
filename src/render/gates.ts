@@ -29,6 +29,7 @@ import {
   LABEL_BEHIND,
   LANE_WIDTH,
   POOL,
+  SIDE_GATE_LABEL_RANGE,
 } from './theme';
 import type { GateKind, GateState, RunState } from '@/sim';
 
@@ -214,7 +215,11 @@ export class GateView {
     slot.material.alpha = GATE_BASE_ALPHA + pulse * 0.35;
 
     const ahead = gate.z - squadZ;
-    const readable = ahead < GATE_LABEL_RANGE && ahead > -LABEL_BEHIND;
+    // A far row shows one number, the near row shows all three: at thirty
+    // metres out the three lanes are close enough on screen that side labels
+    // overlap the middle one, and the nearest row has to stay fully readable.
+    const range = gate.lane === 0 ? GATE_LABEL_RANGE : SIDE_GATE_LABEL_RANGE;
+    const readable = ahead < range && ahead > -LABEL_BEHIND;
     slot.label.isVisible = readable;
     if (readable) {
       // Only when the number actually moved: building the string every frame

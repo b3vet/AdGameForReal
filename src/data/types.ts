@@ -43,6 +43,12 @@ export interface Balance {
     halfWidth: number;
     /** The squad centre is clamped to `x in [-clampX, clampX]`. */
     clampX: number;
+    /**
+     * Floor on that clamp once the crowd's own half-width is taken off it
+     * (`Run.clampLimit`). It has to stay at or inside a lane centre so the
+     * widest squad can still reach a side lane's gate.
+     */
+    clampMin: number;
   };
   enemies: {
     activationDistance: number;

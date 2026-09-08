@@ -28,6 +28,7 @@ export class Hud {
   private shownBossRatio = -1;
   private bossVisible = false;
   private legendArmed = false;
+  private legendSuppressed = false;
 
   constructor(
     elements: {
@@ -47,6 +48,19 @@ export class Hud {
     this.legend = elements.legend;
   }
 
+  /**
+   * The `?debug` panel shares the bottom-left corner with the legend, and two
+   * blocks of text over each other are worse than either alone. Debug wins: a
+   * player who typed `?debug` is not the player the legend is teaching.
+   */
+  setDebugEnabled(enabled: boolean): void {
+    this.legendSuppressed = enabled;
+    if (enabled && this.legendArmed) {
+      this.legendArmed = false;
+      this.setLegendVisible(false);
+    }
+  }
+
   /** Resets every transient bit of HUD state for a fresh run. */
   begin(levelIndex: number): void {
     this.levelLabel.textContent = `Level ${String(levelIndex)}`;
@@ -58,7 +72,7 @@ export class Hud {
     this.shownBossRatio = -1;
 
     // The legend only ever teaches the first level (docs/03-milestone-1-plan.md).
-    this.legendArmed = levelIndex === 1;
+    this.legendArmed = levelIndex === 1 && !this.legendSuppressed;
     this.setLegendVisible(this.legendArmed);
   }
 

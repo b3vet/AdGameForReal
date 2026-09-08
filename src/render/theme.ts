@@ -10,7 +10,7 @@
 
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 
-import { balance } from '@/data';
+import { balance, levels } from '@/data';
 
 /** Fog fades to this and the canvas clears to it, so the horizon has no seam. */
 export const SKY = new Color3(0.4, 0.54, 0.76);
@@ -42,13 +42,22 @@ export const GATE_TINTS = {
 } as const;
 
 /**
+ * The longest level in `levels.json`. Pool sizes are derived from it rather
+ * than guessed, so adding rows to a level cannot silently starve the pools and
+ * drop gates or blocks on the floor.
+ */
+const MAX_ROWS = levels.reduce((most, level) => Math.max(most, Math.ceil(level.rows)), 1);
+
+/** Three lanes per row, plus slack for the ones still playing their exit. */
+const PER_ROW_POOL = MAX_ROWS * 3 + 6;
+
+/**
  * Every pool is allocated once in `Renderer.init` and handed out by
  * `loadLevel`, so no mesh, material or label is ever created during a run.
  */
 export const POOL = {
-  /** Ten rows x three lanes plus headroom for longer levels. */
-  gates: 48,
-  enemies: 64,
+  gates: PER_ROW_POOL,
+  enemies: PER_ROW_POOL,
   stompRings: 8,
   /** Concurrent shrinking corpses; a big `sub` gate can kill dozens at once. */
   dyingUnits: 192,
@@ -63,6 +72,13 @@ export const ROAD_HALF_WIDTH = balance.road.halfWidth;
 export const LABEL_RANGE = 45;
 /** Gate rows are 18 m apart; past two rows the numbers are noise, not choice. */
 export const GATE_LABEL_RANGE = 46;
+/**
+ * Side lanes are two metres from the middle one, which is barely thirty screen
+ * pixels once a row is thirty metres out — three numbers printed across that
+ * touch each other. Past this distance only the middle lane keeps its label, so
+ * the row the player is actually deciding about is the only one showing three.
+ */
+export const SIDE_GATE_LABEL_RANGE = 30;
 /** How far behind the squad a label stays alive before it is hidden. */
 export const LABEL_BEHIND = 4;
 
@@ -89,7 +105,8 @@ export const POP_DURATION = 0.25;
 /** Shrink-and-fade for a unit that just died. */
 export const DEATH_DURATION = 0.25;
 
-export const GATE_WIDTH = 2;
+/** A panel spans its lane exactly, so what the player aims at is what they hit. */
+export const GATE_WIDTH = LANE_WIDTH;
 export const GATE_HEIGHT = 2.2;
 export const GATE_CENTER_Y = 1.15;
 export const GATE_PULSE_DURATION = 0.2;
@@ -120,4 +137,10 @@ export const CAMERA = {
   pullbackMax: 3,
   /** Exponential smoothing rate, in 1/seconds. */
   smoothing: 6,
+  /**
+   * Camera movement per frame, in meters, below which the pose counts as
+   * arrived. Well under a pixel at this distance, and it is what lets the title
+   * screen stop redrawing an identical frame.
+   */
+  settleEpsilon: 0.002,
 } as const;

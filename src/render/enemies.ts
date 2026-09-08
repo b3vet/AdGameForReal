@@ -26,12 +26,11 @@ import {
   LABEL_RANGE,
   POOL,
 } from './theme';
+import { balance } from '@/data';
+import { enemyFootprint } from '@/sim';
 import type { EnemyState, GateState, RunState } from '@/sim';
 
-/** Block footprint: `0.9 + 0.12*sqrt(units)`, capped so it never spans the road. */
-const WIDTH_BASE = 0.9;
-const WIDTH_PER_UNIT = 0.12;
-const WIDTH_MAX = 2.4;
+/** A block gets taller with the units it is worth, on top of getting wider. */
 const HEIGHT_BASE = 0.8;
 const HEIGHT_PER_UNIT = 0.1;
 const HEIGHT_MAX = 2.4;
@@ -196,7 +195,12 @@ export class EnemyView {
   ): void {
     const units = Math.max(1, enemy.units);
     const root = Math.sqrt(units);
-    slot.width = Math.min(WIDTH_MAX, WIDTH_BASE + WIDTH_PER_UNIT * root);
+    // The box is drawn exactly as wide as the sim's own footprint for the block
+    // (`enemyFootprint` is a half-width), because the player judges "will that
+    // thing hit me?" off the box. Render used to carry its own width curve,
+    // which had drifted to about half the collision width: blocks that visibly
+    // missed the squad ate it anyway.
+    slot.width = enemyFootprint(enemy.kind, units, balance) * 2;
     slot.height = Math.min(HEIGHT_MAX, HEIGHT_BASE + HEIGHT_PER_UNIT * root);
 
     slot.box.scaling.set(slot.width, slot.height, slot.width);

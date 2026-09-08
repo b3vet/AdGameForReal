@@ -141,6 +141,8 @@ export class Overlay {
 
   setDebugEnabled(enabled: boolean): void {
     this.debugPanel.setEnabled(enabled);
+    // The panel and the level-1 legend share the bottom-left corner.
+    this.hud.setDebugEnabled(enabled);
   }
 
   updateDebug(

@@ -95,8 +95,25 @@ export class Run {
 
   /** Clamped to the road; the squad eases toward it at `balance.squad.lateralSpeed`. */
   setTargetX(x: number): void {
-    const limit = this.balance.road.clampX;
+    const limit = this.clampLimit();
     this.runState.squad.targetX = Math.min(Math.max(x, -limit), limit);
+  }
+
+  /**
+   * How far from the centre line the squad's *centre* may stand.
+   *
+   * Tapered by the crowd's own half-width, so a 500-strong squad hugging the
+   * edge still stands on the road instead of overhanging the grass:
+   * `road.halfWidth - halfWidth(count)`, never wider than the plan's
+   * `road.clampX` and never tighter than `road.clampMin`. That floor is what
+   * keeps the side lanes reachable — a lane centre is at `|x| = laneWidth`, and
+   * `laneOf` puts everything from `road.clampMin` outward in the side lane, so
+   * even the widest squad can still choose a side gate.
+   */
+  private clampLimit(): number {
+    const road = this.balance.road;
+    const tapered = road.halfWidth - halfWidth(this.runState.squad.count);
+    return Math.max(road.clampMin, Math.min(road.clampX, tapered));
   }
 
   /**
@@ -130,27 +147,38 @@ export class Run {
 
     state.time += dt;
 
+    // Re-clamped every step, not only when the player steers: the limit moves
+    // as the crowd grows and shrinks (see `clampLimit`).
+    const limit = this.clampLimit();
+    squad.targetX = Math.min(Math.max(squad.targetX, -limit), limit);
     const dx = squad.targetX - squad.x;
     const maxMove = this.balance.squad.lateralSpeed * dt;
     squad.x += Math.abs(dx) <= maxMove ? dx : Math.sign(dx) * maxMove;
+    squad.x = Math.min(Math.max(squad.x, -limit), limit);
 
     // The squad stops at the arena to fight the boss.
     if (squad.z < state.arenaZ) {
       squad.z = Math.min(state.arenaZ, squad.z + this.level.runSpeed * dt);
     }
 
+    // Every phase can end the run, and `runEnded` is the last event of its
+    // tick: nothing may fire, walk or stomp after the run is over.
     this.applyCrossedRows();
     if (state.status !== 'running') return;
 
     this.targets.rebuild(state, this.balance);
     this.updateProjectiles(dt);
+    if (state.status !== 'running') return;
     this.fire(dt);
+    if (state.status !== 'running') return;
     this.updateEnemies(dt);
+    if (state.status !== 'running') return;
     this.updateBoss(dt);
+    if (state.status !== 'running') return;
 
     if (squad.count > state.peakCount) state.peakCount = squad.count;
     state.survivors = squad.count;
-    if (state.status === 'running' && squad.count <= 0) this.finish('lost');
+    if (squad.count <= 0) this.finish('lost');
   }
 
 
@@ -188,6 +216,10 @@ export class Run {
 
     const after = clampCount(countAfterGate(gate.kind, gate.value, before), this.balance);
     squad.count = after;
+    // Recorded here rather than only at the end of the step: a row that grows
+    // the squad and a row that wipes it can land in the same step, and the peak
+    // the player reached is part of their result either way.
+    if (after > this.runState.peakCount) this.runState.peakCount = after;
     this.events.gatePassed(gate.id, gate.kind, gate.value, before, after);
     if (after > before) this.events.unitsGained(after - before);
     else if (after < before) this.events.unitsLost(before - after, 'gate');
@@ -316,8 +348,14 @@ export class Run {
     }
   }
 
+  /**
+   * Which lane a point stands in. Rounded on `|x|` so the two boundaries are
+   * mirror images: plain `Math.round` breaks ties toward `+infinity`, which put
+   * `x = +1` in the right lane but `x = -1` in the middle one — visible the
+   * moment a wide squad is clamped to exactly `±road.clampMin`.
+   */
   private laneOf(x: number): Lane {
-    const raw = Math.round(x / this.balance.road.laneWidth);
+    const raw = Math.sign(x) * Math.round(Math.abs(x) / this.balance.road.laneWidth);
     return Math.min(1, Math.max(-1, raw)) as Lane;
   }
 

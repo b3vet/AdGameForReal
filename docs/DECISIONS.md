@@ -14,3 +14,7 @@
 | D10 | 2026-09-08 | Docs are immutable memory: numbered docs never edited, ledger and logs append-only. | docs/README.md |
 | D11 | 2026-09-08 | Playtest delivery: single-file HTML build published as a hosted artifact link, plus the normal Vite build for local runs. | 03 |
 | D12 | 2026-09-08 | Milestone 1 has no physics engine; everything is kinematic. Havok and ragdolls start in Milestone 2. | 03 |
+| D13 | 2026-09-08 | `?turbo=N` runs the sim faster than real time for automated playthroughs; the smoke test uses turbo 8 and is strict by default. | 04 (Phase C) |
+| D14 | 2026-09-08 | Each level has an explicit `peakTarget` for squad size (60 → 450) that drives gate values and the add-gate cap; the 500 cap is a ceiling, not a goal. | 04 (Phase C, D) |
+| D15 | 2026-09-08 | The squad's x clamp tapers by formation half-width with a floor of ±1 m so the crowd never overhangs the road. | 04 (Phase D) |
+| D16 | 2026-09-08 | Playtest delivery is the standalone HTML file until hosting is resolved; the hosted artifact route is blocked by a service-side misclassification of the bundle (supersedes the hosted half of D11). | 04 (Phase D) |

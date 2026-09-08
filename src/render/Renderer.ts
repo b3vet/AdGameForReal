@@ -67,6 +67,7 @@ export class Renderer {
   /** Scratch vectors: `update` runs 60 times a second and must not allocate. */
   private readonly cameraTarget = new Vector3(0, CAMERA.lookHeight, CAMERA.lookAhead);
   private cameraReady = false;
+  private cameraSettled = false;
 
   private disposed = false;
 
@@ -127,6 +128,17 @@ export class Renderer {
     await scene.whenReadyAsync();
   }
 
+  /**
+   * True when the last `update` moved the camera by less than a pixel's worth.
+   *
+   * The title screen shows a run that never ticks, so once the camera has eased
+   * into place nothing in the scene changes and the caller can stop asking for
+   * frames until something does (see `App.frame`).
+   */
+  isSettled(): boolean {
+    return this.cameraSettled;
+  }
+
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
@@ -137,6 +149,7 @@ export class Renderer {
     this.enemies?.reset();
     this.boss?.reset();
     this.cameraReady = false;
+    this.cameraSettled = false;
   }
 
   /**
@@ -258,9 +271,13 @@ export class Renderer {
     const blend = this.cameraReady ? 1 - Math.exp(-CAMERA.smoothing * dt) : 1;
     this.cameraReady = true;
 
-    camera.position.x += (wantX - camera.position.x) * blend;
-    camera.position.y += (wantY - camera.position.y) * blend;
-    camera.position.z += (wantZ - camera.position.z) * blend;
+    const dx = (wantX - camera.position.x) * blend;
+    const dy = (wantY - camera.position.y) * blend;
+    const dz = (wantZ - camera.position.z) * blend;
+    camera.position.x += dx;
+    camera.position.y += dy;
+    camera.position.z += dz;
+    this.cameraSettled = Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < CAMERA.settleEpsilon;
 
     this.cameraTarget.set(lateral, CAMERA.lookHeight, squad.z + CAMERA.lookAhead);
     camera.setTarget(this.cameraTarget);

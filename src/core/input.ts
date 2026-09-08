@@ -42,6 +42,8 @@ export function attachInput(
   const onPointerDown = (event: PointerEvent): void => {
     // Even when steering is disabled: this is what stops the page from scrolling.
     event.preventDefault();
+    // One finger steers. A second one is swallowed, not tracked: two fingers
+    // dragging opposite ways would fight over `targetX`.
     if (activePointerId !== null) return;
     activePointerId = event.pointerId;
     lastX = event.clientX;
@@ -61,6 +63,15 @@ export function attachInput(
     if (event.pointerId !== activePointerId) return;
     activePointerId = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  };
+
+  /**
+   * Capture can be taken away without a pointerup — a browser gesture, or the
+   * canvas being detached. Without this the drag stays "active" forever and
+   * every later touch is ignored, which reads as the controls dying.
+   */
+  const onLostCapture = (event: PointerEvent): void => {
+    if (event.pointerId === activePointerId) activePointerId = null;
   };
 
   // iOS Safari still honours `touchmove` defaults in some gesture states even
@@ -108,6 +119,7 @@ export function attachInput(
   canvas.addEventListener('pointermove', onPointerMove, { passive: false });
   canvas.addEventListener('pointerup', endPointer, { passive: true });
   canvas.addEventListener('pointercancel', endPointer, { passive: true });
+  canvas.addEventListener('lostpointercapture', onLostCapture, { passive: true });
   canvas.addEventListener('touchmove', swallow, { passive: false });
   canvas.addEventListener('contextmenu', swallow);
   canvas.addEventListener('dragstart', swallow);
@@ -120,6 +132,7 @@ export function attachInput(
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', endPointer);
     canvas.removeEventListener('pointercancel', endPointer);
+    canvas.removeEventListener('lostpointercapture', onLostCapture);
     canvas.removeEventListener('touchmove', swallow);
     canvas.removeEventListener('contextmenu', swallow);
     canvas.removeEventListener('dragstart', swallow);
