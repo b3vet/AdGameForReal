@@ -33,3 +33,50 @@
   artifact is 1.4 MB.
 - Next: B1 (sim), B2 (render), B3 (app) launched in parallel with strict path
   ownership.
+
+## 2026-09-08 — Phase B: sim, render, app (verified and committed)
+
+Three agents worked in parallel in one working tree with strict path
+ownership. No conflicts. Tech lead re-ran lint, typecheck, 71 tests and the
+build after each report, reviewed screenshots, and committed each owner's
+paths separately (commits f2d607d sim, c9027c5 app, this one render).
+
+### B1 sim
+- Choices: shots accumulate per tick and are assigned round-robin to
+  formation slots; projectiles sweep from previous to next z against a sorted
+  target list (no tunneling); above the 400-projectile cap the remainder is
+  batched per lane into hitscan. Enemy footprint widens with `sqrt(units)`.
+  Boss activates when the squad reaches `arenaZ`.
+- Deviations accepted: `add` gate cap 250 → 30 (gates get about 2.4 hits per
+  unit per row, so 250 saturated every level by row 4); the running
+  squad-size estimate was replaced with a closed-form `squadCurve`; enemy
+  `hpScale` runs 0.45 → 1.5 and boss hp 1800 → 12800 instead of the plan's
+  guesses. Bug found: boss contact never applied because of a floating
+  point equality; fixed with an epsilon.
+- Balance: greedy clears all ten levels on all five seeds; random loses 4.4
+  of 10; worst loses all. Full curve table is in the B1 report, summarized:
+  rows 8 → 14, start 5 → 12, boss hp 1800 → 12800, level length 34 s → 70 s.
+- Tech lead concern for Phase C: every level saturates near the 500 cap,
+  including level 1 (5 → 430 in 34 s). Peaks must scale with level.
+
+### B2 render
+- Pools at init: 48 gates, 64 enemy boxes, 1 boss, 8 stomp rings, 192
+  corpses, squad and projectile thin-instance buffers at max size. Slots bind
+  by id and release after exit animations. One fullscreen GUI texture with
+  pre-created labels drawn on the panel or box face (floating labels
+  collided). Pixel ratio capped at 2.
+- Deviation accepted: road extends to `arenaZ + 70` so it ends inside the fog.
+- Babylon trap recorded: `mesh.clone()` shares geometry, and thin-instance
+  buffers live on the geometry, so a cloned thin-instance mesh steals the
+  original's matrices. Build meshes independently.
+- Open: above ~75 units the phyllotaxis formation spills off the 6 m road.
+
+### B3 app
+- Title with level picker (save in localStorage), HUD with count bump, boss
+  bar, level-1 legend, result screen, pointer and keyboard input, bots built
+  once per run, query parameters, debug panel, `app.startLevel(n)` and
+  `app.status()` on the debug handle.
+- Open: a full greedy level-1 run takes ~205 s of wall clock under
+  SwiftShader (about 6 fps at 430 units), so strict smoke needs a faster
+  path; debug panel overlaps the boss bar; no route back to the title from
+  the result screen; three UI constants live in code instead of balance.json.
