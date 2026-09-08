@@ -184,3 +184,24 @@ hosted variant that loads Babylon from a CDN and inlines only the game code.
 Definition of done items 1 to 4 and 6 met. Item 5 (tech lead plays the
 hosted artifact) is met through the smoke bot runs and frame review instead,
 since hosting is blocked.
+
+## 2026-09-08 — Post-close: hosted link resolved
+
+- Product owner asked for a clickable link. The fully inlined single-file
+  build (1.6 MB) is rejected by the page host: a page without the Babylon
+  bundle publishes, a same-size page of filler script publishes, and the
+  first half of the bundle text alone is rejected, so the trigger is content
+  inside the Babylon code. The tech lead stopped probing at that point.
+- A build agent added `npm run build:hosted`: Vite lib mode in IIFE format
+  with `@babylonjs/core` and `@babylonjs/gui` external, mapped to the
+  `BABYLON` and `BABYLON.GUI` globals from
+  `https://cdn.jsdelivr.net/npm/babylonjs@9.25.0/babylon.js` and
+  `https://cdn.jsdelivr.net/npm/babylonjs-gui@9.25.0/babylon.gui.min.js`.
+  The fragment is 70 KB with a 60 KB inline script. All 16 named imports
+  resolve to UMD globals; the thin-instance side-effect import drops out
+  because the UMD bundle already includes it.
+- Verified headless: boots, plays a greedy level 1 to victory, no console
+  errors, both CDN scripts load. Published as the Milestone 1 artifact.
+- Sandbox-only notes: Chromium in this environment needs
+  `--ssl-version-max=tls1.2` behind the agent proxy for CDN loads; not a
+  product concern.

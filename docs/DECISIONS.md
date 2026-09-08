@@ -18,3 +18,4 @@
 | D14 | 2026-09-08 | Each level has an explicit `peakTarget` for squad size (60 → 450) that drives gate values and the add-gate cap; the 500 cap is a ceiling, not a goal. | 04 (Phase C, D) |
 | D15 | 2026-09-08 | The squad's x clamp tapers by formation half-width with a floor of ±1 m so the crowd never overhangs the road. | 04 (Phase D) |
 | D16 | 2026-09-08 | Playtest delivery is the standalone HTML file until hosting is resolved; the hosted artifact route is blocked by a service-side misclassification of the bundle (supersedes the hosted half of D11). | 04 (Phase D) |
+| D17 | 2026-09-08 | Hosted playtest links use `npm run build:hosted`: only the game code is inlined and Babylon core and GUI load from jsdelivr as UMD globals. The fully inlined build stays for standalone files. Supersedes D16. | 04 (post-close) |
