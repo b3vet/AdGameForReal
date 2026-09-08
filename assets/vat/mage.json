@@ -1,0 +1,35 @@
+{
+  "rig": "mage",
+  "source": "models/mage.glb",
+  "boneCount": 41,
+  "width": 168,
+  "height": 134,
+  "fps": 30,
+  "format": "half-float-rgba",
+  "ranges": {
+    "idle": {
+      "animation": "Idle",
+      "from": 0,
+      "to": 31,
+      "loop": true
+    },
+    "run": {
+      "animation": "Running_A",
+      "from": 32,
+      "to": 55,
+      "loop": true
+    },
+    "cast": {
+      "animation": "Spellcast_Shoot",
+      "from": 56,
+      "to": 83,
+      "loop": true
+    },
+    "cheer": {
+      "animation": "Cheer",
+      "from": 84,
+      "to": 133,
+      "loop": true
+    }
+  }
+}

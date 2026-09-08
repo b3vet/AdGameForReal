@@ -1,0 +1,274 @@
+{
+  "basePath": "/assets/",
+  "entries": [
+    {
+      "id": "mage",
+      "kind": "model",
+      "url": "models/mage.glb",
+      "vat": "vat-mage",
+      "scale": 0.35,
+      "animations": {
+        "idle": "Idle",
+        "run": "Running_A",
+        "cast": "Spellcast_Shoot",
+        "cheer": "Cheer"
+      },
+      "body": [
+        "Mage_Body",
+        "Mage_Head",
+        "Mage_ArmLeft",
+        "Mage_ArmRight",
+        "Mage_LegLeft",
+        "Mage_LegRight",
+        "Mage_Hat",
+        "Mage_Cape"
+      ],
+      "variants": {
+        "ember": [
+          "2H_Staff"
+        ],
+        "storm": [
+          "1H_Wand"
+        ],
+        "frost": [
+          "Spellbook_open"
+        ]
+      }
+    },
+    {
+      "id": "skeleton_minion",
+      "kind": "model",
+      "url": "models/skeleton_minion.glb",
+      "vat": "vat-skeleton_minion",
+      "scale": 0.35,
+      "animations": {
+        "walk": "Walking_D_Skeletons",
+        "death": "Death_C_Skeletons"
+      },
+      "body": [
+        "Skeleton_Minion_Body",
+        "Skeleton_Minion_Head",
+        "Skeleton_Minion_Jaw",
+        "Skeleton_Minion_ArmLeft",
+        "Skeleton_Minion_ArmRight",
+        "Skeleton_Minion_LegLeft",
+        "Skeleton_Minion_LegRight",
+        "Skeleton_Minion_Cloak"
+      ],
+      "variants": {
+        "default": []
+      }
+    },
+    {
+      "id": "skeleton_warrior",
+      "kind": "model",
+      "url": "models/skeleton_warrior.glb",
+      "vat": "vat-skeleton_warrior",
+      "scale": 0.35,
+      "animations": {
+        "walk": "Walking_C",
+        "death": "Death_A"
+      },
+      "body": [
+        "Skeleton_Warrior_Body",
+        "Skeleton_Warrior_Head",
+        "Skeleton_Warrior_Jaw",
+        "Skeleton_Warrior_ArmLeft",
+        "Skeleton_Warrior_ArmRight",
+        "Skeleton_Warrior_LegLeft",
+        "Skeleton_Warrior_LegRight",
+        "Skeleton_Warrior_Cloak",
+        "Skeleton_Warrior_Helmet"
+      ],
+      "variants": {
+        "default": []
+      }
+    },
+    {
+      "id": "boss_demon",
+      "kind": "model",
+      "url": "models/boss_demon.glb",
+      "scale": 1,
+      "animations": {
+        "idle": "Idle",
+        "walk": "Walk",
+        "attack": "Punch",
+        "hit": "HitReact",
+        "death": "Death"
+      }
+    },
+    {
+      "id": "prop_fence",
+      "kind": "model",
+      "url": "props/fence.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_grave_A",
+      "kind": "model",
+      "url": "props/grave_A.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_gravestone",
+      "kind": "model",
+      "url": "props/gravestone.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_pillar",
+      "kind": "model",
+      "url": "props/pillar.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_post_lantern",
+      "kind": "model",
+      "url": "props/post_lantern.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_tree_dead_large",
+      "kind": "model",
+      "url": "props/tree_dead_large.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_tree_dead_medium",
+      "kind": "model",
+      "url": "props/tree_dead_medium.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_tree_dead_small",
+      "kind": "model",
+      "url": "props/tree_dead_small.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_tree_pine_orange_large",
+      "kind": "model",
+      "url": "props/tree_pine_orange_large.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "prop_tree_pine_orange_medium",
+      "kind": "model",
+      "url": "props/tree_pine_orange_medium.glb",
+      "animations": {},
+      "scale": 0.35
+    },
+    {
+      "id": "vat-mage",
+      "kind": "vat",
+      "url": "vat/mage.bin",
+      "metaUrl": "vat/mage.json"
+    },
+    {
+      "id": "vat-skeleton_minion",
+      "kind": "vat",
+      "url": "vat/skeleton_minion.bin",
+      "metaUrl": "vat/skeleton_minion.json"
+    },
+    {
+      "id": "vat-skeleton_warrior",
+      "kind": "vat",
+      "url": "vat/skeleton_warrior.bin",
+      "metaUrl": "vat/skeleton_warrior.json"
+    },
+    {
+      "id": "sfx_block_kill",
+      "kind": "audio",
+      "url": "audio/block_kill.wav"
+    },
+    {
+      "id": "sfx_boss_death",
+      "kind": "audio",
+      "url": "audio/boss_death.wav"
+    },
+    {
+      "id": "sfx_boss_hit",
+      "kind": "audio",
+      "url": "audio/boss_hit.wav"
+    },
+    {
+      "id": "sfx_boss_stomp",
+      "kind": "audio",
+      "url": "audio/boss_stomp.wav"
+    },
+    {
+      "id": "sfx_enemy_hit",
+      "kind": "audio",
+      "url": "audio/enemy_hit.wav"
+    },
+    {
+      "id": "sfx_gate_pass_bad",
+      "kind": "audio",
+      "url": "audio/gate_pass_bad.wav"
+    },
+    {
+      "id": "sfx_gate_pass_good",
+      "kind": "audio",
+      "url": "audio/gate_pass_good.wav"
+    },
+    {
+      "id": "sfx_gate_tick",
+      "kind": "audio",
+      "url": "audio/gate_tick.wav"
+    },
+    {
+      "id": "sfx_lose_sting",
+      "kind": "audio",
+      "url": "audio/lose_sting.wav"
+    },
+    {
+      "id": "sfx_shatter",
+      "kind": "audio",
+      "url": "audio/shatter.wav"
+    },
+    {
+      "id": "sfx_shot_ember",
+      "kind": "audio",
+      "url": "audio/shot_ember.wav"
+    },
+    {
+      "id": "sfx_shot_frost",
+      "kind": "audio",
+      "url": "audio/shot_frost.wav"
+    },
+    {
+      "id": "sfx_shot_storm",
+      "kind": "audio",
+      "url": "audio/shot_storm.wav"
+    },
+    {
+      "id": "sfx_ui_tap",
+      "kind": "audio",
+      "url": "audio/ui_tap.wav"
+    },
+    {
+      "id": "sfx_units_gained",
+      "kind": "audio",
+      "url": "audio/units_gained.wav"
+    },
+    {
+      "id": "sfx_units_lost",
+      "kind": "audio",
+      "url": "audio/units_lost.wav"
+    },
+    {
+      "id": "sfx_win_fanfare",
+      "kind": "audio",
+      "url": "audio/win_fanfare.wav"
+    }
+  ]
+}

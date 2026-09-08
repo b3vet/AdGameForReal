@@ -1,0 +1,23 @@
+{
+  "rig": "skeleton_warrior",
+  "source": "models/skeleton_warrior.glb",
+  "boneCount": 41,
+  "width": 168,
+  "height": 73,
+  "fps": 30,
+  "format": "half-float-rgba",
+  "ranges": {
+    "walk": {
+      "animation": "Walking_C",
+      "from": 0,
+      "to": 47,
+      "loop": true
+    },
+    "death": {
+      "animation": "Death_A",
+      "from": 48,
+      "to": 72,
+      "loop": false
+    }
+  }
+}

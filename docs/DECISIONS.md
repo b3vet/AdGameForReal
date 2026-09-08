@@ -24,3 +24,5 @@
 | D20 | 2026-09-08 | Difficulty targets: a good player ends with 35 to 65 percent of peak; boss fights last 20 to 30 s; curses start small enough to be shot down. | 06 |
 | D21 | 2026-09-08 | Tone is epic and heavy: sound, palette, camera shake, boss weight, UI copy. Staffs are Ember, Storm, Frost. | 06 |
 | D22 | 2026-09-08 | Single-file builds inline every asset and the Havok WASM as data because the page host blocks runtime fetches; dev and production builds load assets by URL. | 06 |
+| D23 | 2026-09-08 | One VAT bake per rig drives every accessory (staffs are skinned to the hand bone and merged), since a VAT is bone matrices, not mesh data. Props come from KayKit Halloween Bits; the biome-1 boss is the Quaternius Demon. | 07 (Phase A), ASSETS.md |
+| D24 | 2026-09-08 | Peak targets re-derived for rate-based growth: 105 at level 1 to 400 at level 10 (supersedes the numbers in D14). Pre-boss road runs 29 to 46 s; row counts won over the 30 to 45 s band. | 07 (Phase B1) |

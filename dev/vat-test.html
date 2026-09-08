@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>Arcane Rush — asset test</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0d14;
+        overflow: hidden;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #cfd6e6;
+      }
+      #vat-test-canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        touch-action: none;
+        outline: none;
+      }
+      #hud {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        padding: 8px 10px;
+        background: rgba(6, 8, 14, 0.78);
+        border: 1px solid #262c3d;
+        border-radius: 6px;
+        white-space: pre;
+        pointer-events: none;
+      }
+      #hud b {
+        color: #8fb4ff;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="vat-test-canvas" touch-action="none"></canvas>
+    <div id="hud">loading…</div>
+    <script type="module" src="/dev/vat-test.ts"></script>
+  </body>
+</html>
