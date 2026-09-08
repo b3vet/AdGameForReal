@@ -15,14 +15,19 @@ import type { Scene } from '@babylonjs/core/scene';
 import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
 import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
+import { loadPropMeshes, meshExtent } from './models';
 import {
   GATE_BASE_ALPHA,
   GATE_CENTER_Y,
+  GATE_DRAW_RANGE,
   GATE_EXIT_DURATION,
   GATE_HEIGHT,
   GATE_LABEL_MIN,
   GATE_LABEL_RANGE,
   GATE_LABEL_SIZE,
+  GATE_PROP_HEIGHT,
+  GATE_PROP_SPIN,
+  GATE_PROP_Y,
   GATE_PULSE_DURATION,
   GATE_TINTS,
   GATE_WIDTH,
@@ -33,7 +38,19 @@ import {
   POOL,
   SIDE_GATE_LABEL_RANGE,
 } from './theme';
+import { weaponIds } from '@/sim';
 import type { GateKind, GateState, RunState, WeaponId } from '@/sim';
+
+/**
+ * The staff each weapon gate floats above its panel, by mesh name inside
+ * `mage.glb`. They are the same meshes the mages carry, so the panel offering
+ * "Frost" shows the exact grimoire the crowd will be holding a second later.
+ */
+const STAFF_MESHES: Record<WeaponId, string> = {
+  ember: '2H_Staff',
+  storm: '1H_Wand',
+  frost: 'Spellbook_open',
+};
 
 type Exit = 'none' | 'chosen' | 'skipped';
 
@@ -67,6 +84,8 @@ interface GateSlot {
   pulse: number;
   exit: Exit;
   exitAge: number;
+  /** Whether the panel is inside the draw range; see `paintIdle`. */
+  drawn: boolean;
   /** Frame counter of the last `RunState` that still listed this gate. */
   seen: number;
 }
@@ -74,9 +93,16 @@ interface GateSlot {
 export class GateView {
   private readonly slots: GateSlot[] = [];
   private readonly byGateId = new Map<number, GateSlot>();
+  private readonly scene: Scene;
+  /** One floating staff per weapon, shown above the nearest gate offering it. */
+  private readonly staffs = new Map<WeaponId, Mesh>();
+  /** Rebuilt every frame: which gate, if any, each staff is hovering over. */
+  private readonly staffTarget = new Map<WeaponId, GateSlot>();
   private frame = 0;
+  private spin = 0;
 
   constructor(scene: Scene, labels: LabelLayer) {
+    this.scene = scene;
     for (let i = 0; i < POOL.gates; i++) {
       const material = new StandardMaterial(`gateMat-${String(i)}`, scene);
       material.specularColor = Color3.Black();
@@ -107,8 +133,23 @@ export class GateView {
         pulse: 0,
         exit: 'none',
         exitAge: 0,
+        drawn: false,
         seen: 0,
       });
+    }
+  }
+
+  /** Pulls the three staff props out of the mage model. */
+  async load(): Promise<void> {
+    const meshes = await loadPropMeshes(this.scene, 'mage', Object.values(STAFF_MESHES));
+    for (const id of weaponIds) {
+      const mesh = meshes.get(STAFF_MESHES[id]);
+      if (mesh === undefined) continue;
+      const height = Math.max(0.01, meshExtent(mesh).y);
+      mesh.scaling.setAll(GATE_PROP_HEIGHT / height);
+      mesh.isPickable = false;
+      mesh.setEnabled(false);
+      this.staffs.set(id, mesh);
     }
   }
 
@@ -116,6 +157,8 @@ export class GateView {
   reset(): void {
     this.byGateId.clear();
     for (const slot of this.slots) this.release(slot);
+    for (const staff of this.staffs.values()) staff.setEnabled(false);
+    this.staffTarget.clear();
   }
 
   /** A shot landed on this gate: flash it so the player sees the number move. */
@@ -142,6 +185,7 @@ export class GateView {
   update(state: RunState, dt: number): void {
     this.frame++;
     const squadZ = state.squad.z;
+    this.staffTarget.clear();
 
     for (const gate of state.gates) {
       const slot = this.bind(gate);
@@ -157,6 +201,12 @@ export class GateView {
       }
 
       this.paintIdle(slot, gate, squadZ);
+      if (gate.kind === 'weapon' && gate.weaponId !== undefined && slot.drawn) {
+        const held = this.staffTarget.get(gate.weaponId);
+        if (held === undefined || slot.panel.position.z < held.panel.position.z) {
+          this.staffTarget.set(gate.weaponId, slot);
+        }
+      }
     }
 
     for (const slot of this.slots) {
@@ -169,12 +219,39 @@ export class GateView {
       }
       this.advanceExit(slot, dt, squadZ);
     }
+
+    this.placeStaffs(dt);
   }
 
   dispose(): void {
     for (const slot of this.slots) slot.panel.dispose();
     this.slots.length = 0;
     this.byGateId.clear();
+    for (const staff of this.staffs.values()) staff.dispose();
+    this.staffs.clear();
+  }
+
+  /**
+   * Floats each staff over the nearest gate offering it, turning slowly so the
+   * silhouette reads from any angle, and hides the ones nobody is offering.
+   */
+  private placeStaffs(dt: number): void {
+    this.spin += dt * GATE_PROP_SPIN;
+    for (const [id, mesh] of this.staffs) {
+      const slot = this.staffTarget.get(id);
+      if (slot === undefined) {
+        if (mesh.isEnabled()) mesh.setEnabled(false);
+        continue;
+      }
+      mesh.setEnabled(true);
+      mesh.position.set(
+        slot.panel.position.x,
+        GATE_PROP_Y + Math.sin(this.spin * 2) * 0.06,
+        slot.panel.position.z,
+      );
+      mesh.rotation.y = this.spin;
+      mesh.rotation.z = 0.35;
+    }
   }
 
   private bind(gate: GateState): GateSlot | undefined {
@@ -195,6 +272,7 @@ export class GateView {
 
     slot.panel.position.set(gate.lane * LANE_WIDTH, GATE_CENTER_Y, gate.z);
     slot.panel.scaling.setAll(1);
+    slot.drawn = true;
     slot.panel.setEnabled(true);
     slot.material.alpha = GATE_BASE_ALPHA;
     this.tint(slot, gate.kind);
@@ -215,6 +293,20 @@ export class GateView {
   }
 
   private paintIdle(slot: GateSlot, gate: GateState, squadZ: number): void {
+    const ahead = gate.z - squadZ;
+    // A level carries up to sixty panels and each is its own draw call, so the
+    // ones deep in the fog are not drawn at all. Three rows are in frame at
+    // 11 m spacing, which is everything the player can act on.
+    const drawn = ahead < GATE_DRAW_RANGE && ahead > -LABEL_BEHIND * 2;
+    if (drawn !== slot.drawn) {
+      slot.drawn = drawn;
+      slot.panel.setEnabled(drawn);
+    }
+    if (!drawn) {
+      hideLabel(slot.label);
+      return;
+    }
+
     // Shooting a `sub` gate to zero turns it into an `add` gate: the colour has
     // to follow, or the player reads a red panel offering a bonus.
     if (gate.kind !== slot.kind) this.tint(slot, gate.kind);
@@ -226,7 +318,6 @@ export class GateView {
     tint.scaleToRef(0.35 + pulse * 0.9, slot.material.emissiveColor);
     slot.material.alpha = GATE_BASE_ALPHA + pulse * 0.35;
 
-    const ahead = gate.z - squadZ;
     // A far row shows one number, the near row shows all three: at thirty
     // metres out the three lanes are close enough on screen that side labels
     // overlap the middle one, and the nearest row has to stay fully readable.
@@ -289,6 +380,7 @@ export class GateView {
     slot.exit = 'none';
     slot.exitAge = 0;
     slot.pulse = 0;
+    slot.drawn = false;
     slot.panel.setEnabled(false);
     slot.panel.scaling.setAll(1);
     hideLabel(slot.label);

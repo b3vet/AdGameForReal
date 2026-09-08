@@ -1,6 +1,12 @@
 /**
- * The squad: one capsule mesh drawn as thin instances, one per unit, placed at
- * `formationOffsets(count)` around `(squad.x, squad.z)`.
+ * The squad: a crowd of animated apprentice mages, one baked-animation thin
+ * instance per unit, placed at `formationOffsets(count)` around
+ * `(squad.x, squad.z)`.
+ *
+ * All three staffs are loaded at init and only the one in hand is drawn, so a
+ * `weapon` gate swaps a mesh rather than loading anything mid-run. Because the
+ * per-instance offsets are derived from the formation index and not stored on
+ * the crowd, the swap keeps every mage exactly where it was.
  *
  * Count changes are read, not told: the view diffs `count` against the previous
  * frame. Because the phyllotaxis offset for index `i` does not depend on the
@@ -8,35 +14,41 @@
  * looks like recruits joining the edge rather than the whole blob reshuffling.
  */
 
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { CreateCapsule } from '@babylonjs/core/Meshes/Builders/capsuleBuilder';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
+import type { Crowd } from './characters';
+import { loadCrowd } from './models';
 import {
+  CASTING_SHARE,
   CROWD_SCALE_FROM,
   CROWD_SCALE_MIN,
   CROWD_SCALE_TO,
   DEATH_DURATION,
+  EMBER_COLOR,
+  FROST_COLOR,
+  MAGE_SCALE,
   POOL,
   POP_DURATION,
-  SQUAD_BODY,
-  SQUAD_DEATH,
-  SQUAD_GLOW,
-  SQUAD_HEIGHT,
-  SQUAD_RADIUS,
+  STORM_COLOR,
 } from './theme';
-import { formationOffsets } from '@/sim';
-import type { SquadState } from '@/sim';
+import { formationOffsets, startWeapon, weaponIds, weaponOf } from '@/sim';
+import type { RunStatus, SquadState, WeaponId } from '@/sim';
 
 /** Sentinel in `spawnAge`: this unit finished its pop and needs no animation. */
 const SETTLED = 1e9;
 
+/** Metres of forward travel per second below which the squad counts as stopped. */
+const ADVANCE_EPSILON = 0.05;
+
+/** Fallback capsule colours, one per staff, when the model cannot be loaded. */
+const FALLBACK_COLORS: Record<WeaponId, typeof EMBER_COLOR> = {
+  ember: EMBER_COLOR,
+  storm: STORM_COLOR,
+  frost: FROST_COLOR,
+};
+
 interface Corpse {
   x: number;
-  y: number;
   z: number;
   age: number;
   /** The crowd scale this unit died at, so it shrinks from the size it had. */
@@ -44,101 +56,147 @@ interface Corpse {
 }
 
 export class SquadView {
-  private readonly mesh: Mesh;
-  private readonly corpseMesh: Mesh;
-  private readonly matrices: Float32Array;
-  private readonly corpseMatrices: Float32Array;
+  private readonly scene: Scene;
+  private readonly crowds = new Map<WeaponId, Crowd>();
+  private active: WeaponId = startWeapon;
 
   /** Seconds since unit `i` appeared, or `SETTLED`. Indexed by formation slot. */
-  private readonly spawnAge: Float32Array;
+  private readonly spawnAge = new Float32Array(POOL.squad);
 
-  /** Fixed-size ring of shrinking corpses; oldest is overwritten if it overflows. */
+  /** Fixed-size ring of shrinking corpses; a full pool simply drops the extras. */
   private readonly corpses: Corpse[] = [];
   private corpseCount = 0;
 
   private previousCount = -1;
+  private previousZ = Number.NaN;
+  private advancing = false;
+  private cheering = false;
 
   constructor(scene: Scene) {
-    const body = new StandardMaterial('squadMat', scene);
-    body.diffuseColor = SQUAD_BODY;
-    body.emissiveColor = SQUAD_GLOW;
-    body.specularColor = new Color3(0.4, 0.45, 0.6);
-
-    // A second mesh rather than a per-instance colour buffer: two draw calls is
-    // cheaper than the shader permutation, and the dying units need a different
-    // material anyway (unlit red so they read against the blue cluster).
-    const dying = new StandardMaterial('squadDeathMat', scene);
-    dying.diffuseColor = SQUAD_DEATH;
-    dying.emissiveColor = SQUAD_DEATH.scale(0.8);
-    dying.specularColor = Color3.Black();
-
-    // Two separate builds rather than `clone`: a clone shares its geometry, and
-    // `thinInstanceSetBuffer` writes the instance matrices into the geometry's
-    // vertex buffers, so the second mesh would silently steal the first's.
-    this.mesh = createUnitMesh(scene, 'squadUnit');
-    this.mesh.material = body;
-
-    this.corpseMesh = createUnitMesh(scene, 'squadCorpse');
-    this.corpseMesh.material = dying;
-
-    this.matrices = createMatrixBuffer(this.mesh, POOL.squad);
-    this.corpseMatrices = createMatrixBuffer(this.corpseMesh, POOL.dyingUnits);
-
-    this.spawnAge = new Float32Array(POOL.squad);
+    this.scene = scene;
     for (let i = 0; i < POOL.dyingUnits; i++) {
-      this.corpses.push({ x: 0, y: 0, z: 0, age: 0, scale: 1 });
+      this.corpses.push({ x: 0, z: 0, age: 0, scale: 1 });
     }
+  }
+
+  /** Loads all three staffs. Called once, from `Renderer.init`. */
+  async load(): Promise<void> {
+    const capacity = POOL.squad + POOL.dyingUnits;
+    const loaded = await Promise.all(
+      weaponIds.map(async (id) =>
+        loadCrowd(this.scene, {
+          modelId: 'mage',
+          variant: id,
+          capacity,
+          fallbackColor: FALLBACK_COLORS[id],
+          fallbackName: `mage-${id}`,
+        }),
+      ),
+    );
+    weaponIds.forEach((id, index) => {
+      const crowd = loaded[index];
+      if (crowd === undefined) return;
+      // A crowd starts hidden and `commit` turns it on when it has instances,
+      // so nothing here has to enable anything.
+      this.crowds.set(id, crowd);
+    });
   }
 
   /** New level: the starting squad is simply there, with no pop animation, and
    *  nothing is left standing from the run before. */
   reset(): void {
     this.previousCount = -1;
+    this.previousZ = Number.NaN;
     this.corpseCount = 0;
-    commitInstances(this.mesh, 0);
-    commitInstances(this.corpseMesh, 0);
+    this.cheering = false;
+    this.advancing = false;
+    for (const crowd of this.crowds.values()) {
+      crowd.setCount(0);
+      crowd.commit();
+    }
   }
 
-  update(squad: SquadState, dt: number): void {
-    const count = Math.min(POOL.squad, Math.max(0, Math.floor(squad.count)));
-    const crowd = crowdScale(count);
-    this.diffCount(count, squad.x, squad.z, crowd);
+  /** The squad picked up a different staff: draw the crowd that carries it. */
+  setWeapon(weaponId: WeaponId): void {
+    if (weaponId === this.active) return;
+    // The old crowd keeps its stale instances but stops being drawn; the new
+    // one is rewritten in full by the `update` that follows and enables itself
+    // when it commits, so nothing has to be copied across.
+    this.crowds.get(this.active)?.mesh.setEnabled(false);
+    this.active = weaponId;
+  }
 
+  /** Won: the survivors cheer until the next level is loaded. */
+  onRunEnded(status: RunStatus): void {
+    this.cheering = status === 'won';
+  }
+
+  update(squad: SquadState, arenaZ: number, dt: number): void {
+    this.setWeapon(weaponOf(squad));
+    const crowd = this.crowds.get(this.active);
+    if (crowd === undefined) return;
+
+    const count = Math.min(POOL.squad, Math.max(0, Math.floor(squad.count)));
+    const crowdScaleNow = crowdScale(count);
+    this.diffCount(count, squad.x, squad.z, crowdScaleNow);
+    this.trackMotion(squad.z, dt);
+
+    const inArena = squad.z >= arenaZ - 0.5;
     const offsets = formationOffsets(count);
-    const halfHeight = SQUAD_HEIGHT / 2;
 
     for (let i = 0; i < count; i++) {
       const offset = offsets[i];
       if (offset === undefined) continue;
 
-      let scale = crowd;
+      let scale = crowdScaleNow;
       const age = this.spawnAge[i] ?? SETTLED;
       if (age < POP_DURATION) {
-        scale = crowd * popScale(age);
+        scale = crowdScaleNow * popScale(age);
         this.spawnAge[i] = age + dt;
       } else if (age !== SETTLED) {
         this.spawnAge[i] = SETTLED;
       }
 
-      writeInstance(
-        this.matrices,
+      crowd.setInstance(
         i,
-        scale,
-        scale,
-        scale,
         squad.x + offset.x,
-        halfHeight * scale,
+        0,
         squad.z + offset.z,
+        yawOf(i),
+        scale * MAGE_SCALE,
+        this.animationFor(i, inArena),
+        timeOffsetOf(i),
       );
     }
-    commitInstances(this.mesh, count);
 
-    this.updateCorpses(dt);
+    const dying = this.writeCorpses(crowd, count, dt);
+    crowd.setCount(count + dying);
+    crowd.commit();
+    crowd.update(dt);
   }
 
   dispose(): void {
-    this.mesh.dispose();
-    this.corpseMesh.dispose();
+    for (const crowd of this.crowds.values()) crowd.dispose();
+    this.crowds.clear();
+  }
+
+  /**
+   * A VAT cannot blend, so the crowd's "firing while running" look is built out
+   * of whole units: one mage in `CASTING_SHARE` throws a spell at any moment
+   * while the rest run, which at any squad size reads as a firing crowd and
+   * hides the fact that each unit's animation is a hard cut.
+   */
+  private animationFor(index: number, inArena: boolean): string {
+    if (this.cheering) return 'cheer';
+    if (this.advancing) return index % CASTING_SHARE === 0 ? 'cast' : 'run';
+    return inArena ? 'cast' : 'idle';
+  }
+
+  private trackMotion(z: number, dt: number): void {
+    const previous = this.previousZ;
+    this.previousZ = z;
+    if (Number.isNaN(previous) || dt <= 0) return;
+    this.advancing = (z - previous) / dt > ADVANCE_EPSILON;
   }
 
   private diffCount(count: number, x: number, z: number, crowd: number): void {
@@ -163,25 +221,28 @@ export class SquadView {
       for (let i = count; i < previous; i++) {
         const offset = offsets[i];
         if (offset === undefined) continue;
-        this.pushCorpse(x + offset.x, SQUAD_HEIGHT / 2, z + offset.z, crowd);
+        this.pushCorpse(x + offset.x, z + offset.z, crowd);
       }
     }
   }
 
-  private pushCorpse(x: number, y: number, z: number, scale: number): void {
+  private pushCorpse(x: number, z: number, scale: number): void {
     if (this.corpseCount >= POOL.dyingUnits) return;
     const corpse = this.corpses[this.corpseCount];
     if (corpse === undefined) return;
     corpse.x = x;
-    corpse.y = y;
     corpse.z = z;
     corpse.age = 0;
     corpse.scale = scale;
     this.corpseCount++;
   }
 
-  /** Compacts the live corpses to the front of the buffer as they expire. */
-  private updateCorpses(dt: number): void {
+  /**
+   * Shrinking corpses, written into the same instance buffer straight after the
+   * live units: same mesh, same draw call, and the dead keep the staff the
+   * squad was holding when they fell.
+   */
+  private writeCorpses(crowd: Crowd, base: number, dt: number): number {
     let write = 0;
     for (let i = 0; i < this.corpseCount; i++) {
       const corpse = this.corpses[i];
@@ -189,22 +250,21 @@ export class SquadView {
       corpse.age += dt;
       if (corpse.age >= DEATH_DURATION) continue;
 
-      const scale = corpse.scale * (1 - corpse.age / DEATH_DURATION);
-      writeInstance(
-        this.corpseMatrices,
-        write,
-        scale * 1.3,
-        scale,
-        scale * 1.3,
+      const fade = 1 - corpse.age / DEATH_DURATION;
+      crowd.setInstance(
+        base + write,
         corpse.x,
-        corpse.y * scale,
+        0,
         corpse.z,
+        yawOf(i),
+        corpse.scale * MAGE_SCALE * fade,
+        'idle',
+        timeOffsetOf(i),
       );
 
       const kept = this.corpses[write];
       if (kept !== undefined && write !== i) {
         kept.x = corpse.x;
-        kept.y = corpse.y;
         kept.z = corpse.z;
         kept.age = corpse.age;
         kept.scale = corpse.scale;
@@ -212,16 +272,18 @@ export class SquadView {
       write++;
     }
     this.corpseCount = write;
-    commitInstances(this.corpseMesh, write);
+    return write;
   }
 }
 
-function createUnitMesh(scene: Scene, name: string): Mesh {
-  return CreateCapsule(
-    name,
-    { radius: SQUAD_RADIUS, height: SQUAD_HEIGHT, tessellation: 10, capSubdivisions: 3 },
-    scene,
-  );
+/** A little turn per unit, so five hundred mages are not one rigid block. */
+function yawOf(index: number): number {
+  return ((index % 7) - 3) * 0.05;
+}
+
+/** Seconds into the loop, spread over the crowd so nobody marches in lockstep. */
+function timeOffsetOf(index: number): number {
+  return (index % 29) * 0.041;
 }
 
 /** Full size for a small squad, easing to `CROWD_SCALE_MIN` at the count cap. */

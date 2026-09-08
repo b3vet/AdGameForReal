@@ -11,29 +11,31 @@
  * single-file artifact build stays small.
  */
 
-import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
-import { Engine } from '@babylonjs/core/Engines/engine';
-import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
-import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
-import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { Scene } from '@babylonjs/core/scene';
+import type { Engine } from '@babylonjs/core/Engines/engine';
+import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import type { GlowLayer } from '@babylonjs/core/Layers/glowLayer';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { Scene } from '@babylonjs/core/scene';
 
 import { BossView } from './boss';
+import { CameraRig } from './camera';
+import { EffectsView } from './effects';
 import { EnemyView } from './enemies';
 import { GateView } from './gates';
 import { LabelLayer } from './labels';
 import { ProjectileView } from './projectiles';
+import { PropsView } from './props';
 import { RoadView } from './road';
+import { createEngine, createGlow, createScene } from './scene';
 import { SquadView } from './squad';
-import { CAMERA, FOG_END, FOG_START, SKY } from './theme';
-import type { LevelDef, RunState, SimEvent } from '@/sim';
+import { SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { startWeapon, weaponOf } from '@/sim';
+import type { LevelDef, RunState, SimEvent, WeaponId } from '@/sim';
 
 export interface RendererOptions {
   /**
    * Ceiling on the device pixel ratio the scene renders at. Phones ship 3x and
-   * 4x screens; past 2x the extra pixels cost frames and buy nothing on a
-   * greybox scene.
+   * 4x screens; past 2x the extra pixels cost frames and buy nothing.
    */
   maxPixelRatio?: number;
 }
@@ -48,26 +50,43 @@ const DEFAULT_MAX_PIXEL_RATIO = 2;
 const ROAD_START_Z = -10;
 const ROAD_PAST_ARENA = 70;
 
+/** The boss's death: one big ring and a circle of bursts around the body. */
+const BOSS_DEATH_RING = 5;
+const BOSS_DEATH_BURSTS = 8;
+const BOSS_DEATH_SPREAD = 1.4;
+
+/** Scratch for the position lookups in `applyEvents`, which must not allocate. */
+const scratchFrom = { x: 0, z: 0 };
+const scratchTo = { x: 0, z: 0 };
+
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly maxPixelRatio: number;
 
   private engine: Engine | null = null;
-  private scene: Scene | null = null;
-  private camera: UniversalCamera | null = null;
+  private sceneRef: Scene | null = null;
+  private rig: CameraRig | null = null;
+  private instrumentation: SceneInstrumentation | null = null;
 
   private labels: LabelLayer | null = null;
   private road: RoadView | null = null;
+  private props: PropsView | null = null;
   private squad: SquadView | null = null;
   private projectiles: ProjectileView | null = null;
+  private effects: EffectsView | null = null;
   private gates: GateView | null = null;
   private enemies: EnemyView | null = null;
   private boss: BossView | null = null;
 
-  /** Scratch vectors: `update` runs 60 times a second and must not allocate. */
-  private readonly cameraTarget = new Vector3(0, CAMERA.lookHeight, CAMERA.lookAhead);
-  private cameraReady = false;
-  private cameraSettled = false;
+  private glow: GlowLayer | null = null;
+  private glowEnabled = true;
+  private physicsQuality = 2;
+  /** The boss's enemy id, so `enemyHit` can be routed to its hit reaction. */
+  private bossId = -1;
+  /** A boss death arrives as two events; the burst belongs to whichever is first. */
+  private bossBurstDone = false;
+  /** The staff in hand, for effects fired by events that do not name one. */
+  private lastWeapon: WeaponId = startWeapon;
 
   private disposed = false;
 
@@ -81,40 +100,19 @@ export class Renderer {
     this.engine = engine;
     this.applyPixelRatio();
 
-    const scene = new Scene(engine);
-    scene.clearColor = new Color4(SKY.r, SKY.g, SKY.b, 1);
-    // Linear fog to the sky colour: the road has to end somewhere, and a haze
-    // is cheaper and calmer than a skybox.
-    scene.fogMode = Scene.FOGMODE_LINEAR;
-    scene.fogColor = SKY.clone();
-    scene.fogStart = FOG_START;
-    scene.fogEnd = FOG_END;
-    this.scene = scene;
+    const scene = createScene(engine);
+    this.sceneRef = scene;
+    this.instrumentation = new SceneInstrumentation(scene);
 
-    const camera = new UniversalCamera('camera', new Vector3(0, CAMERA.height, -CAMERA.behind), scene);
-    camera.fov = CAMERA.fov;
-    camera.minZ = 0.2;
-    camera.maxZ = 220;
-    // No input: the squad is driven by the sim, and a stray gesture must never
-    // move the camera.
-    camera.inputs.clear();
-    camera.setTarget(this.cameraTarget);
-    this.camera = camera;
-
-    const sky = new HemisphericLight('sky', new Vector3(0.2, 1, -0.15), scene);
-    sky.intensity = 0.85;
-    sky.diffuse = new Color3(1, 0.98, 0.94);
-    sky.groundColor = new Color3(0.28, 0.3, 0.36);
-
-    const sun = new DirectionalLight('sun', new Vector3(-0.35, -1, 0.5), scene);
-    sun.intensity = 1.1;
-    sun.diffuse = new Color3(1, 0.95, 0.85);
+    this.rig = new CameraRig(scene);
 
     const labels = new LabelLayer(scene);
     this.labels = labels;
     this.road = new RoadView(scene);
+    this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
     this.projectiles = new ProjectileView(scene);
+    this.effects = new EffectsView(scene);
     this.gates = new GateView(scene, labels);
     this.enemies = new EnemyView(scene, labels);
     this.boss = new BossView(scene, labels);
@@ -122,6 +120,19 @@ export class Renderer {
     // A default stretch of road, so the very first frame — which the app draws
     // behind the title screen before any level exists — is not empty sky.
     this.road.setExtent(ROAD_START_Z, 200, 168);
+
+    // Models are loaded in parallel and each loader is fail-soft: a missing
+    // `/assets/` costs the art, never the boot.
+    await Promise.all([
+      this.squad.load(),
+      this.enemies.load(),
+      this.boss.load(),
+      this.gates.load(),
+      this.props.load(),
+    ]);
+    this.props.build(1, ROAD_START_Z, 200);
+
+    this.buildGlow(scene);
 
     // Compiles shaders and uploads buffers, so the first `update` is not a
     // blank frame that the smoke test would screenshot.
@@ -136,41 +147,93 @@ export class Renderer {
    * frames until something does (see `App.frame`).
    */
   isSettled(): boolean {
-    return this.cameraSettled;
+    return this.rig?.isSettled() ?? false;
+  }
+
+  /**
+   * The Babylon scene, for the layers that draw into it without owning it —
+   * the physics debris in `src/physics`, and whatever the app hangs off it.
+   * Throws rather than returning null: every caller needs a scene, and a
+   * silent null here would surface as a mystery three frames later.
+   */
+  get scene(): Scene {
+    const scene = this.sceneRef;
+    if (scene === null) throw new Error('Renderer.scene read before init()');
+    return scene;
+  }
+
+  /** Draw calls in the last rendered frame; the budget is 40 at 500 units. */
+  get drawCalls(): number {
+    return this.instrumentation?.drawCallsCounter.current ?? 0;
+  }
+
+  /** Kicks the camera; see `CameraRig.shake`. */
+  shake(strength: number, seconds: number): void {
+    this.rig?.shake(strength, seconds);
+  }
+
+  /**
+   * The physics layer's quality, mirrored here because it decides who draws a
+   * death: at 1 and 2 `src/physics` spawns ragdolls and shards, so the renderer
+   * only takes the block away; at 0 it plays the baked death animation itself.
+   */
+  setPhysicsQuality(quality: number): void {
+    this.physicsQuality = Math.max(0, Math.min(2, Math.round(quality)));
+    this.enemies?.setPhysicsQuality(this.physicsQuality);
+  }
+
+  /** Degrade ladder rung: the glow pass costs a blur and a second draw. */
+  setGlow(enabled: boolean): void {
+    this.glowEnabled = enabled;
+    if (this.glow !== null) this.glow.isEnabled = enabled;
   }
 
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
-    this.road?.setExtent(ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA, level.arenaZ);
+    const endZ = level.arenaZ + ROAD_PAST_ARENA;
+    this.road?.setExtent(ROAD_START_Z, endZ, level.arenaZ);
+    this.props?.build(level.index, ROAD_START_Z, endZ);
     this.squad?.reset();
     this.projectiles?.reset();
+    this.effects?.reset();
     this.gates?.reset();
     this.enemies?.reset();
     this.boss?.reset();
-    this.cameraReady = false;
-    this.cameraSettled = false;
+    this.bossId = -1;
+    this.bossBurstDone = false;
+    this.rig?.reset();
   }
 
   /**
    * Called every frame after `Run.tick`. `events` are the events from that same
    * tick, in the order the sim produced them; they start animations, while every
    * position comes from `state`. Safe to call before `loadLevel`.
+   *
+   * `dt` is sim time, which the app scales for hit-stop and slow-mo, so every
+   * animation here is driven by it rather than by the frame clock.
    */
   update(state: RunState, events: readonly SimEvent[], dt: number): void {
     if (this.disposed) return;
-    const scene = this.scene;
+    const scene = this.sceneRef;
     if (scene === null) return;
 
+    this.bossId = state.boss?.id ?? this.bossId;
+    this.lastWeapon = weaponOf(state.squad);
     this.applyEvents(events);
 
-    this.squad?.update(state.squad, dt);
-    this.projectiles?.update(state.projectiles);
+    this.squad?.update(state.squad, state.arenaZ, dt);
+    this.projectiles?.update(state.projectiles, weaponOf(state.squad));
     this.gates?.update(state, dt);
     this.enemies?.update(state, dt);
-    this.boss?.update(state.boss, state.squad.z, dt);
+    this.boss?.update(state.boss, state.squad.z, dt, this.timeScale(dt));
+    this.effects?.update(dt);
 
-    this.updateCamera(state, dt);
+    this.rig?.update(state.squad, dt);
+    // After the rig, because the sky dome rides on the camera: a dome that
+    // follows a frame late shears against the fog on a fast lateral drag.
+    const camera = this.rig?.camera;
+    if (camera !== undefined) this.road?.update(camera.position.x, camera.position.z, dt);
 
     scene.render();
   }
@@ -198,30 +261,69 @@ export class Renderer {
 
     this.squad?.dispose();
     this.projectiles?.dispose();
+    this.effects?.dispose();
     this.gates?.dispose();
     this.enemies?.dispose();
     this.boss?.dispose();
+    this.props?.dispose();
     this.road?.dispose();
     this.labels?.dispose();
+    this.glow?.dispose();
 
     this.squad = null;
     this.projectiles = null;
+    this.effects = null;
     this.gates = null;
     this.enemies = null;
     this.boss = null;
+    this.props = null;
     this.road = null;
     this.labels = null;
-    this.camera = null;
+    this.glow = null;
+    this.rig?.dispose();
+    this.rig = null;
 
-    this.scene?.dispose();
-    this.scene = null;
+    this.instrumentation?.dispose();
+    this.instrumentation = null;
+    this.sceneRef?.dispose();
+    this.sceneRef = null;
     this.engine?.dispose();
     this.engine = null;
   }
 
   private applyEvents(events: readonly SimEvent[]): void {
+    const effects = this.effects;
+    const enemies = this.enemies;
+
     for (const event of events) {
       switch (event.type) {
+        case 'projectileFired':
+          effects?.onMuzzle(event.x, event.z);
+          break;
+        case 'projectileHit':
+          effects?.onImpact(event.weaponId, event.x, event.z);
+          break;
+        case 'splash':
+          effects?.onSplash(event.x, event.z, event.radius);
+          break;
+        case 'chain':
+          // The event carries block ids, not positions: the view that draws
+          // them is the one that knows where they are.
+          if (
+            enemies !== undefined &&
+            enemies !== null &&
+            enemies.positionOf(event.from, scratchFrom) &&
+            enemies.positionOf(event.to, scratchTo)
+          ) {
+            effects?.onChain(scratchFrom.x, scratchFrom.z, scratchTo.x, scratchTo.z);
+          }
+          break;
+        case 'weaponChanged':
+          this.lastWeapon = event.to;
+          this.squad?.setWeapon(event.to);
+          this.projectiles?.setWeapon(event.to);
+          effects?.setWeapon(event.to);
+          break;
         case 'gateHit':
           this.gates?.onHit(event.gateId);
           break;
@@ -229,75 +331,90 @@ export class Renderer {
           this.gates?.onPassed(event.gateId);
           break;
         case 'enemyHit':
-          this.enemies?.onHit(event.enemyId);
+          if (event.enemyId === this.bossId) this.boss?.onHit();
+          break;
+        case 'enemySlowed':
+          enemies?.onSlowed(event.enemyId, event.seconds);
+          break;
+        case 'enemyShattered':
+          enemies?.onShattered(event.enemyId);
+          // The shards are the physics layer's; the frost flash is the tell
+          // that this block did not fall over, it broke.
+          effects?.onImpact('frost', event.x, event.z);
           break;
         case 'enemyKilled':
-          if (event.kind === 'boss') this.boss?.onKilled();
-          else this.enemies?.onKilled(event.enemyId);
+          if (event.kind === 'boss') {
+            this.boss?.onKilled();
+            this.bossDeathBurst(event.x, event.z);
+          } else {
+            enemies?.onKilled(event.enemyId);
+          }
+          break;
+        case 'bossActivated':
+          this.bossId = event.enemyId;
           break;
         case 'bossStomp':
           this.boss?.onStomp(event.x, event.z);
+          this.shake(SHAKE_STOMP.strength, SHAKE_STOMP.seconds);
           break;
         case 'bossKilled':
           this.boss?.onKilled();
+          // `bossKilled` carries no position, unlike the `enemyKilled` that
+          // usually precedes it; the view knows where it last drew the body.
+          this.boss?.positionOf(scratchTo);
+          this.bossDeathBurst(scratchTo.x, scratchTo.z);
+          this.shake(SHAKE_BOSS_KILL.strength, SHAKE_BOSS_KILL.seconds);
+          break;
+        case 'runEnded':
+          this.squad?.onRunEnded(event.status);
           break;
         default:
-          // Everything else (fired, activated, gained, lost, ended) is already
-          // visible through `RunState`; the UI layer owns the rest.
+          // Everything else (activated, gained, lost) is already visible through
+          // `RunState`; the UI layer owns the rest.
           break;
       }
     }
   }
 
   /**
-   * Behind and above the squad, easing toward the ideal pose so a fast lateral
-   * drag does not snap the whole world sideways, and pulling back as the squad
-   * grows so a 500-unit crowd still fits in frame.
+   * The one moment the scene is allowed to shout: rings and a ring of bursts
+   * around the body. Still pooled geometry rather than a particle system —
+   * a boss dies once a level and the draw-call budget is for every frame.
    */
-  private updateCamera(state: RunState, dt: number): void {
-    const camera = this.camera;
-    if (camera === null) return;
-
-    const squad = state.squad;
-    const pullback = Math.min(CAMERA.pullbackMax, squad.count * CAMERA.pullbackPerUnit);
-    const lateral = squad.x * CAMERA.lateralFollow;
-
-    const wantX = lateral;
-    const wantY = CAMERA.height + pullback;
-    const wantZ = squad.z - CAMERA.behind - pullback;
-
-    // A fresh level snaps; every other frame eases at a rate independent of
-    // frame time, so 30 fps and 120 fps feel the same.
-    const blend = this.cameraReady ? 1 - Math.exp(-CAMERA.smoothing * dt) : 1;
-    this.cameraReady = true;
-
-    const fromX = camera.position.x;
-    const fromY = camera.position.y;
-    const fromZ = camera.position.z;
-
-    let x = fromX + (wantX - fromX) * blend;
-    let y = fromY + (wantY - fromY) * blend;
-    let z = fromZ + (wantZ - fromZ) * blend;
-
-    // The ease runs on frame time while the squad moves on sim time. A long
-    // frame — or `?turbo`, which advances the sim several steps per frame —
-    // leaves the pose metres behind the squad, which is a different shot
-    // entirely: flatter, more sky, the near row halfway up the screen. Clamping
-    // the trailing distance keeps the framing the tuning was done against.
-    const lag = Math.hypot(wantX - x, wantY - y, wantZ - z);
-    if (lag > CAMERA.maxLag) {
-      const keep = CAMERA.maxLag / lag;
-      x = wantX + (x - wantX) * keep;
-      y = wantY + (y - wantY) * keep;
-      z = wantZ + (z - wantZ) * keep;
+  private bossDeathBurst(x: number, z: number): void {
+    const effects = this.effects;
+    if (effects === null) return;
+    if (this.bossBurstDone) return;
+    this.bossBurstDone = true;
+    effects.onSplash(x, z, BOSS_DEATH_RING);
+    for (let i = 0; i < BOSS_DEATH_BURSTS; i++) {
+      const angle = (i / BOSS_DEATH_BURSTS) * Math.PI * 2;
+      effects.onImpact(
+        this.lastWeapon,
+        x + Math.cos(angle) * BOSS_DEATH_SPREAD,
+        z + Math.sin(angle) * BOSS_DEATH_SPREAD,
+      );
     }
+  }
 
-    this.cameraSettled =
-      Math.abs(x - fromX) + Math.abs(y - fromY) + Math.abs(z - fromZ) < CAMERA.settleEpsilon;
-    camera.position.set(x, y, z);
+  /**
+   * The ratio between the sim time a frame covers and the wall clock it took.
+   * The boss's animation groups run on the scene's own clock, so this is what
+   * carries the app's hit-stop and slow-mo through to them.
+   */
+  private timeScale(dt: number): number {
+    const frame = (this.engine?.getDeltaTime() ?? 16) / 1000;
+    if (frame <= 0) return 1;
+    return Math.max(0, Math.min(8, dt / frame));
+  }
 
-    this.cameraTarget.set(lateral, CAMERA.lookHeight, squad.z + CAMERA.lookAhead);
-    camera.setTarget(this.cameraTarget);
+  /** Hands the glow pass the meshes that bloom; see `createGlow`. */
+  private buildGlow(scene: Scene): void {
+    const meshes: Mesh[] = [];
+    for (const view of [this.projectiles, this.effects, this.enemies, this.boss]) {
+      meshes.push(...(view?.glowMeshes() ?? []));
+    }
+    this.glow = createGlow(scene, meshes, this.glowEnabled);
   }
 
   /** Caps the backing-store resolution; `1 / level` is the effective ratio. */
@@ -306,30 +423,5 @@ export class Renderer {
     if (engine === null) return;
     const deviceRatio = typeof window === 'undefined' ? 1 : (window.devicePixelRatio || 1);
     engine.setHardwareScalingLevel(1 / Math.min(deviceRatio, this.maxPixelRatio));
-  }
-}
-
-/**
- * SwiftShader in headless Chromium can refuse a WebGL2 context. Try the normal
- * antialiased WebGL2 engine first, then fall back to WebGL1 without
- * antialiasing rather than letting the whole app fail to boot.
- */
-function createEngine(canvas: HTMLCanvasElement): Engine {
-  try {
-    return new Engine(
-      canvas,
-      true,
-      {
-        disableWebGL2Support: false,
-        preserveDrawingBuffer: true,
-        stencil: true,
-        antialias: true,
-        powerPreference: 'high-performance',
-      },
-      true,
-    );
-  } catch (error) {
-    console.warn('[render] WebGL2 engine failed, falling back to WebGL1', error);
-    return new Engine(canvas, false);
   }
 }

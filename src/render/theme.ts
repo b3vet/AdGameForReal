@@ -6,46 +6,57 @@
  * durations — so they live next to the code that reads them. Anything the sim
  * also needs (lane width, projectile cap, max squad count) is read from
  * `@/data` here rather than duplicated.
+ *
+ * Palette, per docs/06-milestone-2-plan.md ("Palette and tone"): a near-black
+ * indigo sky with a dusk band, a dark desaturated road, and three saturated
+ * spell colours — ember orange, storm violet, frost cyan — that own every
+ * bright pixel on screen. Gate panels stay the most readable thing in frame.
  */
 
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 
 import { balance, levels } from '@/data';
 
-/** Fog fades to this and the canvas clears to it, so the horizon has no seam. */
-export const SKY = new Color3(0.4, 0.54, 0.76);
-export const FOG_START = 24;
-export const FOG_END = 70;
+/** Sky gradient, bottom to top. The fog fades to `SKY_HAZE`, so there is no seam. */
+export const SKY_HORIZON = new Color3(0.29, 0.16, 0.15);
+export const SKY_HAZE = new Color3(0.14, 0.1, 0.15);
+export const SKY_MID = new Color3(0.07, 0.06, 0.12);
+export const SKY_ZENITH = new Color3(0.021, 0.024, 0.055);
+/** What the canvas clears to: the top of the dome, for the pixels it misses. */
+export const SKY = SKY_ZENITH;
+export const FOG_COLOR = SKY_HAZE;
+export const FOG_START = 22;
+export const FOG_END = 72;
 
-export const ROAD_COLOR = new Color3(0.44, 0.41, 0.37);
-export const FIELD_COLOR = new Color3(0.2, 0.27, 0.24);
-export const LANE_LINE_COLOR = new Color3(0.95, 0.93, 0.78);
-export const ARENA_COLOR = new Color3(1, 0.78, 0.24);
+export const ROAD_COLOR = new Color3(0.24, 0.235, 0.27);
+export const FIELD_COLOR = new Color3(0.055, 0.056, 0.07);
+/** Lane runes: cool arcane light, dim enough that a gate number still wins. */
+export const LANE_LINE_COLOR = new Color3(0.36, 0.44, 0.95);
+export const ARENA_COLOR = new Color3(0.85, 0.4, 0.12);
 
-export const SQUAD_BODY = new Color3(0.24, 0.44, 0.95);
-export const SQUAD_GLOW = new Color3(0.1, 0.2, 0.55);
-export const SQUAD_DEATH = new Color3(0.95, 0.18, 0.14);
-export const PROJECTILE_COLOR = new Color3(1, 0.9, 0.5);
+/** The three staffs. Everything a weapon touches is one of these three hues. */
+export const EMBER_COLOR = new Color3(1, 0.45, 0.1);
+export const STORM_COLOR = new Color3(0.72, 0.42, 1);
+export const FROST_COLOR = new Color3(0.36, 0.86, 1);
 
+/** The stand-in colour for a crowd whose model could not be loaded. */
 export const ENEMY_COLOR = new Color3(0.82, 0.18, 0.16);
-export const ENEMY_GLOW = new Color3(0.26, 0.03, 0.02);
-export const BOSS_COLOR = new Color3(0.58, 0.2, 0.88);
-export const BOSS_GLOW = new Color3(0.22, 0.05, 0.38);
+export const BOSS_ENRAGE_COLOR = new Color3(1, 0.12, 0.06);
 export const STOMP_COLOR = new Color3(1, 0.5, 0.18);
 
 /** Gate tints, per `GateKind`. Keys are checked against the sim's union below. */
 export const GATE_TINTS = {
-  add: new Color3(0.22, 0.9, 0.42),
-  sub: new Color3(0.95, 0.24, 0.26),
-  mul: new Color3(0.3, 0.56, 1),
-  fireRate: new Color3(1, 0.78, 0.2),
+  add: new Color3(0.24, 0.95, 0.45),
+  sub: new Color3(1, 0.26, 0.28),
+  mul: new Color3(0.34, 0.62, 1),
+  fireRate: new Color3(1, 0.8, 0.22),
   /**
    * Staff gates. A violet leaning white rather than another saturated hue: this
    * is the only panel that prints a word instead of a number, and the pale tint
    * keeps the letters legible while the violet still reads apart from `mul`'s
    * blue at a glance.
    */
-  weapon: new Color3(0.82, 0.62, 1),
+  weapon: new Color3(0.85, 0.66, 1),
 } as const;
 
 /**
@@ -67,9 +78,18 @@ export const POOL = {
   enemies: PER_ROW_POOL,
   stompRings: 8,
   /** Concurrent shrinking corpses; a big `sub` gate can kill dozens at once. */
-  dyingUnits: 192,
+  dyingUnits: 96,
   squad: balance.squad.maxCount,
   projectiles: balance.projectiles.max,
+  /** Skeleton instances across every live block of one kind. */
+  grunts: 220,
+  brutes: 120,
+  /** Frost rings under slowed blocks. */
+  slowRings: 16,
+  /** Simultaneous impact effects, per the plan's cap. */
+  impacts: 24,
+  splashes: 12,
+  chains: 12,
 } as const;
 
 export const LANE_WIDTH = balance.road.laneWidth;
@@ -93,6 +113,17 @@ export const GATE_LABEL_RANGE = balance.level.rowSpacing * 2.5;
 export const SIDE_GATE_LABEL_RANGE = Math.min(balance.level.rowSpacing * 2.3, 30);
 /** How far behind the squad a label stays alive before it is hidden. */
 export const LABEL_BEHIND = 4;
+
+/**
+ * How far ahead a gate panel is drawn at all. Everything past this is inside
+ * the fog and reads as a smudge, and a level carries up to sixty panels — one
+ * draw call each, which is the whole frame budget (plan, "Performance"). Three
+ * rows of panels are in frame at 11 m spacing, which is what the player is
+ * deciding about.
+ */
+export const GATE_DRAW_RANGE = balance.level.rowSpacing * 3;
+/** Same rule for enemy blocks: their skeletons are instanced, but not free. */
+export const ENEMY_DRAW_RANGE = 52;
 
 /**
  * How much road has to separate a block's HP number from a gate row's numbers
@@ -134,20 +165,43 @@ export const ENEMY_LABEL_MIN = 12;
 export const BOSS_LABEL_SIZE = 54;
 export const BOSS_LABEL_MIN = 26;
 
-export const SQUAD_RADIUS = 0.17;
-export const SQUAD_HEIGHT = 0.62;
+/**
+ * Mage height in metres, and the skeletons' relative to it.
+ *
+ * The manifest's 0.35 makes a KayKit character 0.62 m. Measured against the
+ * camera's 75 CSS px per metre and the sim's 0.35 m formation spacing: a
+ * KayKit mage's pointed hat is wider than its shoulders, so at 0.78 m the front
+ * ranks are a single mass of hat brims seen from above, and at 0.62 m the crowd
+ * reads but the staff is lost. 0.66 m is the compromise — hats still touching
+ * at the back where the crowd is meant to look dense, daylight between the
+ * front three, and the staff long enough to see against the road.
+ */
+export const MAGE_HEIGHT = 0.66;
+export const GRUNT_HEIGHT = 0.72;
+/** The brute is the silhouette that says "this row is going to hurt". */
+export const BRUTE_HEIGHT = 0.92;
+/** What a KayKit character is tall at the manifest's own scale of 0.35. */
+const KAYKIT_UNIT_HEIGHT = 0.62;
+/** Multipliers on that scale, which is what `VatCrowd.setInstance` takes. */
+export const MAGE_SCALE = MAGE_HEIGHT / KAYKIT_UNIT_HEIGHT;
+export const GRUNT_SCALE = GRUNT_HEIGHT / KAYKIT_UNIT_HEIGHT;
+export const BRUTE_SCALE = BRUTE_HEIGHT / KAYKIT_UNIT_HEIGHT;
+
 /**
  * Unit meshes shrink as the crowd tightens: full size while the formation has
  * room, three quarters at the squad cap. The sim packs 500 units into the same
- * 4 m of road as 100, so without this the capsules read as one solid slab.
+ * 4 m of road as 100, so without this the mages read as one solid slab.
  */
 export const CROWD_SCALE_FROM = 50;
 export const CROWD_SCALE_TO = balance.squad.maxCount;
-export const CROWD_SCALE_MIN = 0.75;
+export const CROWD_SCALE_MIN = 0.72;
 /** Scale bounce for a unit that just appeared. */
 export const POP_DURATION = 0.25;
 /** Shrink-and-fade for a unit that just died. */
-export const DEATH_DURATION = 0.25;
+export const DEATH_DURATION = 0.3;
+
+/** Share of the squad casting rather than running while the crowd advances. */
+export const CASTING_SHARE = 3;
 
 /** A panel spans its lane exactly, so what the player aims at is what they hit. */
 export const GATE_WIDTH = LANE_WIDTH;
@@ -156,16 +210,47 @@ export const GATE_CENTER_Y = 1.15;
 export const GATE_PULSE_DURATION = 0.2;
 export const GATE_EXIT_DURATION = 0.3;
 export const GATE_BASE_ALPHA = 0.46;
+/** The staff a `weapon` gate offers, floating above its panel. */
+export const GATE_PROP_HEIGHT = 0.8;
+export const GATE_PROP_Y = GATE_CENTER_Y + GATE_HEIGHT / 2 + 0.45;
+export const GATE_PROP_SPIN = 1.1;
 
-export const ENEMY_HIT_FLASH = 0.06;
-export const ENEMY_DEATH_DURATION = 0.25;
+/** Skeletons drawn for one block, however many units it is worth. */
+export const ENEMY_MAX_INSTANCES = 18;
+/** How tightly a block's skeletons pack inside its own footprint. */
+export const ENEMY_CLUSTER_DEPTH = 1.6;
+export const SLOW_RING_COLOR = FROST_COLOR;
 
-export const BOSS_WIDTH = 2.4;
 export const BOSS_HEIGHT = 3;
+/** The stand-in box, for a build whose boss model could not be loaded. */
+export const BOSS_COLOR = new Color3(0.58, 0.2, 0.88);
+export const BOSS_WIDTH = 2.4;
 export const BOSS_DEPTH = 1.8;
-export const BOSS_DEATH_DURATION = 0.5;
+/** The Quaternius demon is 2.91 m in its own units at the manifest's scale 1. */
+export const BOSS_MODEL_HEIGHT = 2.91;
+export const BOSS_SCALE = BOSS_HEIGHT / BOSS_MODEL_HEIGHT;
+/** Chest height, not head height: the number is huge and the demon's horns are
+ *  the half of it worth seeing. */
+export const BOSS_LABEL_HEIGHT = 1.1;
+/** Seconds a hit reaction is held before another one may interrupt the walk. */
+export const BOSS_HIT_THROTTLE = 1.5;
+/** Death animation, then the body sinks through the road. */
+export const BOSS_SINK_DELAY = 2;
+export const BOSS_SINK_DURATION = 1.2;
+export const BOSS_ENRAGE_PULSE = 4;
+export const BOSS_ENRAGE_SPEED = 1.35;
 export const STOMP_DURATION = 0.5;
 export const STOMP_MAX_RADIUS = 7;
+
+/** Weapon effects. Impacts are pooled per weapon and capped at `POOL.impacts`. */
+export const IMPACT_DURATION = 0.26;
+export const SPLASH_DURATION = 0.34;
+export const CHAIN_DURATION = 0.12;
+export const MUZZLE_DURATION = 0.06;
+
+/** Camera shake the renderer calls on itself, per the juice checklist. */
+export const SHAKE_STOMP = { strength: 0.15, seconds: 0.3 } as const;
+export const SHAKE_BOSS_KILL = { strength: 0.35, seconds: 0.6 } as const;
 
 /**
  * Camera rig, per docs/06-milestone-2-plan.md ("Camera").

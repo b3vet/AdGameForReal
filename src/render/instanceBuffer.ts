@@ -8,6 +8,7 @@
  * directly instead of building `Matrix` objects.
  */
 
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 // Side-effect import: this is what puts `thinInstance*` on `Mesh.prototype`.
 import '@babylonjs/core/Meshes/thinInstanceMesh';
@@ -52,8 +53,45 @@ export function writeInstance(
   buffer[o + 15] = 1;
 }
 
-/** Publishes `count` instances; uploading nothing when there is nothing to draw. */
+/** Reused by `writeRotatedInstance`, which is also a per-frame hot path. */
+const scratchMatrix = Matrix.Identity();
+const scratchScale = Vector3.One();
+const scratchRotation = Quaternion.Identity();
+const scratchTranslation = Vector3.Zero();
+
+/**
+ * The same write with a yaw, for the few things that are not axis-aligned — a
+ * chain arc between two blocks, an impact spark thrown at a random angle.
+ */
+export function writeRotatedInstance(
+  buffer: Float32Array,
+  index: number,
+  scaleX: number,
+  scaleY: number,
+  scaleZ: number,
+  yaw: number,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  scratchScale.set(scaleX, scaleY, scaleZ);
+  Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, scratchRotation);
+  scratchTranslation.set(x, y, z);
+  Matrix.ComposeToRef(scratchScale, scratchRotation, scratchTranslation, scratchMatrix);
+  buffer.set(scratchMatrix.m, index * FLOATS_PER_MATRIX);
+}
+
+/**
+ * Publishes `count` instances, and disables the mesh when there are none.
+ *
+ * The disable is not an optimisation. Babylon's `hasThinInstances` is
+ * `instancesCount > 0`, so a mesh whose count drops to zero falls off the
+ * instanced path and draws *one* copy of itself at the world origin — a stray
+ * bolt in the middle of the crowd, or a three-metre mage standing on the road.
+ * Every pool here empties at some point, so the rule lives in one place.
+ */
 export function commitInstances(mesh: Mesh, count: number): void {
   mesh.thinInstanceCount = count;
+  mesh.setEnabled(count > 0);
   if (count > 0) mesh.thinInstanceBufferUpdated('matrix');
 }

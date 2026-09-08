@@ -1,45 +1,75 @@
 /**
- * The road. One pooled set of static meshes, re-stretched per level and then
- * frozen: the road never moves, so paying for a world-matrix recompute every
- * frame on the largest meshes in the scene would be pure waste.
+ * The place the run happens in: a cobbled road with glowing rune strips down
+ * the lane boundaries, dead ground either side, the arena band at the far end,
+ * and a dusk sky dome behind all of it.
+ *
+ * One pooled set of static meshes, re-stretched per level and then frozen: the
+ * road never moves, so paying for a world-matrix recompute every frame on the
+ * largest meshes in the scene would be pure waste. The sky dome is the one
+ * thing that follows the camera, because a dome that stays behind is a wall.
  */
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
+import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
+import { createGradientTexture, createStoneTexture } from './textures';
 import {
   ARENA_COLOR,
   FIELD_COLOR,
   LANE_LINE_COLOR,
   ROAD_COLOR,
   ROAD_HALF_WIDTH,
+  SKY_HAZE,
+  SKY_HORIZON,
+  SKY_MID,
+  SKY_ZENITH,
 } from './theme';
 
 /** Lane boundaries for a three-lane road: the two edges and the two splits. */
 const LINE_X = [-ROAD_HALF_WIDTH, -ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH];
-const LINE_WIDTH = 0.14;
+const LINE_WIDTH = 0.12;
 /**
  * The field is only there to give the road an edge to read against. It is far
  * wider than the road so its own edges never come into frame, even in landscape.
  */
 const FIELD_WIDTH = 240;
+/** Metres of road one repeat of the stone tile covers. */
+const STONE_TILE_METRES = 2.4;
+/** Big enough to sit outside the far fog and the camera's own far plane. */
+const SKY_RADIUS = 190;
+/** Rune pulse: cycles per second, and how far the emissive swings. */
+const RUNE_PULSE_RATE = 0.6;
+const RUNE_PULSE_DEPTH = 0.35;
 
 export class RoadView {
   private readonly surface: Mesh;
   private readonly field: Mesh;
-  private readonly lines: Mesh[] = [];
+  private readonly runes: Mesh;
+  private readonly runeMatrices: Float32Array;
+  private readonly runeMaterial: StandardMaterial;
   private readonly arenaBand: Mesh;
-  private readonly arenaPosts: Mesh[] = [];
+  private readonly arenaPosts: Mesh;
+  private readonly arenaPostMatrices: Float32Array;
+  private readonly sky: Mesh;
+  private readonly stone: DynamicTexture;
+
+  private phase = 0;
 
   constructor(scene: Scene) {
+    this.stone = createStoneTexture(scene);
+
     const roadMaterial = matte(scene, 'roadMat', ROAD_COLOR);
+    roadMaterial.diffuseTexture = this.stone;
     const fieldMaterial = matte(scene, 'fieldMat', FIELD_COLOR);
-    const lineMaterial = glow(scene, 'laneLineMat', LANE_LINE_COLOR, 0.7);
-    const arenaMaterial = glow(scene, 'arenaMat', ARENA_COLOR, 0.5);
+    this.runeMaterial = glow(scene, 'laneRuneMat', LANE_LINE_COLOR, 0.5);
+    const arenaMaterial = glow(scene, 'arenaMat', ARENA_COLOR, 0.4);
 
     // Unit-length strips: `setExtent` scales them along z, so one build serves
     // every level length.
@@ -50,28 +80,25 @@ export class RoadView {
     this.surface = CreateGround('road', { width: ROAD_HALF_WIDTH * 2, height: 1 }, scene);
     this.surface.material = roadMaterial;
 
-    for (const x of LINE_X) {
-      const line = CreateGround(`laneLine-${String(x)}`, { width: LINE_WIDTH, height: 1 }, scene);
-      line.material = lineMaterial;
-      line.position.x = x;
-      line.position.y = 0.02;
-      this.lines.push(line);
-    }
+    // Four strips of one mesh rather than four meshes: the runes are the same
+    // material at four x offsets, which is exactly what thin instances are for.
+    this.runes = CreateGround('laneRunes', { width: LINE_WIDTH, height: 1 }, scene);
+    this.runes.material = this.runeMaterial;
+    this.runes.position.y = 0.02;
+    this.runeMatrices = createMatrixBuffer(this.runes, LINE_X.length);
 
     this.arenaBand = CreateGround('arenaBand', { width: ROAD_HALF_WIDTH * 2, height: 1 }, scene);
     this.arenaBand.material = arenaMaterial;
     this.arenaBand.position.y = 0.04;
-    this.arenaBand.scaling.z = 0.9;
+    this.arenaBand.scaling.z = 0.5;
 
-    for (const side of [-1, 1]) {
-      const post = CreateBox(`arenaPost-${String(side)}`, { width: 0.3, height: 2.6, depth: 0.3 }, scene);
-      post.material = arenaMaterial;
-      post.position.x = side * (ROAD_HALF_WIDTH + 0.15);
-      post.position.y = 1.3;
-      this.arenaPosts.push(post);
-    }
+    this.arenaPosts = CreateBox('arenaPost', { width: 0.22, height: 2.2, depth: 0.22 }, scene);
+    this.arenaPosts.material = arenaMaterial;
+    this.arenaPostMatrices = createMatrixBuffer(this.arenaPosts, 2);
 
-    for (const mesh of this.allMeshes()) {
+    this.sky = buildSky(scene);
+
+    for (const mesh of [this.field, this.surface, this.arenaBand]) {
       mesh.isPickable = false;
       mesh.receiveShadows = false;
     }
@@ -82,36 +109,106 @@ export class RoadView {
     const length = Math.max(1, endZ - startZ);
     const centerZ = (startZ + endZ) / 2;
 
-    for (const mesh of this.allMeshes()) mesh.unfreezeWorldMatrix();
+    for (const mesh of [this.field, this.surface, this.arenaBand]) mesh.unfreezeWorldMatrix();
 
     this.field.scaling.z = length;
     this.field.position.z = centerZ;
 
     this.surface.scaling.z = length;
     this.surface.position.z = centerZ;
+    // The tile is 2.4 m of road either way, so the cobbles stay square however
+    // long the level is.
+    this.stone.uScale = (ROAD_HALF_WIDTH * 2) / STONE_TILE_METRES;
+    this.stone.vScale = length / STONE_TILE_METRES;
 
-    for (const line of this.lines) {
-      line.scaling.z = length;
-      line.position.z = centerZ;
+    for (let i = 0; i < LINE_X.length; i++) {
+      writeInstance(this.runeMatrices, i, 1, 1, length, LINE_X[i] ?? 0, 0, centerZ);
     }
+    commitInstances(this.runes, LINE_X.length);
 
     this.arenaBand.position.z = arenaZ;
-    for (const post of this.arenaPosts) post.position.z = arenaZ;
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? -1 : 1;
+      writeInstance(
+        this.arenaPostMatrices,
+        i,
+        1,
+        1,
+        1,
+        side * (ROAD_HALF_WIDTH + 0.2),
+        1.1,
+        arenaZ,
+      );
+    }
+    commitInstances(this.arenaPosts, 2);
 
-    for (const mesh of this.allMeshes()) {
+    for (const mesh of [this.field, this.surface, this.arenaBand]) {
       mesh.computeWorldMatrix(true);
       mesh.freezeWorldMatrix();
       mesh.setEnabled(true);
     }
   }
 
+  /**
+   * The runes breathe and the sky follows the camera. Both are cosmetic, and
+   * both are one write a frame: no mesh here is rebuilt or re-transformed.
+   */
+  update(cameraX: number, cameraZ: number, dt: number): void {
+    this.phase += dt * RUNE_PULSE_RATE;
+    const pulse = 1 + Math.sin(this.phase * Math.PI * 2) * RUNE_PULSE_DEPTH;
+    LANE_LINE_COLOR.scaleToRef(0.5 * pulse, this.runeMaterial.emissiveColor);
+    this.sky.position.set(cameraX, 0, cameraZ);
+  }
+
   dispose(): void {
-    for (const mesh of this.allMeshes()) mesh.dispose();
+    for (const mesh of this.allMeshes()) {
+      mesh.material?.dispose();
+      mesh.dispose();
+    }
+    this.stone.dispose();
   }
 
   private allMeshes(): Mesh[] {
-    return [this.field, this.surface, ...this.lines, this.arenaBand, ...this.arenaPosts];
+    return [this.field, this.surface, this.runes, this.arenaBand, this.arenaPosts, this.sky];
   }
+}
+
+/**
+ * The sky: an inverted sphere carrying a painted gradient — near-black indigo
+ * overhead, a dusk band at the horizon that the fog fades the road into.
+ */
+function buildSky(scene: Scene): Mesh {
+  const gradient = createGradientTexture(scene, 'skyGradient', [
+    { at: 0, r: SKY_HORIZON.r * 0.5, g: SKY_HORIZON.g * 0.5, b: SKY_HORIZON.b * 0.6 },
+    { at: 0.47, r: SKY_HORIZON.r, g: SKY_HORIZON.g, b: SKY_HORIZON.b },
+    { at: 0.52, r: SKY_HAZE.r, g: SKY_HAZE.g, b: SKY_HAZE.b },
+    { at: 0.62, r: SKY_MID.r, g: SKY_MID.g, b: SKY_MID.b },
+    { at: 1, r: SKY_ZENITH.r, g: SKY_ZENITH.g, b: SKY_ZENITH.b },
+  ]);
+
+  const material = new StandardMaterial('skyMat', scene);
+  material.emissiveTexture = gradient;
+  // Black, not white: `default.fragment` *adds* the emissive texture to
+  // `emissiveColor` rather than multiplying, so a white base clamps the whole
+  // dome to white and the gradient never shows.
+  material.emissiveColor = Color3.Black();
+  material.diffuseColor = Color3.Black();
+  material.specularColor = Color3.Black();
+  material.disableLighting = true;
+  material.backFaceCulling = false;
+  // The dome is behind everything by construction; letting it write depth would
+  // clip the far end of the road out of the frame.
+  material.disableDepthWrite = true;
+  material.fogEnabled = false;
+
+  const sky = CreateSphere('sky', { diameter: SKY_RADIUS * 2, segments: 16 }, scene);
+  sky.material = material;
+  sky.isPickable = false;
+  sky.infiniteDistance = false;
+  sky.alwaysSelectAsActiveMesh = true;
+  // Drawn first, so everything else paints over it.
+  sky.renderingGroupId = 0;
+  return sky;
 }
 
 function matte(scene: Scene, name: string, color: Color3): StandardMaterial {
@@ -123,7 +220,7 @@ function matte(scene: Scene, name: string, color: Color3): StandardMaterial {
 
 function glow(scene: Scene, name: string, color: Color3, strength: number): StandardMaterial {
   const material = new StandardMaterial(name, scene);
-  material.diffuseColor = color.scale(0.3);
+  material.diffuseColor = color.scale(0.2);
   material.emissiveColor = color.scale(strength);
   material.specularColor = Color3.Black();
   return material;

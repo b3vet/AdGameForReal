@@ -18,6 +18,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import '@babylonjs/core/Meshes/thinInstanceMesh';
 
 import type { CharacterAsset } from './asset';
+import type { Crowd } from './crowd';
 import type { VatRangeMeta } from './manifest';
 
 const FLOATS_PER_MATRIX = 16;
@@ -29,7 +30,7 @@ const scratchScale = Vector3.One();
 const scratchRotation = Quaternion.Identity();
 const scratchTranslation = Vector3.Zero();
 
-export class VatCrowd {
+export class VatCrowd implements Crowd {
   readonly mesh: Mesh;
 
   private readonly matrices: Float32Array;
@@ -64,6 +65,9 @@ export class VatCrowd {
       false,
     );
     this.mesh.thinInstanceCount = 0;
+    // Hidden until something commits instances into it: an empty thin-instance
+    // mesh draws one full-size copy of itself at the origin (see `commit`).
+    this.mesh.setEnabled(false);
   }
 
   /** Animation ids this crowd's baked texture carries, in bake order. */
@@ -77,6 +81,12 @@ export class VatCrowd {
    * `scale` multiplies the manifest's own scale, so callers pass 1 for a
    * normal unit. `timeOffset` is in seconds and is what keeps the crowd out of
    * lockstep; it wraps within the range, so any value is valid.
+   *
+   * `speed` scales this instance's playback. Zero is the useful special case:
+   * the shader's clock is `fract(time * speed / frames)`, so at speed 0 the
+   * instance holds the single frame `timeOffset` picks out — which is how a
+   * block that has not activated yet stands still instead of marching on the
+   * spot, without a second baked range.
    */
   setInstance(
     index: number,
@@ -87,6 +97,7 @@ export class VatCrowd {
     scale: number,
     animationId: string,
     timeOffset: number,
+    speed = 1,
   ): void {
     const range = this.ranges.get(animationId);
     if (range === undefined) throw new Error(`no baked range "${animationId}"`);
@@ -104,7 +115,7 @@ export class VatCrowd {
     this.settings[at] = range.from;
     this.settings[at + 1] = range.to;
     this.settings[at + 2] = timeOffset * this.fps;
-    this.settings[at + 3] = this.fps;
+    this.settings[at + 3] = this.fps * speed;
     this.dirty = true;
   }
 
@@ -114,9 +125,19 @@ export class VatCrowd {
     this.dirty = true;
   }
 
-  /** Uploads both buffers. Cheap enough to call every frame, once. */
+  /**
+   * Uploads both buffers. Cheap enough to call every frame, once.
+   *
+   * The mesh is disabled when the crowd is empty, and that is not an
+   * optimisation: Babylon's `hasThinInstances` is `instancesCount > 0`, so a
+   * mesh whose count has dropped to zero falls back to the *non-instanced*
+   * path and draws one full-size character at the world origin. A squad that
+   * has just been wiped, or a crowd that has been built but not yet placed,
+   * would otherwise put a three-metre mage in the middle of the road.
+   */
   commit(): void {
     this.mesh.thinInstanceCount = this.count;
+    this.mesh.setEnabled(this.count > 0);
     if (!this.dirty || this.count === 0) return;
     this.mesh.thinInstanceBufferUpdated('matrix');
     this.mesh.thinInstanceBufferUpdated('bakedVertexAnimationSettingsInstanced');

@@ -14,6 +14,8 @@
 
 export { loadCharacterAsset } from './asset';
 export type { CharacterAsset, LoadCharacterOptions } from './asset';
+export { StaticCrowd } from './crowd';
+export type { Crowd } from './crowd';
 export { VatCrowd } from './VatCrowd';
 export {
   assetEntry,

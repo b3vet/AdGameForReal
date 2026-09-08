@@ -10,17 +10,11 @@
  * twelve-second screenshot pass reaches the boss.
  */
 
+import { DevCombat } from './dev-combat';
 import { buildDevLevel, emptyDevState } from './dev-fixture';
 import { balance } from '@/data';
-import {
-  applyGateGrowth,
-  BOSS_Z_OFFSET,
-  formationOffsets,
-  gateCap,
-  isShootable,
-  laneCenter,
-} from '@/sim';
-import type { EnemyState, GateState, LevelDef, ProjectileState, RunState, SimEvent } from '@/sim';
+import { BOSS_Z_OFFSET, gateCap, laneCenter, weaponDef, weaponIds } from '@/sim';
+import type { GateState, LevelDef, RunState, SimEvent } from '@/sim';
 
 /**
  * Dev-only pacing. The real `runSpeed` needs 35 s to reach the arena, and the
@@ -37,9 +31,14 @@ const MAX_CATCHUP = 1;
 const DEV_BOSS_SPEED_SCALE = 5;
 /** Stomps often enough that a screenshot near the end catches a ring. */
 const DEV_STOMP_INTERVAL = 1.2;
-const DEV_SHOTS_PER_UNIT = 2;
-const DEV_MAX_SHOTS_PER_SECOND = 90;
 const DEV_BOSS_MIN_HP = 900;
+/**
+ * And a ceiling: the real level-1 boss has 5000 hp, which a fixture squad needs
+ * the better part of a minute to chew through, and the point of this scene is
+ * that the whole story — including the death and the cheer — fits inside one
+ * screenshot pass.
+ */
+const DEV_BOSS_MAX_HP = 700;
 
 /**
  * Squad size after each gate row. The first four are the arc the review asks
@@ -53,29 +52,44 @@ const LATERAL_PERIOD = 7;
 
 const RESTART_DELAY = 1.5;
 
+/** Rows between staff swaps: all three looks inside one screenshot pass. */
+const DEV_ROWS_PER_STAFF = 2;
+/** Where the boss enrages, mirroring `balance.enemies.boss.enrageAt`. */
+const DEV_ENRAGE_AT = balance.enemies.boss.enrageAt;
+
+export interface DevScenarioOptions {
+  /**
+   * Floor under the squad count. `dev/render-test.html?count=500` uses it to
+   * park a full crowd on the road for the draw-call budget check, which the
+   * fixture's own arc (which tops out at 120) would never reach.
+   */
+  floorCount?: number;
+}
+
 export class DevScenario {
   readonly level: LevelDef;
   readonly state: RunState;
 
   private readonly runSpeed: number;
+  private readonly floorCount: number;
 
   private readonly events: SimEvent[] = [];
-  private readonly travelled: Float32Array;
+  private readonly combat: DevCombat;
 
-  private nextProjectile = 0;
-  private fireAccumulator = 0;
-  private shotIndex = 0;
   private rowsPassed = 0;
   private stompTimer = 0;
   private restartTimer: number | null = null;
   private reloaded = false;
   private accumulator = 0;
 
-  constructor() {
+  constructor(options: DevScenarioOptions = {}) {
+    this.floorCount = Math.max(0, options.floorCount ?? 0);
     this.level = buildDevLevel();
     this.runSpeed = Math.max(DEV_MIN_RUN_SPEED, this.level.arenaZ / DEV_ARENA_SECONDS);
-    this.travelled = new Float32Array(balance.projectiles.max);
     this.state = emptyDevState(this.level);
+    this.combat = new DevCombat(this.state, this.events, () => {
+      this.endRunOnBossKill();
+    });
     this.populate();
   }
 
@@ -114,15 +128,28 @@ export class DevScenario {
 
     const state = this.state;
     state.time += dt;
+    if (state.squad.count < this.floorCount) state.squad.count = this.floorCount;
     this.moveSquad(dt);
-    this.fire(dt);
-    this.moveProjectiles(dt);
+    this.combat.step(dt);
     this.moveEnemies(dt);
     this.crossRows();
     this.moveBoss(dt);
 
     if (state.squad.count > state.peakCount) state.peakCount = state.squad.count;
     state.survivors = state.squad.count;
+
+    // A wiped squad has nothing left to animate, and the fixture is meant to
+    // loop forever: end the run the way the sim would and start again.
+    if (state.squad.count <= 0 && this.floorCount === 0 && this.restartTimer === null) {
+      state.status = 'lost';
+      this.events.push({
+        type: 'runEnded',
+        status: 'lost',
+        survivors: 0,
+        peakCount: state.peakCount,
+      });
+      this.restartTimer = RESTART_DELAY;
+    }
   }
 
   private populate(): void {
@@ -136,14 +163,13 @@ export class DevScenario {
     state.squad.targetX = 0;
     state.squad.z = 0;
     state.squad.fireRateBonus = 0;
+    state.squad.weaponId = 'ember';
     state.peakCount = level.startCount;
     state.survivors = level.startCount;
 
     state.gates.length = 0;
     state.enemies.length = 0;
     this.rowsPassed = 0;
-    this.shotIndex = 0;
-    this.fireAccumulator = 0;
     this.stompTimer = 0;
     this.accumulator = 0;
 
@@ -197,11 +223,9 @@ export class DevScenario {
       }
     }
 
-    for (const projectile of state.projectiles) projectile.alive = false;
-    this.travelled.fill(0);
-    this.nextProjectile = 0;
+    this.combat.reset();
 
-    const bossHp = Math.max(DEV_BOSS_MIN_HP, level.boss.hp);
+    const bossHp = Math.min(DEV_BOSS_MAX_HP, Math.max(DEV_BOSS_MIN_HP, level.boss.hp));
     state.boss = {
       id: 9000,
       kind: 'boss',
@@ -225,131 +249,18 @@ export class DevScenario {
     }
   }
 
-  /** The whole squad's output, in shots per second. Gate growth is a share of it. */
-  private shotRate(): number {
-    return Math.min(DEV_MAX_SHOTS_PER_SECOND, this.state.squad.count * DEV_SHOTS_PER_UNIT);
-  }
-
-  private fire(dt: number): void {
-    const squad = this.state.squad;
-    if (squad.count <= 0) return;
-
-    this.fireAccumulator += this.shotRate() * dt;
-
-    const offsets = formationOffsets(squad.count);
-    while (this.fireAccumulator >= 1) {
-      this.fireAccumulator -= 1;
-      const offset = offsets[this.shotIndex % Math.max(1, offsets.length)];
-      this.shotIndex++;
-      if (offset === undefined) continue;
-      this.spawnProjectile(squad.x + offset.x, squad.z + offset.z);
-    }
-  }
-
-  private spawnProjectile(x: number, z: number): void {
-    const pool = this.state.projectiles;
-    for (let attempt = 0; attempt < pool.length; attempt++) {
-      const index = (this.nextProjectile + attempt) % pool.length;
-      const projectile = pool[index];
-      if (projectile === undefined || projectile.alive) continue;
-      projectile.x = x;
-      projectile.z = z;
-      projectile.alive = true;
-      this.travelled[index] = 0;
-      this.nextProjectile = (index + 1) % pool.length;
-      this.events.push({ type: 'projectileFired', x, z });
-      return;
-    }
-  }
-
-  private moveProjectiles(dt: number): void {
-    const speed = balance.projectiles.speed;
-    const range = balance.projectiles.range;
-    const pool = this.state.projectiles;
-
-    for (let i = 0; i < pool.length; i++) {
-      const projectile = pool[i];
-      if (projectile === undefined || !projectile.alive) continue;
-
-      const previousZ = projectile.z;
-      projectile.z += speed * dt;
-      this.travelled[i] = (this.travelled[i] ?? 0) + speed * dt;
-
-      if (this.hitGate(projectile, previousZ) || this.hitEnemy(projectile, previousZ)) {
-        projectile.alive = false;
-        continue;
-      }
-      if ((this.travelled[i] ?? 0) >= range) projectile.alive = false;
-    }
-  }
-
-  private hitGate(projectile: ProjectileState, previousZ: number): boolean {
-    for (const gate of this.state.gates) {
-      // `mul` and staff gates are solid glass: a shot passes through unchanged.
-      if (gate.passed || !isShootable(gate.kind)) continue;
-      if (gate.z < previousZ || gate.z > projectile.z) continue;
-      if (Math.abs(projectile.x - laneCenter(gate.lane)) > balance.road.laneWidth / 2) continue;
-
-      // The sim's own rule, not a stub of it: growth is rate-based, so what the
-      // fixture has to supply is this one hit and the squad's whole shot rate.
-      // A shot is consumed either way, exactly as in `Run`.
-      applyGateGrowth(gate, 1, this.shotRate(), balance);
-      this.events.push({ type: 'gateHit', gateId: gate.id, kind: gate.kind, value: gate.value });
-      return true;
-    }
-    return false;
-  }
-
-  private hitEnemy(projectile: ProjectileState, previousZ: number): boolean {
-    // Deliberately no allocation here: this runs once per live projectile per
-    // fixed step, which is thousands of calls a second.
-    for (const enemy of this.state.enemies) {
-      if (this.tryHit(enemy, projectile, previousZ)) return true;
-    }
-    const boss = this.state.boss;
-    return boss !== null && this.tryHit(boss, projectile, previousZ);
-  }
-
-  private tryHit(enemy: EnemyState, projectile: ProjectileState, previousZ: number): boolean {
-    if (!enemy.alive) return false;
-    if (enemy.z < previousZ || enemy.z > projectile.z) return false;
-    const half = enemy.kind === 'boss' ? 1.3 : blockHalfWidth(enemy.units);
-    if (Math.abs(projectile.x - enemy.x) > half) return false;
-
-    enemy.hp -= 1;
+  /** The fixture's ending: the boss falls, the survivors cheer, and it loops. */
+  private endRunOnBossKill(): void {
+    this.state.boss = null;
+    this.state.status = 'won';
+    this.events.push({ type: 'bossKilled' });
     this.events.push({
-      type: 'enemyHit',
-      enemyId: enemy.id,
-      damage: 1,
-      hp: enemy.hp,
-      x: enemy.x,
-      z: enemy.z,
+      type: 'runEnded',
+      status: 'won',
+      survivors: this.state.squad.count,
+      peakCount: this.state.peakCount,
     });
-    if (enemy.hp <= 0) this.killEnemy(enemy);
-    return true;
-  }
-
-  private killEnemy(enemy: EnemyState): void {
-    enemy.alive = false;
-    enemy.hp = 0;
-    this.events.push({ type: 'enemyKilled', enemyId: enemy.id, kind: enemy.kind, x: enemy.x, z: enemy.z });
-
-    if (enemy.kind === 'boss') {
-      this.state.boss = null;
-      this.state.status = 'won';
-      this.events.push({ type: 'bossKilled' });
-      this.events.push({
-        type: 'runEnded',
-        status: 'won',
-        survivors: this.state.squad.count,
-        peakCount: this.state.peakCount,
-      });
-      this.restartTimer = RESTART_DELAY;
-      return;
-    }
-
-    const index = this.state.enemies.indexOf(enemy);
-    if (index >= 0) this.state.enemies.splice(index, 1);
+    this.restartTimer = RESTART_DELAY;
   }
 
   private moveEnemies(dt: number): void {
@@ -374,7 +285,7 @@ export class DevScenario {
           squad.count -= lost;
           this.events.push({ type: 'unitsLost', amount: lost, reason: 'contact' });
         }
-        this.killEnemy(enemy);
+        this.combat.killEnemy(enemy);
       } else if (enemy.z < squad.z - balance.enemies.contactDistance) {
         this.state.enemies.splice(i, 1);
       }
@@ -411,6 +322,7 @@ export class DevScenario {
     const after = planned ?? before;
     squad.count = after;
     this.rowsPassed++;
+    this.swapStaff();
 
     this.events.push({
       type: 'gatePassed',
@@ -422,6 +334,18 @@ export class DevScenario {
     });
     if (after > before) this.events.push({ type: 'unitsGained', amount: after - before, reason: 'gate' });
     if (after < before) this.events.push({ type: 'unitsLost', amount: before - after, reason: 'gate' });
+  }
+
+  /** Cycles the staff every couple of rows, the way a `weapon` gate would. */
+  private swapStaff(): void {
+    if (this.rowsPassed % DEV_ROWS_PER_STAFF !== 0) return;
+    const squad = this.state.squad;
+    const from = this.state.squad.weaponId ?? 'ember';
+    const next = weaponIds[(weaponIds.indexOf(from) + 1) % weaponIds.length] ?? from;
+    if (next === from) return;
+    squad.weaponId = next;
+    squad.damage = balance.squad.damage * weaponDef(next).damage;
+    this.events.push({ type: 'weaponChanged', from, to: next });
   }
 
   private moveBoss(dt: number): void {
@@ -439,6 +363,11 @@ export class DevScenario {
     if (boss.z > stopZ) boss.z = Math.max(stopZ, boss.z - boss.speed * dt);
     boss.x += (squad.x - boss.x) * Math.min(1, dt * 0.8);
 
+    if (boss.enraged !== true && boss.hp <= boss.maxHp * DEV_ENRAGE_AT) {
+      boss.enraged = true;
+      this.events.push({ type: 'bossEnraged', enemyId: boss.id });
+    }
+
     this.stompTimer += dt;
     if (this.stompTimer >= DEV_STOMP_INTERVAL && boss.z - squad.z <= balance.enemies.boss.stompRange) {
       this.stompTimer = 0;
@@ -452,6 +381,3 @@ export class DevScenario {
   }
 }
 
-function blockHalfWidth(units: number): number {
-  return Math.min(1.2, 0.45 + 0.06 * Math.sqrt(units));
-}

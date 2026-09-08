@@ -8,6 +8,7 @@
  */
 
 import { DevScenario } from './dev-scenario';
+import type { DevScenarioOptions } from './dev-scenario';
 import type { Renderer } from './Renderer';
 
 /**
@@ -25,8 +26,11 @@ export interface DevSceneHandle {
   scenario: DevScenario;
 }
 
-export function runRenderDevScene(renderer: Renderer): DevSceneHandle {
-  const scenario = new DevScenario();
+export function runRenderDevScene(
+  renderer: Renderer,
+  options: DevScenarioOptions = {},
+): DevSceneHandle {
+  const scenario = new DevScenario(options);
   renderer.loadLevel(scenario.level);
 
   let rafId: number | null = null;
@@ -56,3 +60,4 @@ export function runRenderDevScene(renderer: Renderer): DevSceneHandle {
 }
 
 export { DevScenario };
+export type { DevScenarioOptions };

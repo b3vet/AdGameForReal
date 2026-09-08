@@ -7,15 +7,50 @@
 
 import { balance, levelConfig } from '@/data';
 import { generateLevel } from '@/sim';
-import type { EnemyState, GateState, LevelDef, ProjectileState, RunState, SquadState } from '@/sim';
+import type {
+  EnemyState,
+  GateState,
+  LevelDef,
+  ProjectileState,
+  RowDef,
+  RunState,
+  SquadState,
+  WeaponId,
+} from '@/sim';
 
 /** The generator is the sim agent's; if it is still a stub, fall back to a fixture. */
 export function buildDevLevel(): LevelDef {
   const config = levelConfig(1);
   const generated = generateLevel(1, config, config.seed);
-  if (generated.rows.length > 0) return generated;
-  return handBuiltLevel();
+  const level = generated.rows.length > 0 ? generated : handBuiltLevel();
+  return withStaffGates(level);
 }
+
+/**
+ * Forces two staff gates into the fixture's level.
+ *
+ * `gen.weaponGatesEnabled` is off in `balance.json` until the renderer draws
+ * staffs — which is exactly what this scene is for — so without this the one
+ * gate kind that carries a floating prop above its panel would never appear in
+ * the fixture and could not be reviewed.
+ */
+function withStaffGates(level: LevelDef): LevelDef {
+  const staffed: LevelDef['rows'] = level.rows.map((row, index) => {
+    const offer = STAFF_ROWS.get(index);
+    if (offer === undefined) return row;
+    // The tuple shape is part of `RowDef`: three lanes, some of them empty.
+    const gates: RowDef['gates'] = [row.gates[0], row.gates[1], row.gates[2]];
+    gates[offer.slot] = { kind: 'weapon', value: 0, weaponId: offer.weaponId };
+    return { ...row, gates };
+  });
+  return { ...level, rows: staffed };
+}
+
+/** Which row offers which staff, and in which lane slot (0, 1, 2 = left to right). */
+const STAFF_ROWS = new Map<number, { slot: 0 | 1 | 2; weaponId: WeaponId }>([
+  [1, { slot: 2, weaponId: 'storm' }],
+  [4, { slot: 0, weaponId: 'frost' }],
+]);
 
 function handBuiltLevel(): LevelDef {
   const rows: LevelDef['rows'] = [

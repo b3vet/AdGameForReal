@@ -1,28 +1,42 @@
 /**
- * The boss and its stomp rings.
+ * The boss: the Quaternius demon, three metres of it, and its stomp rings.
  *
- * One box, one big label and a small ring pool, all built at init. The boss is
- * the only thing in the scene the player is supposed to stare at, so it is
- * bigger, purple, and its number is twice the size of a block's.
+ * It is the one thing in the scene that is not a crowd, so it keeps a real
+ * skeleton and real animation groups and gets blending between them. The state
+ * machine is a priority list — death beats a stomp, a stomp beats a hit
+ * reaction, a hit reaction beats walking — because the sim can hand us a stomp
+ * and six hits in the same tick.
+ *
+ * Clip playback runs on the app's time scale rather than the frame's, so
+ * hit-stop and the slow-mo on the kill hold the boss too.
  */
 
+import type { AnimationGroup } from '@babylonjs/core/Animations/animationGroup';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
-import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
 import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
 import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
+import { liftEmissive, loadAnimatedModel, type AnimatedModel } from './models';
+import { RingPool } from './rings';
 import {
   BOSS_COLOR,
-  BOSS_DEATH_DURATION,
   BOSS_DEPTH,
-  BOSS_GLOW,
+  BOSS_ENRAGE_COLOR,
+  BOSS_ENRAGE_PULSE,
+  BOSS_ENRAGE_SPEED,
   BOSS_HEIGHT,
+  BOSS_HIT_THROTTLE,
+  BOSS_LABEL_HEIGHT,
   BOSS_LABEL_MIN,
   BOSS_LABEL_SIZE,
+  BOSS_MODEL_HEIGHT,
+  BOSS_SINK_DELAY,
+  BOSS_SINK_DURATION,
   BOSS_WIDTH,
   LABEL_RANGE,
   POOL,
@@ -32,124 +46,175 @@ import {
 } from './theme';
 import type { EnemyState } from '@/sim';
 
-/** On the boss's face, like the block HP numbers. */
-const LABEL_OFFSET_Y = 0;
 /** Rings start as a tight shockwave under the boss and sweep outward. */
 const RING_START_RADIUS = 0.8;
+/** Which way the model faces before it is turned to look down the road. */
+const FACING = Math.PI;
+/** The demon is the darkest thing in the pack; it needs the same lift the
+ *  crowds get, a little weaker so the enrage pulse still reads on top of it. */
+const BOSS_LIFT = 0.2;
 
 interface Ring {
-  mesh: Mesh;
-  material: StandardMaterial;
+  x: number;
+  z: number;
   age: number;
-  active: boolean;
 }
 
 export class BossView {
-  private readonly box: Mesh;
-  private readonly material: StandardMaterial;
+  private readonly scene: Scene;
+  private readonly anchor: TransformNode;
   private readonly label: TextBlock;
-  private readonly rings: Ring[] = [];
+  private readonly rings: RingPool;
+  private readonly ringState: Ring[] = [];
+  private readonly fallback: Mesh;
+  private readonly fallbackMaterial: StandardMaterial;
 
-  /** Seconds into the death animation, or -1 while alive. */
+  private model: AnimatedModel | null = null;
+  private current = '';
+  private scale = 1;
+
+  /** Seconds left of a one-shot clip that owns the boss until it ends. */
+  private oneShot = 0;
+  private hitCooldown = 0;
+  /** Seconds since `bossKilled`, or -1 while alive. */
   private dying = -1;
-
-  /** Last hp printed, so the label is only re-set when the number changes. */
+  private enragePhase = 0;
   private shownHp = Number.NaN;
-
-  /** Last font size applied; see `scaleLabel`. */
   private shownSize = Number.NaN;
+  /** Where the body was last drawn, for the sink and for the death burst. */
+  private lastX = 0;
+  private lastZ = 0;
 
   constructor(scene: Scene, labels: LabelLayer) {
-    this.material = new StandardMaterial('bossMat', scene);
-    this.material.diffuseColor = BOSS_COLOR;
-    this.material.emissiveColor = BOSS_GLOW;
-    this.material.specularColor = new Color3(0.3, 0.2, 0.4);
+    this.scene = scene;
+    this.anchor = new TransformNode('boss-anchor', scene);
+    this.label = labels.create({ fontSize: BOSS_LABEL_SIZE, color: '#ffd9d2', outline: 8 });
+    linkLabel(this.label, this.anchor, 0);
 
-    this.box = CreateBox(
-      'boss',
+    // Thin and half-lit: the ring sweeps out to seven metres and the glow pass
+    // blooms it, so a fat bright one swallows the boss it is meant to sell.
+    this.rings = new RingPool(scene, 'stomp', STOMP_COLOR, POOL.stompRings, {
+      thickness: 0.1,
+      alpha: 0.55,
+      additive: true,
+      y: 0.12,
+    });
+    for (let i = 0; i < POOL.stompRings; i++) this.ringState.push({ x: 0, z: 0, age: -1 });
+
+    // Stands in for the demon when the model cannot be loaded, so a build
+    // without assets still has a boss to shoot at.
+    this.fallbackMaterial = new StandardMaterial('bossFallbackMat', scene);
+    this.fallbackMaterial.diffuseColor = BOSS_COLOR;
+    this.fallbackMaterial.emissiveColor = BOSS_COLOR.scale(0.25);
+    this.fallbackMaterial.specularColor = Color3.Black();
+    this.fallback = CreateBox(
+      'boss-fallback',
       { width: BOSS_WIDTH, height: BOSS_HEIGHT, depth: BOSS_DEPTH },
       scene,
     );
-    this.box.material = this.material;
-    this.box.isPickable = false;
-    this.box.setEnabled(false);
+    this.fallback.material = this.fallbackMaterial;
+    this.fallback.isPickable = false;
+    this.fallback.setEnabled(false);
+  }
 
-    this.label = labels.create({ fontSize: BOSS_LABEL_SIZE, color: '#f2e2ff', outline: 8 });
-    linkLabel(this.label, this.box, LABEL_OFFSET_Y);
+  async load(): Promise<void> {
+    const model = await loadAnimatedModel(this.scene, 'boss_demon');
+    if (model === null) return;
+    this.model = model;
+    for (const material of model.materials) liftEmissive(material, BOSS_LIFT);
+    // The manifest's own scale is a starting point; the plan wants three metres.
+    this.scale = BOSS_HEIGHT / (model.height > 0 ? model.height : BOSS_MODEL_HEIGHT);
+    model.pivot.scaling.setAll(this.scale);
+    model.pivot.rotation.y = FACING;
+    model.setEnabled(false);
+  }
 
-    for (let i = 0; i < POOL.stompRings; i++) {
-      const material = new StandardMaterial(`stompMat-${String(i)}`, scene);
-      material.emissiveColor = STOMP_COLOR;
-      material.diffuseColor = Color3.Black();
-      material.specularColor = Color3.Black();
-      material.disableLighting = true;
-      material.alpha = 0;
-      material.backFaceCulling = false;
+  /** Where the boss stands, for the effects that `bossKilled` does not locate. */
+  positionOf(out: { x: number; z: number }): void {
+    out.x = this.lastX;
+    out.z = this.lastZ;
+  }
 
-      // A torus already lies flat in the xz plane, so a shockwave needs no
-      // rotation — only a scale on x and z.
-      const mesh = CreateTorus(
-        `stomp-${String(i)}`,
-        { diameter: 2, thickness: 0.28, tessellation: 32 },
-        scene,
-      );
-      mesh.material = material;
-      mesh.isPickable = false;
-      mesh.setEnabled(false);
-      mesh.position.y = 0.12;
-
-      this.rings.push({ mesh, material, age: 0, active: false });
-    }
+  /** The stomp shockwave blooms; the demon itself is lit. */
+  glowMeshes(): Mesh[] {
+    return [this.rings.mesh];
   }
 
   reset(): void {
     this.dying = -1;
+    this.oneShot = 0;
+    this.hitCooldown = 0;
+    this.current = '';
     this.shownHp = Number.NaN;
     this.shownSize = Number.NaN;
-    this.box.setEnabled(false);
-    this.box.rotation.y = 0;
-    this.box.scaling.setAll(1);
+    this.enragePhase = 0;
+    this.model?.setEnabled(false);
+    this.fallback.setEnabled(false);
     hideLabel(this.label);
-    for (const ring of this.rings) this.retire(ring);
+    for (const ring of this.ringState) ring.age = -1;
+    this.rings.reset();
+    this.stopAll();
   }
 
   onStomp(x: number, z: number): void {
-    const ring = this.freeRing();
-    if (ring === undefined) return;
-    ring.active = true;
-    ring.age = 0;
-    ring.mesh.position.set(x, 0.12, z);
-    ring.mesh.scaling.set(RING_START_RADIUS, 1, RING_START_RADIUS);
-    ring.mesh.setEnabled(true);
+    for (const ring of this.ringState) {
+      if (ring.age >= 0) continue;
+      ring.x = x;
+      ring.z = z;
+      ring.age = 0;
+      break;
+    }
+    this.playOneShot('attack');
+  }
+
+  /** Hit reactions are throttled: the squad lands dozens of shots a second. */
+  onHit(): void {
+    if (this.dying >= 0 || this.hitCooldown > 0 || this.oneShot > 0) return;
+    this.hitCooldown = BOSS_HIT_THROTTLE;
+    this.playOneShot('hit');
   }
 
   onKilled(): void {
-    if (this.dying >= 0 || !this.box.isEnabled()) return;
+    if (this.dying >= 0) return;
     this.dying = 0;
+    this.oneShot = 0;
     hideLabel(this.label);
+    this.play('death', false);
   }
 
-  update(boss: EnemyState | null, squadZ: number, dt: number): void {
+  /**
+   * `timeScale` is the app's time scale — the ratio between the sim time this
+   * frame covers and the wall clock it took — so hit-stop and slow-mo reach the
+   * animation groups, which otherwise run on the scene's own clock.
+   */
+  update(boss: EnemyState | null, squadZ: number, dt: number, timeScale: number): void {
     this.updateRings(dt);
+    this.hitCooldown = Math.max(0, this.hitCooldown - dt);
 
     if (this.dying >= 0) {
-      this.advanceDeath(dt);
+      this.oneShot = 0;
+      this.advanceDeath(dt, timeScale);
       return;
     }
 
     if (boss === null || !boss.alive) {
-      if (this.box.isEnabled()) {
-        this.box.setEnabled(false);
-        hideLabel(this.label);
-      }
+      this.show(false);
+      hideLabel(this.label);
       return;
     }
 
-    this.box.setEnabled(true);
-    this.box.scaling.setAll(1);
-    this.box.position.set(boss.x, BOSS_HEIGHT / 2, boss.z);
-    // An idle boss sways; an activated one squares up to the squad.
-    this.box.rotation.y = boss.active ? 0 : Math.sin(boss.z * 0.05) * 0.15;
+    this.show(true);
+    this.place(boss.x, 0, boss.z);
+    this.anchor.position.set(boss.x, BOSS_LABEL_HEIGHT, boss.z);
+
+    const enraged = boss.enraged === true;
+    this.paintEnrage(enraged, dt);
+    if (this.oneShot <= 0) this.play(boss.active ? 'walk' : 'idle', true);
+    // Counted down *after* the decision, so a one-shot started by this frame's
+    // events is drawn at least once: on a slow frame `dt` is longer than a
+    // punch, and a punch cut before the frame renders never happened at all.
+    this.oneShot = Math.max(0, this.oneShot - dt);
+    this.setSpeed(timeScale * (enraged ? BOSS_ENRAGE_SPEED : 1));
 
     const ahead = boss.z - squadZ;
     const readable = ahead < LABEL_RANGE;
@@ -172,55 +237,121 @@ export class BossView {
     }
   }
 
-  /** First idle ring. An index loop, not `find`, so a stomp allocates nothing. */
-  private freeRing(): Ring | undefined {
-    for (let i = 0; i < this.rings.length; i++) {
-      const ring = this.rings[i];
-      if (ring !== undefined && !ring.active) return ring;
-    }
-    return undefined;
-  }
-
   dispose(): void {
-    this.box.dispose();
-    for (const ring of this.rings) ring.mesh.dispose();
-    this.rings.length = 0;
+    this.model?.dispose();
+    this.model = null;
+    this.fallback.dispose();
+    this.fallbackMaterial.dispose();
+    this.anchor.dispose();
+    this.rings.dispose();
+    this.ringState.length = 0;
   }
 
-  private advanceDeath(dt: number): void {
+  /** The body plays its death, holds, then sinks through the road. */
+  private advanceDeath(dt: number, timeScale: number): void {
     this.dying += dt;
-    const p = Math.min(1, this.dying / BOSS_DEATH_DURATION);
-    if (p >= 1) {
-      this.box.setEnabled(false);
-      this.box.scaling.setAll(1);
-      this.dying = -1;
+    this.setSpeed(timeScale);
+    const sinking = this.dying - BOSS_SINK_DELAY;
+    if (sinking <= 0) return;
+    if (sinking >= BOSS_SINK_DURATION) {
+      this.show(false);
       return;
     }
-    const shrink = 1 - p;
-    this.box.scaling.setAll(shrink);
-    this.box.position.y = (BOSS_HEIGHT / 2) * shrink;
-    this.box.rotation.y += dt * 10;
+    const drop = (sinking / BOSS_SINK_DURATION) * (BOSS_HEIGHT + 0.5);
+    this.place(this.lastX, -drop, this.lastZ);
+  }
+
+  private place(x: number, y: number, z: number): void {
+    this.lastX = x;
+    this.lastZ = z;
+    const model = this.model;
+    if (model !== null) {
+      model.pivot.position.set(x, y, z);
+      return;
+    }
+    this.fallback.position.set(x, y + BOSS_HEIGHT / 2, z);
+  }
+
+  private show(enabled: boolean): void {
+    if (this.model !== null) this.model.setEnabled(enabled);
+    else this.fallback.setEnabled(enabled);
+  }
+
+  /** Enraged: a red pulse over the whole body, in time with the faster walk. */
+  private paintEnrage(enraged: boolean, dt: number): void {
+    const model = this.model;
+    if (model === null) {
+      this.fallbackMaterial.emissiveColor.copyFrom(
+        enraged ? BOSS_ENRAGE_COLOR : BOSS_COLOR.scale(0.25),
+      );
+      return;
+    }
+    if (!enraged) {
+      if (this.enragePhase === 0) return;
+      this.enragePhase = 0;
+      for (const material of model.materials) material.emissiveColor.set(0, 0, 0);
+      return;
+    }
+    this.enragePhase += dt * BOSS_ENRAGE_PULSE;
+    const pulse = 0.4 + 0.35 * Math.sin(this.enragePhase);
+    for (const material of model.materials) {
+      BOSS_ENRAGE_COLOR.scaleToRef(pulse, material.emissiveColor);
+    }
+  }
+
+  private play(id: string, loop: boolean): void {
+    if (this.current === id) return;
+    const group = this.model?.groups.get(id);
+    if (group === undefined) return;
+    this.stopAll();
+    group.play(loop);
+    this.current = id;
+  }
+
+  /** A clip that owns the boss until it has played out, then hands back. */
+  private playOneShot(id: string): void {
+    if (this.dying >= 0) return;
+    const group = this.model?.groups.get(id);
+    if (group === undefined) return;
+    this.current = '';
+    this.stopAll();
+    group.play(false);
+    this.current = id;
+    this.oneShot = groupSeconds(group);
+  }
+
+  private setSpeed(speed: number): void {
+    const group = this.model?.groups.get(this.current);
+    if (group === undefined) return;
+    const clamped = Math.max(0, Math.min(8, speed));
+    if (Math.abs(group.speedRatio - clamped) > 0.01) group.speedRatio = clamped;
+  }
+
+  private stopAll(): void {
+    const model = this.model;
+    if (model === null) return;
+    for (const group of model.groups.values()) group.stop();
   }
 
   private updateRings(dt: number): void {
-    for (const ring of this.rings) {
-      if (!ring.active) continue;
+    this.rings.begin();
+    for (const ring of this.ringState) {
+      if (ring.age < 0) continue;
       ring.age += dt;
-      const p = ring.age / STOMP_DURATION;
-      if (p >= 1) {
-        this.retire(ring);
+      if (ring.age >= STOMP_DURATION) {
+        ring.age = -1;
         continue;
       }
-      const radius = RING_START_RADIUS + (STOMP_MAX_RADIUS - RING_START_RADIUS) * p;
-      ring.mesh.scaling.set(radius, 1, radius);
-      ring.material.alpha = 0.9 * (1 - p);
+      const p = ring.age / STOMP_DURATION;
+      this.rings.add(ring.x, ring.z, RING_START_RADIUS + (STOMP_MAX_RADIUS - RING_START_RADIUS) * p);
     }
+    this.rings.end();
   }
+}
 
-  private retire(ring: Ring): void {
-    ring.active = false;
-    ring.age = 0;
-    ring.material.alpha = 0;
-    ring.mesh.setEnabled(false);
-  }
+/** How long a clip lasts at speed 1, from the frames it was authored at. */
+function groupSeconds(group: AnimationGroup): number {
+  const first = group.targetedAnimations[0];
+  const fps = first === undefined ? 30 : first.animation.framePerSecond;
+  return (group.to - group.from) / Math.max(1, fps);
 }
