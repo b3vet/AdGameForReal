@@ -6,7 +6,7 @@
  * debugged with a query parameter instead of a new build.
  */
 
-import type { RunState, SimEvent } from '@/sim';
+import type { GateKind, RunState, SimEvent } from '@/sim';
 
 import './debug.css';
 
@@ -137,16 +137,28 @@ function describe(event: SimEvent): string {
   switch (event.type) {
     case 'projectileFired':
       return 'fire';
+    case 'projectileHit':
+      return `impact ${event.weaponId}`;
     case 'gateHit':
-      return `gateHit ${event.kind} ${String(event.value)}`;
+      return `gateHit ${event.kind} ${gateValue(event.kind, event.value)}`;
     case 'gatePassed':
-      return `gate ${event.kind} ${String(event.value)} ${String(event.countBefore)}>${String(event.countAfter)}`;
+      return `gate ${event.kind} ${gateValue(event.kind, event.value)} ${String(event.countBefore)}>${String(event.countAfter)}`;
     case 'enemyActivated':
       return `activate #${String(event.enemyId)}`;
     case 'enemyHit':
       return `hit #${String(event.enemyId)} hp ${event.hp.toFixed(0)}`;
     case 'enemyKilled':
       return `kill #${String(event.enemyId)} ${event.kind}`;
+    case 'enemyShattered':
+      return `shatter #${String(event.enemyId)}`;
+    case 'enemySlowed':
+      return `slow #${String(event.enemyId)} ${event.seconds.toFixed(1)}s`;
+    case 'splash':
+      return `splash r${event.radius.toFixed(1)}`;
+    case 'chain':
+      return `chain #${String(event.from)}>#${String(event.to)}`;
+    case 'weaponChanged':
+      return `staff ${event.from}>${event.to}`;
     case 'unitsGained':
       return `+${event.amount.toFixed(0)} units`;
     case 'unitsLost':
@@ -155,9 +167,23 @@ function describe(event: SimEvent): string {
       return 'boss active';
     case 'bossStomp':
       return 'boss stomp';
+    case 'bossEnraged':
+      return `boss enraged #${String(event.enemyId)}`;
     case 'bossKilled':
       return 'boss killed';
     case 'runEnded':
       return `runEnded ${event.status} surv ${String(event.survivors)}`;
   }
+}
+
+/**
+ * Gate values are floats now, so the raw number is fifteen digits of noise in a
+ * panel eight lines tall. Rounded the way the gate's own panel rounds it, and
+ * `fireRate` in the percent the player reads rather than in hundredths.
+ */
+function gateValue(kind: GateKind, value: number): string {
+  const scaled = kind === 'fireRate' ? value * 100 : value;
+  const rounded = Math.round(scaled);
+  // `Math.round` hands back `-0`, which prints as "-0" once a sign is glued on.
+  return String(rounded === 0 ? 0 : rounded);
 }

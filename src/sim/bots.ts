@@ -15,12 +15,20 @@ import { halfWidth } from './formation';
 import { countAfterGate } from './gates';
 import { FIRE_RATE_GATE_WORTH, laneCenter } from './level';
 import { mulberry32 } from './rng';
-import type { GateState, Lane, RunState } from './types';
+import type { EnemyState, GateState, Lane, RunState, WeaponId } from './types';
+import { blockGap, expectedDps, weaponOf } from './weapons';
 import { balance } from '@/data';
 
 export type BotKind = 'greedy' | 'random' | 'worst';
 
 const LANES: readonly Lane[] = [-1, 0, 1];
+
+/**
+ * Blocks in the window a bot reads when it values a staff gate. Module-level
+ * and re-used: a bot is asked for a lane every step, and the sim must not
+ * allocate in hot loops (CLAUDE.md).
+ */
+const layout: EnemyState[] = [];
 
 /** Lowest row index that still has an unpassed gate, or -1 once they are gone. */
 function nextGateRow(state: RunState): number {
@@ -40,10 +48,70 @@ function distanceToRow(state: RunState, rowIndex: number): number {
   return Infinity;
 }
 
+function fillLayout(state: RunState): void {
+  layout.length = 0;
+  const from = state.squad.z;
+  const rows = balance.bots.weaponLookaheadRows + 1;
+  const to = from + rows * balance.level.rowSpacing;
+  for (const enemy of state.enemies) {
+    if (!enemy.alive || enemy.z < from || enemy.z > to) continue;
+    layout.push(enemy);
+  }
+}
+
+/**
+ * How many other blocks the average block in the window has within `radius`,
+ * measured the way the sim measures: `edgeToEdge` for a splash, which reaches
+ * from the impact to the edge of a block, and centre to centre for a chain,
+ * which jumps between blocks.
+ */
+function neighboursWithin(radius: number, edgeToEdge: boolean): number {
+  if (layout.length <= 1) return 0;
+  let total = 0;
+  for (let i = 0; i < layout.length; i++) {
+    const a = layout[i];
+    if (a === undefined) continue;
+    const aHalf = edgeToEdge ? enemyFootprint(a.kind, a.units, balance) : 0;
+    for (let j = 0; j < layout.length; j++) {
+      if (i === j) continue;
+      const b = layout[j];
+      if (b === undefined) continue;
+      const bHalf = edgeToEdge ? enemyFootprint(b.kind, b.units, balance) : 0;
+      if (blockGap(a.x, aHalf, b.x, bHalf, a.z - b.z) <= radius) total++;
+    }
+  }
+  return total / layout.length;
+}
+
+/**
+ * What swapping to `next` is worth, in units.
+ *
+ * A staff hands over no units, so it is scored as the squad it makes: expected
+ * damage per second against the blocks in the next few rows, relative to the
+ * staff in hand, damped by `bots.weaponWorth` because DPS is only worth
+ * something where there is something to shoot.
+ */
+function weaponScore(next: WeaponId | undefined, state: RunState): number {
+  const count = state.squad.count;
+  if (next === undefined) return count;
+
+  const current = weaponOf(state.squad);
+  if (next === current) return count;
+
+  fillLayout(state);
+  const slowWorth = balance.bots.weaponSlowWorth;
+  const now = expectedDps(current, neighboursWithin, slowWorth);
+  if (now <= 0) return count;
+  const then = expectedDps(next, neighboursWithin, slowWorth);
+  return count * (1 + balance.bots.weaponWorth * (then / now - 1));
+}
+
 /** What the squad is worth after taking this gate. Empty lanes score `count`. */
-function laneScore(gate: GateState | null, count: number): number {
+function laneScore(gate: GateState | null, state: RunState): number {
+  const count = state.squad.count;
   if (gate === null) return count;
-  if (gate.kind === 'fireRate') return count + count * FIRE_RATE_GATE_WORTH;
+  if (gate.kind === 'fireRate') return count * (1 + gate.value * FIRE_RATE_GATE_WORTH);
+  if (gate.kind === 'weapon') return weaponScore(gate.weaponId, state);
   return Math.min(balance.squad.maxCount, countAfterGate(gate.kind, gate.value, count));
 }
 
@@ -52,7 +120,6 @@ function laneScore(gate: GateState | null, count: number): number {
  * Ties go to the lane nearest the squad, so a bot does not swerve for nothing.
  */
 function pickLane(state: RunState, rowIndex: number, sign: number): Lane {
-  const count = state.squad.count;
   let bestLane: Lane = 0;
   let bestScore = -Infinity;
   let bestDistance = Infinity;
@@ -65,7 +132,7 @@ function pickLane(state: RunState, rowIndex: number, sign: number): Lane {
         break;
       }
     }
-    const score = sign * laneScore(gate, count);
+    const score = sign * laneScore(gate, state);
     const distance = Math.abs(laneCenter(lane, balance.road.laneWidth) - state.squad.x);
     if (score > bestScore || (score === bestScore && distance < bestDistance)) {
       bestScore = score;

@@ -5,7 +5,7 @@
 
 import type { LevelDef, RowDef, RowEnemyDef } from '../level';
 import { Run } from '../Run';
-import type { GateDef, SimEvent } from '../types';
+import type { GateDef, SimEvent, WeaponId } from '../types';
 import { balance } from '@/data';
 import type { Balance } from '@/data/types';
 
@@ -20,6 +20,11 @@ export function row(
   enemies: RowEnemyDef[] = [],
 ): RowDef {
   return { z, gates, enemies };
+}
+
+/** A staff gate in the middle lane, close enough to be taken immediately. */
+export function staffRow(z: number, weaponId: WeaponId): RowDef {
+  return row(z, [null, { kind: 'weapon', value: 0, cap: 0, weaponId }, null]);
 }
 
 export function level(overrides: Partial<LevelDef> = {}): LevelDef {
@@ -51,4 +56,21 @@ export function play(run: Run, seconds: number, targetX?: number): SimEvent[] {
 
 export function runOf(levelDef: LevelDef, balanceOverride?: Balance): Run {
   return new Run(levelDef, balanceOverride ?? testBalance());
+}
+
+/**
+ * Runs `body` with staff gates turned on in the generator.
+ *
+ * `level.ts` reads the shared tuning object rather than taking one as an
+ * argument, so this flips the real dial and puts it back. Phase C turns it on
+ * for good, once render can draw a staff panel.
+ */
+export function withWeaponGates<T>(body: () => T): T {
+  const before = balance.gen.weaponGatesEnabled;
+  balance.gen.weaponGatesEnabled = true;
+  try {
+    return body();
+  } finally {
+    balance.gen.weaponGatesEnabled = before;
+  }
 }

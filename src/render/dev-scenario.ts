@@ -12,7 +12,14 @@
 
 import { buildDevLevel, emptyDevState } from './dev-fixture';
 import { balance } from '@/data';
-import { BOSS_Z_OFFSET, formationOffsets, laneCenter } from '@/sim';
+import {
+  applyGateGrowth,
+  BOSS_Z_OFFSET,
+  formationOffsets,
+  gateCap,
+  isShootable,
+  laneCenter,
+} from '@/sim';
 import type { EnemyState, GateState, LevelDef, ProjectileState, RunState, SimEvent } from '@/sim';
 
 /**
@@ -150,7 +157,7 @@ export class DevScenario {
         const def = row.gates[slot];
         if (def === undefined || def === null) continue;
         const lane = (slot - 1) as -1 | 0 | 1;
-        state.gates.push({
+        const gate: GateState = {
           id: gateId++,
           rowIndex,
           lane,
@@ -159,7 +166,16 @@ export class DevScenario {
           value: def.value,
           hits: 0,
           passed: false,
-        });
+          // The generator freezes a ceiling into every gate it builds; the
+          // hand-written fallback level in `dev-fixture` does not, so derive it
+          // the same way the sim would rather than letting a shot-up fixture
+          // gate run away.
+          cap: def.cap ?? gateCap(def.kind, def.value, balance),
+        };
+        // Assigned rather than spread: `exactOptionalPropertyTypes` rejects an
+        // explicit `undefined` for an optional field.
+        if (def.weaponId !== undefined) gate.weaponId = def.weaponId;
+        state.gates.push(gate);
       }
 
       for (const enemy of row.enemies) {
@@ -209,12 +225,16 @@ export class DevScenario {
     }
   }
 
+  /** The whole squad's output, in shots per second. Gate growth is a share of it. */
+  private shotRate(): number {
+    return Math.min(DEV_MAX_SHOTS_PER_SECOND, this.state.squad.count * DEV_SHOTS_PER_UNIT);
+  }
+
   private fire(dt: number): void {
     const squad = this.state.squad;
     if (squad.count <= 0) return;
 
-    const rate = Math.min(DEV_MAX_SHOTS_PER_SECOND, squad.count * DEV_SHOTS_PER_UNIT);
-    this.fireAccumulator += rate * dt;
+    this.fireAccumulator += this.shotRate() * dt;
 
     const offsets = formationOffsets(squad.count);
     while (this.fireAccumulator >= 1) {
@@ -265,24 +285,15 @@ export class DevScenario {
 
   private hitGate(projectile: ProjectileState, previousZ: number): boolean {
     for (const gate of this.state.gates) {
-      if (gate.passed || gate.kind === 'mul') continue;
+      // `mul` and staff gates are solid glass: a shot passes through unchanged.
+      if (gate.passed || !isShootable(gate.kind)) continue;
       if (gate.z < previousZ || gate.z > projectile.z) continue;
       if (Math.abs(projectile.x - laneCenter(gate.lane)) > balance.road.laneWidth / 2) continue;
 
-      gate.hits++;
-      const step = balance.gates.hitStep;
-      if (gate.kind === 'add') {
-        gate.value = Math.min(balance.gates.caps.add, gate.value + step.add);
-      } else if (gate.kind === 'sub') {
-        gate.value -= step.sub;
-        if (gate.value <= 0) {
-          gate.kind = 'add';
-          gate.value = 0;
-        }
-      } else {
-        gate.value = Math.min(balance.gates.caps.fireRate, gate.value + step.fireRate);
-      }
-
+      // The sim's own rule, not a stub of it: growth is rate-based, so what the
+      // fixture has to supply is this one hit and the squad's whole shot rate.
+      // A shot is consumed either way, exactly as in `Run`.
+      applyGateGrowth(gate, 1, this.shotRate(), balance);
       this.events.push({ type: 'gateHit', gateId: gate.id, kind: gate.kind, value: gate.value });
       return true;
     }

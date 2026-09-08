@@ -1,14 +1,26 @@
 /**
  * Public surface of the sim. Render, core and UI import from `@/sim` only —
- * never from a file inside it — so Phase B1 can restructure internals freely.
+ * never from a file inside it — so the internals can be restructured freely.
  */
 
 export { Run } from './Run';
-export { generateLevel, laneCenter, squadCurve, BOSS_Z_OFFSET, FIRE_RATE_GATE_WORTH } from './level';
+export {
+  addValueAt,
+  generateLevel,
+  laneCenter,
+  laneOf,
+  rowOffersGrowth,
+  squadCurve,
+  BOSS_Z_OFFSET,
+  FIRE_RATE_GATE_WORTH,
+} from './level';
 export type { LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
 export { formationOffsets, halfWidth } from './formation';
 export { enemyBalance, enemyFootprint } from './enemies';
-export { applyGateHits, clampCount, countAfterGate, isShootable } from './gates';
+export { effectiveSpeed, overlapShare } from './contact';
+export { stompKills } from './boss';
+export { applyGateGrowth, clampCount, countAfterGate, gateCap, isShootable } from './gates';
+export { blockGap, expectedDps, startWeapon, weaponDef, weaponIds, weaponOf } from './weapons';
 export type { FormationOffset } from './formation';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
@@ -26,4 +38,5 @@ export type {
   RunStatus,
   SimEvent,
   SquadState,
+  WeaponId,
 } from './types';

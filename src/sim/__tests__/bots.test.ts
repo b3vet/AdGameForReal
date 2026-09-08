@@ -2,22 +2,26 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
 import { laneCenter } from '../level';
-import type { EnemyState, GateState, Lane, RunState } from '../types';
+import type { EnemyState, GateState, Lane, RunState, WeaponId } from '../types';
 import { balance } from '@/data';
 
 function gate(lane: Lane, kind: GateState['kind'], value: number, z = 20): GateState {
   return { id: lane + 1, rowIndex: 0, lane, z, kind, value, hits: 0, passed: false };
 }
 
-function block(x: number, z: number): EnemyState {
+function staff(lane: Lane, weaponId: WeaponId, z = 20): GateState {
+  return { id: lane + 1, rowIndex: 0, lane, z, kind: 'weapon', value: 0, hits: 0, passed: false, weaponId };
+}
+
+function block(x: number, z: number, units = 100): EnemyState {
   return {
     id: 99,
     kind: 'grunt',
     x,
     z,
-    hp: 300,
-    maxHp: 300,
-    units: 100,
+    hp: units * 3,
+    maxHp: units * 3,
+    units,
     speed: 3,
     active: true,
     alive: true,
@@ -30,7 +34,16 @@ function state(gates: GateState[], enemies: EnemyState[] = [], count = 10): RunS
     seed: 1,
     time: 0,
     status: 'running',
-    squad: { count, x: 0, targetX: 0, z: 0, fireRate: 2, damage: 1, fireRateBonus: 0 },
+    squad: {
+      count,
+      x: 0,
+      targetX: 0,
+      z: 0,
+      fireRate: 2,
+      damage: 1,
+      fireRateBonus: 0,
+      weaponId: 'ember',
+    },
     gates,
     enemies,
     projectiles: [],
@@ -59,10 +72,32 @@ describe('bots', () => {
     expect(createBot('worst', 1)(state(partial))).toBe(laneCenter(-1));
   });
 
-  it('values a fireRate gate as a fraction of the squad, not as nothing', () => {
+  it('values a fireRate gate by what it prints, not as nothing', () => {
     const row = [gate(-1, 'fireRate', 0.1), gate(0, 'add', 1), null];
     const gates = row.filter((g): g is GateState => g !== null);
+    // +10% rate on a hundred units beats a single extra body...
     expect(createBot('greedy', 1)(state(gates, [], 100))).toBe(laneCenter(-1));
+    // ...and loses to a real handful of them.
+    const better = [gate(-1, 'fireRate', 0.1), gate(0, 'add', 20)];
+    expect(createBot('greedy', 1)(state(better, [], 100))).toBe(laneCenter(0));
+  });
+
+  it('takes a staff that suits the road ahead, and the worst bot takes the other', () => {
+    // Three blocks strung out down the road: too far apart to splash, close
+    // enough to chain, so storm is the upgrade and frost the downgrade.
+    const strung = [block(0, 12, 4), block(0, 14.5, 4), block(0, 17, 4)];
+    const row = [staff(-1, 'storm'), gate(0, 'add', 40), staff(1, 'frost')];
+    expect(createBot('greedy', 1)(state(row, strung, 200))).toBe(laneCenter(-1));
+    expect(createBot('worst', 1)(state(row, strung, 200))).toBe(laneCenter(1));
+  });
+
+  it('will not swap to a worse staff just because a gate offers one', () => {
+    // Shoulder to shoulder is what the starting staff is for, so trading its
+    // splash away for a slow is a downgrade and the bot walks the empty lane.
+    const packed = [block(-2, 14, 4), block(0, 14, 4), block(2, 14, 4)];
+    const row = [staff(-1, 'frost'), null, null];
+    const gates = row.filter((g): g is GateState => g !== null);
+    expect(createBot('greedy', 1)(state(gates, packed, 100))).not.toBe(laneCenter(-1));
   });
 
   it('makes greedy hold its ground when a block is about to reach it', () => {

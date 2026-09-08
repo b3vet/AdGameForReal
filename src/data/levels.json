@@ -2,12 +2,12 @@
   {
     "index": 1,
     "seed": 1137,
-    "rows": 8,
+    "rows": 12,
     "startCount": 5,
-    "peakTarget": 60,
-    "hpScale": 0.45,
+    "peakTarget": 105,
+    "hpScale": 0.25,
     "boss": {
-      "hp": 2100
+      "hp": 5000
     },
     "gateValues": {
       "mul": {
@@ -15,16 +15,16 @@
         "max": 2
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
         "min": 2,
-        "max": 500
+        "max": 6
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -36,12 +36,12 @@
   {
     "index": 2,
     "seed": 1274,
-    "rows": 8,
+    "rows": 13,
     "startCount": 5,
-    "peakTarget": 80,
-    "hpScale": 0.6,
+    "peakTarget": 130,
+    "hpScale": 0.3,
     "boss": {
-      "hp": 3500
+      "hp": 6000
     },
     "gateValues": {
       "mul": {
@@ -49,16 +49,16 @@
         "max": 2
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 3,
+        "max": 12
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -70,12 +70,12 @@
   {
     "index": 3,
     "seed": 1411,
-    "rows": 9,
+    "rows": 14,
     "startCount": 6,
-    "peakTarget": 110,
-    "hpScale": 0.7,
+    "peakTarget": 160,
+    "hpScale": 0.35,
     "boss": {
-      "hp": 3300
+      "hp": 6400
     },
     "gateValues": {
       "mul": {
@@ -83,16 +83,16 @@
         "max": 2
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 4,
+        "max": 18
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -104,29 +104,29 @@
   {
     "index": 4,
     "seed": 1548,
-    "rows": 9,
+    "rows": 15,
     "startCount": 6,
-    "peakTarget": 140,
-    "hpScale": 0.85,
+    "peakTarget": 195,
+    "hpScale": 0.4,
     "boss": {
-      "hp": 4200
+      "hp": 7700
     },
     "gateValues": {
       "mul": {
         "min": 2,
-        "max": 3
+        "max": 2
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 5,
+        "max": 24
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -138,29 +138,29 @@
   {
     "index": 5,
     "seed": 1685,
-    "rows": 10,
+    "rows": 16,
     "startCount": 7,
-    "peakTarget": 180,
-    "hpScale": 0.95,
+    "peakTarget": 225,
+    "hpScale": 0.5,
     "boss": {
-      "hp": 6300
+      "hp": 8100
     },
     "gateValues": {
       "mul": {
         "min": 2,
-        "max": 3
+        "max": 2
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 6,
+        "max": 30
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -172,12 +172,12 @@
   {
     "index": 6,
     "seed": 1822,
-    "rows": 11,
+    "rows": 16,
     "startCount": 8,
-    "peakTarget": 230,
-    "hpScale": 1.1,
+    "peakTarget": 260,
+    "hpScale": 0.55,
     "boss": {
-      "hp": 5900
+      "hp": 8700
     },
     "gateValues": {
       "mul": {
@@ -185,16 +185,16 @@
         "max": 3
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 8,
+        "max": 36
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -206,12 +206,12 @@
   {
     "index": 7,
     "seed": 1959,
-    "rows": 11,
+    "rows": 17,
     "startCount": 9,
-    "peakTarget": 290,
-    "hpScale": 1.2,
+    "peakTarget": 295,
+    "hpScale": 0.6,
     "boss": {
-      "hp": 8600
+      "hp": 10200
     },
     "gateValues": {
       "mul": {
@@ -219,16 +219,16 @@
         "max": 3
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 9,
+        "max": 42
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -240,12 +240,12 @@
   {
     "index": 8,
     "seed": 2096,
-    "rows": 12,
+    "rows": 18,
     "startCount": 10,
-    "peakTarget": 350,
-    "hpScale": 1.3,
+    "peakTarget": 325,
+    "hpScale": 0.62,
     "boss": {
-      "hp": 12500
+      "hp": 8700
     },
     "gateValues": {
       "mul": {
@@ -253,16 +253,16 @@
         "max": 3
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 11,
+        "max": 48
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -274,29 +274,29 @@
   {
     "index": 9,
     "seed": 2233,
-    "rows": 13,
+    "rows": 19,
     "startCount": 11,
-    "peakTarget": 420,
-    "hpScale": 1.4,
+    "peakTarget": 360,
+    "hpScale": 0.68,
     "boss": {
-      "hp": 13500
+      "hp": 9700
     },
     "gateValues": {
       "mul": {
         "min": 2,
-        "max": 4
+        "max": 3
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 500
+        "min": 13,
+        "max": 54
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {
@@ -308,29 +308,29 @@
   {
     "index": 10,
     "seed": 2370,
-    "rows": 14,
+    "rows": 20,
     "startCount": 12,
-    "peakTarget": 450,
-    "hpScale": 1.5,
+    "peakTarget": 400,
+    "hpScale": 0.75,
     "boss": {
-      "hp": 10800
+      "hp": 11500
     },
     "gateValues": {
       "mul": {
         "min": 2,
-        "max": 4
+        "max": 3
       },
       "add": {
-        "min": 3,
-        "max": 250
+        "min": 1,
+        "max": 400
       },
       "sub": {
-        "min": 2,
-        "max": 160
+        "min": 15,
+        "max": 60
       },
       "fireRate": {
-        "min": 0.05,
-        "max": 0.2
+        "min": 0.03,
+        "max": 0.1
       }
     },
     "rowWeights": {

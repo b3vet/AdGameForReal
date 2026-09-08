@@ -39,6 +39,13 @@ export const GATE_TINTS = {
   sub: new Color3(0.95, 0.24, 0.26),
   mul: new Color3(0.3, 0.56, 1),
   fireRate: new Color3(1, 0.78, 0.2),
+  /**
+   * Staff gates. A violet leaning white rather than another saturated hue: this
+   * is the only panel that prints a word instead of a number, and the pale tint
+   * keeps the letters legible while the violet still reads apart from `mul`'s
+   * blue at a glance.
+   */
+  weapon: new Color3(0.82, 0.62, 1),
 } as const;
 
 /**
@@ -87,9 +94,41 @@ export const SIDE_GATE_LABEL_RANGE = Math.min(balance.level.rowSpacing * 2.3, 30
 /** How far behind the squad a label stays alive before it is hidden. */
 export const LABEL_BEHIND = 4;
 
+/**
+ * How much road has to separate a block's HP number from a gate row's numbers
+ * before both stay readable — as a share of the camera's distance to the gate,
+ * not as metres.
+ *
+ * A share, because the same stretch of road is fewer pixels the further out it
+ * is: five metres hold two labels 55 px apart at the nearest row and 16 px apart
+ * three rows out, so M1's fixed 3 m window either hides everything up close or
+ * nothing far away. Behind is the wider of the two: a block beyond a gate prints
+ * *up* into that gate's panel, while a block in front prints below it, where the
+ * HP label's low anchor on the block's face already buys separation.
+ *
+ * Measured off the camera rig below at 390x844: 0.28 is where the two numbers
+ * stop touching and 0.31 to 0.44 (small squad to large) is where the block's
+ * number clears the panel band entirely.
+ */
+export const BLOCK_LABEL_CLEARANCE_BEHIND = 0.35;
+export const BLOCK_LABEL_CLEARANCE_FRONT = 0.15;
+/**
+ * Lateral reach of the same rule. Lanes are two metres apart, which is 55 px
+ * even three rows out — wider than either number — so only a gate in the block's
+ * own lane can print on the same patch of screen.
+ */
+export const BLOCK_LABEL_LANE_CLEARANCE = 1.2;
+
 /** Full size, and the floor a shrinking distant label is clamped to. */
 export const GATE_LABEL_SIZE = 34;
 export const GATE_LABEL_MIN = 13;
+/**
+ * Staff gates print a word, not two digits. A lane is about 83 px wide two rows
+ * out, and "Ember" at the number size is a hundred — it would run over whatever
+ * the next lane offers. Smaller, so the word stays inside its own panel.
+ */
+export const GATE_WORD_SIZE = 22;
+export const GATE_WORD_MIN = 10;
 export const ENEMY_LABEL_SIZE = 30;
 export const ENEMY_LABEL_MIN = 12;
 export const BOSS_LABEL_SIZE = 54;

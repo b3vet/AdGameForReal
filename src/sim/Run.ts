@@ -4,19 +4,24 @@
  * The sim is deterministic: a fixed 1/60 s step behind an accumulator, no
  * `Math.random`, no `Date`. `state` is the live object the sim mutates, not a
  * copy — render reads it every frame and must never write to it.
+ *
+ * The heavy phases live next door: `firing.ts` owns the shot clock, projectiles
+ * and weapon effects, `contact.ts` owns blocks walking in, `boss.ts` owns the
+ * arena fight. `Run` is the order they happen in and the one place the run ends.
  */
 
 import { BossController } from './boss';
-import { enemyBalance, enemyFootprint } from './enemies';
+import { advanceEnemies } from './contact';
 import { EventBuffer } from './events';
-import { applyGateHits, clampCount, countAfterGate } from './gates';
-import { formationOffsets, halfWidth } from './formation';
-import { laneCenter } from './level';
+import { Firing } from './firing';
+import { halfWidth } from './formation';
+import { clampCount, countAfterGate } from './gates';
+import { laneOf } from './level';
 import type { LevelDef } from './level';
 import { buildWorld } from './spawn';
 import { TargetList } from './targeting';
-import type { Target } from './targeting';
-import type { GateState, Lane, ProjectileState, RunState, RunStatus, SimEvent, SquadState } from './types';
+import type { GateState, RunState, RunStatus, SimEvent, SquadState, WeaponId } from './types';
+import { startWeapon, weaponDef, weaponOf } from './weapons';
 import type { Balance } from '@/data/types';
 
 /** The sim always steps at 1/60 s regardless of frame rate, so runs are reproducible. */
@@ -30,24 +35,18 @@ export class Run {
   private readonly balance: Balance;
   private readonly runState: RunState;
   private readonly events = new EventBuffer();
+  private readonly targets = new TargetList();
+  private readonly firing: Firing;
+  private readonly boss = new BossController();
 
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
   private accumulator = 0;
-
-  /** Projectile pool: every object is created once and re-used forever. */
-  private readonly projectilePool: ProjectileState[] = [];
-  private readonly freeProjectiles: number[] = [];
-  private readonly projectileSpawnZ: Float64Array;
-
-  /** Fractional shots carried between steps, and the unit that fires next. */
-  private shotAccumulator = 0;
-  private fireCursor = 0;
-  private readonly laneBatch = [0, 0, 0];
-
-  private readonly targets = new TargetList();
-
-  private readonly boss = new BossController();
   private nextRow = 0;
+
+  /** Bound once, not per frame: `contact.ts` calls back into the loss check. */
+  private readonly hitSquad = (amount: number, reason: 'contact'): void => {
+    this.removeUnits(amount, reason);
+  };
 
   constructor(level: LevelDef, balance: Balance) {
     this.level = level;
@@ -59,18 +58,12 @@ export class Run {
       targetX: 0,
       z: 0,
       fireRate: balance.squad.fireRate,
-      damage: balance.squad.damage,
+      damage: balance.squad.damage * weaponDef(startWeapon).damage,
       fireRateBonus: 0,
+      weaponId: startWeapon,
     };
 
     const world = buildWorld(level, balance);
-
-    const max = Math.max(1, Math.floor(balance.projectiles.max));
-    this.projectileSpawnZ = new Float64Array(max);
-    for (let i = max - 1; i >= 0; i--) {
-      this.projectilePool[i] = { id: i, x: 0, z: 0, alive: false };
-      this.freeProjectiles.push(i);
-    }
 
     this.runState = {
       levelIndex: level.index,
@@ -86,6 +79,10 @@ export class Run {
       survivors: level.startCount,
       arenaZ: level.arenaZ,
     };
+
+    this.firing = new Firing(balance, this.events, this.targets, () => {
+      this.finish('won');
+    });
   }
 
   /** The live state object. Render reads it; nothing outside the sim writes it. */
@@ -167,11 +164,12 @@ export class Run {
     if (state.status !== 'running') return;
 
     this.targets.rebuild(state, this.balance);
-    this.updateProjectiles(dt);
+    this.firing.beginStep(state);
+    this.firing.update(state, dt);
     if (state.status !== 'running') return;
-    this.fire(dt);
+    this.firing.fire(state, dt);
     if (state.status !== 'running') return;
-    this.updateEnemies(dt);
+    advanceEnemies(state, this.balance, this.events, dt, this.hitSquad);
     if (state.status !== 'running') return;
     this.updateBoss(dt);
     if (state.status !== 'running') return;
@@ -180,7 +178,6 @@ export class Run {
     state.survivors = squad.count;
     if (squad.count <= 0) this.finish('lost');
   }
-
 
   /** Exactly one gate applies per row: the one whose lane holds the squad now. */
   private applyCrossedRows(): void {
@@ -191,7 +188,7 @@ export class Run {
       const row = rows[this.nextRow];
       if (row === undefined || state.squad.z < row.z) break;
 
-      const lane = this.laneOf(state.squad.x);
+      const lane = laneOf(state.squad.x, this.balance.road.laneWidth);
       const rowIndex = this.nextRow;
       this.nextRow++;
 
@@ -214,6 +211,12 @@ export class Run {
       return;
     }
 
+    if (gate.kind === 'weapon') {
+      this.swapWeapon(gate.weaponId);
+      this.events.gatePassed(gate.id, gate.kind, gate.value, before, before);
+      return;
+    }
+
     const after = clampCount(countAfterGate(gate.kind, gate.value, before), this.balance);
     squad.count = after;
     // Recorded here rather than only at the end of the step: a row that grows
@@ -226,175 +229,16 @@ export class Run {
     if (after <= 0) this.finish('lost');
   }
 
-
-  private updateProjectiles(dt: number): void {
-    const live = this.runState.projectiles;
-    const speed = this.balance.projectiles.speed;
-    const range = this.balance.projectiles.range;
-
-    for (let i = live.length - 1; i >= 0; i--) {
-      const projectile = live[i];
-      if (projectile === undefined) continue;
-
-      const prevZ = projectile.z;
-      const nextZ = prevZ + speed * dt;
-      // Sweep the whole step, so a fast shot cannot tunnel through a gate.
-      const maxZ = (this.projectileSpawnZ[projectile.id] ?? prevZ) + range;
-      const hit = this.targets.sweep(projectile.x, prevZ, Math.min(nextZ, maxZ));
-      if (hit !== null) {
-        this.resolveHit(hit, 1, this.runState.squad.damage);
-        this.recycleProjectile(i);
-        continue;
-      }
-      if (nextZ >= maxZ) {
-        this.recycleProjectile(i);
-        continue;
-      }
-      projectile.z = nextZ;
-    }
-  }
-
-  private recycleProjectile(index: number): void {
-    const live = this.runState.projectiles;
-    const projectile = live[index];
-    if (projectile === undefined) return;
-    projectile.alive = false;
-    this.freeProjectiles.push(projectile.id);
-    const last = live.pop();
-    if (last !== undefined && index < live.length) live[index] = last;
-  }
-
-  /** `hits` shots of `damage` each landing on one target at once. */
-  private resolveHit(target: Target, hits: number, damage: number): void {
-    const gate = target.gate;
-    if (gate !== null) {
-      applyGateHits(gate, hits, this.balance);
-      this.events.gateHit(gate.id, gate.kind, gate.value);
-      return;
-    }
-    const enemy = target.enemy;
-    if (enemy === null) return;
-
-    enemy.hp -= hits * damage;
-    if (enemy.hp > 0) {
-      enemy.units = Math.ceil(enemy.hp / enemyBalance(enemy.kind, this.balance).hpPerUnit);
-      this.events.enemyHit(enemy.id, hits * damage, enemy.hp, enemy.x, enemy.z);
-      return;
-    }
-
-    enemy.hp = 0;
-    enemy.units = 0;
-    enemy.alive = false;
-    target.live = false;
-    this.events.enemyHit(enemy.id, hits * damage, 0, enemy.x, enemy.z);
-    this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
-    if (enemy.kind === 'boss') {
-      this.events.bossKilled();
-      this.finish('won');
-    }
-  }
-
-
-  private fire(dt: number): void {
+  /** A staff gate swaps the squad's staff for the rest of the run. */
+  private swapWeapon(next: WeaponId | undefined): void {
+    if (next === undefined) return;
     const squad = this.runState.squad;
-    const count = squad.count;
-    if (count <= 0) return;
-
-    this.shotAccumulator += count * squad.fireRate * (1 + squad.fireRateBonus) * dt;
-    const shots = Math.floor(this.shotAccumulator);
-    if (shots <= 0) return;
-    this.shotAccumulator -= shots;
-
-    const offsets = formationOffsets(count);
-    this.laneBatch[0] = 0;
-    this.laneBatch[1] = 0;
-    this.laneBatch[2] = 0;
-
-    for (let s = 0; s < shots; s++) {
-      const offset = offsets[this.fireCursor % count];
-      this.fireCursor = (this.fireCursor + 1) % 1000003;
-      if (offset === undefined) continue;
-
-      const x = squad.x + offset.x;
-      const z = squad.z + offset.z;
-      const id = this.freeProjectiles.pop();
-      if (id === undefined) {
-        // Cap reached: the rest of this step's shots become hitscan, batched per
-        // lane so a 400-unit squad still costs three sweeps instead of hundreds.
-        const slot = this.laneOf(x) + 1;
-        this.laneBatch[slot] = (this.laneBatch[slot] ?? 0) + 1;
-        continue;
-      }
-
-      const projectile = this.projectilePool[id];
-      if (projectile === undefined) continue;
-      projectile.x = x;
-      projectile.z = z;
-      projectile.alive = true;
-      this.projectileSpawnZ[id] = z;
-      this.runState.projectiles.push(projectile);
-      this.events.projectileFired(x, z);
-    }
-
-    for (let slot = 0; slot < 3; slot++) {
-      const batched = this.laneBatch[slot] ?? 0;
-      if (batched <= 0) continue;
-      const lane = (slot - 1) as Lane;
-      const x = laneCenter(lane, this.balance.road.laneWidth);
-      this.events.projectileFired(x, squad.z);
-      const target = this.targets.sweep(x, squad.z, squad.z + this.balance.projectiles.range);
-      if (target !== null) this.resolveHit(target, batched, squad.damage);
-      if (this.runState.status !== 'running') return;
-    }
+    const current = weaponOf(squad);
+    if (next === current) return;
+    squad.weaponId = next;
+    squad.damage = this.balance.squad.damage * weaponDef(next).damage;
+    this.events.weaponChanged(current, next);
   }
-
-  /**
-   * Which lane a point stands in. Rounded on `|x|` so the two boundaries are
-   * mirror images: plain `Math.round` breaks ties toward `+infinity`, which put
-   * `x = +1` in the right lane but `x = -1` in the middle one — visible the
-   * moment a wide squad is clamped to exactly `±road.clampMin`.
-   */
-  private laneOf(x: number): Lane {
-    const raw = Math.sign(x) * Math.round(Math.abs(x) / this.balance.road.laneWidth);
-    return Math.min(1, Math.max(-1, raw)) as Lane;
-  }
-
-
-  private updateEnemies(dt: number): void {
-    const state = this.runState;
-    const squad = state.squad;
-    const contact = this.balance.enemies.contactDistance;
-    const squadHalf = halfWidth(squad.count);
-
-    for (const enemy of state.enemies) {
-      if (!enemy.alive) continue;
-
-      if (!enemy.active) {
-        if (enemy.z - squad.z > this.balance.enemies.activationDistance) continue;
-        enemy.active = true;
-        this.events.enemyActivated(enemy.id);
-      }
-
-      enemy.z -= enemy.speed * dt;
-
-      if (Math.abs(enemy.z - squad.z) <= contact) {
-        const half = enemyFootprint(enemy.kind, enemy.units, this.balance);
-        if (Math.abs(enemy.x - squad.x) < half + squadHalf) {
-          const taken = enemy.units;
-          enemy.alive = false;
-          enemy.hp = 0;
-          this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
-          this.removeUnits(taken, 'contact');
-          if (state.status !== 'running') return;
-          continue;
-        }
-      }
-
-      // Blocks that got past the squad run off the back of the level.
-      if (enemy.z < squad.z - this.balance.enemies.despawnBehind) enemy.alive = false;
-    }
-  }
-
 
   private updateBoss(dt: number): void {
     const state = this.runState;
@@ -403,16 +247,16 @@ export class Run {
 
     const step = this.boss.update(boss, state.squad, state.arenaZ, this.balance, dt);
     if (step.activated) this.events.bossActivated(boss.id);
+    if (step.enraged) this.events.bossEnraged(boss.id);
     if (step.contactKills > 0) {
       this.removeUnits(step.contactKills, 'contact');
       if (state.status !== 'running') return;
     }
     if (step.stomped) {
       this.events.bossStomp(boss.x, boss.z);
-      this.removeUnits(this.balance.enemies.boss.stompKills, 'stomp');
+      this.removeUnits(step.stompKills, 'stomp');
     }
   }
-
 
   private removeUnits(amount: number, reason: 'contact' | 'gate' | 'stomp'): void {
     const squad = this.runState.squad;

@@ -21,6 +21,7 @@
   "enemies": {
     "activationDistance": 26,
     "contactDistance": 1.2,
+    "contactMinShare": 0.25,
     "footprintPerUnit": 0.15,
     "footprintMax": 2.2,
     "despawnBehind": 30,
@@ -36,42 +37,58 @@
     },
     "boss": {
       "hpPerUnit": 10,
-      "speed": 1.6,
+      "speed": 0.55,
       "footprint": 2.2,
       "lateralSpeed": 1.2,
-      "stompInterval": 2.5,
-      "stompRange": 7,
+      "stompInterval": 2,
+      "stompRange": 18,
       "stompKills": 3,
-      "contactKillsPerSecond": 6
+      "stompShare": 0.06,
+      "contactShare": 0.15,
+      "enrageAt": 0.3,
+      "enrageStompInterval": 1.2,
+      "enrageSpeedMul": 1.3
     }
   },
   "level": {
-    "rowSpacing": 18,
+    "rowSpacing": 11,
     "bossOffset": 22
   },
   "gates": {
     "caps": {
-      "add": 30,
-      "fireRate": 1.0
+      "add": 400,
+      "fireRate": 1
     },
     "hitStep": {
       "add": 1,
       "sub": 1,
       "fireRate": 0.02
+    },
+    "growthPerSecond": {
+      "add": 2,
+      "sub": 2,
+      "fireRate": 0.04
+    },
+    "capShare": 0.6,
+    "capFloor": {
+      "add": 4,
+      "fireRate": 0.04
     }
   },
   "gen": {
-    "mulChance": 0.18,
+    "mulChance": 0.12,
+    "mulFromLevel": 2,
+    "mulX3FromLevel": 6,
     "fireRateChance": 0.16,
     "thirdGateChance": 0.2,
-    "addFrac": {
-      "min": 0.12,
-      "max": 0.3
+    "addShotBonus": 0.6,
+    "addValueShare": 1,
+    "addJitter": {
+      "min": 0.85,
+      "max": 1.2
     },
-    "subFrac": {
-      "min": 0.6,
-      "max": 1.4
-    },
+    "addFracFloor": 0.08,
+    "curseShare": 0.35,
     "enemyFrac": {
       "min": 0.15,
       "max": 0.4
@@ -81,14 +98,20 @@
     "mixedBlockFrac": 0.7,
     "negativeFromLevel": 2,
     "doubleSubChance": 0.3,
-    "addCapShare": 0.7,
-    "addCapFloor": 0.12,
     "mixedEnemyOffset": 6,
-    "maxEnemyRun": 2
+    "maxEnemyRun": 2,
+    "weaponGatesEnabled": false,
+    "weaponGateChance": 0.3,
+    "weaponGatesEarly": 1,
+    "weaponGatesLate": 2,
+    "weaponGateManyFromLevel": 4
   },
   "bots": {
     "threatLookahead": 6,
-    "gateCommitDistance": 7
+    "gateCommitDistance": 7,
+    "weaponLookaheadRows": 3,
+    "weaponWorth": 0.8,
+    "weaponSlowWorth": 0.2
   },
   "input": {
     "sensitivity": 6

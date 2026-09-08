@@ -16,6 +16,10 @@ import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
 import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
 import {
+  BLOCK_LABEL_CLEARANCE_BEHIND,
+  BLOCK_LABEL_CLEARANCE_FRONT,
+  BLOCK_LABEL_LANE_CLEARANCE,
+  CAMERA,
   ENEMY_COLOR,
   ENEMY_DEATH_DURATION,
   ENEMY_GLOW,
@@ -27,7 +31,7 @@ import {
   POOL,
 } from './theme';
 import { balance } from '@/data';
-import { enemyFootprint } from '@/sim';
+import { enemyFootprint, laneCenter } from '@/sim';
 import type { EnemyState, GateState, RunState } from '@/sim';
 
 /** A block gets taller with the units it is worth, on top of getting wider. */
@@ -40,14 +44,6 @@ const HEIGHT_MAX = 2.4;
  * do it. Floating it above collides with the gate labels behind it.
  */
 const LABEL_OFFSET_Y = 0;
-
-/**
- * A block this close in front of an unpassed gate loses its label: the two
- * numbers would print on top of each other and the gate's is the one the player
- * is deciding about. The generator keeps mixed rows further apart than this
- * (`gen.mixedEnemyOffset`); this is the guard for every other arrangement.
- */
-const GATE_LABEL_CLEARANCE = 3;
 
 /** Flash target. A module constant so the hit flash allocates nothing. */
 const WHITE = Color3.White();
@@ -129,13 +125,18 @@ export class EnemyView {
   update(state: RunState, dt: number): void {
     this.frame++;
     const squadZ = state.squad.z;
+    // Where the camera sits this frame, which is what turns metres of road into
+    // pixels for `gateCrowdsLabel`. Hoisted out of the loop: one rig serves
+    // every block on screen.
+    const pullback = Math.min(CAMERA.pullbackMax, state.squad.count * CAMERA.pullbackPerUnit);
+    const eye = squadZ - CAMERA.behind - pullback;
 
     for (const enemy of state.enemies) {
       if (enemy.kind === 'boss') continue;
       const slot = this.bind(enemy);
       if (slot === undefined || slot.dying >= 0) continue;
       slot.seen = this.frame;
-      this.paintAlive(slot, enemy, state, squadZ, dt);
+      this.paintAlive(slot, enemy, state.gates, squadZ, eye, dt);
     }
 
     for (const slot of this.slots) {
@@ -189,8 +190,9 @@ export class EnemyView {
   private paintAlive(
     slot: EnemySlot,
     enemy: EnemyState,
-    state: RunState,
+    gates: readonly GateState[],
     squadZ: number,
+    eye: number,
     dt: number,
   ): void {
     const units = Math.max(1, enemy.units);
@@ -214,7 +216,7 @@ export class EnemyView {
 
     const ahead = enemy.z - squadZ;
     const readable =
-      ahead < LABEL_RANGE && ahead > -LABEL_BEHIND && !gateInFront(state.gates, enemy.z);
+      ahead < LABEL_RANGE && ahead > -LABEL_BEHIND && !gateCrowdsLabel(gates, enemy, eye);
     slot.label.isVisible = readable;
     if (readable) {
       const hp = Math.max(0, Math.round(enemy.hp));
@@ -261,16 +263,26 @@ export class EnemyView {
 }
 
 /**
- * True when an unpassed gate stands just in front of `z`. Both labels would land
- * on the same patch of screen; the gate's number wins, because that is the
- * choice the player is about to make.
+ * True when an unpassed gate stands close enough to this block, in its own lane,
+ * for the two to print on the same patch of screen. The gate's number wins,
+ * because that is the choice the player is about to make.
+ *
+ * The window is measured from the camera (`eye`), not from the squad: at 11 m
+ * row spacing a block guarding the next row stands about five metres beyond the
+ * row in front of it, and those five metres are a readable gap at the nearest
+ * row and a stack of digits two rows out. So a block loses its number while the
+ * row in front of it is still a decision, and gets it back once that row is
+ * behind the squad — which is also when its HP is what the player is reading.
  */
-function gateInFront(gates: readonly GateState[], z: number): boolean {
+function gateCrowdsLabel(gates: readonly GateState[], enemy: EnemyState, eye: number): boolean {
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i];
     if (gate === undefined || gate.passed) continue;
-    const ahead = gate.z - z;
-    if (ahead >= 0 && ahead <= GATE_LABEL_CLEARANCE) return true;
+    if (Math.abs(laneCenter(gate.lane) - enemy.x) > BLOCK_LABEL_LANE_CLEARANCE) continue;
+
+    const gap = enemy.z - gate.z;
+    const share = gap >= 0 ? BLOCK_LABEL_CLEARANCE_BEHIND : BLOCK_LABEL_CLEARANCE_FRONT;
+    if (Math.abs(gap) < (gate.z - eye) * share) return true;
   }
   return false;
 }

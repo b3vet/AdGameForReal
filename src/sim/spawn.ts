@@ -4,6 +4,7 @@
  */
 
 import { enemyBalance } from './enemies';
+import { gateCap } from './gates';
 import { laneCenter } from './level';
 import type { LevelDef } from './level';
 import type { EnemyState, GateState, Lane } from './types';
@@ -36,8 +37,11 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         value: def.value,
         hits: 0,
         passed: false,
+        // Frozen here rather than derived per hit: a cap that tracked the value
+        // it bounds would creep upward for as long as the player kept shooting.
+        cap: def.cap ?? gateCap(def.kind, def.value, balance),
       };
-      if (def.cap !== undefined) gate.cap = def.cap;
+      if (def.weaponId !== undefined) gate.weaponId = def.weaponId;
       gates.push(gate);
     }
 
@@ -57,6 +61,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         speed: config.speed,
         active: false,
         alive: true,
+        slowUntil: 0,
       });
     }
   }
@@ -72,6 +77,8 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     speed: balance.enemies.boss.speed,
     active: false,
     alive: true,
+    slowUntil: 0,
+    enraged: false,
   };
 
   return { gates, enemies, boss };

@@ -1,5 +1,6 @@
 /**
- * Level generation.
+ * Level generation: the shape of a level and the curve every number on it is
+ * sized against. The gates themselves are built in `gateGen.ts`.
  *
  * Every gate value and block size is scaled by `squadCurve`: how big the squad
  * is expected to be by the time it reaches that row. A level therefore plays
@@ -8,32 +9,17 @@
  * much of the expected squad one block is worth.
  */
 
-import { countAfterGate } from './gates';
-import { mulberry32, randomInt, randomRange, weightedIndex } from './rng';
-import type { EnemyKind, GateDef, GateKind, Lane } from './types';
+import { growsTheSquad, shuffle } from './gateGen';
+import type { RowBudget } from './gateGen';
+import { enemyRow, gateRow, mixedRow } from './rows';
+import type { RowDef, RowEnemyDef, RowPermits } from './rows';
+import { mulberry32 } from './rng';
+import type { GateDef, Lane } from './types';
 import { balance } from '@/data';
-import type { LevelGenConfig, ValueRange } from '@/data/types';
+import type { LevelGenConfig } from '@/data/types';
 
-export type { LevelGenConfig };
-
-export interface RowEnemyDef {
-  kind: EnemyKind;
-  lane: Lane;
-  units: number;
-  /**
-   * Meters from the row's own `z`. Mixed rows stand their block short of the
-   * gate row (a negative `dz`) so the block's HP label and the gate's number
-   * are never on the same spot on screen. Omitted means "on the row".
-   */
-  dz?: number;
-}
-
-export interface RowDef {
-  z: number;
-  /** One slot per lane, in lane order `-1, 0, +1`. `null` means no gate there. */
-  gates: [GateDef | null, GateDef | null, GateDef | null];
-  enemies: RowEnemyDef[];
-}
+export { FIRE_RATE_GATE_WORTH } from './gates';
+export type { LevelGenConfig, RowDef, RowEnemyDef };
 
 export interface LevelDef {
   index: number;
@@ -46,11 +32,6 @@ export interface LevelDef {
   boss: { hp: number; units: number };
 }
 
-const LANES: readonly Lane[] = [-1, 0, 1];
-
-/** How much a `fireRate` gate is notionally worth, in units. Bots agree (bots.ts). */
-export const FIRE_RATE_GATE_WORTH = 0.15;
-
 export const BOSS_Z_OFFSET = balance.level.bossOffset;
 
 /** Lane centre in meters. `laneWidth` is 2, so lanes sit at `x = -2, 0, +2`. */
@@ -58,39 +39,34 @@ export function laneCenter(lane: Lane, laneWidth = balance.road.laneWidth): numb
   return lane * laneWidth;
 }
 
+/**
+ * Which lane a point stands in. Rounded on `|x|` so the two boundaries are
+ * mirror images: plain `Math.round` breaks ties toward `+infinity`, which put
+ * `x = +1` in the right lane but `x = -1` in the middle one — visible the
+ * moment a wide squad is clamped to exactly `±road.clampMin`.
+ */
+export function laneOf(x: number, laneWidth = balance.road.laneWidth): Lane {
+  const raw = Math.sign(x) * Math.round(Math.abs(x) / laneWidth);
+  return Math.min(1, Math.max(-1, raw)) as Lane;
+}
+
 type Rng = () => number;
 
-function clampToRange(value: number, range: ValueRange): number {
-  return Math.min(Math.max(value, range.min), range.max);
-}
-
-function shuffle<T>(rng: Rng, items: T[]): void {
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    const a = items[i];
-    const b = items[j];
-    if (a === undefined || b === undefined) continue;
-    items[i] = b;
-    items[j] = a;
-  }
-}
-
-/** What a gate is worth to a player holding `count` units, for ranking gates. */
-function gateWorth(def: GateDef, count: number): number {
-  if (def.kind === 'fireRate') return count + count * FIRE_RATE_GATE_WORTH;
-  return countAfterGate(def.kind, def.value, count);
-}
+/** Row kinds, as `dealRowKinds` deals them. */
+const GATE_ROW = 0;
+const ENEMY_ROW = 1;
+const MIXED_ROW = 2;
 
 /**
  * How big the squad is expected to be at row `i`.
  *
- * Squads grow by shooting gates, not by the number printed on them, so the
- * generator cannot work the size out from gate values: it follows a curve
- * instead. The curve runs geometrically from `startCount` to the level's
- * `peakTarget`, and every threat, gate value and gate cap on the row is sized
- * against it. That is what makes level 1 peak near 60 and level 10 near 480
- * instead of every level saturating at the shared count cap: the curve, not the
- * cap, is the level's ambition. A player who keeps up is fine; one who falls
+ * Squads grow by walking through gates, not by shooting them — shoot-to-grow is
+ * a rate now (D19), worth a couple of units a second whatever the squad size —
+ * so the generator follows a curve. It runs geometrically from `startCount` to
+ * the level's `peakTarget`, and every threat, gate value and gate cap on the row
+ * is sized against it. That is what makes level 1 peak near 60 and level 10 near
+ * 450 instead of every level saturating at the shared count cap: the curve, not
+ * the cap, is the level's ambition. A player who keeps up is fine; one who falls
  * behind meets blocks built for a squad they no longer have.
  */
 export function squadCurve(config: LevelGenConfig, rowIndex: number): number {
@@ -122,254 +98,119 @@ function gateRowShare(config: LevelGenConfig): number {
 }
 
 /**
- * How far shooting can pump a gate on this row.
+ * What one `add` gate has to hand over for the level to reach its `peakTarget`.
  *
- * Not a flat number and not a flat fraction. A gate row has to carry the growth
- * of the enemy rows around it as well as its own, and the `mul` gates sprinkled
- * through the level already carry part of that growth by themselves — so the
- * budget left for add gates is the curve's per-row growth, raised to "one row in
- * every `gateRowShare`", with the expected `mul` payout divided out. That is
- * what lets one set of dials serve a level that grows 5 into 60 and one that
- * grows 12 into 480 with half its rows full of blocks.
+ * A gate row carries the growth of the enemy rows around it as well as its own,
+ * and the `mul` gates sprinkled through the level already carry part of that by
+ * themselves — so the budget left for add gates is the curve's per-row growth,
+ * raised to "one row in every `gateRowShare`", with the expected `mul` payout
+ * divided out, and then the share a player shoots in on the way (`addShotBonus`)
+ * taken off the top. One set of dials then serves a level that grows 5 into 60
+ * and one that grows 12 into 450 with half its rows full of blocks.
  */
-function addCap(config: LevelGenConfig, estimate: number): number {
+export function addValueAt(config: LevelGenConfig, estimate: number): number {
+  const gen = balance.gen;
   const perGateRow = Math.log(curveGrowth(config)) / gateRowShare(config);
   const mulMean = (config.gateValues.mul.min + config.gateValues.mul.max) / 2;
-  const mulChance = Math.min(0.9, Math.max(0, balance.gen.mulChance));
+  const mulChance = config.index >= gen.mulFromLevel ? Math.min(0.9, Math.max(0, gen.mulChance)) : 0;
   const fromAdds = (perGateRow - mulChance * Math.log(Math.max(1, mulMean))) / (1 - mulChance);
-  // Floor: on a level whose multipliers already outrun the curve, add gates
-  // still have to be worth walking into.
-  const frac = Math.max(balance.gen.addCapFloor, Math.exp(fromAdds) - 1);
-  const raw = Math.round(estimate * frac * balance.gen.addCapShare);
-  return Math.round(clampToRange(raw, config.gateValues.add));
+  const frac = Math.max(gen.addFracFloor, (Math.exp(fromAdds) - 1) / (1 + gen.addShotBonus));
+  return estimate * frac * gen.addValueShare;
 }
 
-function makeGate(kind: GateKind, rng: Rng, config: LevelGenConfig, estimate: number): GateDef {
-  const gen = balance.gen;
-  switch (kind) {
-    case 'mul': {
-      const value = randomInt(rng, config.gateValues.mul.min, config.gateValues.mul.max);
-      // `mul` is not shootable, so its cap is its value: nothing can raise it.
-      return { kind, value, cap: value };
-    }
-    case 'add': {
-      const raw = Math.round(estimate * randomRange(rng, gen.addFrac.min, gen.addFrac.max));
-      const value = Math.round(clampToRange(raw, config.gateValues.add));
-      return { kind, value, cap: Math.max(value, addCap(config, estimate)) };
-    }
-    case 'sub': {
-      const raw = Math.round(estimate * randomRange(rng, gen.subFrac.min, gen.subFrac.max));
-      // The cap is what the gate pays *after* it flips to `add`.
-      return {
-        kind,
-        value: Math.round(clampToRange(raw, config.gateValues.sub)),
-        cap: addCap(config, estimate),
-      };
-    }
-    case 'fireRate': {
-      const raw = randomRange(rng, config.gateValues.fireRate.min, config.gateValues.fireRate.max);
-      return { kind, value: Math.round(raw * 100) / 100, cap: balance.gates.caps.fireRate };
-    }
-  }
+function budgetFor(config: LevelGenConfig, rowIndex: number): RowBudget {
+  const estimate = squadCurve(config, rowIndex);
+  return {
+    estimate,
+    addValue: addValueAt(config, estimate),
+    // Floored at two: the plan's own level-1 curses read 2 to 6, and a row
+    // cannot hold two distinct curses if the ceiling is one.
+    curseCeiling: Math.max(2, Math.floor(estimate * balance.gen.curseShare)),
+  };
 }
 
 /**
- * Kinds for one gate row: at most one `mul`, at least one non-negative choice,
- * and no `sub` at all before `gen.negativeFromLevel`.
- */
-function rowGateKinds(rng: Rng, index: number, slots: number): GateKind[] {
-  const gen = balance.gen;
-  const kinds: GateKind[] = [];
-
-  if (rng() < gen.mulChance) kinds.push('mul');
-
-  const negativesAllowed = index >= gen.negativeFromLevel;
-  let subs = 0;
-  if (negativesAllowed) {
-    // Never fill the row with penalties: at least one lane must be worth taking.
-    const maxSubs = slots - Math.max(1, kinds.length);
-    subs = Math.min(maxSubs, rng() < gen.doubleSubChance ? 2 : 1);
-  }
-  for (let i = 0; i < subs; i++) kinds.push('sub');
-
-  while (kinds.length < slots) {
-    kinds.push(rng() < gen.fireRateChance ? 'fireRate' : 'add');
-  }
-
-  shuffle(rng, kinds);
-  return kinds;
-}
-
-function emptyGates(): [GateDef | null, GateDef | null, GateDef | null] {
-  return [null, null, null];
-}
-
-/** What the player reads off a panel: two gates printing this are one choice. */
-function gateKey(def: GateDef): string {
-  return `${def.kind}:${String(def.value)}`;
-}
-
-/** The smallest step that visibly separates two gates of this kind: one shot. */
-function nudgeStep(kind: GateKind): number {
-  const step = balance.gates.hitStep;
-  if (kind === 'fireRate') return step.fireRate;
-  if (kind === 'sub') return step.sub;
-  return step.add;
-}
-
-/** Rounded the way `makeGate` rounds this kind, so the nudge stays printable. */
-function roundValue(kind: GateKind, value: number): number {
-  return kind === 'fireRate' ? Math.round(value * 100) / 100 : Math.round(value);
-}
-
-/**
- * Moves `def` off any value already taken on this row.
+ * The kind of every row, dealt rather than rolled: `0` gate, `1` enemy,
+ * `2` mixed.
  *
- * Two panels printing `+3` side by side are not a choice, they are a wasted
- * row, so the second one steps away by a shot's worth at a time — outward while
- * the kind's range allows it, inward once it does not. Purely arithmetic: it
- * draws no randomness, so the level stays a function of its seed.
+ * The weights in `levels.json` are a mix, not a per-row probability. Rolling
+ * them row by row made the number of gate rows a coin-flip — a level of sixteen
+ * rows swung between six and eleven of them — and since every gate row is a
+ * multiplicative step, two rows either way was the difference between a squad
+ * of 90 and a squad of 290 on the same level. So the mix is dealt out and
+ * shuffled, and only the order is random.
+ *
+ * The first row is always a plain gate row: the player needs units before
+ * anything is allowed to take units away.
  */
-function makeDistinct(def: GateDef, taken: ReadonlySet<string>, config: LevelGenConfig): void {
-  if (!taken.has(gateKey(def))) return;
+function dealRowKinds(rng: Rng, config: LevelGenConfig, rowCount: number): number[] {
+  const weights = config.rowWeights;
+  const total = Math.max(1, weights.gate + weights.enemy + weights.mixed);
+  const rest = Math.max(0, rowCount - 1);
+  const enemies = Math.round((rest * weights.enemy) / total);
+  const mixed = Math.round((rest * weights.mixed) / total);
+  const gates = Math.max(0, rest - enemies - mixed);
 
-  const range = config.gateValues[def.kind];
-  const step = nudgeStep(def.kind);
-  const original = def.value;
+  const tail: number[] = [];
+  for (let i = 0; i < gates; i++) tail.push(GATE_ROW);
+  for (let i = 0; i < enemies; i++) tail.push(ENEMY_ROW);
+  for (let i = 0; i < mixed; i++) tail.push(MIXED_ROW);
+  shuffle(rng, tail);
 
-  for (const direction of [1, -1]) {
-    for (let i = 1; i <= 3; i++) {
-      const candidate = roundValue(def.kind, original + direction * i * step);
-      if (candidate < range.min || candidate > range.max) break;
-      def.value = candidate;
-      if (!taken.has(gateKey(def))) {
-        // For `add`, `mul` and `fireRate` the cap bounds this very number, so it
-        // has to follow the nudge up. A `sub` gate's cap is what it pays *after*
-        // it flips, which has nothing to do with the penalty printed now.
-        if (def.cap !== undefined && def.kind !== 'sub') {
-          def.cap = Math.max(def.cap, def.value);
-        }
-        return;
-      }
+  // A long run of pure enemy rows is a dead zone: the squad cannot grow while
+  // the curve behind the next row's blocks keeps rising, so the level walks the
+  // player into a wall they were never given the units for. Broken by swapping
+  // rather than rewriting, so the mix the level was dealt survives.
+  const maxRun = Math.max(1, balance.gen.maxEnemyRun);
+  let run = 0;
+  for (let i = 0; i < tail.length; i++) {
+    if (tail[i] !== ENEMY_ROW) {
+      run = 0;
+      continue;
     }
+    run++;
+    if (run <= maxRun) continue;
+    let j = i + 1;
+    while (j < tail.length && tail[j] === ENEMY_ROW) j++;
+    if (j < tail.length) {
+      tail[i] = tail[j] ?? GATE_ROW;
+      tail[j] = ENEMY_ROW;
+    } else {
+      tail[i] = MIXED_ROW;
+    }
+    run = 0;
   }
 
-  // A range too narrow to separate them (level 1's `mul` is a single value):
-  // leave the gate as it was rather than pushing it outside its own range.
-  def.value = original;
+  return [GATE_ROW, ...tail];
 }
 
-/** Builds one row's gates, keeping the numbers on it distinct. */
-function rowGates(
-  rng: Rng,
-  config: LevelGenConfig,
-  estimate: number,
-  lanes: readonly Lane[],
-  kinds: readonly GateKind[],
-): [GateDef | null, GateDef | null, GateDef | null] {
-  const gates = emptyGates();
-  const taken = new Set<string>();
-
-  for (let i = 0; i < lanes.length; i++) {
-    const lane = lanes[i];
-    const kind = kinds[i];
-    if (lane === undefined || kind === undefined) continue;
-    const def = makeGate(kind, rng, config, estimate);
-    makeDistinct(def, taken, config);
-    taken.add(gateKey(def));
-    gates[lane + 1] = def;
+/** Rows from `from` onward that will carry gates. Never zero, so it divides. */
+function countGateRows(kinds: readonly number[], from: number): number {
+  let count = 0;
+  for (let i = from; i < kinds.length; i++) {
+    if (kinds[i] !== ENEMY_ROW) count++;
   }
-
-  return gates;
+  return Math.max(1, count);
 }
 
-/** Lanes that carry a gate this row, in ascending lane order. */
-function pickLanes(rng: Rng, count: number): Lane[] {
-  const lanes = [...LANES];
-  shuffle(rng, lanes);
-  const chosen = lanes.slice(0, count);
-  chosen.sort((a, b) => a - b);
-  return chosen;
+/**
+ * How many `mul` gates this level should carry.
+ *
+ * A budget rather than a coin flip per row: multiplied growth is the loudest
+ * term in the curve, and a level that rolled three multipliers played nothing
+ * like the same level that rolled none — which showed up as the greedy bot
+ * arriving at some bosses with half the squad the level was built for.
+ */
+function mulBudget(index: number, rowCount: number, config: LevelGenConfig): number {
+  if (index < balance.gen.mulFromLevel) return 0;
+  return Math.round(balance.gen.mulChance * rowCount * gateRowShare(config));
 }
 
-function blockUnits(
-  rng: Rng,
-  config: LevelGenConfig,
-  estimate: number,
-  kind: EnemyKind,
-  scale: number,
-): number {
+/** How many staff gates this level may carry, and whether they are on at all. */
+function weaponBudget(index: number): number {
   const gen = balance.gen;
-  const frac = randomRange(rng, gen.enemyFrac.min, gen.enemyFrac.max);
-  const gruntUnits = estimate * frac * config.hpScale * scale;
-  const kindScale = kind === 'brute' ? gen.bruteUnitFrac : 1;
-  return Math.max(1, Math.round(gruntUnits * kindScale));
-}
-
-function pickEnemyKind(rng: Rng): EnemyKind {
-  return rng() < balance.gen.bruteChance ? 'brute' : 'grunt';
-}
-
-function gateRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number): RowDef {
-  const slots = rng() < balance.gen.thirdGateChance ? 3 : 2;
-  const lanes = pickLanes(rng, slots);
-  const kinds = rowGateKinds(rng, config.index, slots);
-
-  return { z, gates: rowGates(rng, config, estimate, lanes, kinds), enemies: [] };
-}
-
-/**
- * A wall of blocks. The row's threat is one budget split across its lanes, not
- * one budget per lane: a wide squad overlaps every lane at once, so three
- * full-sized blocks on one row is not three times the choice, it is a wipe.
- */
-function enemyRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number): RowDef {
-  const lanes = pickLanes(rng, randomInt(rng, 1, 3));
-  const share = 1 / lanes.length;
-  const enemies: RowEnemyDef[] = [];
-  for (const lane of lanes) {
-    const kind = pickEnemyKind(rng);
-    enemies.push({ kind, lane, units: blockUnits(rng, config, estimate, kind, share) });
-  }
-  return { z, gates: emptyGates(), enemies };
-}
-
-/**
- * Gates in two lanes with a block standing in the better lane, so the gate the
- * player wants is the one that costs them something to reach.
- */
-function mixedRow(rng: Rng, config: LevelGenConfig, z: number, estimate: number): RowDef {
-  const lanes = pickLanes(rng, 2);
-  const kinds = rowGateKinds(rng, config.index, 2);
-  const gates = rowGates(rng, config, estimate, lanes, kinds);
-
-  let guardedLane: Lane = lanes[0] ?? 0;
-  let guardedWorth = -Infinity;
-  for (const lane of lanes) {
-    const def = gates[lane + 1];
-    if (def === null || def === undefined) continue;
-    // The block guards the lane a player actually wants, so the good gate costs
-    // something to take.
-    const worth = gateWorth(def, estimate);
-    if (def.kind !== 'sub' && worth > guardedWorth) {
-      guardedWorth = worth;
-      guardedLane = lane;
-    }
-  }
-
-  const kind = pickEnemyKind(rng);
-  const enemies: RowEnemyDef[] = [
-    {
-      kind,
-      lane: guardedLane,
-      units: blockUnits(rng, config, estimate, kind, balance.gen.mixedBlockFrac),
-      // Short of the gate, not on it: the block is something to clear on the way
-      // in, and its HP label keeps well clear of the gate's number on screen.
-      dz: -balance.gen.mixedEnemyOffset,
-    },
-  ];
-
-  return { z, gates, enemies };
+  if (!gen.weaponGatesEnabled) return 0;
+  return index >= gen.weaponGateManyFromLevel ? gen.weaponGatesLate : gen.weaponGatesEarly;
 }
 
 /**
@@ -382,25 +223,33 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
   const rowCount = Math.max(1, Math.floor(config.rows));
   const spacing = balance.level.rowSpacing;
 
-  const weights = [config.rowWeights.gate, config.rowWeights.enemy, config.rowWeights.mixed];
   const rows: RowDef[] = [];
-  let enemyRun = 0;
+  const kinds = dealRowKinds(rng, config, rowCount);
+  let weaponsLeft = weaponBudget(index);
+  let mulsLeft = mulBudget(index, rowCount, config);
 
   for (let i = 0; i < rowCount; i++) {
     const z = spacing * (i + 1);
-    const estimate = squadCurve(config, i);
-    // The first row is always a plain gate row: the player needs units before
-    // anything is allowed to take units away.
-    let kind = i === 0 ? 0 : weightedIndex(rng, weights);
-    // A long run of pure enemy rows is a dead zone: the squad cannot grow while
-    // the curve behind the next row's blocks keeps rising, so the level walks
-    // the player into a wall they were never given the units for.
-    if (kind === 1 && enemyRun >= balance.gen.maxEnemyRun) kind = 2;
-    enemyRun = kind === 1 ? enemyRun + 1 : 0;
+    const budget = budgetFor(config, i);
+    const kind = kinds[i] ?? GATE_ROW;
+    // Spread the multiplier budget over the gate rows that are actually left,
+    // counted from the dealt row kinds: rolling it against every row wasted the
+    // budget on enemy rows, which have no lane to put a multiplier in.
+    const gateRowsLeft = countGateRows(kinds, i);
+    const permits: RowPermits = {
+      mul: i > 0 && kind !== ENEMY_ROW && mulsLeft > 0 && rng() < mulsLeft / gateRowsLeft,
+      weapon: i > 0 && kind !== ENEMY_ROW && weaponsLeft > 0,
+    };
 
-    if (kind === 1) rows.push(enemyRow(rng, config, z, estimate));
-    else if (kind === 2) rows.push(mixedRow(rng, config, z, estimate));
-    else rows.push(gateRow(rng, config, z, estimate));
+    const row =
+      kind === ENEMY_ROW
+        ? enemyRow(rng, config, z, budget)
+        : kind === MIXED_ROW
+          ? mixedRow(rng, config, z, budget, permits)
+          : gateRow(rng, config, z, budget, permits);
+    if (row.gates.some((g) => g?.kind === 'weapon')) weaponsLeft--;
+    if (row.gates.some((g) => g?.kind === 'mul')) mulsLeft--;
+    rows.push(row);
   }
 
   const lastRow = rows[rows.length - 1];
@@ -418,4 +267,11 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
       units: Math.max(1, Math.ceil(config.boss.hp / balance.enemies.boss.hpPerUnit)),
     },
   };
+}
+
+/** True when a row hands the player some way to come out of it bigger. */
+export function rowOffersGrowth(row: RowDef): boolean {
+  const gates: ReadonlyArray<GateDef | null> = row.gates;
+  if (gates.some((g) => g === null)) return true;
+  return gates.some((g) => g !== null && growsTheSquad(g.kind));
 }

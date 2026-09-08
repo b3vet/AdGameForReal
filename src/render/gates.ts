@@ -26,14 +26,27 @@ import {
   GATE_PULSE_DURATION,
   GATE_TINTS,
   GATE_WIDTH,
+  GATE_WORD_MIN,
+  GATE_WORD_SIZE,
   LABEL_BEHIND,
   LANE_WIDTH,
   POOL,
   SIDE_GATE_LABEL_RANGE,
 } from './theme';
-import type { GateKind, GateState, RunState } from '@/sim';
+import type { GateKind, GateState, RunState, WeaponId } from '@/sim';
 
 type Exit = 'none' | 'chosen' | 'skipped';
+
+/**
+ * What a staff gate prints. The sim's ids are lower case; a table rather than
+ * `charAt(0).toUpperCase()` so the panel's word is chosen here, in render, and
+ * so a new staff cannot ship without one.
+ */
+const STAFF_NAMES: Record<WeaponId, string> = {
+  ember: 'Ember',
+  storm: 'Storm',
+  frost: 'Frost',
+};
 
 /** Metres behind the squad at which an exiting panel is dropped outright. */
 const EXIT_CUTOFF_BEHIND = 2;
@@ -143,7 +156,6 @@ export class GateView {
         continue;
       }
 
-
       this.paintIdle(slot, gate, squadZ);
     }
 
@@ -226,12 +238,13 @@ export class GateView {
       // allocates, and the GUI re-measures the block on every `text` write.
       if (gate.value !== slot.shownValue) {
         slot.shownValue = gate.value;
-        slot.label.text = gateText(gate.kind, gate.value);
+        slot.label.text = gateText(gate.kind, gate.value, gate.weaponId);
       }
+      const word = gate.kind === 'weapon';
       slot.shownSize = scaleLabel(
         slot.label,
-        GATE_LABEL_SIZE,
-        GATE_LABEL_MIN,
+        word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
+        word ? GATE_WORD_MIN : GATE_LABEL_MIN,
         ahead,
         slot.shownSize,
       );
@@ -282,16 +295,31 @@ export class GateView {
   }
 }
 
-/** What the player reads. `sub` stores its penalty positive, so print the sign. */
-export function gateText(kind: GateKind, value: number): string {
+/**
+ * What the player reads. Gate values are floats — growth is rate-based — so
+ * every branch rounds; `sub` stores its penalty positive, so it prints the sign.
+ */
+export function gateText(kind: GateKind, value: number, weaponId?: WeaponId): string {
   switch (kind) {
     case 'mul':
-      return `x${String(value)}`;
+      return `x${String(whole(value))}`;
     case 'add':
-      return `+${String(Math.round(value))}`;
-    case 'sub':
-      return `-${String(Math.round(value))}`;
+      return `+${String(whole(value))}`;
+    case 'sub': {
+      const penalty = whole(value);
+      // A shot-down `sub` spends its last fraction of a unit before the sim
+      // flips it to `add`. Gluing the sign on would print "-0" for that frame.
+      return penalty === 0 ? '0' : `-${String(penalty)}`;
+    }
     case 'fireRate':
-      return `+${String(Math.round(value * 100))}%`;
+      return `+${String(whole(value * 100))}%`;
+    case 'weapon':
+      return weaponId === undefined ? 'Staff' : STAFF_NAMES[weaponId];
   }
+}
+
+/** `Math.round` hands back `-0` for small negatives, which prints with a sign. */
+function whole(value: number): number {
+  const rounded = Math.round(value);
+  return rounded === 0 ? 0 : rounded;
 }

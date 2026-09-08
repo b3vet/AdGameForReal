@@ -1,0 +1,34 @@
+{
+  "start": "ember",
+  "staffs": {
+    "ember": {
+      "damage": 1,
+      "fireRateMul": 1,
+      "projectileSpeed": 24,
+      "splash": {
+        "radius": 1.2,
+        "falloff": 1
+      }
+    },
+    "storm": {
+      "damage": 1.25,
+      "fireRateMul": 1,
+      "projectileSpeed": 34,
+      "chain": {
+        "count": 2,
+        "range": 3,
+        "damageMul": 0.6
+      }
+    },
+    "frost": {
+      "damage": 0.9,
+      "fireRateMul": 1.1,
+      "projectileSpeed": 22,
+      "slow": {
+        "factor": 0.5,
+        "seconds": 1.5,
+        "shatterOnKill": true
+      }
+    }
+  }
+}

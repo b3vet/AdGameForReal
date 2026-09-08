@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { stompKills } from '../boss';
+import { overlapShare } from '../contact';
 import { halfWidth } from '../formation';
 import type { GateDef } from '../types';
 import { level, play, row, runOf, testBalance } from './fixtures';
@@ -21,7 +23,7 @@ describe('enemies', () => {
     expect(enemy?.z).toBeLessThan(40);
   });
 
-  it('eats the squad on contact and takes its remaining units with it', () => {
+  it('eats the squad on contact and takes its units with it', () => {
     const def = level({
       startCount: 60,
       rows: [row(4, [null, null, null], [{ kind: 'brute', lane: 0, units: 30 }])],
@@ -36,6 +38,42 @@ describe('enemies', () => {
     expect(run.state.squad.count).toBe(60 - lost.amount);
     expect(run.state.enemies[0]?.alive).toBe(false);
     expect(events.some((e) => e.type === 'enemyKilled')).toBe(true);
+  });
+
+  it('charges a graze less than a block that lands square on the squad', () => {
+    // Same block, same squad: the only difference is how much of it connects.
+    const cost = (targetX: number): number => {
+      const def = level({
+        startCount: 60,
+        rows: [row(4, [null, null, null], [{ kind: 'brute', lane: 0, units: 30 }])],
+      });
+      const run = runOf(def);
+      const events = play(run, 2, targetX);
+      let lost = 0;
+      for (const e of events) if (e.type === 'unitsLost' && e.reason === 'contact') lost += e.amount;
+      return lost;
+    };
+
+    const square = cost(0);
+    const graze = cost(2.2);
+    // Square on takes the whole block's worth (less whatever was shot off it).
+    expect(square).toBeGreaterThanOrEqual(28);
+    // The crowd is wider than the block, so even hugging the clamp it eats part
+    // of it — but a part, not the lot.
+    expect(graze).toBeGreaterThanOrEqual(square * 0.25);
+    expect(graze).toBeLessThan(square);
+  });
+
+  it('never lets an overlap cost nothing, and never charges for a miss', () => {
+    const floor = 0.25;
+    // Dead centre: the whole of the narrower footprint is engaged.
+    expect(overlapShare(0, 1, 0, 2, floor)).toBe(1);
+    expect(overlapShare(0, 2, 0, 1, floor)).toBe(1);
+    // Clear of each other: nothing at all.
+    expect(overlapShare(3, 1, 0, 1, floor)).toBe(0);
+    // A hair of overlap still costs the floor, and a real bite costs more.
+    expect(overlapShare(1.95, 1, 0, 1, floor)).toBe(floor);
+    expect(overlapShare(1, 1, 0, 1, floor)).toBe(0.5);
   });
 
   it('shrinks a block as it takes damage and kills it at zero hp', () => {
@@ -85,21 +123,69 @@ describe('boss', () => {
 
     const stomps = events.filter((e) => e.type === 'bossStomp');
     expect(stomps.length).toBeGreaterThan(0);
+    // A stomp costs a share of whoever is standing under it, with a floor.
     const balance = testBalance();
-    expect(
-      events.some((e) => e.type === 'unitsLost' && e.reason === 'stomp' && e.amount === balance.enemies.boss.stompKills),
-    ).toBe(true);
+    const first = events.find((e) => e.type === 'unitsLost' && e.reason === 'stomp');
+    if (first?.type !== 'unitsLost') throw new Error('the boss never stomped');
+    expect(first.amount).toBe(stompKills(200, balance));
+    expect(first.amount).toBeGreaterThan(balance.enemies.boss.stompKills);
   });
 
-  it('tracks the squad sideways without leaving the road', () => {
-    const def = level({ startCount: 50, rows: [], arenaZ: 4, boss: { hp: 4_000_000, units: 400_000 } });
+  it('scales a stomp with the crowd, and never lets one cost nothing', () => {
     const balance = testBalance();
-    const run = runOf(def, balance);
-    play(run, 12, 2.6);
+    const share = balance.enemies.boss.stompShare;
+    expect(stompKills(400, balance)).toBe(Math.ceil(400 * share));
+    expect(stompKills(10, balance)).toBe(balance.enemies.boss.stompKills);
+    expect(stompKills(0, balance)).toBe(balance.enemies.boss.stompKills);
+  });
 
-    const boss = run.state.boss;
-    expect(boss?.x).toBeGreaterThan(0);
-    expect(Math.abs(boss?.x ?? 0)).toBeLessThanOrEqual(balance.road.halfWidth - balance.enemies.boss.footprint + 1e-9);
+  it('enrages once, at a third of its health', () => {
+    const balance = testBalance();
+    const def = level({ startCount: 300, rows: [], arenaZ: 4, boss: { hp: 9000, units: 900 } });
+    const run = runOf(def, balance);
+
+    let enrages = 0;
+    let hpAtEnrage = -1;
+    for (let i = 0; i < 60 * 60; i++) {
+      for (const event of run.tick(1 / 60)) {
+        if (event.type !== 'bossEnraged') continue;
+        enrages++;
+        hpAtEnrage = run.state.boss?.hp ?? -1;
+      }
+    }
+    expect(enrages).toBe(1);
+    expect(hpAtEnrage).toBeGreaterThan(0);
+    expect(hpAtEnrage).toBeLessThanOrEqual(9000 * balance.enemies.boss.enrageAt);
+    expect(run.state.boss?.enraged).toBe(true);
+  });
+
+  it('stomps faster and walks faster once it has turned', () => {
+    const balance = testBalance();
+    // Stomping from the moment it wakes, so the whole fight is measurable.
+    balance.enemies.boss.stompRange = 60;
+    const def = level({ startCount: 400, rows: [], arenaZ: 4, boss: { hp: 14_000, units: 1400 } });
+    const run = runOf(def, balance);
+
+    const before: number[] = [];
+    const after: number[] = [];
+    let enraged = false;
+    let last = -1;
+    let time = 0;
+    for (let i = 0; i < 60 * 45; i++) {
+      for (const event of run.tick(1 / 60)) {
+        if (event.type === 'bossEnraged') enraged = true;
+        if (event.type !== 'bossStomp') continue;
+        if (last >= 0) (enraged ? after : before).push(time - last);
+        last = time;
+      }
+      time += 1 / 60;
+    }
+
+    expect(before.length).toBeGreaterThan(2);
+    expect(after.length).toBeGreaterThan(2);
+    const mean = (gaps: number[]): number => gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    expect(mean(before)).toBeCloseTo(balance.enemies.boss.stompInterval, 1);
+    expect(mean(after)).toBeCloseTo(balance.enemies.boss.enrageStompInterval, 1);
   });
 
   it('ends the run as a win when the boss dies, and reports survivors', () => {
@@ -116,16 +202,35 @@ describe('boss', () => {
     expect(run.state.survivors).toBeGreaterThan(0);
   });
 
-  it('grinds the squad down on contact and loses the run', () => {
+  it('grinds the squad down and loses the run', () => {
     const def = level({ startCount: 60, rows: [], arenaZ: 4, boss: { hp: 4_000_000, units: 400_000 } });
     const run = runOf(def);
-    const events = play(run, 60, 0);
+    const events = play(run, 120, 0);
 
     expect(run.state.status).toBe('lost');
     expect(run.state.survivors).toBe(0);
     expect(events.some((e) => e.type === 'unitsLost' && e.reason === 'stomp')).toBe(true);
-    expect(events.some((e) => e.type === 'unitsLost' && e.reason === 'contact')).toBe(true);
     expect(events.filter((e) => e.type === 'runEnded')).toHaveLength(1);
+  });
+
+  it('takes a share of the squad every second once it reaches them', () => {
+    const balance = testBalance();
+    // No stomps in the way: this measures contact alone.
+    balance.enemies.boss.stompRange = 0;
+    const def = level({ startCount: 400, rows: [], arenaZ: 4, boss: { hp: 4_000_000, units: 400_000 } });
+    const run = runOf(def, balance);
+
+    const reach = (balance.level.bossOffset - balance.enemies.contactDistance) /
+      balance.enemies.boss.speed;
+    play(run, reach + 1, 0);
+    const before = run.state.squad.count;
+    play(run, 4, 0);
+    const after = run.state.squad.count;
+
+    const expected = before * Math.pow(1 - balance.enemies.boss.contactShare, 4);
+    expect(after).toBeLessThan(before);
+    expect(after).toBeGreaterThan(expected * 0.8);
+    expect(after).toBeLessThan(expected * 1.25);
   });
 });
 

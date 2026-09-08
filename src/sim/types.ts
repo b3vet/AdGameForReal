@@ -1,14 +1,19 @@
 /**
- * Shared sim types. Contract source: docs/03-milestone-1-plan.md.
+ * Shared sim types. Contract source: docs/03-milestone-1-plan.md, extended by
+ * docs/06-milestone-2-plan.md (weapons, staff gates, boss enrage).
  *
  * This module is pure data: no Babylon, no DOM, no I/O. Everything here is
  * JSON-serializable so a run can be snapshotted for debugging and replay.
  */
 
+import type { WeaponId } from '@/data/types';
+
+export type { WeaponId };
+
 /** Lane index. Lane centers are at `x = lane * laneWidth` (laneWidth = 2). */
 export type Lane = -1 | 0 | 1;
 
-export type GateKind = 'mul' | 'add' | 'sub' | 'fireRate';
+export type GateKind = 'mul' | 'add' | 'sub' | 'fireRate' | 'weapon';
 
 /** `sub`: value is the penalty, stored as a positive number. */
 export interface GateDef {
@@ -17,11 +22,12 @@ export interface GateDef {
   /**
    * Ceiling on what shooting this gate can raise it to: units for `add` and
    * `sub` (after it flips), the fire-rate bonus for `fireRate`. The generator
-   * sizes it against the squad the row was built for, which is what keeps a
-   * level-1 gate from paying out like a level-10 one. Omitted on hand-made
-   * gates, which fall back to `balance.gates.caps`.
+   * writes it from the gate's own printed value (see `gateCap`); omitted on
+   * hand-made gates, which derive the same ceiling on the fly.
    */
   cap?: number;
+  /** Set on `weapon` gates: the staff the squad leaves the row carrying. */
+  weaponId?: WeaponId;
 }
 
 export interface GateState {
@@ -30,11 +36,14 @@ export interface GateState {
   lane: -1 | 0 | 1;
   z: number;
   kind: GateKind;
+  /** A float: growth is rate-based, and rounding for display is render's job. */
   value: number;
   hits: number;
   passed: boolean;
-  /** See `GateDef.cap`. Undefined means "use the global cap". */
+  /** See `GateDef.cap`. Undefined means "derive it from the printed value". */
   cap?: number;
+  /** See `GateDef.weaponId`. */
+  weaponId?: WeaponId;
 }
 
 export type EnemyKind = 'grunt' | 'brute' | 'boss';
@@ -51,6 +60,16 @@ export interface EnemyState {
   speed: number;
   active: boolean;
   alive: boolean;
+  /**
+   * Sim time until which a frost hit keeps this block at `slow.factor` speed.
+   * Optional so the M1 render fixtures, which build `EnemyState` by hand,
+   * still typecheck; the sim always writes it.
+   */
+  slowUntil?: number;
+  /** Speed multiplier while `slowUntil` holds, from the staff that applied it. */
+  slowFactor?: number;
+  /** Boss only: past `enrageAt` of its HP it stomps faster and walks faster. */
+  enraged?: boolean;
 }
 
 export interface ProjectileState {
@@ -66,9 +85,12 @@ export interface SquadState {
   targetX: number;
   z: number;
   fireRate: number;
+  /** `balance.squad.damage` scaled by the staff in hand. */
   damage: number;
   /** From `fireRate` gates; the effective rate is `fireRate * (1 + fireRateBonus)`. */
   fireRateBonus: number;
+  /** The staff in hand. Optional for the same reason as `EnemyState.slowUntil`. */
+  weaponId?: WeaponId;
 }
 
 export type RunStatus = 'running' | 'won' | 'lost';
@@ -92,6 +114,7 @@ export interface RunState {
 /** Returned by `Run.tick`, consumed by render and UI, then discarded. */
 export type SimEvent =
   | { type: 'projectileFired'; x: number; z: number }
+  | { type: 'projectileHit'; weaponId: WeaponId; x: number; z: number }
   | { type: 'gateHit'; gateId: number; kind: GateKind; value: number }
   | {
       type: 'gatePassed';
@@ -104,9 +127,15 @@ export type SimEvent =
   | { type: 'enemyActivated'; enemyId: number }
   | { type: 'enemyHit'; enemyId: number; damage: number; hp: number; x: number; z: number }
   | { type: 'enemyKilled'; enemyId: number; kind: EnemyKind; x: number; z: number }
+  | { type: 'enemyShattered'; enemyId: number; x: number; z: number }
+  | { type: 'enemySlowed'; enemyId: number; seconds: number }
+  | { type: 'splash'; x: number; z: number; radius: number }
+  | { type: 'chain'; from: number; to: number }
+  | { type: 'weaponChanged'; from: WeaponId; to: WeaponId }
   | { type: 'unitsGained'; amount: number; reason: 'gate' }
   | { type: 'unitsLost'; amount: number; reason: 'contact' | 'gate' | 'stomp' }
   | { type: 'bossActivated'; enemyId: number }
   | { type: 'bossStomp'; x: number; z: number }
+  | { type: 'bossEnraged'; enemyId: number }
   | { type: 'bossKilled' }
   | { type: 'runEnded'; status: RunStatus; survivors: number; peakCount: number };

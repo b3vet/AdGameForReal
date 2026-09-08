@@ -7,7 +7,7 @@
  * longer must be copied, since the next `tick` overwrites these objects.
  */
 
-import type { EnemyKind, GateKind, RunStatus, SimEvent } from './types';
+import type { EnemyKind, GateKind, RunStatus, SimEvent, WeaponId } from './types';
 
 type EventOf<T extends SimEvent['type']> = Extract<SimEvent, { type: T }>;
 
@@ -43,6 +43,46 @@ export class EventBuffer {
     type: 'projectileFired',
     x: 0,
     z: 0,
+  }));
+
+  private readonly impacts = new Pool<EventOf<'projectileHit'>>(() => ({
+    type: 'projectileHit',
+    weaponId: 'ember',
+    x: 0,
+    z: 0,
+  }));
+
+  private readonly splashes = new Pool<EventOf<'splash'>>(() => ({
+    type: 'splash',
+    x: 0,
+    z: 0,
+    radius: 0,
+  }));
+
+  private readonly chains = new Pool<EventOf<'chain'>>(() => ({ type: 'chain', from: 0, to: 0 }));
+
+  private readonly slows = new Pool<EventOf<'enemySlowed'>>(() => ({
+    type: 'enemySlowed',
+    enemyId: 0,
+    seconds: 0,
+  }));
+
+  private readonly shatters = new Pool<EventOf<'enemyShattered'>>(() => ({
+    type: 'enemyShattered',
+    enemyId: 0,
+    x: 0,
+    z: 0,
+  }));
+
+  private readonly weaponSwaps = new Pool<EventOf<'weaponChanged'>>(() => ({
+    type: 'weaponChanged',
+    from: 'ember',
+    to: 'ember',
+  }));
+
+  private readonly enrages = new Pool<EventOf<'bossEnraged'>>(() => ({
+    type: 'bossEnraged',
+    enemyId: 0,
   }));
 
   private readonly gateHits = new Pool<EventOf<'gateHit'>>(() => ({
@@ -119,6 +159,13 @@ export class EventBuffer {
   reset(): void {
     this.list.length = 0;
     this.fired.reset();
+    this.impacts.reset();
+    this.splashes.reset();
+    this.chains.reset();
+    this.slows.reset();
+    this.shatters.reset();
+    this.weaponSwaps.reset();
+    this.enrages.reset();
     this.gateHits.reset();
     this.gatePasses.reset();
     this.activations.reset();
@@ -136,6 +183,57 @@ export class EventBuffer {
     const e = this.fired.take();
     e.x = x;
     e.z = z;
+    this.list.push(e);
+  }
+
+  projectileHit(weaponId: WeaponId, x: number, z: number): void {
+    const e = this.impacts.take();
+    e.weaponId = weaponId;
+    e.x = x;
+    e.z = z;
+    this.list.push(e);
+  }
+
+  splash(x: number, z: number, radius: number): void {
+    const e = this.splashes.take();
+    e.x = x;
+    e.z = z;
+    e.radius = radius;
+    this.list.push(e);
+  }
+
+  chain(from: number, to: number): void {
+    const e = this.chains.take();
+    e.from = from;
+    e.to = to;
+    this.list.push(e);
+  }
+
+  enemySlowed(enemyId: number, seconds: number): void {
+    const e = this.slows.take();
+    e.enemyId = enemyId;
+    e.seconds = seconds;
+    this.list.push(e);
+  }
+
+  enemyShattered(enemyId: number, x: number, z: number): void {
+    const e = this.shatters.take();
+    e.enemyId = enemyId;
+    e.x = x;
+    e.z = z;
+    this.list.push(e);
+  }
+
+  weaponChanged(from: WeaponId, to: WeaponId): void {
+    const e = this.weaponSwaps.take();
+    e.from = from;
+    e.to = to;
+    this.list.push(e);
+  }
+
+  bossEnraged(enemyId: number): void {
+    const e = this.enrages.take();
+    e.enemyId = enemyId;
     this.list.push(e);
   }
 
