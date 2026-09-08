@@ -162,6 +162,18 @@ export class Renderer {
     scene.render();
   }
 
+  /**
+   * Starts the animations a batch of events implies without drawing a frame.
+   *
+   * `?turbo` runs several sim ticks per frame, and the sim re-uses its event
+   * objects between ticks, so every tick but the last hands its events here
+   * before they are overwritten. The last tick's events go to `update` as usual.
+   */
+  absorbEvents(events: readonly SimEvent[]): void {
+    if (this.disposed) return;
+    this.applyEvents(events);
+  }
+
   resize(): void {
     this.engine?.resize();
     this.applyPixelRatio();

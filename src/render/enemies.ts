@@ -26,7 +26,7 @@ import {
   LABEL_RANGE,
   POOL,
 } from './theme';
-import type { EnemyState, RunState } from '@/sim';
+import type { EnemyState, GateState, RunState } from '@/sim';
 
 /** Block footprint: `0.9 + 0.12*sqrt(units)`, capped so it never spans the road. */
 const WIDTH_BASE = 0.9;
@@ -42,6 +42,17 @@ const HEIGHT_MAX = 2.4;
  */
 const LABEL_OFFSET_Y = 0;
 
+/**
+ * A block this close in front of an unpassed gate loses its label: the two
+ * numbers would print on top of each other and the gate's is the one the player
+ * is deciding about. The generator keeps mixed rows further apart than this
+ * (`gen.mixedEnemyOffset`); this is the guard for every other arrangement.
+ */
+const GATE_LABEL_CLEARANCE = 3;
+
+/** Flash target. A module constant so the hit flash allocates nothing. */
+const WHITE = Color3.White();
+
 interface EnemySlot {
   box: Mesh;
   material: StandardMaterial;
@@ -53,6 +64,10 @@ interface EnemySlot {
   width: number;
   height: number;
   seen: number;
+  /** Last hp printed, so the label is only re-set when the number changes. */
+  shownHp: number;
+  /** Last font size applied; see `scaleLabel`. */
+  shownSize: number;
 }
 
 export class EnemyView {
@@ -63,8 +78,10 @@ export class EnemyView {
   constructor(scene: Scene, labels: LabelLayer) {
     for (let i = 0; i < POOL.enemies; i++) {
       const material = new StandardMaterial(`enemyMat-${String(i)}`, scene);
-      material.diffuseColor = ENEMY_COLOR;
-      material.emissiveColor = ENEMY_GLOW;
+      // Clones, not the shared theme colours: the hit flash writes into these
+      // in place every frame rather than allocating a new Color3.
+      material.diffuseColor = ENEMY_COLOR.clone();
+      material.emissiveColor = ENEMY_GLOW.clone();
       material.specularColor = Color3.Black();
 
       const box = CreateBox(`enemy-${String(i)}`, { size: 1 }, scene);
@@ -85,6 +102,8 @@ export class EnemyView {
         width: 1,
         height: 1,
         seen: 0,
+        shownHp: Number.NaN,
+        shownSize: Number.NaN,
       });
     }
   }
@@ -117,7 +136,7 @@ export class EnemyView {
       const slot = this.bind(enemy);
       if (slot === undefined || slot.dying >= 0) continue;
       slot.seen = this.frame;
-      this.paintAlive(slot, enemy, squadZ, dt);
+      this.paintAlive(slot, enemy, state, squadZ, dt);
     }
 
     for (const slot of this.slots) {
@@ -142,21 +161,39 @@ export class EnemyView {
     if (existing !== undefined) return existing;
     if (!enemy.alive) return undefined;
 
-    const slot = this.slots.find((candidate) => candidate.enemyId < 0);
+    const slot = this.freeSlot();
     if (slot === undefined) return undefined;
 
     slot.enemyId = enemy.id;
     slot.flash = 0;
     slot.dying = -1;
+    slot.shownHp = Number.NaN;
+    slot.shownSize = Number.NaN;
     slot.box.rotation.y = 0;
     slot.box.setEnabled(true);
-    slot.material.emissiveColor = ENEMY_GLOW;
+    slot.material.emissiveColor.copyFrom(ENEMY_GLOW);
 
     this.byEnemyId.set(enemy.id, slot);
     return slot;
   }
 
-  private paintAlive(slot: EnemySlot, enemy: EnemyState, squadZ: number, dt: number): void {
+  /** First unbound slot. An index loop, not `find`: this runs per block per
+   *  frame and a closure per call is an allocation in the steady-state path. */
+  private freeSlot(): EnemySlot | undefined {
+    for (let i = 0; i < this.slots.length; i++) {
+      const slot = this.slots[i];
+      if (slot !== undefined && slot.enemyId < 0) return slot;
+    }
+    return undefined;
+  }
+
+  private paintAlive(
+    slot: EnemySlot,
+    enemy: EnemyState,
+    state: RunState,
+    squadZ: number,
+    dt: number,
+  ): void {
     const units = Math.max(1, enemy.units);
     const root = Math.sqrt(units);
     slot.width = Math.min(WIDTH_MAX, WIDTH_BASE + WIDTH_PER_UNIT * root);
@@ -168,15 +205,26 @@ export class EnemyView {
     if (slot.flash > 0) {
       slot.flash = Math.max(0, slot.flash - dt);
       const hot = slot.flash / ENEMY_HIT_FLASH;
-      slot.material.emissiveColor = Color3.Lerp(ENEMY_GLOW, Color3.White(), hot);
+      Color3.LerpToRef(ENEMY_GLOW, WHITE, hot, slot.material.emissiveColor);
     }
 
     const ahead = enemy.z - squadZ;
-    const readable = ahead < LABEL_RANGE && ahead > -LABEL_BEHIND;
+    const readable =
+      ahead < LABEL_RANGE && ahead > -LABEL_BEHIND && !gateInFront(state.gates, enemy.z);
     slot.label.isVisible = readable;
     if (readable) {
-      slot.label.text = String(Math.max(0, Math.round(enemy.hp)));
-      scaleLabel(slot.label, ENEMY_LABEL_SIZE, ENEMY_LABEL_MIN, ahead);
+      const hp = Math.max(0, Math.round(enemy.hp));
+      if (hp !== slot.shownHp) {
+        slot.shownHp = hp;
+        slot.label.text = String(hp);
+      }
+      slot.shownSize = scaleLabel(
+        slot.label,
+        ENEMY_LABEL_SIZE,
+        ENEMY_LABEL_MIN,
+        ahead,
+        slot.shownSize,
+      );
     }
   }
 
@@ -192,7 +240,7 @@ export class EnemyView {
     slot.box.scaling.set(slot.width * shrink, slot.height * shrink, slot.width * shrink);
     slot.box.position.y = (slot.height / 2) * shrink;
     slot.box.rotation.y += dt * 14;
-    slot.material.emissiveColor = Color3.Lerp(Color3.White(), ENEMY_GLOW, p);
+    Color3.LerpToRef(WHITE, ENEMY_GLOW, p, slot.material.emissiveColor);
   }
 
   private release(slot: EnemySlot): void {
@@ -200,8 +248,25 @@ export class EnemyView {
     slot.enemyId = -1;
     slot.flash = 0;
     slot.dying = -1;
+    slot.shownHp = Number.NaN;
+    slot.shownSize = Number.NaN;
     slot.box.setEnabled(false);
     slot.box.rotation.y = 0;
     hideLabel(slot.label);
   }
+}
+
+/**
+ * True when an unpassed gate stands just in front of `z`. Both labels would land
+ * on the same patch of screen; the gate's number wins, because that is the
+ * choice the player is about to make.
+ */
+function gateInFront(gates: readonly GateState[], z: number): boolean {
+  for (let i = 0; i < gates.length; i++) {
+    const gate = gates[i];
+    if (gate === undefined || gate.passed) continue;
+    const ahead = gate.z - z;
+    if (ahead >= 0 && ahead <= GATE_LABEL_CLEARANCE) return true;
+  }
+  return false;
 }

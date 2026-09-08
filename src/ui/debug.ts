@@ -16,9 +16,22 @@ const LOG_LIMIT = 8;
 /** DOM writes per second. The panel is for reading, not for measuring itself. */
 const REFRESH_INTERVAL = 0.1;
 
+/** Exponential smoothing weight for the per-frame cost readouts. */
+const AVERAGE_WEIGHT = 0.1;
+
 interface LogEntry {
   text: string;
   repeats: number;
+}
+
+/**
+ * What one frame cost, in milliseconds: the whole `Run.tick` sequence and the
+ * whole `Renderer.update` including `scene.render`. The app owns one instance
+ * and overwrites it every frame, so nothing here may hold on to it.
+ */
+export interface FrameTimings {
+  simMs: number;
+  renderMs: number;
 }
 
 export class DebugPanel {
@@ -27,6 +40,8 @@ export class DebugPanel {
 
   private enabled = false;
   private fps = 0;
+  private simMs = 0;
+  private renderMs = 0;
   private sinceRefresh = REFRESH_INTERVAL;
 
   constructor(element: HTMLElement) {
@@ -43,11 +58,17 @@ export class DebugPanel {
     events: readonly SimEvent[],
     dt: number,
     phase: string,
+    timings: FrameTimings,
   ): void {
     if (!this.enabled) return;
 
-    // Exponential smoothing: raw 1/dt jitters too much to read.
-    if (dt > 0) this.fps += (1 / dt - this.fps) * 0.1;
+    // Exponential smoothing: raw per-frame numbers jitter too much to read, and
+    // a phone's hot spot shows up as a rising average, not as one bad frame.
+    if (dt > 0) {
+      this.fps += (1 / dt - this.fps) * AVERAGE_WEIGHT;
+      this.simMs += (timings.simMs - this.simMs) * AVERAGE_WEIGHT;
+      this.renderMs += (timings.renderMs - this.renderMs) * AVERAGE_WEIGHT;
+    }
 
     for (const event of events) this.push(describe(event));
 
@@ -59,7 +80,10 @@ export class DebugPanel {
   }
 
   private compose(state: Readonly<RunState> | null, phase: string): string {
-    const lines = [`fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}`];
+    const lines = [
+      `fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}`,
+      `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms`,
+    ];
 
     if (state === null) {
       lines.push('no run');

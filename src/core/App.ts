@@ -12,6 +12,7 @@ import { runRenderDevScene } from '@/render/dev-scene';
 import { createBot, generateLevel, Run } from '@/sim';
 import type { BotKind, LevelDef, RunState, SimEvent } from '@/sim';
 import { Overlay } from '@/ui';
+import type { FrameTimings } from '@/ui';
 
 import { attachInput } from './input';
 import type { DetachInput } from './input';
@@ -38,16 +39,29 @@ interface QueryOptions {
   seed: number | null;
   debug: boolean;
   devScene: boolean;
+  /** Sim seconds per real second. 1 is normal play; `?turbo=8` is for scripts. */
+  turbo: number;
 }
 
 /** Frame delta is clamped so a backgrounded tab cannot teleport the squad. */
 const MAX_FRAME_DT = 0.05;
 
-/** Seconds between the run ending and the result screen: the last frames play out. */
-const RESULT_DELAY = 0.8;
+/**
+ * Largest sim step a single `tick` is given, even under `?turbo`. The sim's own
+ * accumulator would clamp a longer step anyway, and keeping chunks small means a
+ * fast-forwarded run resolves collisions exactly as a real-time one does.
+ */
+const MAX_SIM_CHUNK = 0.05;
+
+/** Ceiling on `?turbo`: past this a frame's worth of sim costs more than it saves. */
+const MAX_TURBO = 20;
 
 /** Shared empty list, so an idle frame allocates nothing. */
 const NO_EVENTS: readonly SimEvent[] = [];
+
+/** Wall clock for the debug panel's cost readouts; never used by the sim. */
+const now = (): number =>
+  typeof performance === 'undefined' ? 0 : performance.now();
 
 export class App {
   private readonly canvas: HTMLCanvasElement;
@@ -70,6 +84,9 @@ export class App {
   private lastFrameTime = 0;
   private endCountdown: number | null = null;
 
+  /** Re-used every frame: the debug panel reads it, nothing else may write it. */
+  private readonly timings: FrameTimings = { simMs: 0, renderMs: 0 };
+
   constructor(canvas: HTMLCanvasElement, overlayRoot: ParentNode, search: string) {
     this.canvas = canvas;
     this.options = parseQuery(search);
@@ -86,6 +103,9 @@ export class App {
       },
       onSelectLevel: (level: number) => {
         this.selectLevel(level);
+      },
+      onLevels: () => {
+        this.showTitle();
       },
     });
   }
@@ -216,26 +236,59 @@ export class App {
     if (run === null) {
       const preview = this.preview;
       if (preview !== null) this.renderer.update(preview.state, NO_EVENTS, dt);
-      this.overlay.updateDebug(null, NO_EVENTS, dt, this.phase);
+      this.overlay.updateDebug(null, NO_EVENTS, dt, this.phase, this.timings);
       return;
     }
 
-    if (this.bot !== null && run.state.status === 'running') run.setTargetX(this.bot(run.state));
-
-    const events = run.tick(dt);
+    const simStart = now();
+    const events = this.stepSim(run, dt);
+    const renderStart = now();
     this.renderer.update(run.state, events, dt);
+    const renderEnd = now();
+    this.timings.simMs = renderStart - simStart;
+    this.timings.renderMs = renderEnd - renderStart;
+
     this.overlay.updateHud(run.state, events);
-    this.overlay.updateDebug(run.state, events, dt, this.phase);
+    this.overlay.updateDebug(run.state, events, dt, this.phase, this.timings);
 
     if (this.phase === 'playing') this.advanceEnding(run, dt);
   };
+
+  /**
+   * Advances the sim by `dt * turbo`, split into ticks of at most
+   * `MAX_SIM_CHUNK`, and returns the last tick's events for the render call.
+   *
+   * Only the last array survives: the sim pools its event objects and the next
+   * `tick` overwrites them, so every earlier chunk hands its events to the
+   * renderer and the HUD right away instead of being concatenated. That keeps
+   * the count, the bump animation and the gate flashes correct at any speed.
+   */
+  private stepSim(run: Run, dt: number): readonly SimEvent[] {
+    const total = dt * this.options.turbo;
+    const chunks = Math.max(1, Math.ceil(total / MAX_SIM_CHUNK));
+    const chunkDt = total / chunks;
+
+    let events: readonly SimEvent[] = NO_EVENTS;
+    for (let i = 0; i < chunks; i++) {
+      if (this.bot !== null && run.state.status === 'running') run.setTargetX(this.bot(run.state));
+      events = run.tick(chunkDt);
+      if (i === chunks - 1) break;
+
+      this.renderer.absorbEvents(events);
+      this.overlay.updateHud(run.state, events);
+      // dt 0: an intermediate chunk drew no frame, so it must not move the
+      // panel's frame-rate average.
+      this.overlay.updateDebug(run.state, events, 0, this.phase, this.timings);
+    }
+    return events;
+  }
 
   /** Holds the result screen back for a beat so the killing blow is visible. */
   private advanceEnding(run: Run, dt: number): void {
     if (this.endCountdown === null) {
       if (run.state.status === 'running') return;
 
-      this.endCountdown = RESULT_DELAY;
+      this.endCountdown = balance.ui.resultDelay;
       // Unlock as soon as the run is won, not when the player taps Next: a
       // player who closes the tab on the result screen keeps their progress.
       if (run.state.status === 'won' && this.options.level < levelCount) {
@@ -293,6 +346,7 @@ function parseQuery(search: string): QueryOptions {
     botParam === 'greedy' || botParam === 'random' || botParam === 'worst' ? botParam : null;
 
   const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
+  const turboParam = Number.parseFloat(params.get('turbo') ?? '');
 
   return {
     level,
@@ -300,5 +354,6 @@ function parseQuery(search: string): QueryOptions {
     seed: Number.isFinite(seedParam) ? seedParam : null,
     debug: params.has('debug'),
     devScene: params.get('scene') === 'render-test',
+    turbo: Number.isFinite(turboParam) ? Math.min(MAX_TURBO, Math.max(1, turboParam)) : 1,
   };
 }

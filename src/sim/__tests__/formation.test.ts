@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { formationOffsets, halfWidth } from '../formation';
+import { formationOffsets, halfWidth, unitSpacing } from '../formation';
 
-/** The formation spiral's radial constant; units must never pack tighter than this. */
-const MIN_SEPARATION = 0.3;
+/** Units may pack tighter as the squad grows, but never tighter than this share
+ *  of the spacing that squad size is built around. */
+const MIN_SEPARATION_FRACTION = 0.8;
+
+/** The road spans `x in [-3, 3]`; a wider crowd than this stands in the grass. */
+const MAX_HALF_WIDTH = 2.4;
 
 const COUNTS = [1, 2, 3, 5, 8, 13, 21, 50, 100, 250, 500];
 
@@ -21,6 +25,15 @@ function minPairDistance(offsets: ReadonlyArray<{ x: number; z: number }>): numb
   return min;
 }
 
+function maxAbs(offsets: ReadonlyArray<{ x: number; z: number }>, axis: 'x' | 'z'): number {
+  let max = 0;
+  for (const offset of offsets) {
+    const value = Math.abs(offset[axis]);
+    if (value > max) max = value;
+  }
+  return max;
+}
+
 describe('formationOffsets', () => {
   it('returns exactly one offset per unit', () => {
     for (const count of COUNTS) {
@@ -36,7 +49,18 @@ describe('formationOffsets', () => {
   it('never places two units closer than the minimum separation', () => {
     for (const count of COUNTS) {
       if (count < 2) continue;
-      expect(minPairDistance(formationOffsets(count))).toBeGreaterThanOrEqual(MIN_SEPARATION);
+      const floor = MIN_SEPARATION_FRACTION * unitSpacing(count);
+      expect(minPairDistance(formationOffsets(count))).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
+  it('is an ellipse pointing down the road, never a disc wider than the lane', () => {
+    for (const count of COUNTS) {
+      if (count < 8) continue;
+      const offsets = formationOffsets(count);
+      // Elongated along z: the crowd grows down the road, not across it.
+      expect(maxAbs(offsets, 'z')).toBeGreaterThan(maxAbs(offsets, 'x'));
+      expect(maxAbs(offsets, 'x')).toBeLessThanOrEqual(MAX_HALF_WIDTH);
     }
   });
 
@@ -50,12 +74,29 @@ describe('formationOffsets', () => {
     expect(second).toEqual(first);
   });
 
-  it('is a prefix sequence: growing the squad keeps existing units in place', () => {
+  it('keeps each unit on its own ray as the squad tightens around it', () => {
+    // Spacing shrinks with the count, so a growing squad contracts toward the
+    // centre rather than reshuffling: unit `i` keeps its bearing, and the whole
+    // formation scales by one factor.
     const small = formationOffsets(10);
     const large = formationOffsets(40);
-    for (let i = 0; i < small.length; i++) {
-      expect(large[i]).toEqual(small[i]);
+    const scale = unitSpacing(40) / unitSpacing(10);
+    for (let i = 1; i < small.length; i++) {
+      const a = small[i];
+      const b = large[i];
+      if (a === undefined || b === undefined) throw new Error('missing offset');
+      expect(b.x).toBeCloseTo(a.x * scale, 9);
+      expect(b.z).toBeCloseTo(a.z * scale, 9);
     }
+  });
+});
+
+describe('unitSpacing', () => {
+  it('shrinks as the crowd grows, from 0.35 down to roughly a third of that', () => {
+    expect(unitSpacing(1)).toBeCloseTo(0.35, 6);
+    expect(unitSpacing(500)).toBeLessThan(unitSpacing(100));
+    expect(unitSpacing(100)).toBeLessThan(unitSpacing(10));
+    expect(unitSpacing(500)).toBeGreaterThan(0.05);
   });
 });
 
@@ -69,6 +110,12 @@ describe('halfWidth', () => {
     }
   });
 
+  it('keeps even a maximum squad on the road', () => {
+    expect(halfWidth(500)).toBeLessThanOrEqual(MAX_HALF_WIDTH);
+    // And nothing between here and there is wider, by monotonicity above.
+    for (const count of COUNTS) expect(halfWidth(count)).toBeLessThanOrEqual(MAX_HALF_WIDTH);
+  });
+
   it('grows strictly over the range the game actually spans', () => {
     expect(halfWidth(500)).toBeGreaterThan(halfWidth(100));
     expect(halfWidth(100)).toBeGreaterThan(halfWidth(10));
@@ -77,8 +124,7 @@ describe('halfWidth', () => {
 
   it('covers every unit in the formation plus padding', () => {
     for (const count of COUNTS) {
-      const widest = Math.max(...formationOffsets(count).map((o) => Math.abs(o.x)));
-      expect(halfWidth(count)).toBeGreaterThan(widest);
+      expect(halfWidth(count)).toBeGreaterThan(maxAbs(formationOffsets(count), 'x'));
     }
   });
 

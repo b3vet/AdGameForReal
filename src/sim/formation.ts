@@ -5,13 +5,29 @@
  * collision half-width are both derived from `count` by a phyllotaxis (sunflower)
  * spiral, so the two can never disagree. Render reads these offsets to place
  * unit instances; the sim reads `halfWidth` for gate and enemy overlap.
+ *
+ * The spiral is stretched into an ellipse pointing down the road and its spacing
+ * shrinks as the squad grows, because the road is only 6 m wide: a crowd of 500
+ * has to get denser and longer rather than wider. Stretching `z` rather than
+ * squashing `x` matters — squashing would pull neighbouring units on top of each
+ * other, while stretching only ever pushes them apart.
  */
 
-/** Radial constant of the spiral, in meters. Also the nearest-neighbour distance. */
-const SPACING = 0.35;
+/** Spacing at small counts, in meters. Also the spiral's radial constant there. */
+const SPACING_MAX = 0.35;
 
 /** Padding added to the widest unit so contact feels fair rather than pixel-exact. */
 const HALF_WIDTH_PADDING = 0.2;
+
+/**
+ * Ceiling the formation's half-width approaches as the squad grows. The road
+ * spans `x in [-3, 3]`, so a crowd wider than this stands in the grass however
+ * many units it holds.
+ */
+const HALF_WIDTH_CAP = 2.2;
+
+/** x extent as a share of the z extent: the crowd is an ellipse, nose forward. */
+const X_TO_Z = 0.6;
 
 /** Golden angle: the divergence that makes the spiral pack evenly. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -26,9 +42,32 @@ export interface FormationOffset {
  * frame and the sim must not allocate in hot loops (CLAUDE.md).
  */
 const offsetCache = new Map<number, ReadonlyArray<FormationOffset>>();
-const halfWidthCache = new Map<number, number>();
 
 const EMPTY: ReadonlyArray<FormationOffset> = Object.freeze([]);
+
+/**
+ * How far the outermost unit stands from the centre along `x`.
+ *
+ * Free growth (`SPACING_MAX * sqrt(n - 1)`) while the squad is small, bending
+ * smoothly to `HALF_WIDTH_CAP` as it gets big. Smooth matters: a hard clamp
+ * would make the crowd stop growing outward in one frame, and this is also what
+ * makes `halfWidth` monotonic in `count`.
+ */
+function halfExtentX(count: number): number {
+  const natural = SPACING_MAX * Math.sqrt(Math.max(0, count - 1));
+  return (natural * HALF_WIDTH_CAP) / Math.hypot(natural, HALF_WIDTH_CAP);
+}
+
+/**
+ * Distance between neighbouring units at this squad size, in meters: 0.35 for a
+ * handful, about a third of that at 500. Render scales its unit meshes by the
+ * same number so a dense crowd reads as dense rather than as overlapping boxes.
+ */
+export function unitSpacing(count: number): number {
+  const n = Math.max(0, Math.floor(count));
+  if (n < 2) return SPACING_MAX;
+  return halfExtentX(n) / Math.sqrt(n - 1);
+}
 
 /**
  * Formation offsets relative to the squad centre, one per unit.
@@ -41,11 +80,12 @@ export function formationOffsets(count: number): ReadonlyArray<FormationOffset> 
   const cached = offsetCache.get(n);
   if (cached !== undefined) return cached;
 
+  const spacing = unitSpacing(n);
   const offsets: FormationOffset[] = new Array<FormationOffset>(n);
   for (let i = 0; i < n; i++) {
-    const radius = SPACING * Math.sqrt(i);
+    const radius = spacing * Math.sqrt(i);
     const angle = i * GOLDEN_ANGLE;
-    offsets[i] = { x: radius * Math.cos(angle), z: radius * Math.sin(angle) };
+    offsets[i] = { x: radius * Math.cos(angle), z: (radius * Math.sin(angle)) / X_TO_Z };
   }
 
   const frozen: ReadonlyArray<FormationOffset> = Object.freeze(offsets);
@@ -54,24 +94,15 @@ export function formationOffsets(count: number): ReadonlyArray<FormationOffset> 
 }
 
 /**
- * Half the squad's footprint along `x`: the widest unit plus padding.
- * Monotonically non-decreasing in `count`, because adding units to the spiral
- * can only push the outer edge further out.
+ * Half the squad's footprint along `x`: the widest unit can stand plus padding.
+ *
+ * Closed form rather than a scan of the offsets, so it is monotonically
+ * non-decreasing in `count` by construction — the sim compares it against enemy
+ * footprints every step and a squad that got narrower by recruiting would let
+ * blocks phase through the edge of the crowd.
  */
 export function halfWidth(count: number): number {
   const n = Math.max(0, Math.floor(count));
   if (n === 0) return 0;
-
-  const cached = halfWidthCache.get(n);
-  if (cached !== undefined) return cached;
-
-  let maxAbsX = 0;
-  for (const offset of formationOffsets(n)) {
-    const absX = Math.abs(offset.x);
-    if (absX > maxAbsX) maxAbsX = absX;
-  }
-
-  const result = maxAbsX + HALF_WIDTH_PADDING;
-  halfWidthCache.set(n, result);
-  return result;
+  return halfExtentX(n) + HALF_WIDTH_PADDING;
 }

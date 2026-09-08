@@ -53,6 +53,12 @@ export class BossView {
   /** Seconds into the death animation, or -1 while alive. */
   private dying = -1;
 
+  /** Last hp printed, so the label is only re-set when the number changes. */
+  private shownHp = Number.NaN;
+
+  /** Last font size applied; see `scaleLabel`. */
+  private shownSize = Number.NaN;
+
   constructor(scene: Scene, labels: LabelLayer) {
     this.material = new StandardMaterial('bossMat', scene);
     this.material.diffuseColor = BOSS_COLOR;
@@ -98,6 +104,8 @@ export class BossView {
 
   reset(): void {
     this.dying = -1;
+    this.shownHp = Number.NaN;
+    this.shownSize = Number.NaN;
     this.box.setEnabled(false);
     this.box.rotation.y = 0;
     this.box.scaling.setAll(1);
@@ -106,7 +114,7 @@ export class BossView {
   }
 
   onStomp(x: number, z: number): void {
-    const ring = this.rings.find((candidate) => !candidate.active);
+    const ring = this.freeRing();
     if (ring === undefined) return;
     ring.active = true;
     ring.age = 0;
@@ -147,9 +155,30 @@ export class BossView {
     const readable = ahead < LABEL_RANGE;
     this.label.isVisible = readable;
     if (readable) {
-      this.label.text = String(Math.max(0, Math.round(boss.hp)));
-      scaleLabel(this.label, BOSS_LABEL_SIZE, BOSS_LABEL_MIN, ahead);
+      // The boss loses hp every frame, but only whole numbers are printable:
+      // re-set the text when the rounded number moves, not on every hit.
+      const hp = Math.max(0, Math.round(boss.hp));
+      if (hp !== this.shownHp) {
+        this.shownHp = hp;
+        this.label.text = String(hp);
+      }
+      this.shownSize = scaleLabel(
+        this.label,
+        BOSS_LABEL_SIZE,
+        BOSS_LABEL_MIN,
+        ahead,
+        this.shownSize,
+      );
     }
+  }
+
+  /** First idle ring. An index loop, not `find`, so a stomp allocates nothing. */
+  private freeRing(): Ring | undefined {
+    for (let i = 0; i < this.rings.length; i++) {
+      const ring = this.rings[i];
+      if (ring !== undefined && !ring.active) return ring;
+    }
+    return undefined;
   }
 
   dispose(): void {

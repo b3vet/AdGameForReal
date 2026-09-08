@@ -76,6 +76,14 @@ export const BOSS_LABEL_MIN = 26;
 
 export const SQUAD_RADIUS = 0.17;
 export const SQUAD_HEIGHT = 0.62;
+/**
+ * Unit meshes shrink as the crowd tightens: full size while the formation has
+ * room, three quarters at the squad cap. The sim packs 500 units into the same
+ * 4 m of road as 100, so without this the capsules read as one solid slab.
+ */
+export const CROWD_SCALE_FROM = 50;
+export const CROWD_SCALE_TO = balance.squad.maxCount;
+export const CROWD_SCALE_MIN = 0.75;
 /** Scale bounce for a unit that just appeared. */
 export const POP_DURATION = 0.25;
 /** Shrink-and-fade for a unit that just died. */

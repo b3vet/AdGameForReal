@@ -86,7 +86,24 @@ export function hideLabel(block: TextBlock): void {
  */
 const FULL_SIZE_DISTANCE = 12;
 
-export function scaleLabel(block: TextBlock, base: number, minimum: number, distance: number): void {
+/**
+ * Sizes a label for its distance and returns the size it applied.
+ *
+ * `shown` is the size the caller applied last time. Assigning `fontSize` is not
+ * free — Babylon's setter formats the current value to a string to compare, and
+ * a number never equals that string, so every assignment re-dirties the control
+ * and re-lays out the GUI. Callers keep the returned value and hand it back, so
+ * a label that has not changed size costs nothing.
+ */
+export function scaleLabel(
+  block: TextBlock,
+  base: number,
+  minimum: number,
+  distance: number,
+  shown: number,
+): number {
   const scaled = Math.round((base * FULL_SIZE_DISTANCE) / Math.max(FULL_SIZE_DISTANCE / 2, distance));
-  block.fontSize = Math.max(minimum, Math.min(base, scaled));
+  const size = Math.max(minimum, Math.min(base, scaled));
+  if (size !== shown) block.fontSize = size;
+  return size;
 }

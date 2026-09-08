@@ -60,12 +60,12 @@
     }
   },
   "gen": {
-    "mulChance": 0.7,
+    "mulChance": 0.18,
     "fireRateChance": 0.16,
     "thirdGateChance": 0.2,
     "addFrac": {
-      "min": 0.3,
-      "max": 0.75
+      "min": 0.12,
+      "max": 0.3
     },
     "subFrac": {
       "min": 0.6,
@@ -80,7 +80,10 @@
     "mixedBlockFrac": 0.7,
     "negativeFromLevel": 2,
     "doubleSubChance": 0.3,
-    "curveTarget": 0.9
+    "addCapShare": 0.7,
+    "addCapFloor": 0.12,
+    "mixedEnemyOffset": 6,
+    "maxEnemyRun": 2
   },
   "bots": {
     "threatLookahead": 6,
@@ -88,5 +91,10 @@
   },
   "input": {
     "sensitivity": 6
+  },
+  "ui": {
+    "resultDelay": 0.8,
+    "keySpeed": 900,
+    "legendSeconds": 6
   }
 }

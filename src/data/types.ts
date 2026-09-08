@@ -102,8 +102,20 @@ export interface Balance {
     negativeFromLevel: number;
     /** Chance a row that may carry penalties carries two of them. */
     doubleSubChance: number;
-    /** Share of `maxCount` the expected-squad curve reaches on the last row. */
-    curveTarget: number;
+    /**
+     * Share of a gate row's growth budget that shooting one gate can supply.
+     * The budget itself comes from the level's own curve (see `addCap` in
+     * `level.ts`); this dial says how much of it a player who shoots well gets,
+     * with the rest coming from `mul` gates. Below 1 the level needs its
+     * multipliers; above 1 add gates alone outrun the curve.
+     */
+    addCapShare: number;
+    /** Smallest gate growth budget, as a share of the expected squad. */
+    addCapFloor: number;
+    /** Meters a mixed row's block stands short of its gate row, so labels clear. */
+    mixedEnemyOffset: number;
+    /** Longest run of rows with no gate at all before one is forced. */
+    maxEnemyRun: number;
   };
   bots: {
     /** How far ahead a scripted player looks for a block about to reach it. */
@@ -114,6 +126,15 @@ export interface Balance {
   input: {
     /** Road meters travelled for one full screen width of drag. */
     sensitivity: number;
+  };
+  /** Numbers the shell needs. Timings are in seconds unless the name says else. */
+  ui: {
+    /** Seconds the result screen waits so the killing blow plays out. */
+    resultDelay: number;
+    /** CSS pixels per second of held steering key, matched to a brisk drag. */
+    keySpeed: number;
+    /** How long the level-1 gate legend stays on screen. */
+    legendSeconds: number;
   };
 }
 
@@ -128,6 +149,12 @@ export interface LevelGenConfig {
   seed: number;
   rows: number;
   startCount: number;
+  /**
+   * Squad size this level is designed to peak at — the top of `squadCurve` and
+   * the scale every gate and block on the level is sized against. Growth across
+   * the campaign is this number rising, not the shared `maxCount` cap.
+   */
+  peakTarget: number;
   /** Multiplier on generated enemy block sizes. */
   hpScale: number;
   boss: { hp: number };

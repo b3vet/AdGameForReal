@@ -20,6 +20,12 @@ export interface PlayResult {
   survivors: number;
   peakCount: number;
   seconds: number;
+  /** Sim seconds between the boss activating and the run ending. */
+  bossSeconds: number;
+  /** Squad size the moment the boss woke up, or 0 if it never did. */
+  countAtBoss: number;
+  /** Boss hp still standing when the run ended. */
+  bossHpLeft: number;
 }
 
 export function playLevel(levelIndex: number, seed: number, kind: BotKind): PlayResult {
@@ -28,11 +34,17 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
   const bot = createBot(kind, seed * 7919 + levelIndex);
 
   let steps = 0;
+  let bossStart = -1;
+  let countAtBoss = 0;
   const maxSteps = Math.round(MAX_SECONDS / DT);
   while (run.state.status === 'running' && steps < maxSteps) {
     run.setTargetX(bot(run.state));
     run.tick(DT);
     steps++;
+    if (bossStart < 0 && run.state.boss?.active === true) {
+      bossStart = steps;
+      countAtBoss = run.state.squad.count;
+    }
   }
 
   const state = run.state;
@@ -41,6 +53,9 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
     survivors: state.survivors,
     peakCount: state.peakCount,
     seconds: steps * DT,
+    bossSeconds: bossStart < 0 ? 0 : (steps - bossStart) * DT,
+    countAtBoss,
+    bossHpLeft: state.boss?.hp ?? 0,
   };
 }
 

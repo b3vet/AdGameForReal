@@ -14,6 +14,8 @@
  * on a phone.
  */
 
+import { balance } from '@/data';
+
 export type DetachInput = () => void;
 
 export interface InputOptions {
@@ -24,9 +26,6 @@ export interface InputOptions {
    */
   enabled: () => boolean;
 }
-
-/** CSS pixels per second of held key, matched to a brisk drag. */
-const KEY_SPEED = 900;
 
 export function attachInput(
   canvas: HTMLCanvasElement,
@@ -77,7 +76,9 @@ export function attachInput(
     let direction = 0;
     if (heldKeys.has('ArrowLeft') || heldKeys.has('KeyA')) direction -= 1;
     if (heldKeys.has('ArrowRight') || heldKeys.has('KeyD')) direction += 1;
-    if (direction !== 0 && dt > 0 && options.enabled()) onDeltaX(direction * KEY_SPEED * dt);
+    if (direction !== 0 && dt > 0 && options.enabled()) {
+      onDeltaX(direction * balance.ui.keySpeed * dt);
+    }
 
     if (heldKeys.size === 0) {
       keyRafId = null;

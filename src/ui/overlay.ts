@@ -12,6 +12,7 @@ import './styles.css';
 import type { RunState, SimEvent } from '@/sim';
 
 import { DebugPanel } from './debug';
+import type { FrameTimings } from './debug';
 import { Hud } from './hud';
 
 export interface OverlayCallbacks {
@@ -20,6 +21,8 @@ export interface OverlayCallbacks {
   onNext: () => void;
   /** A level picker chip was tapped. The app decides whether to accept it. */
   onSelectLevel: (level: number) => void;
+  /** "Levels" on the result screen: back to the title and its level picker. */
+  onLevels: () => void;
 }
 
 export interface TitleView {
@@ -85,6 +88,9 @@ export class Overlay {
     this.nextButton.addEventListener('click', () => {
       callbacks.onNext();
     });
+    requireElement<HTMLButtonElement>(root, '#levels-button').addEventListener('click', () => {
+      callbacks.onLevels();
+    });
   }
 
   showTitle(view: TitleView): void {
@@ -142,8 +148,9 @@ export class Overlay {
     events: readonly SimEvent[],
     dt: number,
     phase: string,
+    timings: FrameTimings,
   ): void {
-    this.debugPanel.update(state, events, dt, phase);
+    this.debugPanel.update(state, events, dt, phase, timings);
   }
 
   /** Chips are created once; later `showTitle` calls only re-flag them. */

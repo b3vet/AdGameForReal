@@ -7,6 +7,9 @@ import { balance, levelConfig, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
+/** Closer than this and a block's HP label prints over a gate's number. */
+const MIN_GATE_ENEMY_GAP = 4;
+
 function everyLevel(fn: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
     for (const seed of SEEDS) {
@@ -98,6 +101,31 @@ describe('generateLevel', () => {
     });
   });
 
+  it('runs every level curve to its own peak target, never to the shared cap', () => {
+    let previous = 0;
+    for (let index = 1; index <= levelCount; index++) {
+      const config = levelConfig(index);
+      expect(config.peakTarget).toBeGreaterThan(previous);
+      expect(config.peakTarget).toBeLessThanOrEqual(balance.squad.maxCount);
+      expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
+      previous = config.peakTarget;
+    }
+  });
+
+  it('keeps every block clear of a gate row, so their labels never collide', () => {
+    everyLevel((level) => {
+      const gateRowZ = level.rows.filter((r) => r.gates.some((g) => g !== null)).map((r) => r.z);
+      for (const row of level.rows) {
+        for (const enemy of row.enemies) {
+          const z = row.z + (enemy.dz ?? 0);
+          for (const gateZ of gateRowZ) {
+            expect(Math.abs(gateZ - z)).toBeGreaterThanOrEqual(MIN_GATE_ENEMY_GAP);
+          }
+        }
+      }
+    });
+  });
+
   it('hides a block behind a gate on mixed rows', () => {
     let mixed = 0;
     everyLevel((level) => {
@@ -107,6 +135,8 @@ describe('generateLevel', () => {
         mixed++;
         for (const enemy of row.enemies) {
           expect(row.gates[enemy.lane + 1]).not.toBeNull();
+          // Short of the gate it guards: the player meets the block first.
+          expect(enemy.dz).toBe(-balance.gen.mixedEnemyOffset);
         }
       }
     });
@@ -117,10 +147,7 @@ describe('generateLevel', () => {
     const level = generateLevel(10, levelConfig(10), 3);
     const config = levelConfig(10);
     expect(squadCurve(config, 0)).toBeCloseTo(config.startCount, 9);
-    expect(squadCurve(config, config.rows - 1)).toBeCloseTo(
-      balance.squad.maxCount * balance.gen.curveTarget,
-      6,
-    );
+    expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
 
     const early = level.rows.slice(0, 3).flatMap((r) => r.enemies.map((e) => e.units));
     const late = level.rows.slice(-3).flatMap((r) => r.enemies.map((e) => e.units));

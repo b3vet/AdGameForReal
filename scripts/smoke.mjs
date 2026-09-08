@@ -23,23 +23,52 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
 const OUT_DIR = path.join(ROOT, 'artifacts', 'smoke');
 
-const URL_PATH = '/?bot=greedy&level=1&seed=1';
-
-/** Seconds after Play is clicked. */
-const SHOTS = [
-  { at: 1, name: 't1.png' },
-  { at: 6, name: 't6.png' },
-  { at: 12, name: 't12.png' },
-];
-
-const TITLE_SHOT = 'title.png';
-const END_SHOT = 'end.png';
+/**
+ * `turbo=8` runs the sim eight times faster than the wall clock. SwiftShader
+ * draws a few frames a second on a big squad, and a full level is a minute of
+ * sim time; without this the smoke would take three minutes per run.
+ */
+const TURBO = 8;
 
 /**
- * How long to wait for the run to reach a terminal status. Overridable for
- * local iteration; the default is the number in docs/03-milestone-1-plan.md.
+ * The runs this smoke drives, in order. The first is the definition-of-done
+ * run: a greedy clear of level 1 with a shot at 1 s, 6 s and 12 s. The others
+ * exist to prove a loss screen and a big level-10 squad also render.
  */
-const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 90_000);
+const RUNS = [
+  {
+    label: 'greedy level 1',
+    query: `?bot=greedy&level=1&seed=1&turbo=${TURBO}`,
+    titleShot: 'title.png',
+    shots: [
+      { at: 1, name: 't1.png' },
+      { at: 6, name: 't6.png' },
+      { at: 12, name: 't12.png' },
+    ],
+    endShot: 'end.png',
+    // The frame the blank-frame check runs on: mid-run, squad and gates on screen.
+    assertNotBlank: 't6.png',
+  },
+  {
+    label: 'random level 3',
+    query: `?bot=random&level=3&seed=2&turbo=${TURBO}`,
+    shots: [],
+    endShot: 'end-random.png',
+  },
+  {
+    label: 'greedy level 10',
+    query: `?bot=greedy&level=10&seed=1&turbo=${TURBO}`,
+    shots: [{ at: 12, name: 't12-l10.png' }],
+    endShot: 'end-l10.png',
+  },
+];
+
+/**
+ * How long to wait for a run to reach a terminal status. A greedy level-10 run
+ * is about 75 s of sim time, which is ~10 s of wall clock at turbo 8 when the
+ * renderer keeps up and well inside this when it does not.
+ */
+const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 120_000);
 
 /**
  * How long to wait for the result screen after the run reaches a terminal
@@ -47,12 +76,6 @@ const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 90_000);
  * that in wall-clock time on a SwiftShader machine.
  */
 const RESULT_SETTLE_MS = 15_000;
-
-/**
- * With a stub sim a run never ends, so a timeout is a warning by default and a
- * failure once the tech lead integrates (`SMOKE_STRICT=1`).
- */
-const STRICT = process.env.SMOKE_STRICT === '1';
 
 /** The frame we assert on. A live scene is far above these floors. */
 const BLANK_STD_DEV_FLOOR = 3;
@@ -147,6 +170,85 @@ async function assertNotBlank(file, label) {
   console.log(`  ${label}: ${summary}`);
 }
 
+async function openPage(browser, failures) {
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: DEVICE_SCALE_FACTOR,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+
+  page.on('console', (message) => {
+    if (message.type() === 'error') failures.push(`console error: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => {
+    failures.push(`page error: ${error.message}`);
+  });
+
+  return page;
+}
+
+/** Plays one scripted run to its result screen, writing every shot it asks for. */
+async function driveRun(page, url, run, failures) {
+  const shot = async (name) => {
+    const file = path.join(OUT_DIR, name);
+    await page.screenshot({ path: file });
+    const { size } = await stat(file);
+    console.log(`[smoke] screenshot ${name}`);
+    return `${name} (${(size / 1024).toFixed(0)} KB)`;
+  };
+
+  console.log(`[smoke] ${run.label}: ${run.query}`);
+  await page.goto(url, { waitUntil: 'load' });
+  await page.waitForFunction(() => globalThis.__arcane?.ready === true, null, { timeout: 30_000 });
+
+  const written = [];
+
+  // The title screen is part of the definition of done, so it gets a frame of
+  // its own before anything is clicked.
+  await sleep(300);
+  if (run.titleShot !== undefined) written.push(await shot(run.titleShot));
+
+  await page.click('#play-button');
+  const startedAt = Date.now();
+
+  for (const frame of run.shots) {
+    const wait = frame.at * 1000 - (Date.now() - startedAt);
+    if (wait > 0) await sleep(wait);
+    written.push(await shot(frame.name));
+  }
+
+  await page.waitForFunction(
+    () => {
+      const status = globalThis.__arcane?.state()?.status;
+      return typeof status === 'string' && status !== 'running';
+    },
+    null,
+    { timeout: RUN_END_TIMEOUT_MS },
+  );
+
+  const status = await page.evaluate(() => globalThis.__arcane?.state()?.status ?? 'unknown');
+  // The app holds the result screen back a beat so the last frames play out.
+  await page
+    .waitForFunction(() => globalThis.__arcane?.app.status() === 'result', null, {
+      timeout: RESULT_SETTLE_MS,
+    })
+    .catch(() => {});
+  const phase = await page.evaluate(() => globalThis.__arcane?.app.status() ?? 'unknown');
+  const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.log(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
+  if (phase !== 'result') failures.push(`${run.label}: run ended but the result screen never showed`);
+
+  written.push(await shot(run.endShot));
+
+  if (run.assertNotBlank !== undefined) {
+    await assertNotBlank(path.join(OUT_DIR, run.assertNotBlank), run.assertNotBlank);
+  }
+
+  return written;
+}
+
 async function main() {
   console.log('[smoke] building...');
   await build({ logLevel: 'warn' });
@@ -158,7 +260,6 @@ async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
   const { server, port } = await serveDist(DIST);
-  const url = `http://127.0.0.1:${port}${URL_PATH}`;
   console.log(`[smoke] serving dist/ at http://127.0.0.1:${port}`);
 
   const executablePath = resolveChromiumPath();
@@ -166,87 +267,17 @@ async function main() {
 
   const browser = await chromium.launch({ executablePath, args: CHROMIUM_ARGS });
   const failures = [];
-  let runEndWarning = null;
+  const written = [];
 
   try {
-    const context = await browser.newContext({
-      viewport: VIEWPORT,
-      deviceScaleFactor: DEVICE_SCALE_FACTOR,
-      isMobile: true,
-      hasTouch: true,
-    });
-    const page = await context.newPage();
-
-    page.on('console', (message) => {
-      if (message.type() === 'error') failures.push(`console error: ${message.text()}`);
-    });
-    page.on('pageerror', (error) => {
-      failures.push(`page error: ${error.message}`);
-    });
-
-    console.log(`[smoke] opening ${URL_PATH}`);
-    await page.goto(url, { waitUntil: 'load' });
-
-    await page.waitForFunction(() => globalThis.__arcane?.ready === true, null, { timeout: 30_000 });
-    console.log('[smoke] __arcane.ready');
-
-    // The title screen is part of the definition of done, so it gets a frame of
-    // its own before anything is clicked.
-    await sleep(300);
-    await page.screenshot({ path: path.join(OUT_DIR, TITLE_SHOT) });
-    console.log(`[smoke] screenshot ${TITLE_SHOT}`);
-
-    await page.click('#play-button');
-    const startedAt = Date.now();
-    console.log('[smoke] clicked Play');
-
-    for (const shot of SHOTS) {
-      const wait = shot.at * 1000 - (Date.now() - startedAt);
-      if (wait > 0) await sleep(wait);
-      const file = path.join(OUT_DIR, shot.name);
-      await page.screenshot({ path: file });
-      console.log(`[smoke] screenshot ${shot.name} at ~${shot.at}s`);
+    for (const run of RUNS) {
+      const page = await openPage(browser, failures);
+      try {
+        written.push(...(await driveRun(page, `http://127.0.0.1:${port}/${run.query}`, run, failures)));
+      } finally {
+        await page.context().close();
+      }
     }
-
-    console.log(`[smoke] waiting for the run to end (up to ${RUN_END_TIMEOUT_MS / 1000}s)...`);
-    let ended = true;
-    try {
-      await page.waitForFunction(
-        () => {
-          const status = globalThis.__arcane?.state()?.status;
-          return typeof status === 'string' && status !== 'running';
-        },
-        null,
-        { timeout: RUN_END_TIMEOUT_MS },
-      );
-    } catch {
-      ended = false;
-    }
-
-    if (ended) {
-      const status = await page.evaluate(() => globalThis.__arcane?.state()?.status ?? 'unknown');
-      // The app holds the result screen back ~0.8 s of frame time so the last
-      // frames play out; that is longer than 0.8 s of wall clock on SwiftShader.
-      await page
-        .waitForFunction(() => globalThis.__arcane?.app.status() === 'result', null, {
-          timeout: RESULT_SETTLE_MS,
-        })
-        .catch(() => {});
-      const phase = await page.evaluate(() => globalThis.__arcane?.app.status() ?? 'unknown');
-      console.log(`[smoke] run ended: status ${status}, app phase ${phase}`);
-    } else {
-      runEndWarning =
-        `run did not end within ${RUN_END_TIMEOUT_MS / 1000}s — ` +
-        `${END_SHOT} is a mid-run frame, not the result screen. ` +
-        'A full level 1 greedy run takes ~200s of wall clock under SwiftShader ' +
-        '(32s of sim time at ~6 fps once the squad is large): raise ' +
-        'SMOKE_RUN_TIMEOUT_MS to capture the real result screen.';
-    }
-
-    await page.screenshot({ path: path.join(OUT_DIR, END_SHOT) });
-    console.log(`[smoke] screenshot ${END_SHOT}`);
-
-    await assertNotBlank(path.join(OUT_DIR, 't6.png'), 't6.png');
   } finally {
     await browser.close();
     await new Promise((resolve) => {
@@ -257,20 +288,6 @@ async function main() {
   if (failures.length > 0) {
     throw new Error(`page reported ${failures.length} error(s):\n  ${failures.join('\n  ')}`);
   }
-
-  if (runEndWarning !== null) {
-    if (STRICT) throw new Error(runEndWarning);
-    console.warn(`[smoke] WARN — ${runEndWarning}`);
-    console.warn('[smoke] WARN — expected while the sim is a stub; SMOKE_STRICT=1 makes it fatal');
-  }
-
-  const names = [TITLE_SHOT, ...SHOTS.map((shot) => shot.name), END_SHOT];
-  const written = await Promise.all(
-    names.map(async (name) => {
-      const { size } = await stat(path.join(OUT_DIR, name));
-      return `${name} (${(size / 1024).toFixed(0)} KB)`;
-    }),
-  );
 
   console.log(`[smoke] PASS — ${written.join(', ')} in artifacts/smoke/`);
 }

@@ -45,6 +45,10 @@ interface GateSlot {
   rowIndex: number;
   /** Last kind painted. A shot-down `sub` gate flips to `add` and must re-tint. */
   kind: GateKind;
+  /** Last value printed. Re-building the string every frame allocates. */
+  shownValue: number;
+  /** Last font size applied; see `scaleLabel`. */
+  shownSize: number;
   /** Seconds left on the hit flash. */
   pulse: number;
   exit: Exit;
@@ -84,6 +88,8 @@ export class GateView {
         gateId: -1,
         rowIndex: -1,
         kind: 'add',
+        shownValue: Number.NaN,
+        shownSize: Number.NaN,
         pulse: 0,
         exit: 'none',
         exitAge: 0,
@@ -163,11 +169,13 @@ export class GateView {
     if (existing !== undefined) return existing;
     if (gate.passed) return undefined;
 
-    const slot = this.slots.find((candidate) => candidate.gateId < 0);
+    const slot = this.freeSlot();
     if (slot === undefined) return undefined;
 
     slot.gateId = gate.id;
     slot.rowIndex = gate.rowIndex;
+    slot.shownValue = Number.NaN;
+    slot.shownSize = Number.NaN;
     slot.pulse = 0;
     slot.exit = 'none';
     slot.exitAge = 0;
@@ -182,6 +190,17 @@ export class GateView {
     return slot;
   }
 
+  /** First unbound slot, or undefined when the pool is full. An index loop
+   *  rather than `find`: this runs per gate per frame and a closure per call is
+   *  an allocation in the steady-state path. */
+  private freeSlot(): GateSlot | undefined {
+    for (let i = 0; i < this.slots.length; i++) {
+      const slot = this.slots[i];
+      if (slot !== undefined && slot.gateId < 0) return slot;
+    }
+    return undefined;
+  }
+
   private paintIdle(slot: GateSlot, gate: GateState, squadZ: number): void {
     // Shooting a `sub` gate to zero turns it into an `add` gate: the colour has
     // to follow, or the player reads a red panel offering a bonus.
@@ -189,23 +208,38 @@ export class GateView {
 
     const tint = GATE_TINTS[gate.kind];
     const pulse = slot.pulse / GATE_PULSE_DURATION;
-    slot.material.emissiveColor = tint.scale(0.35 + pulse * 0.9);
+    // Written into the material's own colour: `scale` would allocate a Color3
+    // for every visible gate on every frame.
+    tint.scaleToRef(0.35 + pulse * 0.9, slot.material.emissiveColor);
     slot.material.alpha = GATE_BASE_ALPHA + pulse * 0.35;
 
     const ahead = gate.z - squadZ;
     const readable = ahead < GATE_LABEL_RANGE && ahead > -LABEL_BEHIND;
     slot.label.isVisible = readable;
     if (readable) {
-      slot.label.text = gateText(gate.kind, gate.value);
-      scaleLabel(slot.label, GATE_LABEL_SIZE, GATE_LABEL_MIN, ahead);
+      // Only when the number actually moved: building the string every frame
+      // allocates, and the GUI re-measures the block on every `text` write.
+      if (gate.value !== slot.shownValue) {
+        slot.shownValue = gate.value;
+        slot.label.text = gateText(gate.kind, gate.value);
+      }
+      slot.shownSize = scaleLabel(
+        slot.label,
+        GATE_LABEL_SIZE,
+        GATE_LABEL_MIN,
+        ahead,
+        slot.shownSize,
+      );
     }
   }
 
   private tint(slot: GateSlot, kind: GateKind): void {
     slot.kind = kind;
+    // The kind changed, so the number is about to be re-printed with a new sign.
+    slot.shownValue = Number.NaN;
     const tint = GATE_TINTS[kind];
-    slot.material.diffuseColor = tint.scale(0.5);
-    slot.material.emissiveColor = tint.scale(0.35);
+    tint.scaleToRef(0.5, slot.material.diffuseColor);
+    tint.scaleToRef(0.35, slot.material.emissiveColor);
   }
 
   private startExit(slot: GateSlot, exit: Exit): void {

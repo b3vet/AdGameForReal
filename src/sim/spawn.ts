@@ -27,7 +27,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     for (let slot = 0; slot < row.gates.length; slot++) {
       const def = row.gates[slot];
       if (def === undefined || def === null) continue;
-      gates.push({
+      const gate: GateState = {
         id: nextId++,
         rowIndex,
         lane: (slot - 1) as Lane,
@@ -36,7 +36,9 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         value: def.value,
         hits: 0,
         passed: false,
-      });
+      };
+      if (def.cap !== undefined) gate.cap = def.cap;
+      gates.push(gate);
     }
 
     for (const def of row.enemies) {
@@ -46,7 +48,9 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         id: nextId++,
         kind: def.kind,
         x: laneCenter(def.lane, balance.road.laneWidth),
-        z: row.z,
+        // Mixed rows stand their block short of the gate row (`dz`), so the two
+        // labels never print on top of each other.
+        z: row.z + (def.dz ?? 0),
         hp,
         maxHp: hp,
         units: def.units,

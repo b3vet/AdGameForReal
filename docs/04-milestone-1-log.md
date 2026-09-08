@@ -80,3 +80,42 @@ paths separately (commits f2d607d sim, c9027c5 app, this one render).
   SwiftShader (about 6 fps at 430 units), so strict smoke needs a faster
   path; debug panel overlaps the boss bar; no route back to the title from
   the result screen; three UI constants live in code instead of balance.json.
+
+## 2026-09-08 — Phase C: integration and tuning (verified and committed)
+
+Tech lead re-ran typecheck, lint, 77 tests, build, the three-run smoke
+(1 m 44 s wall clock) and the artifact build, and reviewed all eight frames.
+
+- **Turbo mode** `?turbo=N` (1 to 20) advances the sim N× real time in ≤ 50 ms
+  ticks; the renderer absorbs intermediate ticks' events. Smoke now runs
+  greedy level 1, random level 3 (a loss), and greedy level 10 at turbo 8,
+  strict by default.
+- **Per-level growth targets** (`peakTarget` in levels.json: 60 → 480) replace
+  the flat "0.9 × maxCount" curve. The add-gate cap is now derived per level
+  from the curve's own per-row growth (`GateDef.cap`). Mul chance 0.7 → 0.18,
+  mul capped at ×4, enemy-row unit budget split across lanes, and at most two
+  gateless rows in a row (`gen.maxEnemyRun`), after a trace showed four
+  consecutive enemy rows wiping the greedy bot at levels 7 to 10. Greedy
+  average peaks: 76, 89, 111, 163, 230, 223, 272, 377, 399, 401. Boss fights
+  last 9 to 11 s for a greedy squad on every level. Greedy 50/50 wins, random
+  loses 7.2 of 10, worst 10 of 10.
+- **Formation** is now an ellipse stretched along z with spacing that shrinks
+  with count: `halfWidth(500) = 2.32 m`; capsules scale 1.0 → 0.75 with count.
+- **Label collisions**: mixed-row blocks sit 6 m short of their gate row,
+  enemy rows keep 4 m from gate rows, and an enemy label hides while an
+  unpassed gate is within 3 m ahead of it.
+- **App**: `ui` block in balance.json (resultDelay, keySpeed, legendSeconds),
+  Levels button on the result screen with a verified clean title → play
+  reset, debug panel bottom-left with sim and render ms, `dev/` typechecked.
+- **Allocation audit** on the render steady-state path: closures and
+  temporaries removed; label text and font size only set on change (Babylon's
+  fontSize setter stringifies, so assigning a number every frame re-dirtied
+  every label each frame).
+- **Artifact**: the single-file build makes no network request beyond the
+  document itself; the `fetch`/`XMLHttpRequest` references in the bundle are
+  dead Babylon and Vite loader code.
+- Remaining, for Phase D or later: at 500 units the crowd overhangs the road
+  edge when hugging the clamp; level 10 seed 1 saturates the cap (drop its
+  peakTarget to ~450); the debug panel crosses the level-1 legend; identical
+  gate values side by side in one row are a non-choice; three labels in one
+  far row touch each other.

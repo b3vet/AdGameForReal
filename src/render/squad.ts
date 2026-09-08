@@ -16,6 +16,9 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
 import {
+  CROWD_SCALE_FROM,
+  CROWD_SCALE_MIN,
+  CROWD_SCALE_TO,
   DEATH_DURATION,
   POOL,
   POP_DURATION,
@@ -36,6 +39,8 @@ interface Corpse {
   y: number;
   z: number;
   age: number;
+  /** The crowd scale this unit died at, so it shrinks from the size it had. */
+  scale: number;
 }
 
 export class SquadView {
@@ -80,19 +85,24 @@ export class SquadView {
     this.corpseMatrices = createMatrixBuffer(this.corpseMesh, POOL.dyingUnits);
 
     this.spawnAge = new Float32Array(POOL.squad);
-    for (let i = 0; i < POOL.dyingUnits; i++) this.corpses.push({ x: 0, y: 0, z: 0, age: 0 });
+    for (let i = 0; i < POOL.dyingUnits; i++) {
+      this.corpses.push({ x: 0, y: 0, z: 0, age: 0, scale: 1 });
+    }
   }
 
-  /** New level: the starting squad is simply there, with no pop animation. */
+  /** New level: the starting squad is simply there, with no pop animation, and
+   *  nothing is left standing from the run before. */
   reset(): void {
     this.previousCount = -1;
     this.corpseCount = 0;
+    commitInstances(this.mesh, 0);
     commitInstances(this.corpseMesh, 0);
   }
 
   update(squad: SquadState, dt: number): void {
     const count = Math.min(POOL.squad, Math.max(0, Math.floor(squad.count)));
-    this.diffCount(count, squad.x, squad.z);
+    const crowd = crowdScale(count);
+    this.diffCount(count, squad.x, squad.z, crowd);
 
     const offsets = formationOffsets(count);
     const halfHeight = SQUAD_HEIGHT / 2;
@@ -101,10 +111,10 @@ export class SquadView {
       const offset = offsets[i];
       if (offset === undefined) continue;
 
-      let scale = 1;
+      let scale = crowd;
       const age = this.spawnAge[i] ?? SETTLED;
       if (age < POP_DURATION) {
-        scale = popScale(age);
+        scale = crowd * popScale(age);
         this.spawnAge[i] = age + dt;
       } else if (age !== SETTLED) {
         this.spawnAge[i] = SETTLED;
@@ -131,7 +141,7 @@ export class SquadView {
     this.corpseMesh.dispose();
   }
 
-  private diffCount(count: number, x: number, z: number): void {
+  private diffCount(count: number, x: number, z: number, crowd: number): void {
     const previous = this.previousCount;
     this.previousCount = count;
 
@@ -153,12 +163,12 @@ export class SquadView {
       for (let i = count; i < previous; i++) {
         const offset = offsets[i];
         if (offset === undefined) continue;
-        this.pushCorpse(x + offset.x, SQUAD_HEIGHT / 2, z + offset.z);
+        this.pushCorpse(x + offset.x, SQUAD_HEIGHT / 2, z + offset.z, crowd);
       }
     }
   }
 
-  private pushCorpse(x: number, y: number, z: number): void {
+  private pushCorpse(x: number, y: number, z: number, scale: number): void {
     if (this.corpseCount >= POOL.dyingUnits) return;
     const corpse = this.corpses[this.corpseCount];
     if (corpse === undefined) return;
@@ -166,6 +176,7 @@ export class SquadView {
     corpse.y = y;
     corpse.z = z;
     corpse.age = 0;
+    corpse.scale = scale;
     this.corpseCount++;
   }
 
@@ -178,7 +189,7 @@ export class SquadView {
       corpse.age += dt;
       if (corpse.age >= DEATH_DURATION) continue;
 
-      const scale = 1 - corpse.age / DEATH_DURATION;
+      const scale = corpse.scale * (1 - corpse.age / DEATH_DURATION);
       writeInstance(
         this.corpseMatrices,
         write,
@@ -196,6 +207,7 @@ export class SquadView {
         kept.y = corpse.y;
         kept.z = corpse.z;
         kept.age = corpse.age;
+        kept.scale = corpse.scale;
       }
       write++;
     }
@@ -210,6 +222,13 @@ function createUnitMesh(scene: Scene, name: string): Mesh {
     { radius: SQUAD_RADIUS, height: SQUAD_HEIGHT, tessellation: 10, capSubdivisions: 3 },
     scene,
   );
+}
+
+/** Full size for a small squad, easing to `CROWD_SCALE_MIN` at the count cap. */
+function crowdScale(count: number): number {
+  if (count <= CROWD_SCALE_FROM) return 1;
+  const t = Math.min(1, (count - CROWD_SCALE_FROM) / (CROWD_SCALE_TO - CROWD_SCALE_FROM));
+  return 1 + (CROWD_SCALE_MIN - 1) * t;
 }
 
 /** Ease-out-back: overshoots past 1 then settles, which reads as a pop. */

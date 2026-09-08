@@ -14,6 +14,14 @@ export type GateKind = 'mul' | 'add' | 'sub' | 'fireRate';
 export interface GateDef {
   kind: GateKind;
   value: number;
+  /**
+   * Ceiling on what shooting this gate can raise it to: units for `add` and
+   * `sub` (after it flips), the fire-rate bonus for `fireRate`. The generator
+   * sizes it against the squad the row was built for, which is what keeps a
+   * level-1 gate from paying out like a level-10 one. Omitted on hand-made
+   * gates, which fall back to `balance.gates.caps`.
+   */
+  cap?: number;
 }
 
 export interface GateState {
@@ -25,6 +33,8 @@ export interface GateState {
   value: number;
   hits: number;
   passed: boolean;
+  /** See `GateDef.cap`. Undefined means "use the global cap". */
+  cap?: number;
 }
 
 export type EnemyKind = 'grunt' | 'brute' | 'boss';

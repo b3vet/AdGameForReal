@@ -7,12 +7,10 @@
  * scene.
  */
 
+import { balance } from '@/data';
 import type { RunState, SimEvent } from '@/sim';
 
 import './hud.css';
-
-/** The level-1 gate legend is a teaching aid, not chrome: it leaves quickly. */
-const LEGEND_SECONDS = 6;
 
 const BUMP_CLASS = 'hud__count--bump';
 const HURT_CLASS = 'hud__count--hurt';
@@ -26,7 +24,7 @@ export class Hud {
   private readonly legend: HTMLElement;
 
   private shownCount = -1;
-  private shownBossValue = '';
+  private shownBossHp = -1;
   private shownBossRatio = -1;
   private bossVisible = false;
   private legendArmed = false;
@@ -56,7 +54,7 @@ export class Hud {
     this.count.classList.remove(BUMP_CLASS, HURT_CLASS);
 
     this.setBossVisible(false);
-    this.shownBossValue = '';
+    this.shownBossHp = -1;
     this.shownBossRatio = -1;
 
     // The legend only ever teaches the first level (docs/03-milestone-1-plan.md).
@@ -83,7 +81,8 @@ export class Hud {
 
     this.updateBoss(state);
 
-    if (this.legendArmed && state.time >= LEGEND_SECONDS) {
+    // The legend is a teaching aid, not chrome: it leaves quickly.
+    if (this.legendArmed && state.time >= balance.ui.legendSeconds) {
       this.legendArmed = false;
       this.setLegendVisible(false);
     }
@@ -104,10 +103,12 @@ export class Hud {
       this.shownBossRatio = quantised;
     }
 
-    const value = `${String(Math.max(0, Math.ceil(boss.hp)))} / ${String(Math.ceil(maxHp))}`;
-    if (value !== this.shownBossValue) {
-      this.bossValue.textContent = value;
-      this.shownBossValue = value;
+    // Compared as a number first: building the string every frame to find out
+    // it did not change is an allocation on the hot path.
+    const hp = Math.max(0, Math.ceil(boss.hp));
+    if (hp !== this.shownBossHp) {
+      this.shownBossHp = hp;
+      this.bossValue.textContent = `${String(hp)} / ${String(Math.ceil(maxHp))}`;
     }
   }
 

@@ -33,6 +33,15 @@ export function isShootable(kind: GateKind): boolean {
 }
 
 /**
+ * How high shooting can raise this gate. Generated gates carry their own cap,
+ * scaled to the squad the row was built for; hand-made ones use the global one.
+ */
+function capOf(gate: GateState, balance: Balance): number {
+  if (gate.cap !== undefined) return gate.cap;
+  return gate.kind === 'fireRate' ? balance.gates.caps.fireRate : balance.gates.caps.add;
+}
+
+/**
  * Applies `hits` projectile hits at once. Batched hitscan lands dozens of shots
  * in one step, so this is closed-form rather than a loop.
  *
@@ -43,6 +52,7 @@ export function applyGateHits(gate: GateState, hits: number, balance: Balance): 
   if (hits <= 0 || !isShootable(gate.kind)) return;
 
   const step = balance.gates.hitStep;
+  const cap = capOf(gate, balance);
   gate.hits += hits;
 
   if (gate.kind === 'sub') {
@@ -53,14 +63,14 @@ export function applyGateHits(gate: GateState, hits: number, balance: Balance): 
     }
     // The flip: the penalty is spent, the gate is now a bonus that keeps growing.
     gate.kind = 'add';
-    gate.value = Math.min(balance.gates.caps.add, (hits - hitsToZero) * step.add);
+    gate.value = Math.min(cap, (hits - hitsToZero) * step.add);
     return;
   }
 
   if (gate.kind === 'add') {
-    gate.value = Math.min(balance.gates.caps.add, gate.value + hits * step.add);
+    gate.value = Math.min(cap, gate.value + hits * step.add);
     return;
   }
 
-  gate.value = Math.min(balance.gates.caps.fireRate, gate.value + hits * step.fireRate);
+  gate.value = Math.min(cap, gate.value + hits * step.fireRate);
 }
