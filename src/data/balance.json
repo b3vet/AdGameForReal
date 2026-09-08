@@ -9,7 +9,8 @@
   "projectiles": {
     "speed": 24,
     "range": 34,
-    "max": 400
+    "max": 400,
+    "radius": 0.12
   },
   "road": {
     "laneWidth": 2,
@@ -19,6 +20,9 @@
   "enemies": {
     "activationDistance": 26,
     "contactDistance": 1.2,
+    "footprintPerUnit": 0.15,
+    "footprintMax": 2.2,
+    "despawnBehind": 30,
     "grunt": {
       "hpPerUnit": 3,
       "speed": 3,
@@ -33,6 +37,7 @@
       "hpPerUnit": 10,
       "speed": 1.6,
       "footprint": 2.2,
+      "lateralSpeed": 1.2,
       "stompInterval": 2.5,
       "stompRange": 7,
       "stompKills": 3,
@@ -45,7 +50,7 @@
   },
   "gates": {
     "caps": {
-      "add": 250,
+      "add": 30,
       "fireRate": 1.0
     },
     "hitStep": {
@@ -53,6 +58,33 @@
       "sub": 1,
       "fireRate": 0.02
     }
+  },
+  "gen": {
+    "mulChance": 0.7,
+    "fireRateChance": 0.16,
+    "thirdGateChance": 0.2,
+    "addFrac": {
+      "min": 0.3,
+      "max": 0.75
+    },
+    "subFrac": {
+      "min": 0.6,
+      "max": 1.4
+    },
+    "enemyFrac": {
+      "min": 0.15,
+      "max": 0.4
+    },
+    "bruteChance": 0.3,
+    "bruteUnitFrac": 0.35,
+    "mixedBlockFrac": 0.7,
+    "negativeFromLevel": 2,
+    "doubleSubChance": 0.3,
+    "curveTarget": 0.9
+  },
+  "bots": {
+    "threatLookahead": 6,
+    "gateCommitDistance": 7
   },
   "input": {
     "sensitivity": 6

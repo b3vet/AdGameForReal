@@ -1,0 +1,74 @@
+/**
+ * Turning a `LevelDef` into the mutable actors a run works with.
+ * Runs once per run, so readability wins over allocation counting here.
+ */
+
+import { enemyBalance } from './enemies';
+import { laneCenter } from './level';
+import type { LevelDef } from './level';
+import type { EnemyState, GateState, Lane } from './types';
+import type { Balance } from '@/data/types';
+
+export interface World {
+  gates: GateState[];
+  enemies: EnemyState[];
+  boss: EnemyState;
+}
+
+export function buildWorld(level: LevelDef, balance: Balance): World {
+  const gates: GateState[] = [];
+  const enemies: EnemyState[] = [];
+  let nextId = 0;
+
+  for (let rowIndex = 0; rowIndex < level.rows.length; rowIndex++) {
+    const row = level.rows[rowIndex];
+    if (row === undefined) continue;
+
+    for (let slot = 0; slot < row.gates.length; slot++) {
+      const def = row.gates[slot];
+      if (def === undefined || def === null) continue;
+      gates.push({
+        id: nextId++,
+        rowIndex,
+        lane: (slot - 1) as Lane,
+        z: row.z,
+        kind: def.kind,
+        value: def.value,
+        hits: 0,
+        passed: false,
+      });
+    }
+
+    for (const def of row.enemies) {
+      const config = enemyBalance(def.kind, balance);
+      const hp = def.units * config.hpPerUnit;
+      enemies.push({
+        id: nextId++,
+        kind: def.kind,
+        x: laneCenter(def.lane, balance.road.laneWidth),
+        z: row.z,
+        hp,
+        maxHp: hp,
+        units: def.units,
+        speed: config.speed,
+        active: false,
+        alive: true,
+      });
+    }
+  }
+
+  const boss: EnemyState = {
+    id: nextId,
+    kind: 'boss',
+    x: 0,
+    z: level.arenaZ + balance.level.bossOffset,
+    hp: level.boss.hp,
+    maxHp: level.boss.hp,
+    units: level.boss.units,
+    speed: balance.enemies.boss.speed,
+    active: false,
+    alive: true,
+  };
+
+  return { gates, enemies, boss };
+}

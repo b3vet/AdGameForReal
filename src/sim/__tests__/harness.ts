@@ -1,0 +1,82 @@
+/**
+ * Shared plumbing for the balance tests: play a whole level with a bot and
+ * report what happened. Not a test file itself.
+ */
+
+import { createBot } from '../bots';
+import type { BotKind } from '../bots';
+import { generateLevel } from '../level';
+import { Run } from '../Run';
+import { balance, levelConfig, levelCount } from '@/data';
+
+/** One sim step; the bots are asked for a target every step, as the app does. */
+const DT = 1 / 60;
+
+/** A run longer than this is a stalemate and counts as a loss. */
+const MAX_SECONDS = 240;
+
+export interface PlayResult {
+  status: 'won' | 'lost';
+  survivors: number;
+  peakCount: number;
+  seconds: number;
+}
+
+export function playLevel(levelIndex: number, seed: number, kind: BotKind): PlayResult {
+  const level = generateLevel(levelIndex, levelConfig(levelIndex), seed);
+  const run = new Run(level, balance);
+  const bot = createBot(kind, seed * 7919 + levelIndex);
+
+  let steps = 0;
+  const maxSteps = Math.round(MAX_SECONDS / DT);
+  while (run.state.status === 'running' && steps < maxSteps) {
+    run.setTargetX(bot(run.state));
+    run.tick(DT);
+    steps++;
+  }
+
+  const state = run.state;
+  return {
+    status: state.status === 'won' ? 'won' : 'lost',
+    survivors: state.survivors,
+    peakCount: state.peakCount,
+    seconds: steps * DT,
+  };
+}
+
+export interface BotSummary {
+  kind: BotKind;
+  /** Wins per level index (1-based), summed over the seed set. */
+  winsByLevel: number[];
+  /** Mean levels lost per seed, out of `levelCount`. */
+  meanLosses: number;
+  /** Mean of `survivors / peakCount` over won runs. */
+  meanSurvivorShare: number;
+}
+
+export function summarise(kind: BotKind, seeds: readonly number[]): BotSummary {
+  const winsByLevel = new Array<number>(levelCount).fill(0);
+  let losses = 0;
+  let shareTotal = 0;
+  let shareCount = 0;
+
+  for (const seed of seeds) {
+    for (let level = 1; level <= levelCount; level++) {
+      const result = playLevel(level, seed, kind);
+      if (result.status === 'won') {
+        winsByLevel[level - 1] = (winsByLevel[level - 1] ?? 0) + 1;
+        shareTotal += result.peakCount > 0 ? result.survivors / result.peakCount : 0;
+        shareCount++;
+      } else {
+        losses++;
+      }
+    }
+  }
+
+  return {
+    kind,
+    winsByLevel,
+    meanLosses: losses / seeds.length,
+    meanSurvivorShare: shareCount > 0 ? shareTotal / shareCount : 0,
+  };
+}

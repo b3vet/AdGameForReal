@@ -4,9 +4,9 @@
     "seed": 1137,
     "rows": 8,
     "startCount": 5,
-    "hpScale": 1,
+    "hpScale": 0.45,
     "boss": {
-      "hp": 120
+      "hp": 1800
     },
     "gateValues": {
       "mul": {
@@ -15,11 +15,11 @@
       },
       "add": {
         "min": 3,
-        "max": 8
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 4
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -37,9 +37,9 @@
     "seed": 1274,
     "rows": 8,
     "startCount": 5,
-    "hpScale": 1.3,
+    "hpScale": 0.6,
     "boss": {
-      "hp": 190
+      "hp": 2400
     },
     "gateValues": {
       "mul": {
@@ -48,11 +48,11 @@
       },
       "add": {
         "min": 3,
-        "max": 10
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 6
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -70,9 +70,9 @@
     "seed": 1411,
     "rows": 9,
     "startCount": 6,
-    "hpScale": 1.6,
+    "hpScale": 0.7,
     "boss": {
-      "hp": 280
+      "hp": 3200
     },
     "gateValues": {
       "mul": {
@@ -81,11 +81,11 @@
       },
       "add": {
         "min": 3,
-        "max": 12
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 8
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -103,9 +103,9 @@
     "seed": 1548,
     "rows": 9,
     "startCount": 6,
-    "hpScale": 1.9,
+    "hpScale": 0.85,
     "boss": {
-      "hp": 390
+      "hp": 4100
     },
     "gateValues": {
       "mul": {
@@ -114,11 +114,11 @@
       },
       "add": {
         "min": 3,
-        "max": 14
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 10
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -136,9 +136,9 @@
     "seed": 1685,
     "rows": 10,
     "startCount": 7,
-    "hpScale": 2.3,
+    "hpScale": 0.95,
     "boss": {
-      "hp": 520
+      "hp": 5100
     },
     "gateValues": {
       "mul": {
@@ -147,11 +147,11 @@
       },
       "add": {
         "min": 3,
-        "max": 16
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 12
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -169,9 +169,9 @@
     "seed": 1822,
     "rows": 11,
     "startCount": 8,
-    "hpScale": 2.7,
+    "hpScale": 1.1,
     "boss": {
-      "hp": 680
+      "hp": 6300
     },
     "gateValues": {
       "mul": {
@@ -180,11 +180,11 @@
       },
       "add": {
         "min": 3,
-        "max": 18
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 14
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -202,9 +202,9 @@
     "seed": 1959,
     "rows": 11,
     "startCount": 9,
-    "hpScale": 3.1,
+    "hpScale": 1.2,
     "boss": {
-      "hp": 860
+      "hp": 7700
     },
     "gateValues": {
       "mul": {
@@ -213,11 +213,11 @@
       },
       "add": {
         "min": 3,
-        "max": 20
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 16
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -235,9 +235,9 @@
     "seed": 2096,
     "rows": 12,
     "startCount": 10,
-    "hpScale": 3.6,
+    "hpScale": 1.3,
     "boss": {
-      "hp": 1070
+      "hp": 9200
     },
     "gateValues": {
       "mul": {
@@ -246,11 +246,11 @@
       },
       "add": {
         "min": 3,
-        "max": 22
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 18
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -268,9 +268,9 @@
     "seed": 2233,
     "rows": 13,
     "startCount": 11,
-    "hpScale": 4,
+    "hpScale": 1.4,
     "boss": {
-      "hp": 1280
+      "hp": 10800
     },
     "gateValues": {
       "mul": {
@@ -279,11 +279,11 @@
       },
       "add": {
         "min": 3,
-        "max": 24
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 20
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,
@@ -301,9 +301,9 @@
     "seed": 2370,
     "rows": 14,
     "startCount": 12,
-    "hpScale": 4.5,
+    "hpScale": 1.5,
     "boss": {
-      "hp": 1500
+      "hp": 12800
     },
     "gateValues": {
       "mul": {
@@ -312,11 +312,11 @@
       },
       "add": {
         "min": 3,
-        "max": 26
+        "max": 250
       },
       "sub": {
         "min": 2,
-        "max": 22
+        "max": 500
       },
       "fireRate": {
         "min": 0.05,

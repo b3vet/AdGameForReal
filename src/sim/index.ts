@@ -4,9 +4,11 @@
  */
 
 export { Run } from './Run';
-export { generateLevel, laneCenter, BOSS_Z_OFFSET } from './level';
+export { generateLevel, laneCenter, squadCurve, BOSS_Z_OFFSET, FIRE_RATE_GATE_WORTH } from './level';
 export type { LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
 export { formationOffsets, halfWidth } from './formation';
+export { enemyBalance, enemyFootprint } from './enemies';
+export { applyGateHits, clampCount, countAfterGate, isShootable } from './gates';
 export type { FormationOffset } from './formation';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
