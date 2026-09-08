@@ -70,15 +70,20 @@ export const ROAD_HALF_WIDTH = balance.road.halfWidth;
 
 /** Labels cost a 2D canvas redraw, so only near things get one. */
 export const LABEL_RANGE = 45;
-/** Gate rows are 18 m apart; past two rows the numbers are noise, not choice. */
-export const GATE_LABEL_RANGE = 46;
+/**
+ * Past two rows the numbers are noise, not choice — and with the rows this
+ * close together the third and fourth rows print their digits on top of the
+ * second one's. Derived from the sim's spacing so moving the rows again cannot
+ * silently turn the far half of the road back into a stack of numbers.
+ */
+export const GATE_LABEL_RANGE = balance.level.rowSpacing * 2.5;
 /**
  * Side lanes are two metres from the middle one, which is barely thirty screen
  * pixels once a row is thirty metres out — three numbers printed across that
  * touch each other. Past this distance only the middle lane keeps its label, so
  * the row the player is actually deciding about is the only one showing three.
  */
-export const SIDE_GATE_LABEL_RANGE = 30;
+export const SIDE_GATE_LABEL_RANGE = Math.min(balance.level.rowSpacing * 2.3, 30);
 /** How far behind the squad a label stays alive before it is hidden. */
 export const LABEL_BEHIND = 4;
 
@@ -123,18 +128,40 @@ export const BOSS_DEATH_DURATION = 0.5;
 export const STOMP_DURATION = 0.5;
 export const STOMP_MAX_RADIUS = 7;
 
-/** Camera rig, per docs/03-milestone-1-plan.md. */
+/**
+ * Camera rig, per docs/06-milestone-2-plan.md ("Camera").
+ *
+ * Lower and tilted further down than M1: the squad's centre lands about four
+ * fifths down the screen, road fills the frame from there up to the haze at
+ * roughly a quarter, and three rows are in shot at 11 m spacing — the nearest
+ * two carrying numbers. The values are one set, not five knobs: pitch is
+ * `atan((height - lookHeight) / (behind + lookAhead))`, and it decides both how
+ * high the horizon sits and how far down the screen the squad lands — so change
+ * them together and re-shoot `npm run smoke`.
+ */
 export const CAMERA = {
-  fov: 1,
-  height: 9,
-  behind: 9,
+  fov: 0.9,
+  height: 7,
+  behind: 9.5,
   lookAhead: 9,
-  lookHeight: 0.5,
+  lookHeight: 0.8,
   /** The camera tracks the squad's x only partly, so the road stays framed. */
   lateralFollow: 0.35,
-  /** Extra distance per unit as the squad grows, so a big blob still fits. */
-  pullbackPerUnit: 0.01,
-  pullbackMax: 3,
+  /**
+   * Extra distance as the squad grows, so the tail of the crowd stays on
+   * screen. The formation is an ellipse whose depth grows with `sqrt(count)`
+   * and saturates around 3.5 m, so this reaches its cap at about 70 units
+   * rather than climbing all the way to 500.
+   */
+  pullbackPerUnit: 0.03,
+  pullbackMax: 2,
+  /**
+   * How far the eased pose may trail the ideal one, in meters. Steady-state lag
+   * while running is `runSpeed / smoothing`, about 0.8 m, so normal play never
+   * reaches this; a frame hitch or `?turbo` (several sim steps per frame) would,
+   * and without the clamp the whole frame reframes.
+   */
+  maxLag: 1.5,
   /** Exponential smoothing rate, in 1/seconds. */
   smoothing: 6,
   /**

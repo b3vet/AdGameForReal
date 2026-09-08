@@ -252,7 +252,7 @@ export class Renderer {
   /**
    * Behind and above the squad, easing toward the ideal pose so a fast lateral
    * drag does not snap the whole world sideways, and pulling back as the squad
-   * grows so a 300-unit blob still fits in frame.
+   * grows so a 500-unit crowd still fits in frame.
    */
   private updateCamera(state: RunState, dt: number): void {
     const camera = this.camera;
@@ -271,13 +271,30 @@ export class Renderer {
     const blend = this.cameraReady ? 1 - Math.exp(-CAMERA.smoothing * dt) : 1;
     this.cameraReady = true;
 
-    const dx = (wantX - camera.position.x) * blend;
-    const dy = (wantY - camera.position.y) * blend;
-    const dz = (wantZ - camera.position.z) * blend;
-    camera.position.x += dx;
-    camera.position.y += dy;
-    camera.position.z += dz;
-    this.cameraSettled = Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < CAMERA.settleEpsilon;
+    const fromX = camera.position.x;
+    const fromY = camera.position.y;
+    const fromZ = camera.position.z;
+
+    let x = fromX + (wantX - fromX) * blend;
+    let y = fromY + (wantY - fromY) * blend;
+    let z = fromZ + (wantZ - fromZ) * blend;
+
+    // The ease runs on frame time while the squad moves on sim time. A long
+    // frame — or `?turbo`, which advances the sim several steps per frame —
+    // leaves the pose metres behind the squad, which is a different shot
+    // entirely: flatter, more sky, the near row halfway up the screen. Clamping
+    // the trailing distance keeps the framing the tuning was done against.
+    const lag = Math.hypot(wantX - x, wantY - y, wantZ - z);
+    if (lag > CAMERA.maxLag) {
+      const keep = CAMERA.maxLag / lag;
+      x = wantX + (x - wantX) * keep;
+      y = wantY + (y - wantY) * keep;
+      z = wantZ + (z - wantZ) * keep;
+    }
+
+    this.cameraSettled =
+      Math.abs(x - fromX) + Math.abs(y - fromY) + Math.abs(z - fromZ) < CAMERA.settleEpsilon;
+    camera.position.set(x, y, z);
 
     this.cameraTarget.set(lateral, CAMERA.lookHeight, squad.z + CAMERA.lookAhead);
     camera.setTarget(this.cameraTarget);
