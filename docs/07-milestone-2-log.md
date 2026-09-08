@@ -70,3 +70,54 @@
   mage atlas has only two staff props; skeleton eye glow is lost in the merge;
   one-shot VAT ranges loop, so dying instances must be removed after their
   duration; no animation blending.
+
+## 2026-09-08 — Phase B1: sim retune and weapons, plus interim render fixes (verified and committed)
+
+- Rate-based growth implemented as `growthPerSecond × hits / expectedShotRate`
+  (the plan's formula with dt cancelled), using the squad's expected shot
+  rate rather than the integer shots of one step so small squads can still
+  pump a gate. Caps frozen at spawn. Hitscan batches count their batch size.
+- The real M1 difficulty problem was generator variance: row kinds and
+  multipliers rolled per row swung a level between 6 and 11 gate rows. Row
+  mix and multiplier count are now dealt from a budget with only the order
+  random; every gate row carries a real growth gate. Greedy went from 17
+  losses in 50 to 0 with survivors averaging 53 percent of peak.
+- Boss: plan rules kept (stomp `max(3, 6%)` every 2 s, contact 15 percent per
+  second, enrage at 30 percent HP). Boss speed 1.6 → 0.55 and stomp range
+  7 → 18 so stomps carry the attrition and contact is a late failure state
+  rather than a spiral. Fights average 20 to 22 s on every level.
+- Deviations: peak targets re-derived 105 → 400 (ledger D24); pre-boss road
+  29 to 46 s; fireRate gate range 0.03 to 0.10 and bot worth changed to a
+  multiplier on the printed value; no multipliers on level 1.
+- Weapons: Ember 1.0 splash, Storm 1.25 chain, Frost 0.9 at 1.1 rate with
+  slow and shatter; `weapon` gate kind; seven new events. Generation is off
+  (`gen.weaponGatesEnabled: false`) until the renderer draws staffs; with it
+  on, greedy loses 0.2 of 10 and survivors sit at 61 percent.
+- Tests 86 → 131. Perf 600 ticks at 300 units in 11 to 30 ms.
+- Interim render fixes: `weapon` tint and staff-name gate text, seven debug
+  cases, dev scenario uses the sim's growth rule, and a label rule for the
+  11 m rows: a block's HP number hides while an unpassed gate in its lane is
+  within 0.35 × camera distance behind it or 0.15 × in front.
+- Open for the feel check: shooting a gate is worth about 4 to 5 units at any
+  squad size, decisive at level 1 and marginal at level 10; level 8 peaks at
+  0.77 × target; greedy takes 18 of 74 staff gates.
+
+## 2026-09-08 — Phase B3: presentation-only physics layer (verified and committed)
+
+- `src/physics/`: Havok with 24 skinned skeleton ragdolls (11 bodies each
+  from the KayKit rig), 64 shards in three sizes for frost shatter, gate glass
+  and the boss ring, a road collider with side walls, and a degrade ladder
+  (mean frame time over 20 ms for a second steps quality 2 → 1 → 0, never
+  back up). One fixed 60 Hz step per frame so a hitch slows debris instead of
+  flinging it through the road.
+- Traps recorded in `src/physics/rig.ts`: `Ragdoll` silently builds no joints
+  unless the skeleton's root bone is in the config with zero offset; box
+  extents are world-aligned at build time; the ragdoll mesh must keep the
+  loader's mirrored frame (the VAT conjugation does not apply to a live
+  skeleton). `Ragdoll` is one-way, so slots are built once in ragdoll mode
+  and spawned by teleport plus velocities.
+- Integration contract: call `onEvents(events, state)` then `update(frameDt)`
+  before `scene.render()`; `update` takes frame time, not turbo time;
+  `loadLevel` rebuilds the road collider; quality 0 skips the WASM entirely.
+- Open: 64 shards are 64 draw calls worst case; debris does not collide with
+  live enemies or the squad; ragdolls use the minion model for brutes too.
