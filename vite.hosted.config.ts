@@ -8,15 +8,17 @@ import { defineConfig } from 'vite';
  * artifact — something inside the inlined Babylon bundle trips it, not the size.
  * It does allow `<script src>` from jsdelivr, so this config builds *only our
  * code* as a single IIFE and leaves Babylon external, to be supplied by the
- * `babylonjs` / `babylonjs-gui` UMD bundles as the `BABYLON` and `BABYLON.GUI`
- * globals.
+ * `babylonjs`, `babylonjs-gui` and `babylonjs-loaders` UMD bundles as the
+ * `BABYLON` and `BABYLON.GUI` globals. The loaders bundle exports nothing we
+ * name — it registers the glTF plugin with the core bundle as a side effect,
+ * exactly as `import '@babylonjs/loaders/glTF'` does in the ES build.
  *
  * `scripts/build-hosted.mjs` drives this into a temp dir and assembles the
  * fragment. Not used by `npm run build` — that stays a normal module build.
  */
 
-/** Every `@babylonjs/core` and `@babylonjs/gui` id, root or deep. */
-const BABYLON_EXTERNAL = /^@babylonjs\/(core|gui)(\/.*)?$/;
+/** Every `@babylonjs/core`, `gui` and `loaders` id, root or deep. */
+const BABYLON_EXTERNAL = /^@babylonjs\/(core|gui|loaders)(\/.*)?$/;
 
 /**
  * Deep ES imports collapse onto the two UMD globals: the UMD bundles are flat,
@@ -24,7 +26,7 @@ const BABYLON_EXTERNAL = /^@babylonjs\/(core|gui)(\/.*)?$/;
  */
 function babylonGlobal(id: string): string {
   if (/^@babylonjs\/gui(\/.*)?$/.test(id)) return 'BABYLON.GUI';
-  if (/^@babylonjs\/core(\/.*)?$/.test(id)) return 'BABYLON';
+  if (/^@babylonjs\/(core|loaders)(\/.*)?$/.test(id)) return 'BABYLON';
   throw new Error(`vite.hosted.config.ts: no UMD global for external module "${id}"`);
 }
 

@@ -9,7 +9,7 @@
  * much of the expected squad one block is worth.
  */
 
-import { growsTheSquad, shuffle } from './gateGen';
+import { growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
 import type { RowBudget } from './gateGen';
 import { enemyRow, gateRow, mixedRow } from './rows';
 import type { RowDef, RowEnemyDef, RowPermits } from './rows';
@@ -33,6 +33,9 @@ export interface LevelDef {
 }
 
 export const BOSS_Z_OFFSET = balance.level.bossOffset;
+
+/** Mixed into the seed for the staff-gate stream, so it is not the level's. */
+const WEAPON_STREAM_SALT = 0x57_af_f0_0d;
 
 /** Lane centre in meters. `laneWidth` is 2, so lanes sit at `x = -2, 0, +2`. */
 export function laneCenter(lane: Lane, laneWidth = balance.road.laneWidth): number {
@@ -209,8 +212,48 @@ function mulBudget(index: number, rowCount: number, config: LevelGenConfig): num
 /** How many staff gates this level may carry, and whether they are on at all. */
 function weaponBudget(index: number): number {
   const gen = balance.gen;
-  if (!gen.weaponGatesEnabled) return 0;
+  if (!gen.weaponGatesEnabled || index < gen.weaponFromLevel) return 0;
   return index >= gen.weaponGateManyFromLevel ? gen.weaponGatesLate : gen.weaponGatesEarly;
+}
+
+/**
+ * Turns up to `weaponBudget` spare lanes into staff gates, on a stream of its
+ * own.
+ *
+ * Two things this ordering buys. It cannot re-roll the campaign: the level is
+ * already laid out, so every other gate value, block size and row kind is the
+ * one the balance model was tuned against, and turning staff gates on moves
+ * only the lanes it converts. And it can see the finished row, so it converts
+ * what the row can spare — a `fireRate` bonus, a second grower, a second curse
+ * (`staffLane`) — leaving every row with a way to grow and with its pressure
+ * intact. Dealing the staff inside the row (Phase B1) could do neither: it
+ * bought the staff out of the row's curse budget and shifted every subsequent
+ * random draw in the level.
+ */
+function placeWeaponGates(rows: RowDef[], index: number, seed: number): void {
+  const budget = weaponBudget(index);
+  if (budget <= 0) return;
+
+  // A separate stream, salted, so the level's own sequence is untouched.
+  const rng = mulberry32((seed ^ WEAPON_STREAM_SALT) >>> 0);
+
+  // Never the first row: the plan's rule, and the player has not seen a staff
+  // work yet when they are asked to trade for another one.
+  const candidates: { row: number; lane: number }[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row === undefined) continue;
+    const lane = staffLane(row.gates);
+    if (lane >= 0) candidates.push({ row: i, lane });
+  }
+
+  shuffle(rng, candidates);
+  for (let i = 0; i < candidates.length && i < budget; i++) {
+    const candidate = candidates[i];
+    const row = candidate === undefined ? undefined : rows[candidate.row];
+    if (candidate === undefined || row === undefined) continue;
+    row.gates[candidate.lane] = weaponGate(rng);
+  }
 }
 
 /**
@@ -225,7 +268,6 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
 
   const rows: RowDef[] = [];
   const kinds = dealRowKinds(rng, config, rowCount);
-  let weaponsLeft = weaponBudget(index);
   let mulsLeft = mulBudget(index, rowCount, config);
 
   for (let i = 0; i < rowCount; i++) {
@@ -238,7 +280,6 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
     const gateRowsLeft = countGateRows(kinds, i);
     const permits: RowPermits = {
       mul: i > 0 && kind !== ENEMY_ROW && mulsLeft > 0 && rng() < mulsLeft / gateRowsLeft,
-      weapon: i > 0 && kind !== ENEMY_ROW && weaponsLeft > 0,
     };
 
     const row =
@@ -247,10 +288,11 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
         : kind === MIXED_ROW
           ? mixedRow(rng, config, z, budget, permits)
           : gateRow(rng, config, z, budget, permits);
-    if (row.gates.some((g) => g?.kind === 'weapon')) weaponsLeft--;
     if (row.gates.some((g) => g?.kind === 'mul')) mulsLeft--;
     rows.push(row);
   }
+
+  placeWeaponGates(rows, index, resolvedSeed);
 
   const lastRow = rows[rows.length - 1];
   const arenaZ = (lastRow?.z ?? spacing) + spacing;

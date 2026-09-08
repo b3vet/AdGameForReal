@@ -43,6 +43,14 @@ export interface ModelAsset extends AssetBase {
   variants?: Record<string, readonly string[]>;
   /** Metres per model unit. KayKit and Quaternius do not agree on scale. */
   scale?: number;
+  /**
+   * Per-mesh albedo multipliers, baked into the merged mesh as vertex colours
+   * (`[r, g, b]`, above 1 to lighten). One material and one atlas serve the
+   * whole character, so this is the only way to lift one part of it: the mage's
+   * hat is a black brim seen from the camera's pitch, and a crowd of them reads
+   * as a field of dark discs rather than as five hundred wizards.
+   */
+  tints?: Record<string, readonly number[]>;
 }
 
 /** A baked vertex animation texture: raw half-float RGBA plus its dimensions. */

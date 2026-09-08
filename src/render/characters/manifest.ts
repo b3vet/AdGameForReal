@@ -87,3 +87,42 @@ function resolveUrl(url: string): string {
   if (/^(data:|blob:|https?:|\/\/)/.test(url)) return url;
   return `${assetManifest.basePath}${url}`;
 }
+
+/**
+ * The bytes behind an asset URL.
+ *
+ * A `data:` URI is decoded here rather than handed to `fetch`. Both work in a
+ * browser, but the single-file builds exist because the page host blocks
+ * requests, and a request for a `data:` URI is still a request as far as a
+ * strict host — or a Playwright route that aborts everything — is concerned.
+ */
+export async function assetBytes(url: string): Promise<ArrayBuffer> {
+  const base64 = base64Payload(url);
+  if (base64 === null) {
+    const response = await fetch(url);
+    return response.arrayBuffer();
+  }
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/** The same rule for a JSON asset: decode a data URI, fetch anything else. */
+export async function assetJson<T>(url: string): Promise<T> {
+  const base64 = base64Payload(url);
+  if (base64 === null) {
+    const response = await fetch(url);
+    return (await response.json()) as T;
+  }
+  return JSON.parse(atob(base64)) as T;
+}
+
+/** The base64 payload of a `data:...;base64,` URI, or null for anything else. */
+function base64Payload(url: string): string | null {
+  if (!url.startsWith('data:')) return null;
+  const comma = url.indexOf(',');
+  if (comma < 0 || !url.slice(0, comma).endsWith(';base64')) return null;
+  return url.slice(comma + 1);
+}

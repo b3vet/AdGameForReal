@@ -35,7 +35,14 @@ import type { Scene } from '@babylonjs/core/scene';
 // Side-effect import: registers the glTF 2.0 loader with `ImportMeshAsync`.
 import '@babylonjs/loaders/glTF/2.0';
 
-import { modelAsset, resolveAssetUrl, resolveVatMetaUrl, vatAsset } from './manifest';
+import {
+  assetBytes,
+  assetJson,
+  modelAsset,
+  resolveAssetUrl,
+  resolveVatMetaUrl,
+  vatAsset,
+} from './manifest';
 import type { ModelAsset, VatMeta } from './manifest';
 
 /** What `VatCrowd` needs to draw a character, and what the caller must dispose. */
@@ -56,14 +63,38 @@ export interface LoadCharacterOptions {
   variant?: string;
 }
 
+/** One variant of a character. See `loadCharacterAssets` for why this is a list. */
 export async function loadCharacterAsset(
   scene: Scene,
   entry: ModelAsset | string,
   options: LoadCharacterOptions = {},
 ): Promise<CharacterAsset> {
+  const assets = await loadCharacterAssets(scene, entry, [options.variant]);
+  const asset = assets[0];
+  if (asset === undefined) throw new Error('loadCharacterAssets returned nothing');
+  return asset;
+}
+
+/**
+ * Every variant of a character from **one** parse of the `.glb`.
+ *
+ * The mage is one file that carries three staffs, and Phase B2 loaded it once
+ * per staff: four parses of half a megabyte and four copies of a 400 KB baked
+ * texture, all identical. The variants are built here from a single load
+ * instead, and they share the file's material and its VAT texture — the texture
+ * goes when the last of them is disposed, which is what `live` counts.
+ *
+ * `undefined` in `variants` means "the first variant the manifest declares".
+ */
+export async function loadCharacterAssets(
+  scene: Scene,
+  entry: ModelAsset | string,
+  variants: readonly (string | undefined)[],
+): Promise<CharacterAsset[]> {
   const model = typeof entry === 'string' ? modelAsset(entry) : entry;
   if (model.vat === undefined) throw new Error(`asset "${model.id}" has no baked animation`);
   if (model.body === undefined) throw new Error(`asset "${model.id}" declares no body meshes`);
+  const body = model.body;
 
   const loaded = await ImportMeshAsync(resolveAssetUrl(model.id), scene);
   // The loader starts the first clip on its own; nothing here is played back.
@@ -73,56 +104,77 @@ export async function loadCharacterAsset(
   if (skeleton === undefined) throw new Error(`${model.url} has no skeleton`);
 
   const variantNames = Object.keys(model.variants ?? {});
-  const variant = options.variant ?? variantNames[0] ?? '';
-  const extra = model.variants?.[variant];
-  if (variant !== '' && extra === undefined) {
-    throw new Error(`asset "${model.id}" has no variant "${variant}" (have ${variantNames.join(', ')})`);
-  }
+  const { vat, texture } = await loadVatTexture(scene, model.vat);
 
-  const wanted = [...model.body, ...(extra ?? [])];
-  const sources = wanted.map((name) => {
-    const found = loaded.meshes.find((each) => each.name === name);
-    // Everything the glTF loader makes with geometry is a `Mesh`; the narrowing
-    // is here because `ImportMeshAsync` is typed to the abstract base.
-    if (!(found instanceof Mesh)) throw new Error(`${model.url} has no mesh "${name}"`);
-    return found;
+  let live = variants.length;
+  let material: Material | null = null;
+
+  const assets = variants.map((requested) => {
+    const variant = requested ?? variantNames[0] ?? '';
+    const extra = model.variants?.[variant];
+    if (variant !== '' && extra === undefined) {
+      throw new Error(
+        `asset "${model.id}" has no variant "${variant}" (have ${variantNames.join(', ')})`,
+      );
+    }
+
+    const wanted = [...body, ...(extra ?? [])];
+    const sources = wanted.map((name) => {
+      const found = loaded.meshes.find((each) => each.name === name);
+      // Everything the glTF loader makes with geometry is a `Mesh`; the
+      // narrowing is here because `ImportMeshAsync` is typed to the base.
+      if (!(found instanceof Mesh)) throw new Error(`${model.url} has no mesh "${name}"`);
+      return found;
+    });
+
+    const merged = mergeCharacter(sources, skeleton, model.tints);
+    const mesh = new Mesh(`${model.id}:${variant}`, scene);
+    merged.applyToMesh(mesh, false);
+    material ??= pickMaterial(sources);
+    mesh.material = material;
+    // A clone per variant: the mesh only needs *a* skeleton for the shader to
+    // take the baked-animation path, and one shared skeleton could not be
+    // disposed with the first variant that goes away.
+    const bones = skeleton.clone(`${model.id}:${variant}:rig`);
+    mesh.skeleton = bones;
+    mesh.numBoneInfluencers = 4;
+    mesh.isPickable = false;
+    // Thin-instance bounds are not tracked as the buffer changes, so let the
+    // mesh skip frustum culling rather than have the crowd vanish at the edge.
+    mesh.alwaysSelectAsActiveMesh = true;
+    mesh.doNotSyncBoundingInfo = true;
+
+    const manager = new BakedVertexAnimationManager(scene);
+    manager.texture = texture;
+    mesh.bakedVertexAnimationManager = manager;
+
+    const asset: CharacterAsset = {
+      mesh,
+      skeleton: bones,
+      manager,
+      vat,
+      scale: model.scale ?? 1,
+      dispose(): void {
+        // `false`: the texture is shared, so it outlives any one variant.
+        manager.dispose(false);
+        mesh.dispose();
+        bones.dispose();
+        if (--live > 0) return;
+        material?.dispose(true, true);
+        material = null;
+        texture.dispose();
+      },
+    };
+    return asset;
   });
 
-  const merged = mergeCharacter(sources, skeleton);
-  const mesh = new Mesh(`${model.id}:${variant}`, scene);
-  merged.applyToMesh(mesh, false);
-  mesh.material = pickMaterial(sources);
-  mesh.skeleton = skeleton;
-  mesh.numBoneInfluencers = 4;
-  mesh.isPickable = false;
-  // Thin-instance bounds are not tracked as the buffer changes, so let the mesh
-  // skip frustum culling rather than have the crowd vanish at the screen edge.
-  mesh.alwaysSelectAsActiveMesh = true;
-  mesh.doNotSyncBoundingInfo = true;
-
-  // Everything the loader made except the skeleton and the material: the merged
-  // copy owns the geometry now.
+  // Everything the loader made: the merged copies own the geometry now, and
+  // every variant carries its own clone of the rig.
   for (const source of loaded.meshes) source.dispose(false, false);
   for (const node of loaded.transformNodes) node.dispose(false, false);
+  skeleton.dispose();
 
-  const { vat, texture } = await loadVatTexture(scene, model.vat);
-  const manager = new BakedVertexAnimationManager(scene);
-  manager.texture = texture;
-  mesh.bakedVertexAnimationManager = manager;
-
-  return {
-    mesh,
-    skeleton,
-    manager,
-    vat,
-    scale: model.scale ?? 1,
-    dispose(): void {
-      manager.dispose(true);
-      mesh.material?.dispose(true, true);
-      mesh.dispose();
-      skeleton.dispose();
-    },
-  };
+  return assets;
 }
 
 /** The one material every merged mesh shares; the first source that has one. */
@@ -147,11 +199,21 @@ function unmirror(data: Float32Array): void {
 /**
  * Merges the source meshes into one skinned `VertexData` in the rig's bind
  * space, re-skinning any mesh that is parented to a bone rather than skinned.
+ *
+ * `tints` recolours single parts on the way in. Every part gets a colour
+ * attribute, white unless the manifest names it: `VertexData.merge` needs the
+ * same attributes on every part, and a white multiplier is the source texture
+ * unchanged.
  */
-function mergeCharacter(sources: readonly Mesh[], skeleton: Skeleton): VertexData {
+function mergeCharacter(
+  sources: readonly Mesh[],
+  skeleton: Skeleton,
+  tints?: Record<string, readonly number[]>,
+): VertexData {
   const parts: VertexData[] = [];
   const boneIndex = new Map(skeleton.bones.map((bone, index) => [bone.name, index]));
   const bindInverse = bindSpaceInverse(sources);
+  const anyTint = tints !== undefined && Object.keys(tints).length > 0;
 
   for (const source of sources) {
     // `ExtractFromMesh` leaves an absent attribute `undefined` rather than
@@ -168,6 +230,7 @@ function mergeCharacter(sources: readonly Mesh[], skeleton: Skeleton): VertexDat
     const normals = array(data.normals);
     if (normals !== null) unmirror(normals);
     reverseWinding(data);
+    if (anyTint) data.colors = tintColors(positions.length / 3, tints[source.name]);
     parts.push(data);
   }
 
@@ -243,6 +306,21 @@ function reskinToParentBone(
   data.matricesWeights = weights;
 }
 
+/** One RGBA per vertex: the part's multiplier, or white when it has none. */
+function tintColors(count: number, tint: readonly number[] | undefined): Float32Array {
+  const colors = new Float32Array(count * 4);
+  const r = tint?.[0] ?? 1;
+  const g = tint?.[1] ?? 1;
+  const b = tint?.[2] ?? 1;
+  for (let i = 0; i < count; i++) {
+    colors[i * 4] = r;
+    colors[i * 4 + 1] = g;
+    colors[i * 4 + 2] = b;
+    colors[i * 4 + 3] = 1;
+  }
+  return colors;
+}
+
 /** A mirror flips handedness, so the triangles have to be wound back. */
 function reverseWinding(data: VertexData): void {
   const indices = data.indices;
@@ -261,8 +339,8 @@ async function loadVatTexture(
 ): Promise<{ vat: VatMeta; texture: RawTexture }> {
   const entry = vatAsset(vatId);
   const [meta, binary] = await Promise.all([
-    fetch(resolveVatMetaUrl(vatId)).then((response) => response.json() as Promise<VatMeta>),
-    fetch(resolveAssetUrl(entry.id)).then((response) => response.arrayBuffer()),
+    assetJson<VatMeta>(resolveVatMetaUrl(vatId)),
+    assetBytes(resolveAssetUrl(entry.id)),
   ]);
 
   const data = new Uint16Array(binary);

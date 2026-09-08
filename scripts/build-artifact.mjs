@@ -6,6 +6,10 @@
  * body markup and inline scripts, with no doctype/html/head/body wrapper,
  * because the hosting wrapper supplies those.
  *
+ * Everything is inside that one file, models, baked animation, audio and the
+ * Havok WASM included (`scripts/inline-assets.mjs`), so the page runs with the
+ * network switched off.
+ *
  *   npm run build:artifact
  */
 
@@ -16,12 +20,14 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'vite';
 
+import { inlineAssets } from './inline-assets.mjs';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'dist-artifact');
 const OUT_FILE = path.join(OUT_DIR, 'arcane-rush.html');
 const TITLE = 'Arcane Rush';
 
-/** Hosting limit. Well above a greybox build; a breach means an asset leaked in. */
+/** Hosting limit (plan, "Asset delivery in builds"): 16 MB for the standalone. */
 const MAX_BYTES = 16 * 1024 * 1024;
 
 const SCRIPT_RE = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
@@ -65,6 +71,9 @@ async function main() {
     await build({
       configFile: path.join(ROOT, 'vite.artifact.config.ts'),
       logLevel: 'warn',
+      // Every asset and the Havok WASM become data URIs inside the bundle: the
+      // page host blocks every runtime fetch (plan, "Asset delivery in builds").
+      plugins: [inlineAssets({ onReport: (line) => console.log(`[artifact] ${line}`) })],
       build: { outDir: tempDir, emptyOutDir: true },
     });
 

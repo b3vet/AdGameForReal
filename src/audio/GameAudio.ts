@@ -14,18 +14,19 @@
  *   3. It reads sim state and events and writes neither (the same rule the
  *      physics layer follows, decision D18).
  *
- * Loudness and throttles live in `./mix.ts`; see the note at the top of that
- * file about where they should end up.
+ * Loudness and throttles are tuning, so they live in `src/data/audio.json`
+ * (`audio-types.ts` is the schema).
  */
 
 import { CreateAudioEngineAsync, CreateSoundAsync } from '@babylonjs/core/AudioV2';
 import type { AudioEngineV2, StaticSound } from '@babylonjs/core/AudioV2';
 
-import { audioAssets, resolveAssetUrl } from '@/render/characters';
+import { audioMix } from '@/data';
+import { assetBytes, audioAssets, resolveAssetUrl } from '@/render/characters';
 import { mulberry32, weaponOf } from '@/sim';
 import type { RunState, SimEvent } from '@/sim';
 
-import { audioMix } from './mix';
+
 
 /**
  * `off`   — no engine: construction failed, or the browser has no WebAudio.
@@ -193,6 +194,13 @@ export class GameAudio {
             event.kind === 'fireRate' ? event.value * 100 : event.value,
           );
           break;
+        case 'weaponChanged':
+          // The staff the squad just picked up, said once and deep.
+          this.play(
+            audioMix.shot.sound[event.to] ?? 'sfx_shot_ember',
+            audioMix.swap.playbackRate,
+          );
+          break;
         case 'gatePassed':
           if (!this.throttled('gatePass', audioMix.minIntervalMs.gatePass)) {
             // A `sub` gate shot down to zero flips to `add` in the sim, so the
@@ -222,9 +230,9 @@ export class GameAudio {
           this.play(event.status === 'won' ? 'sfx_win_fanfare' : 'sfx_lose_sting');
           break;
         default:
-          // projectileHit, splash, chain, enemySlowed, weaponChanged,
-          // enemyActivated, bossActivated and bossEnraged are carried by the
-          // sounds above or by the renderer's effects.
+          // projectileHit, splash, chain, enemySlowed, enemyActivated,
+          // bossActivated and bossEnraged are carried by the sounds above or
+          // by the renderer's effects.
           break;
       }
     }
@@ -248,9 +256,14 @@ export class GameAudio {
     await Promise.all(
       audioAssets().map(async (asset) => {
         try {
+          const url = resolveAssetUrl(asset.id);
+          // A single-file build carries its clips as data URIs; those are
+          // decoded here rather than fetched, because that build exists for a
+          // host that blocks requests (`src/render/characters/manifest.ts`).
+          const source = url.startsWith('data:') ? await assetBytes(url) : url;
           const sound = await CreateSoundAsync(
             asset.id,
-            resolveAssetUrl(asset.id),
+            source,
             {
               volume: audioMix.volume[asset.id] ?? 0.5,
               maxInstances: audioMix.maxInstances[asset.id] ?? audioMix.defaultMaxInstances,

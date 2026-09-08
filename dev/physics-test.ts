@@ -4,11 +4,13 @@
  * A stretch of road, a hand-built `RunState` that never ticks, and a scripted
  * event stream — a kill every 1.5 s, a frost shatter every 4 s, a gate every
  * 3 s, a boss stomp every 6 s — fed to `PhysicsLayer.onEvents` exactly the way
- * the app will feed it. Nothing here is the game: it exists so the pools, the
- * ragdoll rig and the degrade ladder can be looked at on their own.
+ * the app will feed it. Nothing here is the game: it exists so the pools and
+ * the ragdoll rig can be looked at on their own. The degrade ladder is the
+ * app's (`src/core/quality.ts`) and does not run here, so a quality set with
+ * `?quality=` or the number keys stays where it is put.
  *
  *   ?quality=0|1|2   start at a quality (keys 0/1/2 and Q change it live)
- *   ?pin=1           hold that quality: the degrade ladder cannot lower it
+ *   ?pin=1           re-assert that quality every frame
  *   ?kill=1.5 ?shatter=4 ?gate=3 ?stomp=6   event intervals; 0 turns one off
  *   ?boss=0          seconds between boss deaths; off by default
  *   ?radius=6        camera distance; ?beta, ?alpha, ?z aim it
@@ -72,9 +74,9 @@ const number = (key: string, fallback: number): number => {
 };
 const startQuality = Math.min(2, Math.max(0, Math.round(number('quality', 2)))) as PhysicsQuality;
 /**
- * Under SwiftShader the scene draws at a handful of frames a second, which is
- * exactly what the degrade ladder is built to notice — so a screenshot run that
- * wants to watch quality 2 for ten seconds has to pin it.
+ * Kept from Phase B3, when the layer lowered its own quality under a slow
+ * frame. It no longer does — the app owns that ladder — so this is now only a
+ * guard against a stray key press during a screenshot run.
  */
 const pinQuality = number('pin', 0) === 1;
 const killEvery = number('kill', DEFAULT_KILL_EVERY);

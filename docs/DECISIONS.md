@@ -26,3 +26,6 @@
 | D22 | 2026-09-08 | Single-file builds inline every asset and the Havok WASM as data because the page host blocks runtime fetches; dev and production builds load assets by URL. | 06 |
 | D23 | 2026-09-08 | One VAT bake per rig drives every accessory (staffs are skinned to the hand bone and merged), since a VAT is bone matrices, not mesh data. Props come from KayKit Halloween Bits; the biome-1 boss is the Quaternius Demon. | 07 (Phase A), ASSETS.md |
 | D24 | 2026-09-08 | Peak targets re-derived for rate-based growth: 105 at level 1 to 400 at level 10 (supersedes the numbers in D14). Pre-boss road runs 29 to 46 s; row counts won over the 30 to 45 s band. | 07 (Phase B1) |
+| D25 | 2026-09-08 | Single-file builds inline assets and the Havok WASM through a Vite plugin at build time; the hosted variant loads Babylon core, GUI and loaders from jsdelivr. | 07 (Phase C) |
+| D26 | 2026-09-08 | Staff gates are placed after level layout into a lane the row can spare, never at the cost of a curse; Storm is at single-target damage parity so a staff is a choice, not a strict upgrade. | 07 (Phase C) |
+| D27 | 2026-09-08 | The degrade ladder is owned by the app (`src/core/quality.ts`), six rungs, never steps up; physics and render only expose setters. | 07 (Phase C) |

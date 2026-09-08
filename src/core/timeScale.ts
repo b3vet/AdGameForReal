@@ -11,23 +11,24 @@
  * Physics never sees this: debris runs on real time or a hit-stop would fling
  * it (see `PhysicsLayer.update`).
  *
- * The numbers below are tuning and CLAUDE.md wants tuning in `src/data`. They
- * are here for the same reason as `src/audio/mix.ts`: `balance.json` belongs to
- * the sim agent this milestone. Phase C should move them into its `ui` block.
+ * Every number here is tuning, so it lives in `balance.json`'s `ui` block
+ * (CLAUDE.md); these are the named reads of it.
  */
 
+import { balance } from '@/data';
+
 /** How long the game freezes when a block dies. */
-export const HIT_STOP_SECONDS = 0.04;
+export const HIT_STOP_SECONDS = balance.ui.hitStopSeconds;
 
 /** Minimum gap between two hit-stops, so a wiped row is one hitch and not ten. */
-export const HIT_STOP_COOLDOWN = 0.25;
+export const HIT_STOP_COOLDOWN = balance.ui.hitStopCooldown;
 
 /** Boss kill: the plan's 0.3x for 0.6 s. */
-export const BOSS_KILL_SCALE = 0.3;
-export const BOSS_KILL_SECONDS = 0.6;
+export const BOSS_KILL_SCALE = balance.ui.bossKillScale;
+export const BOSS_KILL_SECONDS = balance.ui.bossKillSeconds;
 
 /** Defeat: held until the result screen replaces the run. */
-export const DEFEAT_SCALE = 0.5;
+export const DEFEAT_SCALE = balance.ui.defeatScale;
 
 export class TimeScale {
   private stopFor = 0;

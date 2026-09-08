@@ -21,7 +21,14 @@ import type { Scene } from '@babylonjs/core/scene';
 // Side-effect import: registers the glTF 2.0 loader with `ImportMeshAsync`.
 import '@babylonjs/loaders/glTF/2.0';
 
-import { StaticCrowd, VatCrowd, loadCharacterAsset, modelAsset, resolveAssetUrl } from './characters';
+import {
+  StaticCrowd,
+  VatCrowd,
+  loadCharacterAsset,
+  loadCharacterAssets,
+  modelAsset,
+  resolveAssetUrl,
+} from './characters';
 import type { Crowd } from './characters';
 
 export interface CrowdRequest {
@@ -32,6 +39,8 @@ export interface CrowdRequest {
   capacity: number;
   /** Colour of the capsule the fallback draws if the model cannot be loaded. */
   fallbackColor: Color3;
+  /** Per-variant override of that colour, for a character with variants. */
+  fallbackColors?: Readonly<Record<string, Color3>>;
   fallbackName: string;
   /** Self-lit share of the albedo; see `liftEmissive`. */
   lift?: number;
@@ -61,6 +70,35 @@ export async function loadCrowd(scene: Scene, request: CrowdRequest): Promise<Cr
   } catch (error) {
     warnOnce(request.modelId, error);
     return new StaticCrowd(scene, request.fallbackName, request.fallbackColor, request.capacity);
+  }
+}
+
+/**
+ * Several variants of one character — the three staffs — from a single parse
+ * of the `.glb` and a single copy of its baked texture. Fail-soft like
+ * `loadCrowd`: a failure hands back capsules, one crowd per variant.
+ */
+export async function loadCrowds(
+  scene: Scene,
+  request: Omit<CrowdRequest, 'variant'> & { variants: readonly string[] },
+): Promise<Crowd[]> {
+  try {
+    const assets = await loadCharacterAssets(scene, request.modelId, request.variants);
+    return assets.map((asset) => {
+      liftEmissive(asset.mesh.material, request.lift ?? CHARACTER_LIFT);
+      return new VatCrowd(asset, request.capacity);
+    });
+  } catch (error) {
+    warnOnce(request.modelId, error);
+    return request.variants.map(
+      (variant) =>
+        new StaticCrowd(
+          scene,
+          `${request.fallbackName}-${variant}`,
+          request.fallbackColors?.[variant] ?? request.fallbackColor,
+          request.capacity,
+        ),
+    );
   }
 }
 

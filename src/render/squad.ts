@@ -17,9 +17,10 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
-import { loadCrowd } from './models';
+import { loadCrowds } from './models';
 import {
   CASTING_SHARE,
+  MAGE_LIFT,
   CROWD_SCALE_FROM,
   CROWD_SCALE_MIN,
   CROWD_SCALE_TO,
@@ -79,20 +80,21 @@ export class SquadView {
     }
   }
 
-  /** Loads all three staffs. Called once, from `Renderer.init`. */
+  /**
+   * Loads all three staffs, from one parse of `mage.glb`: the file carries all
+   * three props and one baked texture drives every one of them.
+   */
   async load(): Promise<void> {
     const capacity = POOL.squad + POOL.dyingUnits;
-    const loaded = await Promise.all(
-      weaponIds.map(async (id) =>
-        loadCrowd(this.scene, {
-          modelId: 'mage',
-          variant: id,
-          capacity,
-          fallbackColor: FALLBACK_COLORS[id],
-          fallbackName: `mage-${id}`,
-        }),
-      ),
-    );
+    const loaded = await loadCrowds(this.scene, {
+      modelId: 'mage',
+      variants: weaponIds,
+      capacity,
+      fallbackColor: FALLBACK_COLORS[startWeapon],
+      fallbackColors: FALLBACK_COLORS,
+      fallbackName: 'mage',
+      lift: MAGE_LIFT,
+    });
     weaponIds.forEach((id, index) => {
       const crowd = loaded[index];
       if (crowd === undefined) return;
@@ -286,8 +288,12 @@ function timeOffsetOf(index: number): number {
   return (index % 29) * 0.041;
 }
 
-/** Full size for a small squad, easing to `CROWD_SCALE_MIN` at the count cap. */
-function crowdScale(count: number): number {
+/**
+ * Full size for a small squad, easing to `CROWD_SCALE_MIN` at the count cap.
+ * Exported for the stress scene, which has to draw the crowd at the size the
+ * game draws it or it is measuring a scene the game never renders.
+ */
+export function crowdScale(count: number): number {
   if (count <= CROWD_SCALE_FROM) return 1;
   const t = Math.min(1, (count - CROWD_SCALE_FROM) / (CROWD_SCALE_TO - CROWD_SCALE_FROM));
   return 1 + (CROWD_SCALE_MIN - 1) * t;

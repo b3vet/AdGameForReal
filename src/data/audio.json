@@ -1,0 +1,61 @@
+{
+  "defaultMaxInstances": 2,
+  "volume": {
+    "sfx_shot_ember": 0.16,
+    "sfx_shot_storm": 0.14,
+    "sfx_shot_frost": 0.15,
+    "sfx_enemy_hit": 0.3,
+    "sfx_block_kill": 0.5,
+    "sfx_shatter": 0.45,
+    "sfx_gate_tick": 0.18,
+    "sfx_gate_pass_good": 0.5,
+    "sfx_gate_pass_bad": 0.55,
+    "sfx_units_gained": 0.45,
+    "sfx_units_lost": 0.5,
+    "sfx_boss_stomp": 0.7,
+    "sfx_boss_hit": 0.35,
+    "sfx_boss_death": 0.85,
+    "sfx_win_fanfare": 0.7,
+    "sfx_lose_sting": 0.7,
+    "sfx_ui_tap": 0.45
+  },
+  "maxInstances": {
+    "sfx_shot_ember": 6,
+    "sfx_shot_storm": 6,
+    "sfx_shot_frost": 6,
+    "sfx_enemy_hit": 6,
+    "sfx_block_kill": 4,
+    "sfx_shatter": 3,
+    "sfx_gate_tick": 4,
+    "sfx_boss_hit": 4,
+    "sfx_boss_stomp": 2,
+    "sfx_boss_death": 1,
+    "sfx_win_fanfare": 1,
+    "sfx_lose_sting": 1
+  },
+  "minIntervalMs": {
+    "enemyHit": 55,
+    "bossHit": 90,
+    "blockKill": 45,
+    "shatter": 60,
+    "gateTick": 45,
+    "gatePass": 60,
+    "unitsGained": 140,
+    "unitsLost": 140,
+    "stomp": 150,
+    "uiTap": 60
+  },
+  "shot": {
+    "windowMs": 100,
+    "windowMax": 8,
+    "pitchSpread": 0.05,
+    "sound": {
+      "ember": "sfx_shot_ember",
+      "storm": "sfx_shot_storm",
+      "frost": "sfx_shot_frost"
+    }
+  },
+  "swap": {
+    "playbackRate": 0.55
+  }
+}

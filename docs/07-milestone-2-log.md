@@ -188,3 +188,38 @@
 - Tech lead review of the frames: the crowd reads as dark discs from the
   camera's pitch, the stomp ring is far too large and bright, the boss bar is
   missing in `boss.png` while present in `t6.png`. All three go to Phase C.
+
+## 2026-09-08 — Phase C: integration, builds, perf (verified and committed)
+
+- Single-file builds: one Vite plugin (`scripts/inline-assets.mjs`) rewrites
+  the asset manifest to data URIs and replaces the Havok WASM module with
+  base64 passed as `wasmBinary`. A `locateFile` stub is still required or
+  emscripten computes a URL from `import.meta` and the hosted IIFE throws.
+  VAT and audio decode base64 instead of fetching. Hosted build adds the
+  loaders UMD as a third CDN script. Sizes: artifact 12.78 MB, hosted
+  9.28 MB. Offline probes with every request blocked except the document and
+  the CDN scripts play level 1 to the result with physics at quality 2 and no
+  console errors.
+- Weapon gates on from level 2. Placing a staff inside a row's random deal
+  cost the row a curse and shifted every later draw; staffs are now placed
+  after layout into a lane the row can spare. Storm at damage parity with a
+  small rate bonus. Greedy 0 losses, survivor share 0.54, boss 19 to 23 s,
+  random 9.6 losses, worst 10. Tests 143.
+- Visual fixes: hat and cape tints from the manifest lighten the crowd; the
+  stomp ring capped at 5 m with lower alpha; the missing boss bar was the
+  screenshot landing after the boss died; lighter title scrim.
+- Draw calls: shards are Havok bodies on invisible nodes copied into one
+  thin-instance mesh per size (64 shards = 3 calls); ragdoll pool 8 with
+  live caps by quality; the boss no longer opts out of culling; gate panels
+  draw to 2.7 rows. Peaks: level 1 44, level 3 47, level 10 46 (was 66),
+  stress 37. Smoke fails above 52.
+- Degrade ladder moved to `src/core/quality.ts`: six rungs (pixel ratio
+  2 → 1.5 → 1, glow off, ragdolls 8 → 4 → 0), never up, `?quality=` pins.
+- Cleanups: audio mix in `src/data/audio.json`; time-scale numbers in
+  `balance.ui`; mage glb parsed once; `App.ts` split into `frame.ts` and
+  `session.ts`; stress crowd at game scale; a staff swap plays its own clip.
+- Smoke shots are keyed to road position and events with the loop stopped
+  in-page, so frames match across machine speeds; about 2.5 minutes.
+- Open: two of five level-10 seeds carry no staff gate because every row
+  there is one curse and one grower; the generator should guarantee one
+  spare lane per level (sim owner).

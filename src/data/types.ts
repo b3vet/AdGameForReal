@@ -209,13 +209,10 @@ export interface Balance {
     mixedEnemyOffset: number;
     /** Longest run of rows with no gate at all before one is forced. */
     maxEnemyRun: number;
-    /**
-     * Staff gates are off until the renderer can draw them (Phase C flips this).
-     * Tests turn it on explicitly.
-     */
+    /** Staff gates in generated levels. On since Phase C drew the staffs. */
     weaponGatesEnabled: boolean;
-    /** Chance an eligible row spends one of its lanes on a staff gate. */
-    weaponGateChance: number;
+    /** First level that may carry one (the plan's "from level 2"). */
+    weaponFromLevel: number;
     /** Staff gates allowed per level below `weaponGateManyFromLevel`... */
     weaponGatesEarly: number;
     /** ...and from that level on. */
@@ -246,6 +243,14 @@ export interface Balance {
     keySpeed: number;
     /** How long the level-1 gate legend stays on screen. */
     legendSeconds: number;
+    /** Hit-stop on a block kill, and the gap before another one may fire. */
+    hitStopSeconds: number;
+    hitStopCooldown: number;
+    /** Boss kill: the plan's 0.3x for 0.6 s. */
+    bossKillScale: number;
+    bossKillSeconds: number;
+    /** Defeat crawl, held until the result screen replaces the run. */
+    defeatScale: number;
   };
 }
 

@@ -64,10 +64,14 @@ export class RagdollPool {
   private readonly slots: Slot[] = [];
   private ticket = 0;
   private liveCount = 0;
+  /** How many corpses may be on the ground at once; see `setLiveCap`. */
+  private liveCap: number;
   /** One material for all twenty-four corpses; fading uses `mesh.visibility`. */
   private material: Material | null = null;
 
-  private constructor(readonly capacity: number) {}
+  private constructor(readonly capacity: number) {
+    this.liveCap = capacity;
+  }
 
   /**
    * Loads the minion once, then clones the merged mesh and the skeleton per
@@ -120,6 +124,21 @@ export class RagdollPool {
 
   get count(): number {
     return this.liveCount;
+  }
+
+  /**
+   * Caps the corpses on the ground. Every live ragdoll is a skinned mesh and
+   * therefore a draw call of its own, so this is a frame-budget knob, not a
+   * physics one: the quality ladder lowers it, and anything already down is
+   * recycled straight away rather than waiting out its two and a half seconds.
+   */
+  setLiveCap(cap: number): void {
+    this.liveCap = Math.max(0, Math.min(this.capacity, Math.floor(cap)));
+    while (this.liveCount > this.liveCap) {
+      const oldest = this.oldestLive();
+      if (oldest === null) break;
+      this.park(oldest.slot, oldest.index);
+    }
   }
 
   get bodyCount(): number {
@@ -245,17 +264,32 @@ export class RagdollPool {
     this.material = null;
   }
 
-  /** A free slot, or the one that has been on the ground longest. */
+  /**
+   * A free slot, or the one that has been on the ground longest — which is the
+   * live cap being enforced rather than a failure.
+   */
   private acquire(): Slot {
+    const underCap = this.liveCount < this.liveCap;
     let oldest: Slot | undefined;
     for (const slot of this.slots) {
-      if (!slot.live) return slot;
+      if (!slot.live && underCap) return slot;
+      if (!slot.live) continue;
       if (oldest === undefined || slot.spawned < oldest.spawned) oldest = slot;
     }
-    // The pool is never empty, so this is the cap being enforced, not a failure.
     if (oldest === undefined) throw new Error('ragdoll pool is empty');
     this.liveCount--;
     return oldest;
+  }
+
+  /** The corpse that has been down longest, with its index, or null. */
+  private oldestLive(): { slot: Slot; index: number } | null {
+    let found: { slot: Slot; index: number } | null = null;
+    for (let i = 0; i < this.slots.length; i++) {
+      const slot = this.slots[i];
+      if (slot === undefined || !slot.live) continue;
+      if (found === null || slot.spawned < found.slot.spawned) found = { slot, index: i };
+    }
+    return found;
   }
 
   private park(slot: Slot, index: number): void {

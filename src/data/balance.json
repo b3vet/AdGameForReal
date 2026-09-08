@@ -100,8 +100,8 @@
     "doubleSubChance": 0.3,
     "mixedEnemyOffset": 6,
     "maxEnemyRun": 2,
-    "weaponGatesEnabled": false,
-    "weaponGateChance": 0.3,
+    "weaponGatesEnabled": true,
+    "weaponFromLevel": 2,
     "weaponGatesEarly": 1,
     "weaponGatesLate": 2,
     "weaponGateManyFromLevel": 4
@@ -119,6 +119,11 @@
   "ui": {
     "resultDelay": 0.8,
     "keySpeed": 900,
-    "legendSeconds": 6
+    "legendSeconds": 6,
+    "hitStopSeconds": 0.04,
+    "hitStopCooldown": 0.25,
+    "bossKillScale": 0.3,
+    "bossKillSeconds": 0.6,
+    "defeatScale": 0.5
   }
 }

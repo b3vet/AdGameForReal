@@ -7,8 +7,10 @@
  * not bytes. That host does allow `<script src>` from jsdelivr, so this variant
  * loads Babylon from the CDN as UMD globals and inlines only our own code.
  *
- * Output is a *fragment* — title, styles, body markup, two CDN script tags and
- * one inline script — because the hosting wrapper supplies doctype/html/head.
+ * Output is a *fragment* — title, styles, body markup, three CDN script tags
+ * and one inline script — because the hosting wrapper supplies doctype/html/head.
+ * Our own assets are not external: they are data URIs inside the inline script
+ * (`scripts/inline-assets.mjs`), because the host blocks every runtime fetch.
  *
  *   npm run build:hosted
  */
@@ -19,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'vite';
 
+import { inlineAssets } from './inline-assets.mjs';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMP_DIR = path.join(ROOT, 'node_modules', '.vite-hosted');
 const OUT_DIR = path.join(ROOT, 'dist-hosted');
@@ -26,13 +30,20 @@ const OUT_FILE = path.join(OUT_DIR, 'arcane-rush.html');
 const TITLE = 'Arcane Rush';
 
 /**
- * The only two external references the host permits. Pinned to the version in
+ * The only external references the host permits. Pinned to the version in
  * package.json: the UMD bundles and `@babylonjs/*` must be the same engine.
  */
 const CDN_SCRIPTS = [
   'https://cdn.jsdelivr.net/npm/babylonjs@9.25.0/babylon.js',
   'https://cdn.jsdelivr.net/npm/babylonjs-gui@9.25.0/babylon.gui.min.js',
+  // The glTF loader registers itself with the core bundle's scene loader when
+  // this script runs, which is what the ES build's `import '@babylonjs/loaders/glTF'`
+  // side effect does. Load order matters: it needs `BABYLON` to exist already.
+  'https://cdn.jsdelivr.net/npm/babylonjs-loaders@9.25.0/babylonjs.loaders.min.js',
 ];
+
+/** Hosting limit (plan, "Asset delivery in builds"): 12 MB for the hosted link. */
+const MAX_BYTES = 12 * 1024 * 1024;
 
 const SCRIPT_RE = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
 const COMMENT_RE = /<!--[\s\S]*?-->/g;
@@ -88,6 +99,9 @@ async function main() {
   await build({
     configFile: path.join(ROOT, 'vite.hosted.config.ts'),
     logLevel: 'warn',
+    // Babylon comes from the CDN; everything else — models, baked animation,
+    // audio, the Havok WASM — is inlined, because the host blocks every fetch.
+    plugins: [inlineAssets({ onReport: (line) => console.log(`[hosted] ${line}`) })],
     build: { outDir: TEMP_DIR, emptyOutDir: true },
   });
 
@@ -118,11 +132,17 @@ async function main() {
   await writeFile(OUT_FILE, fragment + '\n', 'utf8');
 
   const { size } = await stat(OUT_FILE);
+  const megabytes = size / 1024 / 1024;
   const inlineBytes = Buffer.byteLength(bundle.js, 'utf8');
   console.log(
-    `[hosted] ${path.relative(ROOT, OUT_FILE)} — ${(size / 1024).toFixed(0)} KB ` +
-      `(inline script ${(inlineBytes / 1024).toFixed(0)} KB, Babylon from jsdelivr)`,
+    `[hosted] ${path.relative(ROOT, OUT_FILE)} — ${megabytes.toFixed(2)} MB ` +
+      `(inline script ${(inlineBytes / 1024 / 1024).toFixed(2)} MB, Babylon from jsdelivr)`,
   );
+
+  if (size > MAX_BYTES) {
+    throw new Error(`hosted build is ${megabytes.toFixed(2)} MB, over the 12 MB hosting limit`);
+  }
+
   console.log('[hosted] PASS');
 }
 

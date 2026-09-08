@@ -26,10 +26,12 @@ export interface RowBudget {
   curseCeiling: number;
 }
 
-/** Which extra kinds a row is allowed to offer this time round. */
+/**
+ * Which extra kinds a row is allowed to offer this time round. Staff gates are
+ * not here: they are placed after the level is laid out (`level.ts`).
+ */
 export interface RowPermits {
   mul: boolean;
-  weapon: boolean;
 }
 
 function clampToRange(value: number, range: ValueRange): number {
@@ -78,10 +80,10 @@ function makeGate(kind: GateKind, rng: Rng, config: LevelGenConfig, budget: RowB
       // `mul` is not shootable, so its cap is its value: nothing can raise it.
       return { kind, value, cap: value };
     }
-    case 'weapon': {
-      // Not shootable either, and it changes no counts: value is the id's slot.
-      return { kind, value: 0, cap: 0, weaponId: pickWeapon(rng) };
-    }
+    case 'weapon':
+      // Staff gates are not dealt with the row; `level.ts` converts a spare
+      // lane after the level is laid out (`placeWeaponGates`).
+      return weaponGate(rng);
     case 'add': {
       const raw = budget.addValue * randomRange(rng, gen.addJitter.min, gen.addJitter.max);
       const value = Math.round(clampToRange(raw, config.gateValues.add));
@@ -119,7 +121,6 @@ export function rowGateKinds(
 
   // The level's own budget decides which rows may carry one (see `mulBudget`).
   if (permits.mul) kinds.push('mul');
-  if (permits.weapon && kinds.length < slots && rng() < gen.weaponGateChance) kinds.push('weapon');
 
   const negativesAllowed = index >= gen.negativeFromLevel;
   let subs = 0;
@@ -146,6 +147,44 @@ export function rowGateKinds(
 
   shuffle(rng, kinds);
   return kinds;
+}
+
+/**
+ * Which lane of a finished row a staff gate may take over, or -1.
+ *
+ * The order is what the row can spare: a `fireRate` bonus first, then a second
+ * grower, then a second curse — so the row always comes out of it with a way to
+ * grow and with whatever pressure it had. `level.ts` calls this after the level
+ * is laid out; see `placeWeaponGates` for why it happens there.
+ */
+export function staffLane(gates: ReadonlyArray<GateDef | null>): number {
+  let fireRate = -1;
+  let add = -1;
+  let sub = -1;
+  let growers = 0;
+  let curses = 0;
+  for (let i = 0; i < gates.length; i++) {
+    const gate = gates[i];
+    if (gate === null || gate === undefined) continue;
+    if (gate.kind === 'fireRate') fireRate = i;
+    if (gate.kind === 'add') add = i;
+    if (gate.kind === 'sub') sub = i;
+    if (handsOverUnits(gate.kind)) growers++;
+    if (gate.kind === 'sub') curses++;
+  }
+  if (fireRate >= 0) return fireRate;
+  if (growers > 1 && add >= 0) return add;
+  if (curses > 1 && sub >= 0) return sub;
+  // No lane to spare: most late rows are one curse and one grower, and neither
+  // may go. A level whose every row looks like that carries no staff gate —
+  // the plan's budget is a ceiling, not a quota, and a row that gave up its
+  // `add` cost the greedy bot two levels of the ten when it was tried.
+  return -1;
+}
+
+/** The staff gate itself: not shootable, changes no counts. */
+export function weaponGate(rng: Rng): GateDef {
+  return { kind: 'weapon', value: 0, cap: 0, weaponId: pickWeapon(rng) };
 }
 
 /** What the player reads off a panel: two gates printing this are one choice. */

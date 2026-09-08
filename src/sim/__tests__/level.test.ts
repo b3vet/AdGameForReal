@@ -290,10 +290,33 @@ describe('generateLevel', () => {
 });
 
 describe('staff gates', () => {
-  it('are off until the renderer can draw them', () => {
-    expect(balance.gen.weaponGatesEnabled).toBe(false);
+  it('are generated from level 2 on, and never on level 1', () => {
+    // Phase C turned them on (plan, definition of done 5): the renderer draws
+    // the staff a `weapon` panel offers, so the generator may deal them.
+    expect(balance.gen.weaponGatesEnabled).toBe(true);
+    everyLevel((level, index) => {
+      const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
+      if (index < balance.gen.weaponFromLevel) expect(staffs.length).toBe(0);
+    });
+
+    let seen = 0;
+    for (const seed of SEEDS) {
+      seen += gatesOf(generateLevel(2, levelConfig(2), seed)).filter(
+        (g) => g.kind === 'weapon',
+      ).length;
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('leave every row a way to grow and every cursed row a curse', () => {
+    // A staff hands over no units, so it may only take a lane the row can
+    // spare — see `placeWeaponGates`.
     everyLevel((level) => {
-      expect(gatesOf(level).some((g) => g.kind === 'weapon')).toBe(false);
+      for (const row of level.rows) {
+        if (!row.gates.some((g) => g?.kind === 'weapon')) continue;
+        const kinds = row.gates.filter((g) => g !== null).map((g) => g.kind);
+        expect(kinds.some((kind) => kind === 'add' || kind === 'mul')).toBe(true);
+      }
     });
   });
 
@@ -304,9 +327,11 @@ describe('staff gates', () => {
         const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
         seen += staffs.length;
         const allowed =
-          index >= balance.gen.weaponGateManyFromLevel
-            ? balance.gen.weaponGatesLate
-            : balance.gen.weaponGatesEarly;
+          index < balance.gen.weaponFromLevel
+            ? 0
+            : index >= balance.gen.weaponGateManyFromLevel
+              ? balance.gen.weaponGatesLate
+              : balance.gen.weaponGatesEarly;
         const where = `L${String(index)} s${String(seed)}`;
         expect(`${where}: ${String(staffs.length)}`).toBe(
           `${where}: ${String(Math.min(staffs.length, allowed))}`,

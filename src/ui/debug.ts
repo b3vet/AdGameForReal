@@ -45,6 +45,8 @@ export interface DebugStats {
   ragdolls: number;
   shards: number;
   physicsQuality: number;
+  /** Which rung of the app's degrade ladder is in force; 0 is everything on. */
+  qualityRung: number;
   /** `off`, `loading`, `locked` or `unlocked`, plus a mute marker. */
   audio: string;
 }
@@ -107,7 +109,7 @@ export class DebugPanel {
       `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms`,
       `phys ${this.physicsMs.toFixed(2)}ms  draws ${String(stats.drawCalls)}`,
       `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
-        `  q${String(stats.physicsQuality)}`,
+        `  physq${String(stats.physicsQuality)}  rung ${String(stats.qualityRung)}`,
       `audio ${stats.audio}`,
     ];
 

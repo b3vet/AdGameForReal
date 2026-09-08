@@ -33,6 +33,18 @@
         "frost": [
           "Spellbook_open"
         ]
+      },
+      "tints": {
+        "Mage_Hat": [
+          1.75,
+          1.5,
+          2.1
+        ],
+        "Mage_Cape": [
+          1.35,
+          1.2,
+          1.6
+        ]
       }
     },
     {

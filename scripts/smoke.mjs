@@ -38,8 +38,18 @@ const TURBO = 60;
 
 /**
  * The runs this smoke drives, in order. The first is the definition-of-done
- * run: a greedy clear of level 1 with a shot at 1 s, 6 s and 12 s. The others
- * exist to prove a loss screen and a big level-10 squad also render.
+ * run: a greedy clear of level 1, photographed early, mid and late down the
+ * road and then in the boss fight. The others exist to prove a loss screen and
+ * a big level-10 squad also render.
+ *
+ * A shot is keyed to a point on the road (`z`, in metres) or to an event, never
+ * to the wall clock. The frame loop is stopped on the first frame that
+ * satisfies each step and started again once the picture is taken, so the same
+ * frames come out of a fast machine and a slow one — and a turbo frame, which
+ * is three seconds of sim, cannot carry the run past the moment being
+ * photographed. The `t1/t6/t12` names are historical: they were wall-clock
+ * seconds in Milestone 1, and the distances below are where those seconds
+ * landed.
  */
 const RUNS = [
   {
@@ -47,13 +57,12 @@ const RUNS = [
     query: `?bot=greedy&level=1&seed=1&turbo=${TURBO}`,
     titleShot: 'title.png',
     shots: [
-      { at: 1, name: 't1.png' },
-      { at: 6, name: 't6.png' },
-      { at: 12, name: 't12.png' },
+      { at: 'z', value: 25, name: 't1.png' },
+      { at: 'z', value: 65, name: 't6.png' },
+      { at: 'z', value: 110, name: 't12.png' },
+      // The fight, with the boss still standing: bar, HP label and stomp ring.
+      { at: 'boss', name: 'boss.png' },
     ],
-    // Taken BOSS_SHOT_DELAY_MS after the boss activates, so the frame is the
-    // fight and not the walk up to it.
-    bossShot: 'boss.png',
     endShot: 'end.png',
     // The frame the blank-frame check runs on: mid-run, squad and gates on screen.
     assertNotBlank: 't6.png',
@@ -66,19 +75,51 @@ const RUNS = [
   },
   {
     label: 'greedy level 10',
-    query: `?bot=greedy&level=10&seed=1&turbo=${TURBO}`,
-    shots: [{ at: 12, name: 't12-l10.png' }],
+    // Seed 2 is the one whose level 10 puts a staff gate on row 4 of twenty,
+    // so the staff shot has something to photograph early in the run.
+    query: `?bot=greedy&level=10&seed=2&turbo=${TURBO}`,
+    shots: [
+      // A `weapon` gate on screen: the staff prop over the panel and its name
+      // on it (plan, definition of done 5).
+      { at: 'staff', name: 'staff-l10.png' },
+      { at: 'z', value: 120, name: 't12-l10.png' },
+    ],
     endShot: 'end-l10.png',
   },
 ];
 
+/** What a shot is waiting for, for the failure message. */
+function describeShot(frame) {
+  if (frame.at === 'z') return `${String(frame.value)} m of road`;
+  if (frame.at === 'boss') return 'the boss fight';
+  return 'a staff gate';
+}
+
 /**
- * How long after `boss.active` the boss frame is taken. The fight lasts 20 to
- * 30 s of sim time, which at turbo 20 is a handful of frames, so three seconds
- * lands inside it — and if the boss dies first, the shot is taken then rather
- * than after the result screen has replaced it.
+ * The boss frame is taken on the first frame where the boss is down to this
+ * share of its health — half way through the fight, so the demon has walked
+ * into the squad and has a stomp on the ground, with the bar and its HP label
+ * both up. A turbo frame is about a seventh of the fight, so there is no risk
+ * of stepping from above this straight to a dead boss.
+ *
+ * Milestone 2's boss.png was a picture of a *dead* boss: the shot was a fixed
+ * delay after `boss.active`, and at turbo 60 one frame is three seconds of sim,
+ * so the whole fight could pass inside it. Then the HUD's boss bar is hidden
+ * (the bar follows `boss.alive`) and the world HP label is gone with the body,
+ * which read as two missing-UI bugs and was one timing bug.
  */
-const BOSS_SHOT_DELAY_MS = 3_000;
+/**
+ * How close a staff gate has to be before its frame is taken, in metres. Wider
+ * than a turbo frame's fifteen metres of road, or the squad steps over the
+ * window between two frames and the gate is never photographed; not much wider,
+ * or the panel is a smudge in the fog and its staff prop is three pixels.
+ */
+const STAFF_SHOT_RANGE = 18;
+
+/** Share of its health the boss has to have lost before the frame is taken. */
+const BOSS_SHOT_HP_SHARE = 0.5;
+/** Ceiling on one shot's wait, so a run that never gets there still ends. */
+const SHOT_TIMEOUT_MS = Number(process.env.SMOKE_SHOT_TIMEOUT_MS ?? 120_000);
 
 /** The stress scene: how long it runs before the frame and the numbers. */
 const STRESS_SECONDS = 8;
@@ -116,6 +157,14 @@ const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 180_000);
  * that in wall-clock time on a SwiftShader machine.
  */
 const RESULT_SETTLE_MS = 20_000;
+
+/**
+ * Draw-call ceiling for a live run, physics and all (plan, "Performance": 40 at
+ * 500 units for the render layer alone). Debris is what pushes past that — a
+ * ragdoll is a skinned mesh and therefore a call of its own — and the caps in
+ * `src/physics/tuning.ts` are what hold this line.
+ */
+const DRAW_CALL_LIMIT = Number(process.env.SMOKE_DRAW_CALLS ?? 52);
 
 /** The frame we assert on. A live scene is far above these floors. */
 const BLANK_STD_DEV_FLOOR = 3;
@@ -262,6 +311,73 @@ function waitForRunEnd(page) {
   );
 }
 
+/**
+ * Installs a page-side watcher that walks the run's shot list.
+ *
+ * Every frame it asks whether the current step's moment has arrived, and the
+ * first frame that says yes stops the app's loop *from inside the page*. That
+ * is the whole trick: a `waitForFunction` round trip back to Node costs a frame
+ * or three, and a turbo frame is three seconds of sim — long enough for the
+ * boss to die or the gate to end up behind the squad. With the loop stopped
+ * nothing moves while the picture is taken, so the frame photographed is the
+ * frame that qualified, on any machine.
+ */
+async function armShotPlan(page, shots, bossShare, staffRange) {
+  await page.evaluate(
+    ({ plan, share, range }) => {
+      globalThis.__smokePlan = plan;
+      globalThis.__smokeStep = 0;
+      globalThis.__smokeStopped = false;
+
+      const holds = (step, state) => {
+        if (step.at === 'z') return state.squad.z >= step.value;
+        if (step.at === 'boss') {
+          const boss = state.boss;
+          // Under way and still standing: bar and HP label are both up.
+          return boss !== null && boss.active && boss.alive && boss.hp <= boss.maxHp * share;
+        }
+        return state.gates.some(
+          (gate) =>
+            gate.kind === 'weapon' &&
+            !gate.passed &&
+            gate.z - state.squad.z > 0 &&
+            gate.z - state.squad.z < range,
+        );
+      };
+
+      const tick = () => {
+        globalThis.requestAnimationFrame(tick);
+        if (globalThis.__smokeStopped) return;
+        const step = globalThis.__smokePlan[globalThis.__smokeStep];
+        const state = globalThis.__arcane?.state();
+        if (step === undefined || !state) return;
+        if (!holds(step, state)) return;
+        globalThis.__arcane?.app.stop();
+        globalThis.__smokeStopped = true;
+      };
+      globalThis.requestAnimationFrame(tick);
+    },
+    { plan: shots, share: bossShare, range: staffRange },
+  );
+}
+
+/** Waits for the watcher to stop on the current step. False on a timeout. */
+function waitForStop(page, timeout) {
+  return page
+    .waitForFunction(() => globalThis.__smokeStopped === true, null, { timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/** Releases the loop and moves the watcher on to the next step. */
+function releaseStop(page) {
+  return page.evaluate(() => {
+    globalThis.__smokeStep = (globalThis.__smokeStep ?? 0) + 1;
+    globalThis.__smokeStopped = false;
+    globalThis.__arcane?.app.resume();
+  });
+}
+
 /** Plays one scripted run to its result screen, writing every shot it asks for. */
 async function driveRun(page, url, run, failures) {
   const shot = async (name) => {
@@ -283,28 +399,20 @@ async function driveRun(page, url, run, failures) {
   await sleep(300);
   if (run.titleShot !== undefined) written.push(await shot(run.titleShot));
 
+  await armShotPlan(page, run.shots, BOSS_SHOT_HP_SHARE, STAFF_SHOT_RANGE);
   await page.click('#play-button');
   const startedAt = Date.now();
 
   for (const frame of run.shots) {
-    const wait = frame.at * 1000 - (Date.now() - startedAt);
-    if (wait > 0) await sleep(wait);
-    written.push(await shot(frame.name));
-  }
-
-  if (run.bossShot !== undefined) {
-    const activated = await page
-      .waitForFunction(() => globalThis.__arcane?.state()?.boss?.active === true, null, {
-        timeout: RUN_END_TIMEOUT_MS,
-      })
-      .then(() => true)
-      .catch(() => false);
-
-    if (!activated) {
-      failures.push(`${run.label}: the boss never activated`);
-    } else {
-      await Promise.race([sleep(BOSS_SHOT_DELAY_MS), waitForRunEnd(page).catch(() => {})]);
-      written.push(await shot(run.bossShot));
+    const reached = await waitForStop(page, SHOT_TIMEOUT_MS);
+    if (!reached) {
+      failures.push(`${run.label}: ${frame.name} — the run never reached ${describeShot(frame)}`);
+      break;
+    }
+    try {
+      written.push(await shot(frame.name));
+    } finally {
+      await releaseStop(page);
     }
   }
 
@@ -318,9 +426,38 @@ async function driveRun(page, url, run, failures) {
     })
     .catch(() => {});
   const phase = await page.evaluate(() => globalThis.__arcane?.app.status() ?? 'unknown');
+  // The result numbers roll up over 0.7 s of wall clock, which is one frame
+  // here: without this the picture is of a count-up caught at "1".
+  await page
+    .waitForFunction(
+      () => {
+        const shown = globalThis.document.querySelector('#result-peak')?.textContent ?? '';
+        const peak = globalThis.__arcane?.state()?.peakCount ?? 0;
+        return Number(shown) === Math.round(peak);
+      },
+      null,
+      { timeout: RESULT_SETTLE_MS },
+    )
+    .catch(() => {});
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  const draws = await page.evaluate(
+    () => globalThis.__arcane?.draws() ?? { current: 0, peak: 0 },
+  );
+  const quality = await page.evaluate(() => ({
+    rung: globalThis.__arcane?.quality() ?? -1,
+    physics: globalThis.__arcane?.physics()?.stats.quality ?? -1,
+  }));
   console.log(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
+  console.log(
+    `[smoke]   draw calls: peak ${draws.peak} (limit ${DRAW_CALL_LIMIT}), ` +
+      `ladder rung ${quality.rung}, physics quality ${quality.physics}`,
+  );
   if (phase !== 'result') failures.push(`${run.label}: run ended but the result screen never showed`);
+  if (draws.peak > DRAW_CALL_LIMIT) {
+    failures.push(
+      `${run.label}: peak ${draws.peak} draw calls is over the ${DRAW_CALL_LIMIT} budget`,
+    );
+  }
 
   written.push(await shot(run.endShot));
 

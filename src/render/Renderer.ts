@@ -50,8 +50,12 @@ const DEFAULT_MAX_PIXEL_RATIO = 2;
 const ROAD_START_Z = -10;
 const ROAD_PAST_ARENA = 70;
 
-/** The boss's death: one big ring and a circle of bursts around the body. */
-const BOSS_DEATH_RING = 5;
+/**
+ * The boss's death: one ring and a circle of bursts around the body. Three
+ * metres, not five: the ring is additive and bloomed, and the Phase B2 frames
+ * had it filling the arena over the body it was celebrating.
+ */
+const BOSS_DEATH_RING = 3;
 const BOSS_DEATH_BURSTS = 8;
 const BOSS_DEATH_SPREAD = 1.4;
 
@@ -61,7 +65,7 @@ const scratchTo = { x: 0, z: 0 };
 
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
-  private readonly maxPixelRatio: number;
+  private maxPixelRatio: number;
 
   private engine: Engine | null = null;
   private sceneRef: Scene | null = null;
@@ -180,6 +184,17 @@ export class Renderer {
   setPhysicsQuality(quality: number): void {
     this.physicsQuality = Math.max(0, Math.min(2, Math.round(quality)));
     this.enemies?.setPhysicsQuality(this.physicsQuality);
+  }
+
+  /**
+   * Degrade ladder rung: the backing store is what a fill-rate-bound phone
+   * feels first. `src/core/quality.ts` owns when this is called.
+   */
+  setMaxPixelRatio(ratio: number): void {
+    const clamped = Math.max(1, ratio);
+    if (clamped === this.maxPixelRatio) return;
+    this.maxPixelRatio = clamped;
+    this.applyPixelRatio();
   }
 
   /** Degrade ladder rung: the glow pass costs a blur and a second draw. */

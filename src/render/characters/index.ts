@@ -12,13 +12,15 @@
  *   crowd.update(dt);          // advances the shared animation clock
  */
 
-export { loadCharacterAsset } from './asset';
+export { loadCharacterAsset, loadCharacterAssets } from './asset';
 export type { CharacterAsset, LoadCharacterOptions } from './asset';
 export { StaticCrowd } from './crowd';
 export type { Crowd } from './crowd';
 export { VatCrowd } from './VatCrowd';
 export {
+  assetBytes,
   assetEntry,
+  assetJson,
   assetManifest,
   audioAsset,
   audioAssets,

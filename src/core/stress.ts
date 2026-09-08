@@ -16,6 +16,8 @@ import { PhysicsLayer } from '@/physics';
 import type { PhysicsQuality } from '@/physics';
 import { VatCrowd, loadCharacterAsset } from '@/render/characters';
 import type { Renderer } from '@/render/Renderer';
+import { crowdScale } from '@/render/squad';
+import { GRUNT_SCALE, MAGE_SCALE } from '@/render/theme';
 import { balance } from '@/data';
 import { formationOffsets, mulberry32 } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
@@ -140,6 +142,9 @@ export async function runStressScene(
   // The sim's own formation, not an approximation of it: the crowd this scene
   // measures has to be the shape and density the game will actually draw.
   const offsets = formationOffsets(mageCount);
+  // The game's own unit scale, not 1: a crowd drawn larger than the game draws
+  // it measures a fill rate the game never pays (Phase B4 open issue).
+  const mageScale = crowdScale(mageCount) * MAGE_SCALE;
   for (let i = 0; i < mageCount; i++) {
     const offset = offsets[i] ?? { x: 0, z: 0 };
     mages.setInstance(
@@ -148,7 +153,7 @@ export async function runStressScene(
       0,
       CROWD_Z + offset.z,
       Math.sin(i) * 0.12,
-      1,
+      mageScale,
       'run',
       // Staggered, or five hundred mages cast in lockstep and the VAT's one
       // texture read becomes visible as a single animated dummy.
@@ -166,7 +171,7 @@ export async function runStressScene(
       0,
       ENEMY_Z + row * 0.9,
       Math.PI,
-      1,
+      GRUNT_SCALE,
       'walk',
       (i % 11) * 0.05,
     );

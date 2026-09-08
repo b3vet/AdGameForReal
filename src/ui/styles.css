@@ -109,6 +109,16 @@ body {
   background: radial-gradient(120% 80% at 50% 0%, rgba(29, 20, 58, 0.72), rgba(6, 4, 14, 0.94));
 }
 
+/* The title is a shop window: the dressed road and the idle mages behind it
+   are the first thing a player sees, so it dims only enough to keep the
+   wordmark and the level picker legible. The result screen keeps the heavy
+   scrim — there the scene is over and the numbers are the point. */
+.screen--title {
+  background:
+    radial-gradient(150% 55% at 50% 100%, rgba(6, 4, 14, 0.62), rgba(6, 4, 14, 0.08) 60%),
+    linear-gradient(180deg, rgba(10, 6, 24, 0.78) 0%, rgba(10, 6, 24, 0.3) 26%, rgba(6, 4, 14, 0.12) 46%);
+}
+
 .screen--hud {
   background: none;
 }

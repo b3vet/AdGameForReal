@@ -25,17 +25,14 @@ import '@babylonjs/core/Physics/v2/physicsEngineComponent';
 import type { Scene } from '@babylonjs/core/scene';
 
 import HavokPhysics from '@babylonjs/havok';
-// Vite serves the WASM as a URL; `locateFile` overrides emscripten's default,
-// which would look for it next to the pre-bundled module. The single-file
-// builds hand the same loader a base64 `wasmBinary` instead (plan, "Asset
-// delivery in builds"), which is why the URL is never written by hand.
-import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 
 import { laneCenter, mulberry32 } from '@/sim';
 import type { GateKind, LevelDef, RunState, SimEvent } from '@/sim';
 
-import { FrameBudget } from './degrade';
 import { GroundCollider } from './ground';
+// Where the WASM comes from: a URL to fetch in dev and production, the bytes
+// themselves in the single-file builds (plan, "Asset delivery in builds").
+import { havokLoaderOptions } from './havokLoader';
 import { RagdollPool } from './RagdollPool';
 import { ShardPool } from './ShardPool';
 import {
@@ -49,6 +46,7 @@ import {
   ICE_TINT,
   RAGDOLLS_PER_KILL,
   RAGDOLL_CAPACITY,
+  RAGDOLL_LIVE_CAP,
   RAGDOLL_PUSH_JITTER,
   RAGDOLL_PUSH_SPEED,
   RAGDOLL_PUSH_UP,
@@ -103,8 +101,6 @@ export class PhysicsLayer {
   private ready = false;
   private disposed = false;
 
-  private readonly budget = new FrameBudget();
-
   /**
    * Enemy ids that shattered this batch. A frost kill emits `enemyKilled` and
    * then `enemyShattered` for the same block, and a frozen block comes apart
@@ -130,7 +126,7 @@ export class PhysicsLayer {
   async init(): Promise<void> {
     if (this.disposed || this.ready || this.quality === 0) return;
 
-    const havok = await HavokPhysics({ locateFile: () => havokWasmUrl });
+    const havok = await HavokPhysics(havokLoaderOptions());
     if (this.disposed) return;
 
     // `false` means a fixed step rather than the frame's delta: a hitch or a
@@ -147,6 +143,7 @@ export class PhysicsLayer {
 
     this.shards = new ShardPool(this.scene, SHARD_CAPACITY);
     this.ragdolls = await RagdollPool.create(this.scene, RAGDOLL_CAPACITY, this.ragdollModelId);
+    this.ragdolls.setLiveCap(RAGDOLL_LIVE_CAP[this.quality] ?? 0);
     if (this.disposed) {
       this.shards.dispose();
       this.ragdolls.dispose();
@@ -222,12 +219,11 @@ export class PhysicsLayer {
     }
   }
 
-  /** Ages both pools and runs the degrade ladder. Call before `scene.render`. */
+  /** Ages both pools. Call before `scene.render`. */
   update(dt: number): void {
     if (this.disposed) return;
     this.ragdolls?.update(dt);
     this.shards?.update(dt);
-    this.trackFrame(dt);
 
     this.stats.ragdolls = this.ragdolls?.count ?? 0;
     this.stats.shards = this.shards?.count ?? 0;
@@ -235,12 +231,21 @@ export class PhysicsLayer {
     this.stats.quality = this.quality;
   }
 
-  /** Lower is cheaper. Nothing raises this automatically, only the caller. */
+  /**
+   * Lower is cheaper. The layer never decides this for itself: the app owns the
+   * degrade ladder (`src/core/quality.ts`) because most of its rungs are the
+   * renderer's, and this is the one it turns here.
+   */
   setQuality(quality: PhysicsQuality): void {
-    if (quality === this.quality) return;
-    this.quality = quality;
-    this.stats.quality = quality;
-    if (quality === 0) {
+    // A layer that never came up cannot be turned back on: `?physics=0` skipped
+    // the WASM and a failed init has no pools, so anything above 0 would be a
+    // number the debug panel prints and nothing behind it.
+    const wanted = this.ready ? quality : 0;
+    if (wanted === this.quality) return;
+    this.quality = wanted;
+    this.stats.quality = wanted;
+    this.ragdolls?.setLiveCap(RAGDOLL_LIVE_CAP[wanted] ?? 0);
+    if (wanted === 0) {
       this.ragdolls?.reset();
       this.shards?.reset();
     }
@@ -372,13 +377,6 @@ export class PhysicsLayer {
         Math.sin(angle) * speed,
         (this.random() - 0.5) * 2 * SHARD_SPIN,
       );
-    }
-  }
-
-  /** Drops a step when `FrameBudget` says the last second was over budget. */
-  private trackFrame(dt: number): void {
-    if (this.budget.push(dt) && this.quality > 0) {
-      this.setQuality((this.quality - 1) as PhysicsQuality);
     }
   }
 }

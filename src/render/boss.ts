@@ -26,6 +26,7 @@ import { RingPool } from './rings';
 import {
   BOSS_COLOR,
   BOSS_DEPTH,
+  BOSS_DRAW_RANGE,
   BOSS_ENRAGE_COLOR,
   BOSS_ENRAGE_PULSE,
   BOSS_ENRAGE_SPEED,
@@ -40,9 +41,11 @@ import {
   BOSS_WIDTH,
   LABEL_RANGE,
   POOL,
+  STOMP_ALPHA,
   STOMP_COLOR,
   STOMP_DURATION,
   STOMP_MAX_RADIUS,
+  STOMP_THICKNESS,
 } from './theme';
 import type { EnemyState } from '@/sim';
 
@@ -91,11 +94,12 @@ export class BossView {
     this.label = labels.create({ fontSize: BOSS_LABEL_SIZE, color: '#ffd9d2', outline: 8 });
     linkLabel(this.label, this.anchor, 0);
 
-    // Thin and half-lit: the ring sweeps out to seven metres and the glow pass
-    // blooms it, so a fat bright one swallows the boss it is meant to sell.
+    // Thin and dim: the ring is a tell, not the event. The glow pass blooms
+    // whatever it is given, so a fat bright ring swallows the boss it is meant
+    // to sell — which is exactly what the Phase B2 frames showed.
     this.rings = new RingPool(scene, 'stomp', STOMP_COLOR, POOL.stompRings, {
-      thickness: 0.1,
-      alpha: 0.55,
+      thickness: STOMP_THICKNESS,
+      alpha: STOMP_ALPHA,
       additive: true,
       y: 0.12,
     });
@@ -157,12 +161,21 @@ export class BossView {
   }
 
   onStomp(x: number, z: number): void {
+    // A free ring, or the one that has swept out furthest: the pool is small on
+    // purpose (see `POOL.stompRings`), and the newest wave is the one that
+    // matters.
+    let chosen = this.ringState[0];
     for (const ring of this.ringState) {
-      if (ring.age >= 0) continue;
-      ring.x = x;
-      ring.z = z;
-      ring.age = 0;
-      break;
+      if (ring.age < 0) {
+        chosen = ring;
+        break;
+      }
+      if (chosen !== undefined && chosen.age >= 0 && ring.age > chosen.age) chosen = ring;
+    }
+    if (chosen !== undefined) {
+      chosen.x = x;
+      chosen.z = z;
+      chosen.age = 0;
     }
     this.playOneShot('attack');
   }
@@ -203,7 +216,11 @@ export class BossView {
       return;
     }
 
-    this.show(true);
+    const ahead = boss.z - squadZ;
+    // Past the fog there is nothing to see, and the model does not frustum-cull
+    // itself: drawing it through the whole road phase costs the frame's peak
+    // two calls for a body nobody can make out.
+    this.show(ahead < BOSS_DRAW_RANGE);
     this.place(boss.x, 0, boss.z);
     this.anchor.position.set(boss.x, BOSS_LABEL_HEIGHT, boss.z);
 
@@ -216,7 +233,6 @@ export class BossView {
     this.oneShot = Math.max(0, this.oneShot - dt);
     this.setSpeed(timeScale * (enraged ? BOSS_ENRAGE_SPEED : 1));
 
-    const ahead = boss.z - squadZ;
     const readable = ahead < LABEL_RANGE;
     this.label.isVisible = readable;
     if (readable) {

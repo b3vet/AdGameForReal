@@ -2,11 +2,17 @@
  * A pool of sixty-four boxes: frost shatter, gate glass and the ring the boss
  * throws when it dies.
  *
- * They are separate meshes rather than thin instances of one, because a shard
- * has to be teleported, coloured and faded on its own, and Havok's instanced
- * bodies share a motion type across every instance. Sixty-four live shards is
- * therefore sixty-four draw calls; they live 1.5 s, and the degrade ladder is
- * what stops that mattering on a slow device.
+ * Bodies and drawing are separate here. Each shard's Havok body hangs off an
+ * invisible `TransformNode` — nothing is drawn from it — and every frame the
+ * live shards of one size are copied into that size's thin-instance buffer. So
+ * sixty-four live shards cost three draw calls (one per shape) instead of the
+ * sixty-four they cost in Phase B3, which is what brought a level-1 frame with
+ * debris from 66 draw calls back under the plan's budget.
+ *
+ * A thin instance has no material of its own, so the tint that used to live on
+ * a per-shard `StandardMaterial` is a per-instance colour buffer, and the fade
+ * that used to be `mesh.visibility` is a shrink to nothing — the same trick the
+ * spell effects use, and the same reason: an instance cannot fade alone.
  *
  * Recycling is the same trick the ragdoll pool uses: the body's prestep type is
  * `TELEPORT`, so writing the transform node's position moves the body, and a
@@ -14,18 +20,22 @@
  */
 
 import type { Color3 } from '@babylonjs/core/Maths/math.color';
-import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsMotionType, PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
 import type { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
 import type { Scene } from '@babylonjs/core/scene';
 
+import { FLOATS_PER_MATRIX, commitInstances, createMatrixBuffer } from '@/render/instanceBuffer';
+
 import {
   PARK_SPACING,
   PARK_Y,
+  SHARD_EMISSIVE,
   SHARD_FADE,
   SHARD_FRICTION,
   SHARD_LIFE,
@@ -34,34 +44,50 @@ import {
 } from './tuning';
 
 interface Slot {
-  readonly mesh: Mesh;
+  readonly node: TransformNode;
   readonly body: PhysicsBody;
-  readonly material: StandardMaterial;
-  /** Index into `SHARD_SIZES`; a spawn asks for the shape it wants. */
+  /** Index into `SHARD_SIZES`, which is also the mesh it is drawn with. */
   readonly size: number;
   readonly parkX: number;
+  readonly tint: { r: number; g: number; b: number };
   live: boolean;
   frozen: boolean;
   age: number;
   spawned: number;
 }
 
+/** One drawn shape: the mesh every shard of that size is an instance of. */
+interface ShardMesh {
+  readonly mesh: Mesh;
+  readonly material: StandardMaterial;
+  readonly matrices: Float32Array;
+  readonly colors: Float32Array;
+  live: number;
+}
+
+const FLOATS_PER_COLOR = 4;
+
 const scratchVelocity = new Vector3();
 const scratchSpin = new Vector3();
 const scratchQuaternion = new Quaternion();
+const scratchScale = new Vector3();
+const scratchMatrix = Matrix.Identity();
 const ZERO = Vector3.Zero();
 
 export class ShardPool {
   private readonly slots: Slot[] = [];
+  private readonly shapes: ShardMesh[] = [];
   private ticket = 0;
   private liveCount = 0;
 
   constructor(scene: Scene, readonly capacity: number) {
+    for (let size = 0; size < SHARD_SIZES.length; size++) {
+      this.shapes.push(buildShape(scene, size, capacity));
+    }
     for (let i = 0; i < capacity; i++) {
       // Round robin, so every shape has a third of the pool and a burst of one
       // kind never has to steal from another.
-      const size = i % SHARD_SIZES.length;
-      this.slots.push(buildSlot(scene, i, size));
+      this.slots.push(buildSlot(scene, i, i % SHARD_SIZES.length));
     }
   }
 
@@ -92,10 +118,11 @@ export class ShardPool {
     spin: number,
   ): void {
     const slot = this.acquire(size);
-    slot.material.diffuseColor.copyFrom(tint);
-    slot.material.emissiveColor.copyFrom(tint).scaleInPlace(0.45);
+    slot.tint.r = tint.r;
+    slot.tint.g = tint.g;
+    slot.tint.b = tint.b;
 
-    const node = slot.body.transformNode;
+    const node = slot.node;
     node.position.set(x, y, z);
     Quaternion.RotationYawPitchRollToRef(spin, spin * 0.7, spin * 1.3, scratchQuaternion);
     if (node.rotationQuaternion === null) node.rotationQuaternion = scratchQuaternion.clone();
@@ -107,8 +134,6 @@ export class ShardPool {
     slot.body.setLinearVelocity(scratchVelocity);
     slot.body.setAngularVelocity(scratchSpin);
 
-    slot.mesh.setEnabled(true);
-    slot.mesh.visibility = 1;
     slot.live = true;
     slot.frozen = false;
     slot.age = 0;
@@ -116,24 +141,38 @@ export class ShardPool {
     this.liveCount++;
   }
 
+  /** Ages every live shard and rewrites the three instance buffers. */
   update(dt: number): void {
+    for (const shape of this.shapes) shape.live = 0;
+
     // Indexed rather than `for...of`: this and `push` are the two loops that
     // run every frame, and CLAUDE.md asks the hot ones not to allocate.
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
       if (slot === undefined || !slot.live) continue;
       slot.age += dt;
-      if (slot.age < SHARD_LIFE) continue;
-      const progress = (slot.age - SHARD_LIFE) / SHARD_FADE;
-      if (progress >= 1) {
-        this.park(slot);
-        continue;
+
+      let scale = 1;
+      if (slot.age >= SHARD_LIFE) {
+        const progress = (slot.age - SHARD_LIFE) / SHARD_FADE;
+        if (progress >= 1) {
+          this.park(slot);
+          continue;
+        }
+        if (!slot.frozen) {
+          slot.frozen = true;
+          freeze(slot);
+        }
+        // A thin instance cannot fade on its own, so it shrinks out instead.
+        scale = 1 - progress;
       }
-      if (!slot.frozen) {
-        slot.frozen = true;
-        freeze(slot);
-      }
-      slot.mesh.visibility = 1 - progress;
+
+      this.draw(slot, scale);
+    }
+
+    for (const shape of this.shapes) {
+      commitInstances(shape.mesh, shape.live);
+      if (shape.live > 0) shape.mesh.thinInstanceBufferUpdated('color');
     }
   }
 
@@ -142,7 +181,7 @@ export class ShardPool {
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
       if (slot === undefined || !slot.live || slot.frozen) continue;
-      const at = slot.body.transformNode.position;
+      const at = slot.node.position;
       const dx = at.x - x;
       const dz = at.z - z;
       const distanceSquared = dx * dx + dz * dz;
@@ -162,17 +201,47 @@ export class ShardPool {
     for (const slot of this.slots) {
       if (slot.live) this.park(slot);
     }
+    for (const shape of this.shapes) {
+      shape.live = 0;
+      commitInstances(shape.mesh, 0);
+    }
   }
-
 
   dispose(): void {
     for (const slot of this.slots) {
       slot.body.dispose();
-      slot.material.dispose();
-      slot.mesh.dispose(false, false);
+      slot.node.dispose();
     }
     this.slots.length = 0;
+    for (const shape of this.shapes) {
+      shape.material.dispose();
+      shape.mesh.dispose(false, false);
+    }
+    this.shapes.length = 0;
     this.liveCount = 0;
+  }
+
+  /** Copies one live shard's body transform into its shape's buffers. */
+  private draw(slot: Slot, scale: number): void {
+    const shape = this.shapes[slot.size];
+    if (shape === undefined || shape.live >= this.capacity) return;
+
+    const node = slot.node;
+    scratchScale.set(scale, scale, scale);
+    Matrix.ComposeToRef(
+      scratchScale,
+      node.rotationQuaternion ?? scratchQuaternion,
+      node.position,
+      scratchMatrix,
+    );
+    shape.matrices.set(scratchMatrix.m, shape.live * FLOATS_PER_MATRIX);
+
+    const offset = shape.live * FLOATS_PER_COLOR;
+    shape.colors[offset] = slot.tint.r;
+    shape.colors[offset + 1] = slot.tint.g;
+    shape.colors[offset + 2] = slot.tint.b;
+    shape.colors[offset + 3] = 1;
+    shape.live++;
   }
 
   /**
@@ -203,8 +272,7 @@ export class ShardPool {
 
   private park(slot: Slot): void {
     freeze(slot);
-    slot.body.transformNode.position.set(slot.parkX, PARK_Y, 0);
-    slot.mesh.setEnabled(false);
+    slot.node.position.set(slot.parkX, PARK_Y, 0);
     if (slot.live) this.liveCount--;
     slot.live = false;
     slot.frozen = false;
@@ -217,27 +285,44 @@ function freeze(slot: Slot): void {
   slot.body.setMotionType(PhysicsMotionType.ANIMATED);
 }
 
-function buildSlot(scene: Scene, index: number, size: number): Slot {
+/** One mesh per shard shape, drawn as thin instances tinted per shard. */
+function buildShape(scene: Scene, size: number, capacity: number): ShardMesh {
   const shape = SHARD_SIZES[size];
   if (shape === undefined) throw new Error(`no shard size ${String(size)}`);
 
   const mesh = CreateBox(
-    `shard_${String(index)}`,
+    `shard_shape_${String(size)}`,
     { width: shape.width, height: shape.height, depth: shape.depth },
     scene,
   );
-  const material = new StandardMaterial(`shard_mat_${String(index)}`, scene);
+  const material = new StandardMaterial(`shard_mat_${String(size)}`, scene);
+  // White here, coloured per instance: the shader multiplies both the lit and
+  // the emissive term by the instance colour, so one material serves every tint.
   material.specularColor.set(0.25, 0.25, 0.3);
+  material.emissiveColor.set(SHARD_EMISSIVE, SHARD_EMISSIVE, SHARD_EMISSIVE);
   mesh.material = material;
-  mesh.isPickable = false;
-  mesh.rotationQuaternion = Quaternion.Identity();
-  mesh.setEnabled(false);
+
+  const matrices = createMatrixBuffer(mesh, capacity);
+  const colors = new Float32Array(capacity * FLOATS_PER_COLOR);
+  mesh.thinInstanceSetBuffer('color', colors, FLOATS_PER_COLOR, false);
+  commitInstances(mesh, 0);
+
+  return { mesh, material, matrices, colors, live: 0 };
+}
+
+/** One body on an invisible node: nothing here is drawn, only simulated. */
+function buildSlot(scene: Scene, index: number, size: number): Slot {
+  const shape = SHARD_SIZES[size];
+  if (shape === undefined) throw new Error(`no shard size ${String(size)}`);
+
+  const node = new TransformNode(`shard_${String(index)}`, scene);
+  node.rotationQuaternion = Quaternion.Identity();
 
   const parkX = index * PARK_SPACING;
-  mesh.position.set(parkX, PARK_Y, 0);
+  node.position.set(parkX, PARK_Y, 0);
 
   const aggregate = new PhysicsAggregate(
-    mesh,
+    node,
     PhysicsShapeType.BOX,
     {
       mass: shape.mass,
@@ -251,11 +336,11 @@ function buildSlot(scene: Scene, index: number, size: number): Slot {
   aggregate.body.disablePreStep = false;
 
   const slot: Slot = {
-    mesh,
+    node,
     body: aggregate.body,
-    material,
     size,
     parkX,
+    tint: { r: 1, g: 1, b: 1 },
     live: false,
     frozen: false,
     age: 0,

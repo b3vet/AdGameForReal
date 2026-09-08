@@ -11,8 +11,8 @@
       }
     },
     "storm": {
-      "damage": 1.25,
-      "fireRateMul": 1,
+      "damage": 1.0,
+      "fireRateMul": 1.05,
       "projectileSpeed": 34,
       "chain": {
         "count": 2,

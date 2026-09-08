@@ -1,37 +1,34 @@
 /**
  * App state machine: `title -> playing -> result`.
  *
- * Owns the canvas, the renderer, the physics layer, the audio, one `Run` at a
- * time, the frame loop and the `window.__arcane` debug handle the smoke test
- * drives. Everything visual is delegated to `src/ui` and `src/render`;
- * everything about the game is delegated to `@/sim`.
- *
- * Two clocks run here and they must not be confused:
- *
- *   frameDt   real seconds since the last frame. Physics, every juice timer and
- *             the result-screen countdown run on this.
- *   scaledDt  `frameDt * timeScale`, then multiplied by `?turbo` inside the sim
- *             step. The sim and the renderer run on this, which is what makes
- *             hit-stop and slow-mo affect the game rather than an animation.
+ * Owns the canvas, the renderer, the physics layer, the audio, one
+ * `RunSession` at a time, the degrade ladder and the `window.__arcane` debug
+ * handle the smoke test drives. Everything visual is delegated to `src/ui` and
+ * `src/render`; everything about the game is delegated to `@/sim` through
+ * `./session`; everything that happens inside one frame is `./frame`.
  */
 
 import { GameAudio } from '@/audio';
-import { balance, levelConfig, levelCount } from '@/data';
+import { balance, levelCount } from '@/data';
 import { PhysicsLayer } from '@/physics';
+import type { PhysicsQuality } from '@/physics';
 import { Renderer } from '@/render/Renderer';
 import { runRenderDevScene } from '@/render/dev-scene';
-import { createBot, generateLevel, Run, weaponOf } from '@/sim';
-import type { LevelDef, RunState, SimEvent } from '@/sim';
+import { weaponOf } from '@/sim';
+import type { Run, RunState } from '@/sim';
 import { Overlay } from '@/ui';
-import type { DebugStats } from '@/ui';
 
+import { FrameDriver, NO_EVENTS } from './frame';
+import type { FrameHost } from './frame';
 import { attachInput } from './input';
 import type { DetachInput } from './input';
 import { Juice } from './juice';
-import { PhysicsEventQueue } from './physicsEvents';
+import { QualityLadder } from './quality';
+import type { QualityRung } from './quality';
 import { clampLevel, parseQuery } from './query';
 import type { QueryOptions } from './query';
-import { loadSave, setMuted, unlockLevel } from './save';
+import { loadSave, setMuted } from './save';
+import { RunSession } from './session';
 import { runStressScene } from './stress';
 import type { StressHandle } from './stress';
 
@@ -45,6 +42,10 @@ export interface ArcaneDebugHandle {
   state: () => Readonly<RunState> | null;
   /** Null until `init` finishes, and when `?physics=0` skipped it. */
   physics: () => PhysicsLayer | null;
+  /** Which rung of the degrade ladder the app is on; 0 is everything on. */
+  quality: () => number;
+  /** Draw calls: the last frame's, and the worst since the run started. */
+  draws: () => { current: number; peak: number };
 }
 
 declare global {
@@ -52,84 +53,32 @@ declare global {
   var __arcane: ArcaneDebugHandle | undefined;
 }
 
-/** Frame delta is clamped so a backgrounded tab cannot teleport the squad. */
-const MAX_FRAME_DT = 0.05;
+export class App implements FrameHost {
+  readonly renderer: Renderer;
+  readonly audio: GameAudio;
+  readonly juice: Juice;
+  readonly overlay: Overlay;
 
-/**
- * Largest sim step a single `tick` is given, even under `?turbo`. The sim's own
- * accumulator would clamp a longer step anyway, and keeping chunks small means a
- * fast-forwarded run resolves collisions exactly as a real-time one does.
- */
-const MAX_SIM_CHUNK = 0.05;
-
-/** Shared empty list, so an idle frame allocates nothing. */
-const NO_EVENTS: readonly SimEvent[] = [];
-
-/** Wall clock for the debug panel's cost readouts; never used by the sim. */
-const now = (): number =>
-  typeof performance === 'undefined' ? 0 : performance.now();
-
-export class App {
   private readonly canvas: HTMLCanvasElement;
-  private readonly overlay: Overlay;
-  private readonly renderer: Renderer;
-  private readonly audio: GameAudio;
   private readonly options: QueryOptions;
+  private readonly driver: FrameDriver;
+  private readonly ladder: QualityLadder;
 
-  private physics: PhysicsLayer | null = null;
+  private physicsLayer: PhysicsLayer | null = null;
   private stress: StressHandle | null = null;
   /** `?scene=render-test`'s own loop, so `dispose` can stop it. Structural on
    * purpose: the handle's shape is the render agent's to change. */
   private devScene: { stop: () => void } | null = null;
 
-  private readonly juice: Juice;
-  private readonly physicsEvents = new PhysicsEventQueue();
-
-  private phase: AppPhase = 'title';
-  private run: Run | null = null;
-  private bot: ((state: RunState) => number) | null = null;
+  private currentPhase: AppPhase = 'title';
+  private session: RunSession | null = null;
+  /** A never-ticked session whose level and state back the title screen. */
+  private preview: RunSession | null = null;
   private detachInput: DetachInput | null = null;
   private muted: boolean;
 
-  /**
-   * A never-ticked run whose state backs the title screen, so the renderer has
-   * a real level to show behind the menu instead of an empty scene.
-   */
-  private preview: Run | null = null;
-
-  /** The level the renderer and the physics layer are currently loaded with. */
-  private level: LevelDef | null = null;
-
-  private rafId: number | null = null;
-  private lastFrameTime = 0;
-  private endCountdown: number | null = null;
-
-  /**
-   * Whether the title screen's frame still needs drawing. The preview run never
-   * ticks, so once the camera has eased into place the scene is identical frame
-   * to frame and `scene.render` is pure heat; anything that can change it
-   * (a new preview, a resize) arms this again.
-   */
-  private previewDirty = true;
-
-  /** Last quality handed to the renderer, so the mirror only fires on a change. */
-  private mirroredQuality = -1;
-
   /** Set by `dispose`, so the loads still in flight there hand back their work. */
   private disposed = false;
-
-  /** Re-used every frame: the debug panel reads it, nothing else may write it. */
-  private readonly stats: DebugStats = {
-    simMs: 0,
-    renderMs: 0,
-    physicsMs: 0,
-    drawCalls: 0,
-    timeScale: 1,
-    ragdolls: 0,
-    shards: 0,
-    physicsQuality: 0,
-    audio: 'off',
-  };
 
   constructor(canvas: HTMLCanvasElement, overlayRoot: ParentNode, search: string) {
     this.canvas = canvas;
@@ -138,6 +87,13 @@ export class App {
     this.renderer = new Renderer(canvas);
     this.juice = new Juice(canvas, this.renderer, this.options.turbo === 1);
     this.audio = new GameAudio({ muted: this.muted });
+    this.driver = new FrameDriver(this);
+    this.ladder = new QualityLadder({
+      forced: this.options.qualityRung,
+      apply: (rung, index) => {
+        this.applyQuality(rung, index);
+      },
+    });
     this.overlay = new Overlay(overlayRoot, {
       onPlay: () => {
         this.startRun();
@@ -177,14 +133,17 @@ export class App {
     window.addEventListener('resize', this.onResize);
     this.detachInput = attachInput(this.canvas, this.onDragDeltaPixels, {
       // A scripted bot owns `targetX`; a stray drag must not fight it.
-      enabled: () => this.phase === 'playing' && this.bot === null,
+      enabled: () => this.currentPhase === 'playing' && (this.session?.bot ?? null) === null,
     });
     this.overlay.setDebugEnabled(this.options.debug);
     this.overlay.setMuted(this.muted);
+    // The renderer exists now, so the rung the ladder settled on at
+    // construction is applied to it for real.
+    this.ladder.applyCurrent();
 
     if (this.options.scene !== 'game') {
       // The dev scenes bypass the state machine entirely: they drive the
-      // renderer themselves, so no run, no HUD and no frame loop here.
+      // renderer themselves, so no session, no HUD and no frame loop here.
       this.overlay.hideAll();
       if (this.options.scene === 'render-test') {
         this.devScene = runRenderDevScene(this.renderer);
@@ -207,12 +166,12 @@ export class App {
     void this.initPhysics();
     void this.audio.load();
 
-    if (this.rafId === null) this.rafId = requestAnimationFrame(this.frame);
+    this.driver.start();
   }
 
   /** `'title' | 'playing' | 'result'` — the state machine's current node. */
   status(): AppPhase {
-    return this.phase;
+    return this.currentPhase;
   }
 
   /** Jumps straight into a level, ignoring the save's unlock state. */
@@ -222,10 +181,16 @@ export class App {
   }
 
   stop(): void {
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
+    this.driver.stop();
+  }
+
+  /**
+   * Restarts the frame loop after `stop`. The smoke test uses the pair to hold
+   * a frame still while it photographs it: a scene that takes a second to draw
+   * would otherwise move between the check and the picture.
+   */
+  resume(): void {
+    this.driver.start();
   }
 
   dispose(): void {
@@ -241,16 +206,110 @@ export class App {
     this.overlay.dispose();
     this.audio.dispose();
     // Before the renderer: the layer's bodies and meshes live in its scene.
-    this.physics?.dispose();
-    this.physics = null;
+    this.physicsLayer?.dispose();
+    this.physicsLayer = null;
     this.renderer.dispose();
     if (globalThis.__arcane?.app === this) globalThis.__arcane = undefined;
   }
 
+  // --- FrameHost -----------------------------------------------------------
+
+  get turbo(): number {
+    return this.options.turbo;
+  }
+
+  activeSession(): RunSession | null {
+    return this.session;
+  }
+
+  previewSession(): RunSession | null {
+    return this.preview;
+  }
+
+  physics(): PhysicsLayer | null {
+    return this.physicsLayer;
+  }
+
+  phaseName(): string {
+    return this.currentPhase;
+  }
+
+  /** The degrade ladder and the result-screen beat both ride the wall clock. */
+  onFrameEnd(frameDt: number, realDt: number): void {
+    this.ladder.track(frameDt);
+
+    const session = this.session;
+    if (session === null || this.currentPhase !== 'playing') return;
+    if (session.advanceEnding(realDt, this.options.level)) this.showResult(session);
+  }
+
+  // --- Screens -------------------------------------------------------------
+
+  private showTitle(): void {
+    this.currentPhase = 'title';
+    this.session = null;
+    this.juice.reset();
+
+    this.loadPreview();
+    this.overlay.showTitle({
+      levelCount,
+      unlockedLevel: Math.min(levelCount, loadSave().unlockedLevel),
+      selectedLevel: this.options.level,
+    });
+  }
+
+  private selectLevel(level: number): void {
+    if (this.currentPhase !== 'title') return;
+    this.options.level = clampLevel(level, levelCount);
+    this.showTitle();
+  }
+
+  /** Builds the level shown behind the title screen and hands it to the renderer. */
+  private loadPreview(): void {
+    const preview = new RunSession(this.options.level, this.options);
+    this.preview = preview;
+    this.renderer.loadLevel(preview.level);
+    this.physicsLayer?.loadLevel(preview.level);
+    this.renderer.update(preview.state, NO_EVENTS, 0);
+    this.driver.markPreviewDirty();
+  }
+
+  private startRun(): void {
+    // The next title screen draws a fresh preview whatever happens here.
+    this.driver.markPreviewDirty();
+    const session = new RunSession(this.options.level, this.options);
+    this.session = session;
+    this.preview = null;
+    this.juice.reset();
+    this.audio.beginRun();
+
+    this.renderer.loadLevel(session.level);
+    this.physicsLayer?.loadLevel(session.level);
+    this.driver.resetPeak();
+    this.currentPhase = 'playing';
+    this.overlay.showPlaying(this.options.level, weaponOf(session.state.squad));
+
+    this.driver.start();
+  }
+
+  private showResult(session: RunSession): void {
+    this.currentPhase = 'result';
+    this.juice.endDefeatCrawl();
+    this.overlay.showResult({
+      levelIndex: this.options.level,
+      won: session.won,
+      survivors: session.state.survivors,
+      peakCount: session.state.peakCount,
+      canAdvance: this.options.level < levelCount,
+    });
+  }
+
+  // --- Wiring --------------------------------------------------------------
+
   /**
-   * Havok, or nothing. A failed init is a downgrade and not a crash: the hosted
-   * single-file build cannot fetch the WASM until Phase C inlines it, and a
-   * phone that cannot afford physics should still play the game.
+   * Havok, or nothing. A failed init is a downgrade and not a crash: a phone
+   * that cannot afford physics should still play the game, and every ladder
+   * rung below stays honest because the layer is marked unavailable.
    */
   private async initPhysics(): Promise<void> {
     const physics = new PhysicsLayer(this.renderer.scene, {
@@ -267,84 +326,48 @@ export class App {
       physics.dispose();
       return;
     }
-    this.physics = physics;
-    this.mirrorPhysicsQuality();
+    this.physicsLayer = physics;
     // Whatever is on screen was loaded before this finished, so the road
     // collider is built now rather than at the next `loadLevel`.
-    if (this.level !== null) physics.loadLevel(this.level);
+    const level = this.session?.level ?? this.preview?.level ?? null;
+    if (level !== null) physics.loadLevel(level);
+    // The layer arrived after the ladder settled; hand it the current rung.
+    this.ladder.applyCurrent();
+  }
+
+  /**
+   * One rung of the degrade ladder, applied to whoever owns each step
+   * (`src/core/quality.ts`). Called on construction, when the physics layer
+   * arrives, and on every step down.
+   */
+  private applyQuality(rung: QualityRung, index: number): void {
+    this.renderer.setMaxPixelRatio(rung.pixelRatio);
+    this.renderer.setGlow(rung.glow);
+    const physics = this.physicsLayer;
+    if (physics !== null) {
+      // The rung is a ceiling, not an instruction: `?physics=1` asked for less
+      // than the ladder's top rung offers, and a layer whose init failed stays
+      // at 0 whatever it is told (`PhysicsLayer.setQuality`).
+      const wanted = Math.min(rung.physics, this.options.physicsQuality) as PhysicsQuality;
+      physics.setQuality(wanted);
+      // The renderer plays the baked death itself at quality 0, so it follows
+      // whatever the layer actually ended up at rather than what was asked.
+      this.renderer.setPhysicsQuality(physics.stats.quality);
+    }
+    this.driver.stats.qualityRung = index;
   }
 
   private publishHandle(): void {
     const handle: ArcaneDebugHandle = {
       ready: true,
       app: this,
-      run: () => this.run,
-      state: () => this.run?.state ?? null,
-      physics: () => this.physics,
+      run: () => this.session?.run ?? null,
+      state: () => this.session?.state ?? null,
+      physics: () => this.physicsLayer,
+      quality: () => this.ladder.rung,
+      draws: () => ({ current: this.renderer.drawCalls, peak: this.driver.peakDrawCalls }),
     };
     globalThis.__arcane = handle;
-  }
-
-  private showTitle(): void {
-    this.phase = 'title';
-    this.run = null;
-    this.bot = null;
-    this.endCountdown = null;
-    this.juice.reset();
-
-    this.loadPreview();
-    this.overlay.showTitle({
-      levelCount,
-      unlockedLevel: Math.min(levelCount, loadSave().unlockedLevel),
-      selectedLevel: this.options.level,
-    });
-  }
-
-  private selectLevel(level: number): void {
-    if (this.phase !== 'title') return;
-    this.options.level = clampLevel(level, levelCount);
-    this.showTitle();
-  }
-
-  /** Builds the level shown behind the title screen and hands it to the renderer. */
-  private loadPreview(): void {
-    const level = this.buildLevel();
-    this.preview = new Run(level, balance);
-    this.renderer.loadLevel(level);
-    this.physics?.loadLevel(level);
-    this.renderer.update(this.preview.state, NO_EVENTS, 0);
-    this.previewDirty = true;
-  }
-
-  private startRun(): void {
-    // The next title screen draws a fresh preview whatever happens here.
-    this.previewDirty = true;
-    const level = this.buildLevel();
-    const seed = level.seed;
-
-    this.run = new Run(level, balance);
-    this.preview = null;
-    // Constructed once per run: the policy carries its own RNG stream, so
-    // rebuilding it every tick would reset that stream and break determinism.
-    this.bot = this.options.bot === null ? null : createBot(this.options.bot, seed);
-    this.endCountdown = null;
-    this.juice.reset();
-    this.audio.beginRun();
-
-    this.renderer.loadLevel(level);
-    this.physics?.loadLevel(level);
-    this.phase = 'playing';
-    this.overlay.showPlaying(this.options.level, weaponOf(this.run.state.squad));
-
-    this.lastFrameTime = 0;
-    if (this.rafId === null) this.rafId = requestAnimationFrame(this.frame);
-  }
-
-  private buildLevel(): LevelDef {
-    const config = levelConfig(this.options.level);
-    const level = generateLevel(this.options.level, config, this.options.seed ?? config.seed);
-    this.level = level;
-    return level;
   }
 
   private setMuted(muted: boolean): void {
@@ -354,162 +377,10 @@ export class App {
     this.overlay.setMuted(muted);
   }
 
-  private readonly frame = (time: number): void => {
-    this.rafId = requestAnimationFrame(this.frame);
-
-    // Two real deltas: the clamped one drives the game, the raw one drives the
-    // result-screen countdown. Clamping the countdown would make it frame-rate
-    // dependent — a beat of 0.8 s takes sixteen seconds at one frame a second,
-    // which is what a software rasteriser gives a big crowd.
-    const realDt = this.lastFrameTime === 0 ? 0 : (time - this.lastFrameTime) / 1000;
-    const frameDt = Math.min(MAX_FRAME_DT, realDt);
-    this.lastFrameTime = time;
-
-    this.juice.advance(frameDt);
-    const scaledDt = frameDt * this.juice.scale;
-
-    const run = this.run;
-    if (run === null) {
-      const preview = this.preview;
-      if (preview !== null && this.previewDirty) {
-        this.renderer.update(preview.state, NO_EVENTS, scaledDt);
-        this.previewDirty = !this.renderer.isSettled();
-      }
-      // Real time, always: debris left over from the last run has to settle
-      // rather than hang in the air behind the menu.
-      this.physics?.update(frameDt);
-      this.updateDebug(null, NO_EVENTS, frameDt);
-      return;
-    }
-
-    const simStart = now();
-    const events = this.stepSim(run, scaledDt);
-    const renderStart = now();
-    this.renderer.update(run.state, events, scaledDt);
-    const physicsStart = now();
-    this.stepPhysics(run.state, frameDt);
-    const physicsEnd = now();
-
-    this.stats.simMs = renderStart - simStart;
-    this.stats.renderMs = physicsStart - renderStart;
-    this.stats.physicsMs = physicsEnd - physicsStart;
-
-    this.juice.apply();
-    this.stats.timeScale = this.juice.scale;
-    this.overlay.updateHud(run.state, events);
-    this.updateDebug(run.state, events, frameDt);
-
-    if (this.phase === 'playing') this.advanceEnding(run, realDt);
-  };
-
-  /**
-   * Advances the sim by `dt * turbo`, split into ticks of at most
-   * `MAX_SIM_CHUNK`, and returns the last tick's events for the render call.
-   *
-   * Only the last array survives: the sim pools its event objects and the next
-   * `tick` overwrites them, so every earlier chunk hands its events to the
-   * renderer and the HUD right away instead of being concatenated. That keeps
-   * the count, the bump animation and the gate flashes correct at any speed.
-   * The physics layer is the exception — it runs once a frame — so every chunk
-   * copies what it needs into `physicsEvents`.
-   */
-  private stepSim(run: Run, dt: number): readonly SimEvent[] {
-    this.physicsEvents.clear();
-    this.juice.beginFrame();
-
-    const total = dt * this.options.turbo;
-    const chunks = Math.max(1, Math.ceil(total / MAX_SIM_CHUNK));
-    const chunkDt = total / chunks;
-
-    let events: readonly SimEvent[] = NO_EVENTS;
-    for (let i = 0; i < chunks; i++) {
-      if (this.bot !== null && run.state.status === 'running') run.setTargetX(this.bot(run.state));
-      events = run.tick(chunkDt);
-
-      this.physicsEvents.absorb(events);
-      this.audio.onEvents(events, run.state);
-      this.juice.scan(events);
-      if (i === chunks - 1) break;
-
-      this.renderer.absorbEvents(events);
-      this.overlay.updateHud(run.state, events);
-      // dt 0: an intermediate chunk drew no frame, so it must not move the
-      // panel's frame-rate average.
-      this.updateDebug(run.state, events, 0);
-    }
-    return events;
-  }
-
-  /** Debris runs on real frame time and after the render, never on sim time. */
-  private stepPhysics(state: RunState | null, frameDt: number): void {
-    const physics = this.physics;
-    if (physics === null) return;
-    if (state !== null) physics.onEvents(this.physicsEvents.events, state);
-    physics.update(frameDt);
-    this.mirrorPhysicsQuality();
-  }
-
-  /** The degrade ladder lives in the physics layer; the renderer follows it. */
-  private mirrorPhysicsQuality(): void {
-    const quality = this.physics?.stats.quality ?? 0;
-    if (quality === this.mirroredQuality) return;
-    this.mirroredQuality = quality;
-    this.renderer.setPhysicsQuality(quality);
-  }
-
-  private updateDebug(
-    state: Readonly<RunState> | null,
-    events: readonly SimEvent[],
-    dt: number,
-  ): void {
-    if (!this.overlay.debugEnabled) return;
-
-    const physics = this.physics;
-    this.stats.drawCalls = this.renderer.drawCalls;
-    this.stats.ragdolls = physics?.stats.ragdolls ?? 0;
-    this.stats.shards = physics?.stats.shards ?? 0;
-    this.stats.physicsQuality = physics?.stats.quality ?? 0;
-    this.stats.audio = this.muted ? `${this.audio.status} muted` : this.audio.status;
-
-    this.overlay.updateDebug(state, events, dt, this.phase, this.stats);
-  }
-
-  /**
-   * Holds the result screen back for a beat so the killing blow is visible.
-   * `dt` is unclamped wall-clock time: the beat is a beat, not a frame count.
-   */
-  private advanceEnding(run: Run, dt: number): void {
-    if (this.endCountdown === null) {
-      if (run.state.status === 'running') return;
-
-      this.endCountdown = balance.ui.resultDelay;
-      // Unlock as soon as the run is won, not when the player taps Ascend: a
-      // player who closes the tab on the result screen keeps their progress.
-      if (run.state.status === 'won' && this.options.level < levelCount) {
-        unlockLevel(this.options.level + 1);
-      }
-      return;
-    }
-
-    this.endCountdown -= dt;
-    if (this.endCountdown > 0) return;
-
-    this.endCountdown = null;
-    this.phase = 'result';
-    this.juice.endDefeatCrawl();
-    this.overlay.showResult({
-      levelIndex: this.options.level,
-      won: run.state.status === 'won',
-      survivors: run.state.survivors,
-      peakCount: run.state.peakCount,
-      canAdvance: this.options.level < levelCount,
-    });
-  }
-
   private readonly onResize = (): void => {
     this.renderer.resize();
     // The canvas just changed size, so whatever is on it is stale.
-    this.previewDirty = true;
+    this.driver.markPreviewDirty();
   };
 
   /**
@@ -517,11 +388,11 @@ export class App {
    * `balance.input.sensitivity` meters. Tuning stays in `src/data`.
    */
   private readonly onDragDeltaPixels = (deltaXPixels: number): void => {
-    const run = this.run;
-    if (run === null || this.phase !== 'playing') return;
+    const session = this.session;
+    if (session === null || this.currentPhase !== 'playing') return;
 
     const width = this.canvas.clientWidth || window.innerWidth || 1;
     const meters = (deltaXPixels / width) * balance.input.sensitivity;
-    run.setTargetX(run.state.squad.targetX + meters);
+    session.run.setTargetX(session.state.squad.targetX + meters);
   };
 }

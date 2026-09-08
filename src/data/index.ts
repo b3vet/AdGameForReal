@@ -3,13 +3,19 @@
  * the `.json` files directly, so the schema is checked in one place.
  */
 
+import audioJson from './audio.json';
 import balanceJson from './balance.json';
 import levelsJson from './levels.json';
+import type { AudioMix } from './audio-types';
 import type { Balance, LevelGenConfig } from './types';
 
 export type { Balance, LevelGenConfig, ValueRange, EnemyBalance, BossBalance } from './types';
+export type { AudioMix } from './audio-types';
 
 export const balance: Balance = balanceJson;
+
+/** Mix and throttles for `src/audio`; see `audio-types.ts`. */
+export const audioMix: AudioMix = audioJson;
 
 export const levels: readonly LevelGenConfig[] = levelsJson;
 

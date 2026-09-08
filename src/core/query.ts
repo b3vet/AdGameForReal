@@ -11,12 +11,14 @@
  *   ?debug          show the debug panel
  *   ?turbo=8        run the sim this many times faster than the wall clock
  *   ?physics=0|1|2  physics quality: 0 skips Havok entirely
+ *   ?quality=3      pin a rung of the degrade ladder (0 best, 5 worst)
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  */
 
 import type { PhysicsQuality } from '@/physics';
 import type { BotKind } from '@/sim';
 
+import { clampRung } from './quality';
 import { loadSave } from './save';
 
 export type SceneKind = 'game' | 'render-test' | 'stress';
@@ -29,8 +31,14 @@ export interface QueryOptions {
   scene: SceneKind;
   /** Sim seconds per real second. 1 is normal play; `?turbo=8` is for scripts. */
   turbo: number;
-  /** Starting physics quality. The layer's own degrade ladder may lower it. */
+  /** Starting physics quality. The app's degrade ladder may lower it. */
   physicsQuality: PhysicsQuality;
+  /**
+   * A pinned rung of the degrade ladder (`src/core/quality.ts`), or null for
+   * the automatic ladder. Pinning is how a phone's worst case is looked at on
+   * a desktop; a pinned ladder never steps on its own.
+   */
+  qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */
   muted: boolean;
 }
@@ -68,6 +76,7 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     botParam === 'greedy' || botParam === 'random' || botParam === 'worst' ? botParam : null;
 
   const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
+  const qualityParam = Number.parseInt(params.get('quality') ?? '', 10);
   const turboParam = Number.parseFloat(params.get('turbo') ?? '');
   const sceneParam = params.get('scene');
 
@@ -79,6 +88,7 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     scene: parseScene(sceneParam),
     turbo: Number.isFinite(turboParam) ? Math.min(MAX_TURBO, Math.max(1, turboParam)) : 1,
     physicsQuality: parseQuality(params.get('physics')),
+    qualityRung: Number.isFinite(qualityParam) ? clampRung(qualityParam) : null,
     muted: save.muted,
   };
 }

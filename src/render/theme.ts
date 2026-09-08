@@ -76,7 +76,13 @@ const PER_ROW_POOL = MAX_ROWS * 3 + 6;
 export const POOL = {
   gates: PER_ROW_POOL,
   enemies: PER_ROW_POOL,
-  stompRings: 8,
+  /**
+   * Live stomp shockwaves. Three, not eight: a ring lives half a second of
+   * *frame* time while the sim can throw one every 1.2 s of *sim* time, so a
+   * fast-forwarded run (or a phone at ten frames a second) stacks them into a
+   * bright portal around the boss instead of one wave leaving it.
+   */
+  stompRings: 3,
   /** Concurrent shrinking corpses; a big `sub` gate can kill dozens at once. */
   dyingUnits: 96,
   squad: balance.squad.maxCount,
@@ -117,11 +123,14 @@ export const LABEL_BEHIND = 4;
 /**
  * How far ahead a gate panel is drawn at all. Everything past this is inside
  * the fog and reads as a smudge, and a level carries up to sixty panels — one
- * draw call each, which is the whole frame budget (plan, "Performance"). Three
- * rows of panels are in frame at 11 m spacing, which is what the player is
- * deciding about.
+ * draw call each, which is most of the frame budget (plan, "Performance").
+ *
+ * Just outside `GATE_LABEL_RANGE`, so a panel fades up shortly before its
+ * number does and never the other way round. Three full rows (the Phase B2
+ * value) put up to nine unlabelled slabs in the fog and three draw calls on
+ * the frame's peak for panels the player cannot read.
  */
-export const GATE_DRAW_RANGE = balance.level.rowSpacing * 3;
+export const GATE_DRAW_RANGE = balance.level.rowSpacing * 2.7;
 /** Same rule for enemy blocks: their skeletons are instanced, but not free. */
 export const ENEMY_DRAW_RANGE = 52;
 
@@ -184,6 +193,13 @@ export const BRUTE_HEIGHT = 0.92;
 const KAYKIT_UNIT_HEIGHT = 0.62;
 /** Multipliers on that scale, which is what `VatCrowd.setInstance` takes. */
 export const MAGE_SCALE = MAGE_HEIGHT / KAYKIT_UNIT_HEIGHT;
+/**
+ * Self-lit share of the mage's own albedo, above the 0.26 the enemies get.
+ * The squad is the thing the player's eye lives on and it is the furthest into
+ * the bottom of the frame, where the key light rakes across it; the extra lift
+ * is what separates one hat from the next instead of a single dark mass.
+ */
+export const MAGE_LIFT = 0.34;
 export const GRUNT_SCALE = GRUNT_HEIGHT / KAYKIT_UNIT_HEIGHT;
 export const BRUTE_SCALE = BRUTE_HEIGHT / KAYKIT_UNIT_HEIGHT;
 
@@ -221,6 +237,15 @@ export const ENEMY_MAX_INSTANCES = 18;
 export const ENEMY_CLUSTER_DEPTH = 1.6;
 export const SLOW_RING_COLOR = FROST_COLOR;
 
+/**
+ * How far ahead the boss is drawn. Its meshes opt out of frustum culling (a
+ * skinned model's rest-pose bounds are wrong once it animates), so without this
+ * the demon and its trident are two draw calls on every frame of the road
+ * phase — for a body sixty metres away and fully inside the fog. `FOG_END` is
+ * the distance at which it would be a silhouette of haze anyway.
+ */
+export const BOSS_DRAW_RANGE = FOG_END;
+
 export const BOSS_HEIGHT = 3;
 /** The stand-in box, for a build whose boss model could not be loaded. */
 export const BOSS_COLOR = new Color3(0.58, 0.2, 0.88);
@@ -240,7 +265,17 @@ export const BOSS_SINK_DURATION = 1.2;
 export const BOSS_ENRAGE_PULSE = 4;
 export const BOSS_ENRAGE_SPEED = 1.35;
 export const STOMP_DURATION = 0.5;
-export const STOMP_MAX_RADIUS = 7;
+/**
+ * How far the shockwave sweeps, in metres — capped here and *not* read from the
+ * sim's `stompRange` (18 m), which is how far the boss can reach, not how big
+ * the tell should be. At seven metres the ring was wider than the road, ate the
+ * boss and its HP number, and bloomed white through the glow pass; five metres
+ * lands the ring at the squad's front rank, which is what it means.
+ */
+export const STOMP_MAX_RADIUS = 5;
+/** Ring alpha and thickness. Dim: the glow pass doubles whatever this is. */
+export const STOMP_ALPHA = 0.3;
+export const STOMP_THICKNESS = 0.07;
 
 /** Weapon effects. Impacts are pooled per weapon and capped at `POOL.impacts`. */
 export const IMPACT_DURATION = 0.26;
