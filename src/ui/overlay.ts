@@ -12,6 +12,9 @@
  */
 
 import './styles.css';
+// Imported for the effect, not the value: it starts the display faces loading
+// at boot (see `./fonts`), which the overlay itself only benefits from.
+import './fonts';
 
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
@@ -107,12 +110,10 @@ export class Overlay {
       levelLabel: requireElement(root, '#hud-level'),
       count: requireElement(root, '#hud-count'),
       staffBadge: requireElement(root, '#hud-staff'),
-      staffFlash: requireElement(root, '#staff-flash'),
       bossBar: requireElement(root, '#boss-bar'),
       bossFill: requireElement(root, '#boss-bar-fill'),
       bossValue: requireElement(root, '#boss-bar-value'),
       bossLabel: requireElement(root, '#boss-bar-label'),
-      legend: requireElement(root, '#gate-legend'),
     });
     this.debugPanel = new DebugPanel(
       {
@@ -169,14 +170,15 @@ export class Overlay {
   }
 
   /**
-   * Copy is in the epic register (docs/06-milestone-2-plan.md): a win is a
+   * Copy is in the epic register (docs/06-milestone-2-plan.md) and cut to the
+   * shortest phrase that still says it (plan, "UI text, font"): a win is a
    * slaughter, a loss is being overwhelmed, and the next level is an ascent.
    */
   showResult(view: ResultView): void {
     const survivors = Math.max(0, Math.round(view.survivors));
     const peak = Math.max(0, Math.round(view.peakCount));
 
-    this.resultKicker.textContent = view.won ? 'The horde is slain' : 'Overwhelmed';
+    this.resultKicker.textContent = view.won ? 'Horde slain' : 'Overwhelmed';
     this.resultTitle.textContent = `Level ${String(view.levelIndex)}`;
     this.nextButton.hidden = !(view.won && view.canAdvance);
     // "Levels" is the way out when there is no next level to ascend to; on a
@@ -223,8 +225,6 @@ export class Overlay {
 
   setDebugEnabled(enabled: boolean): void {
     this.debugPanel.setEnabled(enabled);
-    // The panel and the level-1 legend share the bottom-left corner.
-    this.hud.setDebugEnabled(enabled);
   }
 
   /** False lets the app skip gathering numbers only the panel would read. */
@@ -245,7 +245,6 @@ export class Overlay {
   dispose(): void {
     this.stopCountUp();
     this.confetti.dispose();
-    this.hud.dispose();
     this.listeners.abort();
   }
 

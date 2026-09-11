@@ -1,7 +1,16 @@
 /*
- * In-run HUD styling: squad count, level chip, boss bar, level-1 legend.
+ * In-run HUD styling. Milestone 3 cut it to the four things a player reads
+ * mid-run (plan, "UI text, font"): the squad count, the staff badge, the boss
+ * bar and the level chip — plus mute. The gate legend and the staff-name flash
+ * are gone; the badge keeps its swap animation, which is the part that told the
+ * player something the road did not.
+ *
  * Split out of `styles.css` so each stylesheet stays readable; `hud.ts` imports
- * it, and the single-file artifact build inlines both into one <style>.
+ * it, and the single-file builds inline both into one <style>.
+ *
+ * Everything here floats directly over the road, so nothing relies on a page
+ * background: chips are dark plates with warm off-white ink and the count
+ * carries its own stroke.
  */
 
 .hud__stack {
@@ -25,28 +34,33 @@
 .hud__level {
   grid-column: 1;
   justify-self: start;
-  padding: 0.3rem 0.6rem;
-  border-radius: 0.6rem;
-  background: rgba(10, 7, 22, 0.5);
-  font-size: 0.85rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.8rem;
+  background: var(--chip);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-bright);
 }
 
 /*
- * Big numbers sit on top of a moving 3D scene, so they carry their own
- * contrast: a dark stroke painted behind the fill plus a soft drop shadow.
+ * The count is the biggest number on screen and it sits on a moving scene, so
+ * it carries its own contrast: a dark stroke painted behind the fill plus a
+ * soft drop shadow.
  */
 .hud__count {
-  font-size: clamp(2.6rem, 14vw, 3.6rem);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 13vw, 3.4rem);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.02em;
-  -webkit-text-stroke: 0.18rem rgba(6, 4, 14, 0.9);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-bright);
+  -webkit-text-stroke: 0.2rem var(--outline);
   paint-order: stroke fill;
-  text-shadow: 0 0.15rem 0.9rem rgba(0, 0, 0, 0.6);
+  text-shadow: 0 0.15rem 0.9rem rgba(32, 18, 58, 0.5);
   transform-origin: 50% 50%;
 }
 
@@ -79,7 +93,7 @@
     color: var(--danger);
   }
   100% {
-    color: var(--ink);
+    color: var(--ink-bright);
     transform: scale(1);
   }
 }
@@ -91,35 +105,38 @@
   }
 }
 
+/* --- Boss bar ------------------------------------------------------------- */
+
 .boss {
   width: min(100%, 22rem);
   margin-top: 0.6rem;
-  padding: 0.4rem 0.6rem 0.5rem;
-  border-radius: 0.75rem;
-  background: rgba(10, 7, 22, 0.55);
+  padding: 0.45rem 0.7rem 0.55rem;
+  border-radius: 1rem;
+  background: var(--chip-strong);
 }
 
 .boss__head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-bright);
 }
 
 .boss__value {
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+  color: var(--ink-bright-dim);
 }
 
 .boss__track {
-  margin-top: 0.3rem;
-  height: 0.5rem;
+  margin-top: 0.35rem;
+  height: 0.55rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 245, 230, 0.18);
   overflow: hidden;
 }
 
@@ -127,39 +144,8 @@
   height: 100%;
   width: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #ff9d5c, var(--danger));
+  background: linear-gradient(90deg, #ffb457, var(--danger));
   transform-origin: 0 50%;
-}
-
-/* Sits in the bottom third, where nothing else competes during a run. */
-.legend {
-  margin: 0 0 0.5rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(10, 7, 22, 0.6);
-  max-width: 100%;
-  font-size: clamp(0.66rem, 3vw, 0.8rem);
-  color: var(--ink-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.legend b {
-  margin-left: 0.35rem;
-}
-
-.legend__add {
-  color: var(--gate-add);
-}
-.legend__mul {
-  color: var(--gate-mul);
-}
-.legend__sub {
-  color: var(--gate-sub);
-}
-.legend__rate {
-  color: var(--gate-rate);
 }
 
 /* --- Staff badge and the count wrapper ------------------------------------ */
@@ -178,38 +164,43 @@
 
 .hud__staff {
   position: absolute;
-  left: calc(100% + 0.4rem);
+  left: calc(100% + 0.45rem);
   top: 50%;
   transform: translateY(-50%);
-  padding: 0.15rem 0.45rem;
-  border-radius: 0.5rem;
-  background: rgba(10, 7, 22, 0.6);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.6rem;
+  background: var(--chip-strong);
   box-shadow: inset 0 0 0 1px currentcolor;
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   white-space: nowrap;
   color: var(--staff-color, var(--accent-bright));
 }
 
 .hud__staff[data-staff='ember'] {
-  --staff-color: #ff9d5c;
+  --staff-color: #ffb066;
 }
 .hud__staff[data-staff='storm'] {
-  --staff-color: #a48cff;
+  --staff-color: #c0adff;
 }
 .hud__staff[data-staff='frost'] {
-  --staff-color: #7fe6ff;
+  --staff-color: #8ee9ff;
 }
 
+/*
+ * The swap animation is the whole announcement now that the full-screen staff
+ * name is gone: the badge blows up and settles, which is enough to pull the eye
+ * to the corner that changed.
+ */
 .hud__staff--swap {
   animation: hud-staff-swap 700ms ease-out;
 }
 
 @keyframes hud-staff-swap {
   0% {
-    transform: translateY(-50%) scale(1.9);
+    transform: translateY(-50%) scale(2.1);
     box-shadow: inset 0 0 0 2px currentcolor;
   }
   100% {
@@ -221,8 +212,8 @@
 .mute--hud {
   grid-column: 3;
   justify-self: end;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.3rem;
+  height: 2.3rem;
 }
 
 /* --- Boss bar: hit shake and the enrage state ----------------------------- */
@@ -254,12 +245,11 @@
  * so the state reads even when the boss is between stomps.
  */
 .boss--enraged {
-  background: rgba(48, 8, 18, 0.72);
-  box-shadow: 0 0 1.2rem rgba(255, 84, 112, 0.45);
+  background: rgba(96, 16, 40, 0.78);
 }
 
 .boss--enraged .boss__label {
-  color: var(--danger);
+  color: #ffd2da;
   animation: boss-enraged-pulse 900ms ease-in-out infinite;
 }
 

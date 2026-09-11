@@ -1,6 +1,11 @@
 /**
- * The in-run HUD: squad count, level label, staff badge, boss HP bar, and the
- * first-level legend.
+ * The in-run HUD: squad count, level chip, staff badge, boss HP bar.
+ *
+ * That is the whole list now (plan, "UI text, font"). The gate legend and the
+ * full-screen staff-name flash were cut: the legend taught a rule the first
+ * gate teaches better, and the flash covered the road at the exact moment the
+ * player had just changed weapon. The badge keeps its swap animation, which is
+ * what actually announced the change.
  *
  * Reads sim state and events only — it never touches the `Run`. Every DOM write
  * is guarded by a "did this actually change?" check, because `update` runs on
@@ -8,7 +13,6 @@
  * scene.
  */
 
-import { balance } from '@/data';
 import { weaponOf } from '@/sim';
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
@@ -17,7 +21,6 @@ import './hud.css';
 const BUMP_CLASS = 'hud__count--bump';
 const HURT_CLASS = 'hud__count--hurt';
 const SWAP_CLASS = 'hud__staff--swap';
-const FLASH_CLASS = 'staff-flash--show';
 const BOSS_HIT_CLASS = 'boss--hit';
 const BOSS_ENRAGED_CLASS = 'boss--enraged';
 
@@ -27,9 +30,6 @@ const BOSS_ENRAGED_CLASS = 'boss--enraged';
  * moves at all.
  */
 const BOSS_SHAKE_INTERVAL_MS = 220;
-
-/** How long the staff announcement stays up. Matches the CSS animation. */
-const STAFF_FLASH_MS = 1100;
 
 const STAFF_NAMES: Readonly<Record<WeaponId, string>> = {
   ember: 'Ember',
@@ -44,12 +44,10 @@ export interface HudElements {
   levelLabel: HTMLElement;
   count: HTMLElement;
   staffBadge: HTMLElement;
-  staffFlash: HTMLElement;
   bossBar: HTMLElement;
   bossFill: HTMLElement;
   bossValue: HTMLElement;
   bossLabel: HTMLElement;
-  legend: HTMLElement;
 }
 
 export class Hud {
@@ -61,27 +59,10 @@ export class Hud {
   private shownStaff: WeaponId | null = null;
   private bossVisible = false;
   private bossEnraged = false;
-  private legendArmed = false;
-  private legendSuppressed = false;
   private lastBossShake = 0;
-  private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(elements: HudElements) {
     this.elements = elements;
-  }
-
-  /**
-   * The debug panel shares the bottom-left corner with the legend, and two
-   * blocks of text over each other are worse than either alone. Debug wins: a
-   * player who typed `?debug` — or triple-tapped the level chip to get the
-   * panel up — is not the player the legend is teaching.
-   */
-  setDebugEnabled(enabled: boolean): void {
-    this.legendSuppressed = enabled;
-    if (enabled && this.legendArmed) {
-      this.legendArmed = false;
-      this.setLegendVisible(false);
-    }
   }
 
   /** Resets every transient bit of HUD state for a fresh run. */
@@ -92,16 +73,11 @@ export class Hud {
 
     this.shownStaff = null;
     this.setStaff(staff, false);
-    this.hideFlash();
 
     this.setBossVisible(false);
     this.setBossEnraged(false);
     this.shownBossHp = -1;
     this.shownBossRatio = -1;
-
-    // The legend only ever teaches the first level (docs/03-milestone-1-plan.md).
-    this.legendArmed = levelIndex === 1 && !this.legendSuppressed;
-    this.setLegendVisible(this.legendArmed);
   }
 
   update(state: Readonly<RunState>, events: readonly SimEvent[]): void {
@@ -148,17 +124,6 @@ export class Hud {
     else this.setStaff(weaponOf(state.squad), false);
 
     this.updateBoss(state, bossHit, enraged);
-
-    // The legend is a teaching aid, not chrome: it leaves quickly.
-    if (this.legendArmed && state.time >= balance.ui.legendSeconds) {
-      this.legendArmed = false;
-      this.setLegendVisible(false);
-    }
-  }
-
-  /** Stops the flash timer. The overlay owns the elements, so nothing else. */
-  dispose(): void {
-    this.hideFlash();
   }
 
   private updateBoss(state: Readonly<RunState>, hit: boolean, enraged: boolean): void {
@@ -202,47 +167,23 @@ export class Hud {
     this.elements.bossLabel.textContent = enraged ? 'Enraged' : 'Boss';
   }
 
-  /** The badge always shows the staff in hand; a swap also announces itself. */
+  /**
+   * The badge always shows the staff in hand; a swap also blows it up and lets
+   * it settle, which is the whole announcement since the flash was cut.
+   */
   private setStaff(staff: WeaponId, announce: boolean): void {
     if (staff === this.shownStaff && !announce) return;
     this.shownStaff = staff;
 
-    const name = STAFF_NAMES[staff];
     const badge = this.elements.staffBadge;
-    badge.textContent = name;
+    badge.textContent = STAFF_NAMES[staff];
     badge.dataset['staff'] = staff;
-    if (!announce) return;
-
-    replayAnimation(badge, SWAP_CLASS);
-
-    const flash = this.elements.staffFlash;
-    flash.textContent = `${name} Staff`;
-    flash.dataset['staff'] = staff;
-    flash.hidden = false;
-    replayAnimation(flash, FLASH_CLASS);
-
-    if (this.flashTimer !== null) clearTimeout(this.flashTimer);
-    this.flashTimer = setTimeout(() => {
-      this.hideFlash();
-    }, STAFF_FLASH_MS);
-  }
-
-  private hideFlash(): void {
-    if (this.flashTimer !== null) {
-      clearTimeout(this.flashTimer);
-      this.flashTimer = null;
-    }
-    this.elements.staffFlash.classList.remove(FLASH_CLASS);
-    this.elements.staffFlash.hidden = true;
+    if (announce) replayAnimation(badge, SWAP_CLASS);
   }
 
   private setBossVisible(visible: boolean): void {
     this.bossVisible = visible;
     this.elements.bossBar.hidden = !visible;
-  }
-
-  private setLegendVisible(visible: boolean): void {
-    this.elements.legend.hidden = !visible;
   }
 
   /** Restarts a CSS animation that may already be running on the count. */

@@ -3,7 +3,7 @@
 Every file in `assets/` and where it came from. Written and maintained by the
 asset pipeline agent (Milestone 2, Phase A). Definition of done item 11.
 
-Everything here is **CC0**. The licence text of each pack is copied verbatim
+Everything here is **CC0** except the two fonts under `assets/fonts/`, which are **OFL 1.1** (licence texts in `assets/licenses/ofl-*.txt`). The licence text of each pack is copied verbatim
 into `assets/licenses/`; the quoted lines below are from those files.
 
 ## How to rebuild
@@ -61,6 +61,8 @@ If a future session can reach GitHub, the same files are at
 | Kenney UI SFX Set | kenney.nl/assets/ui-audio | "License (Creative Commons Zero, CC0)" |
 | Kenney Sci-Fi Sounds (1.0) | kenney.nl/assets/sci-fi-sounds | "License: (Creative Commons Zero, CC0)" |
 | Kenney Music Jingles | kenney.nl/assets/music-jingles | "License (Creative Commons Zero, CC0)" |
+| Cinzel (v26) | fonts.googleapis.com CSS API → fonts.gstatic.com; OFL via jsDelivr | "This Font Software is licensed under the SIL Open Font License, Version 1.1." |
+| Nunito (v32) | fonts.googleapis.com CSS API → fonts.gstatic.com; OFL via jsDelivr | "This Font Software is licensed under the SIL Open Font License, Version 1.1." |
 
 Two notes on the licence files. Quaternius's `License.txt` inside the Ultimate
 Monsters folder is headed "Ultimate Platformer Pack" — his own copy-paste slip;
@@ -156,6 +158,40 @@ may be added.
 | `win_fanfare.wav` | 0.94 | Music Jingles `jingles_STEEL00` | Level clear |
 | `lose_sting.wav` | 0.71 | Music Jingles `jingles_HIT09` | Defeat |
 | `ui_tap.wav` | 0.10 | UI SFX `click1` | Any button |
+
+### Fonts — `assets/fonts/`
+
+The two UI faces (decision D30), added by Milestone 3 Phase B3 and rebuilt with
+`node scripts/fetch-fonts.mjs`. Not CC0 like everything above: both are under
+the SIL Open Font License 1.1, which permits embedding and redistribution with
+the licence, and forbids selling the fonts on their own.
+
+Two things shape what is here. Google's CSS API splits a family by unicode
+range, and the game's copy plus the digit atlas are ASCII, so only the `latin`
+block of each family is kept — that is the whole subsetting step, with no font
+tooling in the repo. And both families are served as **variable** fonts, so the
+`latin` file for Cinzel 700 and for Cinzel 900 is one and the same download;
+`src/ui/styles.css` declares one `@font-face` per family with a `font-weight`
+range rather than one per weight.
+
+| File | Size | Source | Use |
+|---|---|---|---|
+| `cinzel-latin.woff2` | 25,904 B | `fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2` | Display and numbers: wordmark, squad count (900), chips, buttons, result numbers (700). The digit atlas rasterises from this family. |
+| `nunito-latin.woff2` | 39,128 B | `fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaB.woff2` | Body lines — the few that are left after the HUD reduction. |
+| `licenses/ofl-cinzel.txt` | 4,383 B | `cdn.jsdelivr.net/gh/google/fonts@main/ofl/cinzel/OFL.txt` | "This Font Software is licensed under the SIL Open Font License, Version 1.1." — "Copyright 2020 The Cinzel Project Authors" |
+| `licenses/ofl-nunito.txt` | 4,385 B | `cdn.jsdelivr.net/gh/google/fonts@main/ofl/nunito/OFL.txt` | "This Font Software is licensed under the SIL Open Font License, Version 1.1." — "Copyright 2014 The Nunito Project Authors" |
+
+Two notes on the routes, since neither is the obvious one. The CSS API serves
+woff2 only to a modern user agent — an old or absent `User-Agent` gets ttf — so
+`fetch-fonts.mjs` sends a current Chrome string. And `github.com` is blocked
+from this sandbox exactly as it is for the KayKit packs, so the OFL texts come
+through jsDelivr's mirror of `google/fonts`; `fonts.google.com` was not needed.
+
+The bytes reach an offline build through the `@font-face` rules, not through
+the manifest loader: `scripts/inline-assets.mjs` rewrites `url(/assets/fonts/…)`
+into a `data:` URI in the CSS of the single-file builds. The `font` entries in
+`assets.json` are the inventory record that tells the inliner which files those
+are, and carry the family and weight the digit atlas asks for.
 
 ### Licences — `assets/licenses/`
 

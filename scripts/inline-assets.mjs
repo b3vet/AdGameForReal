@@ -3,8 +3,8 @@
  * builds"; decision D22).
  *
  * The page host that serves our playtest links blocks every runtime fetch, so a
- * single-file build may not leave one behind. This Vite plugin rewrites the two
- * modules that would cause one:
+ * single-file build may not leave one behind. This Vite plugin rewrites the three
+ * things that would cause one:
  *
  *   1. `src/data/assets.json` — every `url` (and a VAT entry's `metaUrl`)
  *      becomes a `data:` URI of the file's bytes and `basePath` becomes empty.
@@ -12,7 +12,11 @@
  *      no runtime code changes; the glTF loader takes a `data:` URI through its
  *      `directLoad` path and `src/render/characters/manifest.ts` decodes the
  *      rest itself rather than fetching.
- *   2. `src/physics/havokWasm.ts` — the module that carries the Havok WASM.
+ *   2. Every `@font-face` in our CSS — the `url(/assets/fonts/*.woff2)` the
+ *      browser would otherwise fetch becomes a `data:` URI of the file. The
+ *      files are named by the `font` entries in `assets.json`, so the manifest
+ *      stays the one place that says which faces we ship.
+ *   3. `src/physics/havokWasm.ts` — the module that carries the Havok WASM.
  *      Normally it exports the `?url` Vite emits and an empty base64 string;
  *      here it is replaced wholesale with the base64 of the WASM and an empty
  *      URL, so the loader is handed a `wasmBinary` and never calls `locateFile`.
@@ -58,6 +62,7 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.ktx2': 'image/ktx2',
+  '.woff2': 'font/woff2',
 };
 
 function mimeOf(file) {
@@ -83,6 +88,15 @@ export async function inlineManifest() {
   let files = 0;
 
   for (const entry of manifest.entries) {
+    // A font's bytes ride in the `@font-face` rule (see `inlineFontCss`), and
+    // nothing loads one through `resolveAssetUrl`. Inlining it here as well
+    // would ship every glyph twice. The URL is absolutised instead, so it still
+    // means what it meant before `basePath` was emptied.
+    if (entry.kind === 'font') {
+      entry.url = `${basePath}${entry.url}`;
+      continue;
+    }
+
     const asset = await dataUri(basePath, entry.url);
     entry.url = asset.uri;
     bytes += asset.bytes;
@@ -96,6 +110,48 @@ export async function inlineManifest() {
 
   manifest.basePath = '';
   return { manifest, bytes, files };
+}
+
+/**
+ * Every `font` entry in the manifest as `<absolute url> -> data: URI`.
+ *
+ * The `@font-face` rules in `src/ui/styles.css` point at `/assets/fonts/...`.
+ * That is all a normal build needs: the dev server serves the path straight
+ * from the repo root, and `npm run build` resolves it against the root and
+ * re-emits the file into `dist/bundle/` with a content hash. Only the
+ * single-file builds need the bytes in the rule itself, and this is where they
+ * come from.
+ */
+async function fontDataUris() {
+  const manifest = JSON.parse(await readFile(MANIFEST_FILE, 'utf8'));
+  const basePath = manifest.basePath ?? '';
+  const map = new Map();
+  let bytes = 0;
+
+  for (const entry of manifest.entries) {
+    if (entry.kind !== 'font') continue;
+    const asset = await dataUri(basePath, entry.url);
+    map.set(`${basePath}${entry.url}`, asset.uri);
+    bytes += asset.bytes;
+  }
+
+  return { map, bytes };
+}
+
+/**
+ * Replaces those URLs wherever they appear in a stylesheet. Runs before Vite's
+ * own CSS plugin (`enforce: 'pre'`), which then leaves the `data:` URIs alone.
+ * A URL that is in the CSS but not in the manifest is an error rather than a
+ * silent pass-through: it would be a runtime fetch on a host that allows none.
+ */
+function inlineFontCss(code, fonts) {
+  return code.replace(/url\(\s*(['"]?)(\/assets\/fonts\/[^'")]+)\1\s*\)/g, (match, _q, url) => {
+    const uri = fonts.get(url);
+    if (uri === undefined) {
+      throw new Error(`inline-assets: ${url} is not a font entry in assets.json`);
+    }
+    return `url("${uri}")`;
+  });
 }
 
 /** The replacement for `src/physics/havokWasm.ts`: the WASM as base64. */
@@ -115,11 +171,26 @@ async function inlineHavok() {
  */
 export function inlineAssets(options = {}) {
   const report = options.onReport ?? (() => {});
+  /** Read once and shared by every stylesheet the build passes through. */
+  let fonts = null;
+
   return {
     name: 'arcane-rush:inline-assets',
-    // Before Vite's own JSON and asset plugins, so `load` wins for both files.
+    // Before Vite's own JSON, CSS and asset plugins, so `load` wins for both
+    // files and `transform` sees stylesheets as their author wrote them.
     enforce: 'pre',
     apply: 'build',
+
+    async transform(code, id) {
+      if (!/\.css(\?|$)/.test(id)) return null;
+      if (!code.includes('/assets/fonts/')) return null;
+
+      if (fonts === null) {
+        fonts = await fontDataUris();
+        report(`inlined ${String(fonts.map.size)} fonts, ${(fonts.bytes / 1024).toFixed(0)} KB raw`);
+      }
+      return { code: inlineFontCss(code, fonts.map), map: null };
+    },
 
     async load(id) {
       const file = id.split('?')[0];

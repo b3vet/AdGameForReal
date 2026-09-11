@@ -11,7 +11,7 @@
  * `src/render/characters/manifest.ts`.
  */
 
-export type AssetKind = 'model' | 'vat' | 'audio' | 'texture';
+export type AssetKind = 'model' | 'vat' | 'audio' | 'texture' | 'font';
 
 interface AssetBase {
   id: string;
@@ -68,7 +68,27 @@ export interface TextureAsset extends AssetBase {
   kind: 'texture';
 }
 
-export type AssetEntry = ModelAsset | VatAsset | AudioAsset | TextureAsset;
+/**
+ * A UI face (decision D30). Unlike every other entry this one is *not* fetched
+ * through `resolveAssetUrl`: the browser loads it from the `@font-face` rules in
+ * `src/ui/styles.css`, and the single-file builds inline the bytes into those
+ * rules (`scripts/inline-assets.mjs`). The entry is the inventory record — it is
+ * what tells the inliner which files to embed, what `scripts/fetch-fonts.mjs`
+ * checks itself against, and where the digit atlas reads the family name it
+ * rasterises from.
+ */
+export interface FontAsset extends AssetBase {
+  kind: 'font';
+  /** The `font-family` name, exactly as the face declares it. */
+  family: string;
+  /**
+   * The `font-weight` descriptor of that face. Both families ship as one
+   * variable file per family, so this is a range ("700 900"), not a number.
+   */
+  weight: string;
+}
+
+export type AssetEntry = ModelAsset | VatAsset | AudioAsset | TextureAsset | FontAsset;
 
 export interface AssetManifest {
   /** Prefix for every relative `url`. Rewritten by the single-file builds. */

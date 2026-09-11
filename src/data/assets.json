@@ -281,6 +281,20 @@
       "id": "sfx_win_fanfare",
       "kind": "audio",
       "url": "audio/win_fanfare.wav"
+    },
+    {
+      "id": "font-cinzel",
+      "kind": "font",
+      "url": "fonts/cinzel-latin.woff2",
+      "family": "Cinzel",
+      "weight": "700 900"
+    },
+    {
+      "id": "font-nunito",
+      "kind": "font",
+      "url": "fonts/nunito-latin.woff2",
+      "family": "Nunito",
+      "weight": "400 700"
     }
   ]
 }

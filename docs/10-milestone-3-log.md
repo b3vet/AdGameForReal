@@ -27,3 +27,20 @@
   hosted build 9.28 MB. Ten type errors remain in `debug.ts` for the stream
   event cases added ahead of the sim phase; they resolve when B1 lands.
 - Published to the product owner's link as the baseline-measurement build.
+
+## 2026-09-11 — Phase B3: fonts and HUD reduction (verified and committed)
+
+- Cinzel and Nunito fetched from the Google Fonts CSS API (Latin subsets
+  only) with OFL licences from the jsDelivr GitHub mirror. Both families are
+  served as variable fonts, so one file per family covers the weight range:
+  Cinzel 25.9 KB, Nunito 39.1 KB. Manifest entries of kind `font`; the
+  single-file builds inline the woff2 files into the `@font-face` rules and
+  skip them in the JSON manifest so glyphs never ship twice.
+- `fontsReady` promise exported from `src/ui` for the renderer's digit atlas.
+- HUD reduced: gate legend, title hint and staff-name flash removed; result
+  copy shortened. Cinzel 900 on the wordmark and the count, Cinzel 700 on
+  chips, buttons and result numbers, Nunito for body lines.
+- Verified in a clean worktree: lint, 152 tests, build, smoke, hosted
+  (9.38 MB) and artifact (12.78 MB) builds; both single-file builds render
+  Cinzel with every non-document request blocked.
+- `balance.ui.legendSeconds` is now unused (sim owner to drop it).
