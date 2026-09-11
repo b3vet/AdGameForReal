@@ -18,7 +18,9 @@
       <section id="title-screen" class="screen screen--menu screen--title">
         <div class="screen__inner">
           <div class="screen__top">
-            <h1 class="screen__title">Arcane&nbsp;Rush</h1>
+            <!-- Triple-tapping the wordmark toggles the debug panel; the
+                 gesture is hit-tested by src/ui/taps.ts, so this stays inert. -->
+            <h1 id="title-wordmark" class="screen__title">Arcane&nbsp;Rush</h1>
             <p class="screen__hint">
               Drag to steer the line. Your apprentices cast without being told.
             </p>
@@ -57,6 +59,7 @@
         <div class="screen__inner">
           <div class="hud__stack">
             <div class="hud__top">
+              <!-- Triple-tap target during a run; see the wordmark above. -->
               <div id="hud-level" class="hud__level">Level 1</div>
 
               <!-- The badge is absolutely placed so the count stays optically
@@ -136,8 +139,13 @@
       <!-- Win confetti. Last before the debug panel so it paints over the result. -->
       <canvas id="confetti" hidden></canvas>
 
-      <!-- ?debug only. Monospace, bottom-left, never interactive. -->
-      <pre id="debug-panel" class="debug" hidden></pre>
+      <!-- ?debug, or a triple-tap on the wordmark or the level chip. Monospace,
+           bottom-left; only the capture button takes pointer events. -->
+      <div id="debug-panel" class="debug" hidden>
+        <pre id="debug-text" class="debug__text"></pre>
+        <pre id="debug-capture" class="debug__capture" hidden></pre>
+        <button id="debug-capture-button" class="debug__button" type="button">Capture 10s</button>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

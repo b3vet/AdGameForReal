@@ -19,6 +19,7 @@ import { Confetti } from './confetti';
 import { DebugPanel } from './debug';
 import type { DebugStats } from './debug';
 import { Hud } from './hud';
+import { watchTripleTap } from './taps';
 
 export interface OverlayCallbacks {
   onPlay: () => void;
@@ -32,6 +33,11 @@ export interface OverlayCallbacks {
   onTap: () => void;
   /** The mute control was used. The app owns the flag and calls `setMuted`. */
   onToggleMute: () => void;
+  /**
+   * The wordmark or the level chip was triple-tapped. The app flips the debug
+   * panel and writes the choice to the save.
+   */
+  onToggleDebug: () => void;
   /** One step of the result screen's count-up, for its tick sound. */
   onCountTick: () => void;
 }
@@ -108,8 +114,27 @@ export class Overlay {
       bossLabel: requireElement(root, '#boss-bar-label'),
       legend: requireElement(root, '#gate-legend'),
     });
-    this.debugPanel = new DebugPanel(requireElement(root, '#debug-panel'));
+    this.debugPanel = new DebugPanel(
+      {
+        root: requireElement(root, '#debug-panel'),
+        text: requireElement(root, '#debug-text'),
+        summary: requireElement(root, '#debug-capture'),
+        button: requireElement<HTMLButtonElement>(root, '#debug-capture-button'),
+      },
+      this.listeners.signal,
+    );
     this.confetti = new Confetti(requireElement<HTMLCanvasElement>(root, '#confetti'));
+
+    // The hosted playtest wrapper may not pass `?debug` through, so the panel
+    // needs a way in from inside the game. Hit-tested rather than bound to the
+    // elements, so a drag that starts on the chip still steers (`./taps.ts`).
+    watchTripleTap(
+      [requireElement(root, '#title-wordmark'), requireElement(root, '#hud-level')],
+      () => {
+        callbacks.onToggleDebug();
+      },
+      this.listeners.signal,
+    );
 
     this.onTap(requireElement<HTMLButtonElement>(root, '#play-button'), callbacks.onPlay);
     this.onTap(this.retryButton, callbacks.onRetry);

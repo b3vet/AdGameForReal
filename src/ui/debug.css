@@ -1,24 +1,39 @@
 /*
- * `?debug` panel styling. Imported by `debug.ts`; see the note in `hud.css`
- * about why the overlay CSS is split across files.
+ * Debug panel styling. Imported by `debug.ts`; see the note in `hud.css` about
+ * why the overlay CSS is split across files.
+ *
+ * The panel is a column pinned to the bottom-left corner: the top of the screen
+ * belongs to the count and the boss bar, and a panel over the boss bar hides the
+ * number the fight is about. Because it is bottom-anchored it grows *upwards*,
+ * so the capture button keeps the same spot on screen however many lines the
+ * readout or the last summary happen to be.
  */
 
 .debug {
   justify-self: start;
-  /* Bottom-left: the top of the screen belongs to the count and the boss bar,
-     and a panel over the boss bar hides the number the fight is about. The
-     overlay root already insets by the safe area, so 0.5rem clears the notch. */
   align-self: end;
-  /* The level-1 legend used to share this corner; it now stands down while the
-     panel is up (`Hud.setDebugEnabled`), so the panel can use the whole edge. */
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.3rem;
+  /* The overlay root already insets by the safe area, so this clears the notch. */
   margin: 0.5rem;
-  padding: 0.5rem 0.6rem;
-  /* Wide enough for the longest line the panel composes — about forty
-     monospace characters at 10px, which is the cost row (`sim / render /
-     phys`). `white-space: pre` does not wrap, so a narrower box does not
-     reflow, it clips: the numbers this panel exists to report were running off
-     the right edge on a 390 px phone. */
+  /* Wide enough for the longest line the panel composes — about forty monospace
+     characters at 10px, which is the cost row (`sim / render / phys`).
+     `white-space: pre` does not wrap, so a narrower box does not reflow, it
+     clips: the numbers this panel exists to report were running off the right
+     edge on a 390 px phone. */
   max-width: min(88vw, 22rem);
+  /* The block is a readout, not a control: only the button opts back in, so a
+     drag that starts over the panel still reaches the canvas and steers. */
+  pointer-events: none;
+}
+
+.debug__text,
+.debug__capture {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  max-width: 100%;
   border-radius: 0.5rem;
   background: rgba(6, 4, 14, 0.78);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -26,5 +41,40 @@
   line-height: 1.35;
   color: #9dffc9;
   white-space: pre;
-  pointer-events: none;
+}
+
+/*
+ * The capture summary is written to be narrow (seven short lines), but it is
+ * also the one block that gets pasted around, so it wraps rather than clips if
+ * a number ever comes out longer than expected.
+ */
+.debug__capture {
+  color: #ffe08a;
+  box-shadow: inset 0 0 0 1px rgba(255, 224, 138, 0.35);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug__button {
+  appearance: none;
+  border: none;
+  border-radius: 0.5rem;
+  /* Taller than the text it holds: a 10px label still needs a thumb-sized tap
+     target, and this one sits low where a mis-tap would hit nothing else. */
+  padding: 0.45rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #06040e;
+  background: #9dffc9;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.debug__button:active {
+  transform: translateY(1px);
 }

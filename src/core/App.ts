@@ -27,7 +27,7 @@ import { QualityLadder } from './quality';
 import type { QualityRung } from './quality';
 import { clampLevel, parseQuery } from './query';
 import type { QueryOptions } from './query';
-import { loadSave, setMuted } from './save';
+import { loadSave, setDebug, setMuted } from './save';
 import { RunSession } from './session';
 import { runStressScene } from './stress';
 import type { StressHandle } from './stress';
@@ -120,6 +120,14 @@ export class App implements FrameHost {
       onToggleMute: () => {
         this.setMuted(!this.muted);
       },
+      onToggleDebug: () => {
+        // The panel is a toggle rather than a query parameter because the
+        // hosted playtest wrapper may not pass one through; the save is what
+        // makes the choice survive the reload that wrapper does on its own.
+        const debug = !this.overlay.debugEnabled;
+        this.overlay.setDebugEnabled(debug);
+        setDebug(debug);
+      },
       onCountTick: () => {
         this.audio.playTick();
       },
@@ -135,7 +143,9 @@ export class App implements FrameHost {
       // A scripted bot owns `targetX`; a stray drag must not fight it.
       enabled: () => this.currentPhase === 'playing' && (this.session?.bot ?? null) === null,
     });
-    this.overlay.setDebugEnabled(this.options.debug);
+    // `?debug` is a request to keep the panel on, not to borrow it for one
+    // load: it writes the save the triple-tap gesture writes.
+    this.overlay.setDebugEnabled(this.options.debug ? setDebug(true).debug : loadSave().debug);
     this.overlay.setMuted(this.muted);
     // The renderer exists now, so the rung the ladder settled on at
     // construction is applied to it for real.

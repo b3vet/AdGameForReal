@@ -71,9 +71,10 @@ export class Hud {
   }
 
   /**
-   * The `?debug` panel shares the bottom-left corner with the legend, and two
+   * The debug panel shares the bottom-left corner with the legend, and two
    * blocks of text over each other are worse than either alone. Debug wins: a
-   * player who typed `?debug` is not the player the legend is teaching.
+   * player who typed `?debug` — or triple-tapped the level chip to get the
+   * panel up — is not the player the legend is teaching.
    */
   setDebugEnabled(enabled: boolean): void {
     this.legendSuppressed = enabled;

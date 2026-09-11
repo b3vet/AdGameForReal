@@ -1,16 +1,23 @@
 /**
- * `?debug` panel: frame cost, squad count, live projectiles, enemies alive,
+ * Debug panel: frame cost, squad count, live projectiles, enemies alive,
  * physics, audio, draw calls, time scale and the last few sim events, as a
- * monospace block in the bottom-left corner.
+ * monospace block in the bottom-left corner, plus a "Capture" button that
+ * records ten seconds of those numbers into one pasteable summary.
+ *
+ * Reached with `?debug` or, because the hosted playtest wrapper may swallow the
+ * query string, by triple-tapping the wordmark or the level chip (`./taps.ts`).
+ * Either way the choice is written to the save, so the next load comes up the
+ * way the panel was left.
  *
  * Development-only, but it ships in the bundle so a hosted playtest link can be
- * debugged with a query parameter instead of a new build. Nothing in here runs
- * while the panel is hidden — not even building an event's string, which is a
- * per-event allocation the game does not otherwise make.
+ * debugged without a new build. Nothing in here runs while the panel is hidden —
+ * not even building an event's string, which is a per-event allocation the game
+ * does not otherwise make.
  */
 
 import type { GateKind, RunState, SimEvent } from '@/sim';
 
+import { CAPTURE_SECONDS, CaptureRecorder } from './capture';
 import './debug.css';
 
 /** How many event lines the panel keeps. */
@@ -21,6 +28,13 @@ const REFRESH_INTERVAL = 0.1;
 
 /** Exponential smoothing weight for the per-frame cost readouts. */
 const AVERAGE_WEIGHT = 0.1;
+
+const IDLE_LABEL = `Capture ${String(CAPTURE_SECONDS)}s`;
+/** Same label plus a tick: the capture is over *and* the clipboard took it. */
+const COPIED_LABEL = `${IDLE_LABEL} ✓`;
+
+/** Wall clock for the capture window. Presentation only; the sim has its own. */
+const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
 
 interface LogEntry {
   text: string;
@@ -61,9 +75,22 @@ export interface DebugStats {
   audioClips: number;
 }
 
+/**
+ * The panel's markup (`index.html`). The root is inert; only the button takes
+ * pointer events, so the rest of the panel never eats a drag.
+ */
+export interface DebugElements {
+  root: HTMLElement;
+  text: HTMLElement;
+  /** The last capture's summary. Hidden until there is one. */
+  summary: HTMLElement;
+  button: HTMLButtonElement;
+}
+
 export class DebugPanel {
-  private readonly element: HTMLElement;
+  private readonly elements: DebugElements;
   private readonly log: LogEntry[] = [];
+  private readonly capture = new CaptureRecorder();
 
   private enabled = false;
   private fps = 0;
@@ -71,9 +98,18 @@ export class DebugPanel {
   private renderMs = 0;
   private physicsMs = 0;
   private sinceRefresh = REFRESH_INTERVAL;
+  private shownLabel = '';
 
-  constructor(element: HTMLElement) {
-    this.element = element;
+  constructor(elements: DebugElements, signal: AbortSignal) {
+    this.elements = elements;
+    this.setLabel(IDLE_LABEL);
+    elements.button.addEventListener(
+      'click',
+      () => {
+        this.onCaptureClick();
+      },
+      { signal },
+    );
   }
 
   /** The app skips gathering panel-only numbers when this is false. */
@@ -83,7 +119,10 @@ export class DebugPanel {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    this.element.hidden = !enabled;
+    this.elements.root.hidden = !enabled;
+    // A hidden panel stops being fed frames, so a capture left running would
+    // hang half-recorded until the panel came back.
+    if (!enabled && this.capture.active) this.stopCapture();
   }
 
   update(
@@ -97,6 +136,7 @@ export class DebugPanel {
 
     // Exponential smoothing: raw per-frame numbers jitter too much to read, and
     // a phone's hot spot shows up as a rising average, not as one bad frame.
+    // The capture is the opposite — it keeps every raw sample.
     if (dt > 0) {
       this.fps += (1 / dt - this.fps) * AVERAGE_WEIGHT;
       this.simMs += (stats.simMs - this.simMs) * AVERAGE_WEIGHT;
@@ -106,11 +146,50 @@ export class DebugPanel {
 
     for (const event of events) this.push(describe(event));
 
+    if (this.capture.active) {
+      const summary = this.capture.add(now(), dt, state, stats);
+      if (summary !== null) this.finishCapture(summary);
+    }
+
     this.sinceRefresh += dt;
     if (this.sinceRefresh < REFRESH_INTERVAL) return;
     this.sinceRefresh = 0;
 
-    this.element.textContent = this.compose(state, phase, stats);
+    this.elements.text.textContent = this.compose(state, phase, stats);
+    if (this.capture.active) {
+      this.setLabel(`Recording ${String(this.capture.secondsLeft(now()))}s`);
+    }
+  }
+
+  /** Starts a capture, or cancels the one running. */
+  private onCaptureClick(): void {
+    if (this.capture.active) {
+      this.stopCapture();
+      return;
+    }
+    this.elements.summary.hidden = true;
+    this.capture.start(now());
+    this.setLabel(`Recording ${String(CAPTURE_SECONDS)}s`);
+  }
+
+  private stopCapture(): void {
+    this.capture.cancel();
+    this.setLabel(IDLE_LABEL);
+  }
+
+  private finishCapture(summary: string): void {
+    this.elements.summary.textContent = summary;
+    this.elements.summary.hidden = false;
+    this.setLabel(IDLE_LABEL);
+    copyToClipboard(summary, (copied) => {
+      this.setLabel(copied ? COPIED_LABEL : IDLE_LABEL);
+    });
+  }
+
+  private setLabel(label: string): void {
+    if (label === this.shownLabel) return;
+    this.shownLabel = label;
+    this.elements.button.textContent = label;
   }
 
   /**
@@ -175,6 +254,31 @@ export class DebugPanel {
   }
 }
 
+/**
+ * Best effort, never fatal: an insecure context has no `navigator.clipboard` at
+ * all and a permission can be denied. The summary is on screen either way, so a
+ * failed copy only changes the button's label.
+ */
+function copyToClipboard(text: string, onDone: (copied: boolean) => void): void {
+  try {
+    const clipboard: Clipboard | undefined = navigator.clipboard;
+    if (clipboard === undefined) {
+      onDone(false);
+      return;
+    }
+    void clipboard.writeText(text).then(
+      () => {
+        onDone(true);
+      },
+      () => {
+        onDone(false);
+      },
+    );
+  } catch {
+    onDone(false);
+  }
+}
+
 function countAlive(items: readonly { alive: boolean }[]): number {
   let alive = 0;
   for (const item of items) if (item.alive) alive++;
@@ -200,6 +304,12 @@ function describe(event: SimEvent): string {
       return `hit #${String(event.enemyId)} hp ${event.hp.toFixed(0)}`;
     case 'enemyKilled':
       return `kill #${String(event.enemyId)} ${event.kind}`;
+    case 'enemyLeaked':
+      return `leak #${String(event.enemyId)} str ${String(event.streamId)}`;
+    case 'streamStarted':
+      return `stream ${String(event.streamId)} lane ${String(event.lane)} x${String(event.count)}`;
+    case 'streamCleared':
+      return `stream ${String(event.streamId)} done leak ${String(event.leaked)}`;
     case 'enemyShattered':
       return `shatter #${String(event.enemyId)}`;
     case 'enemySlowed':
