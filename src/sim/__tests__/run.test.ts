@@ -36,7 +36,9 @@ describe('enemies', () => {
     if (lost?.type !== 'unitsLost') throw new Error('no contact loss');
     expect(lost.amount).toBeGreaterThan(0);
     expect(run.state.squad.count).toBe(60 - lost.amount);
-    expect(run.state.enemies[0]?.alive).toBe(false);
+    // The block died on contact and its corpse has since been swept out of
+    // `state.enemies` (Milestone 3 keeps the array bounded for streams).
+    expect(run.state.enemies.some((e) => e.alive)).toBe(false);
     expect(events.some((e) => e.type === 'enemyKilled')).toBe(true);
   });
 
@@ -89,7 +91,7 @@ describe('enemies', () => {
     // Units track remaining hp, so the label counts down as the block is shot.
     const shrinking = hits.map((e) => (e.type === 'enemyHit' ? e.hp : 0));
     expect(shrinking[shrinking.length - 1]).toBe(0);
-    expect(run.state.enemies[0]?.alive).toBe(false);
+    expect(run.state.enemies.some((e) => e.alive)).toBe(false);
     expect(events.some((e) => e.type === 'enemyKilled' && e.kind === 'brute')).toBe(true);
     // It died to fire, not by walking into the squad.
     expect(events.some((e) => e.type === 'unitsLost')).toBe(false);

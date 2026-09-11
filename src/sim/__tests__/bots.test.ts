@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
 import { laneCenter } from '../level';
-import type { EnemyState, GateState, Lane, RunState, WeaponId } from '../types';
+import type { EnemyState, GateState, Lane, RunState, StreamState, WeaponId } from '../types';
 import { balance } from '@/data';
 
 function gate(lane: Lane, kind: GateState['kind'], value: number, z = 20): GateState {
@@ -28,6 +28,40 @@ function block(x: number, z: number, units = 100): EnemyState {
   };
 }
 
+/** One stream body standing in a lane, `z` metres in front of the squad. */
+function body(id: number, lane: Lane, z: number, streamId = 0): EnemyState {
+  return {
+    id,
+    kind: 'grunt',
+    x: laneCenter(lane),
+    z,
+    hp: 4,
+    maxHp: 4,
+    units: 1,
+    speed: balance.streams.speed,
+    active: true,
+    alive: true,
+    streamId,
+  };
+}
+
+function streamState(id: number, lane: Lane): StreamState {
+  return {
+    id,
+    lane,
+    z: 20,
+    count: 40,
+    remaining: 40,
+    spawned: 10,
+    alive: 10,
+    killed: 0,
+    leaked: 0,
+    headZ: 12,
+    started: true,
+    done: false,
+  };
+}
+
 function state(gates: GateState[], enemies: EnemyState[] = [], count = 10): RunState {
   return {
     levelIndex: 1,
@@ -46,6 +80,7 @@ function state(gates: GateState[], enemies: EnemyState[] = [], count = 10): RunS
     },
     gates,
     enemies,
+    streams: enemies.some((e) => e.streamId !== undefined) ? [streamState(0, 0), streamState(1, 1)] : [],
     projectiles: [],
     boss: null,
     peakCount: count,
@@ -134,6 +169,40 @@ describe('bots', () => {
       return out;
     };
     expect(lanes(1)).not.toEqual(lanes(7));
+  });
+
+  it('moves onto the lane the river is coming down, between gate rows', () => {
+    // The next gate row is far away, so what matters is the stream. A small
+    // squad only covers the lane it stands on, so it has to go to the bodies.
+    const far = [gate(-1, 'add', 5, 60), gate(1, 'add', 6, 60)];
+    const left = [body(10, -1, 8), body(11, -1, 10), body(12, -1, 12), body(13, -1, 14)];
+    const right = left.map((b, i) => ({ ...b, id: 20 + i, x: laneCenter(1) }));
+
+    expect(createBot('greedy', 1)(state(far, left, 3))).toBeLessThan(0);
+    expect(createBot('greedy', 1)(state(far, right, 3))).toBeGreaterThan(0);
+  });
+
+  it('stands between two lanes when a horde pours down both', () => {
+    // Giving one of a horde's two lanes up is a soldier per body; standing in
+    // the gap reaches both, which is why horde lanes are neighbours.
+    const far = [gate(-1, 'add', 5, 60), gate(1, 'add', 6, 60)];
+    const bodies = [
+      body(10, -1, 8),
+      body(11, -1, 10),
+      body(12, -1, 12),
+      body(13, 0, 9, 1),
+      body(14, 0, 11, 1),
+      body(15, 0, 13, 1),
+    ];
+    const stand = createBot('greedy', 1)(state(far, bodies, 3));
+    expect(stand).toBeGreaterThan(laneCenter(-1));
+    expect(stand).toBeLessThan(laneCenter(0));
+  });
+
+  it('goes for the gate once the row is close, stream or no stream', () => {
+    const close = [gate(-1, 'sub', 3, 4), gate(0, 'add', 5, 4), gate(1, 'mul', 2, 4)];
+    const bodies = [body(10, -1, 6), body(11, -1, 7), body(12, -1, 8)];
+    expect(createBot('greedy', 1)(state(close, bodies, 20))).toBe(laneCenter(1));
   });
 
   it('holds station once every gate is behind the squad', () => {

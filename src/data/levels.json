@@ -2,12 +2,19 @@
   {
     "index": 1,
     "seed": 1137,
-    "rows": 12,
+    "rows": 16,
+    "gateRows": 8,
+    "mixedRows": 2,
+    "hordeRows": 0,
+    "bruteRows": 2,
     "startCount": 5,
     "peakTarget": 105,
     "hpScale": 0.25,
+    "streamPressure": 0.45,
+    "streamDensity": 0.8,
     "boss": {
-      "hp": 5000
+      "hp": 5300,
+      "bite": 0.46
     },
     "gateValues": {
       "mul": {
@@ -26,22 +33,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 2,
-      "mixed": 3
     }
   },
   {
     "index": 2,
     "seed": 1274,
-    "rows": 13,
+    "rows": 16,
+    "gateRows": 9,
+    "mixedRows": 3,
+    "hordeRows": 1,
+    "bruteRows": 2,
     "startCount": 5,
     "peakTarget": 130,
     "hpScale": 0.3,
+    "streamPressure": 0.5,
+    "streamDensity": 0.8,
     "boss": {
-      "hp": 6000
+      "hp": 6000,
+      "bite": 0.4
     },
     "gateValues": {
       "mul": {
@@ -60,22 +69,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 2,
-      "mixed": 3
     }
   },
   {
     "index": 3,
     "seed": 1411,
-    "rows": 14,
+    "rows": 17,
+    "gateRows": 9,
+    "mixedRows": 3,
+    "hordeRows": 1,
+    "bruteRows": 2,
     "startCount": 6,
     "peakTarget": 160,
     "hpScale": 0.35,
+    "streamPressure": 0.55,
+    "streamDensity": 0.85,
     "boss": {
-      "hp": 6400
+      "hp": 7200,
+      "bite": 0.48
     },
     "gateValues": {
       "mul": {
@@ -94,22 +105,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 3,
-      "mixed": 3
     }
   },
   {
     "index": 4,
     "seed": 1548,
-    "rows": 15,
+    "rows": 17,
+    "gateRows": 10,
+    "mixedRows": 3,
+    "hordeRows": 2,
+    "bruteRows": 2,
     "startCount": 6,
     "peakTarget": 195,
     "hpScale": 0.4,
+    "streamPressure": 0.68,
+    "streamDensity": 1.0,
     "boss": {
-      "hp": 7700
+      "hp": 7700,
+      "bite": 0.7
     },
     "gateValues": {
       "mul": {
@@ -128,22 +141,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 3,
-      "mixed": 3
     }
   },
   {
     "index": 5,
     "seed": 1685,
-    "rows": 16,
+    "rows": 17,
+    "gateRows": 10,
+    "mixedRows": 4,
+    "hordeRows": 2,
+    "bruteRows": 2,
     "startCount": 7,
     "peakTarget": 225,
     "hpScale": 0.5,
+    "streamPressure": 0.75,
+    "streamDensity": 1.0,
     "boss": {
-      "hp": 8100
+      "hp": 8600,
+      "bite": 0.77
     },
     "gateValues": {
       "mul": {
@@ -162,22 +177,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 4,
-      "mixed": 3
     }
   },
   {
     "index": 6,
     "seed": 1822,
-    "rows": 16,
+    "rows": 18,
+    "gateRows": 11,
+    "mixedRows": 4,
+    "hordeRows": 2,
+    "bruteRows": 2,
     "startCount": 8,
     "peakTarget": 260,
     "hpScale": 0.55,
+    "streamPressure": 0.86,
+    "streamDensity": 1.15,
     "boss": {
-      "hp": 8700
+      "hp": 8700,
+      "bite": 1.0
     },
     "gateValues": {
       "mul": {
@@ -196,22 +213,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 4,
-      "mixed": 3
     }
   },
   {
     "index": 7,
     "seed": 1959,
-    "rows": 17,
+    "rows": 18,
+    "gateRows": 11,
+    "mixedRows": 4,
+    "hordeRows": 2,
+    "bruteRows": 2,
     "startCount": 9,
     "peakTarget": 295,
     "hpScale": 0.6,
+    "streamPressure": 0.88,
+    "streamDensity": 1.2,
     "boss": {
-      "hp": 10200
+      "hp": 10200,
+      "bite": 1.0
     },
     "gateValues": {
       "mul": {
@@ -230,22 +249,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 5,
-      "mixed": 3
     }
   },
   {
     "index": 8,
     "seed": 2096,
     "rows": 18,
+    "gateRows": 11,
+    "mixedRows": 4,
+    "hordeRows": 3,
+    "bruteRows": 2,
     "startCount": 10,
     "peakTarget": 325,
     "hpScale": 0.62,
+    "streamPressure": 0.9,
+    "streamDensity": 1.2,
     "boss": {
-      "hp": 8700
+      "hp": 10600,
+      "bite": 1.0
     },
     "gateValues": {
       "mul": {
@@ -264,22 +285,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 5,
-      "mixed": 3
     }
   },
   {
     "index": 9,
     "seed": 2233,
     "rows": 19,
+    "gateRows": 12,
+    "mixedRows": 5,
+    "hordeRows": 3,
+    "bruteRows": 2,
     "startCount": 11,
     "peakTarget": 360,
     "hpScale": 0.68,
+    "streamPressure": 0.92,
+    "streamDensity": 1.25,
     "boss": {
-      "hp": 9700
+      "hp": 10800,
+      "bite": 1.0
     },
     "gateValues": {
       "mul": {
@@ -298,22 +321,24 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 6,
-      "mixed": 3
     }
   },
   {
     "index": 10,
     "seed": 2370,
-    "rows": 20,
+    "rows": 19,
+    "gateRows": 12,
+    "mixedRows": 5,
+    "hordeRows": 3,
+    "bruteRows": 2,
     "startCount": 12,
     "peakTarget": 400,
     "hpScale": 0.75,
+    "streamPressure": 0.9,
+    "streamDensity": 1.3,
     "boss": {
-      "hp": 11500
+      "hp": 11400,
+      "bite": 1.0
     },
     "gateValues": {
       "mul": {
@@ -332,11 +357,6 @@
         "min": 0.03,
         "max": 0.1
       }
-    },
-    "rowWeights": {
-      "gate": 5,
-      "enemy": 6,
-      "mixed": 3
     }
   }
 ]

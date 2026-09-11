@@ -70,6 +70,56 @@ export interface EnemyState {
   slowFactor?: number;
   /** Boss only: past `enrageAt` of its HP it stomps faster and walks faster. */
   enraged?: boolean;
+  /**
+   * Set on an enemy that belongs to a stream (Milestone 3). A stream enemy is
+   * one body with `units: 1` and its own HP; a block has no `streamId` at all.
+   */
+  streamId?: number;
+  /**
+   * Sim time this enemy died, so the array can keep a corpse around long enough
+   * for render to play its death before it is compacted away.
+   */
+  diedAt?: number;
+}
+
+/**
+ * A river of single enemies pouring down one lane (D29).
+ *
+ * `count` bodies of `hpPerEnemy` each spawn evenly over `durationSeconds`, at
+ * `balance.streams.spawnAhead` metres in front of the squad so the stream keeps
+ * coming however fast the squad runs, and walk toward the squad at `speed` with
+ * up to `jitter` metres of lateral scatter around the lane centre.
+ */
+export interface StreamDef {
+  lane: Lane;
+  kind: 'grunt';
+  count: number;
+  durationSeconds: number;
+  hpPerEnemy: number;
+  speed: number;
+  jitter: number;
+}
+
+/** The live half of a `StreamDef`. Render reads `headZ` to float the count. */
+export interface StreamState {
+  id: number;
+  lane: Lane;
+  /** Where the row that carries the stream stands; the trigger, not the spawn. */
+  z: number;
+  /** What the stream was built to send. */
+  count: number;
+  /** Still to come: unspawned plus live. Zero when the stream is done. */
+  remaining: number;
+  spawned: number;
+  /** Live right now. */
+  alive: number;
+  killed: number;
+  /** Reached the squad; each one cost a unit. */
+  leaked: number;
+  /** The nearest live enemy's `z` — where the floating count rides. */
+  headZ: number;
+  started: boolean;
+  done: boolean;
 }
 
 export interface ProjectileState {
@@ -95,6 +145,9 @@ export interface SquadState {
 
 export type RunStatus = 'running' | 'won' | 'lost';
 
+/** `leak` is new in Milestone 3: one stream enemy walked into the squad. */
+export type UnitLossReason = 'contact' | 'gate' | 'stomp' | 'leak';
+
 export interface RunState {
   levelIndex: number;
   seed: number;
@@ -103,6 +156,7 @@ export interface RunState {
   squad: SquadState;
   gates: GateState[];
   enemies: EnemyState[];
+  streams: StreamState[];
   projectiles: ProjectileState[];
   boss: EnemyState | null;
   peakCount: number;
@@ -126,14 +180,25 @@ export type SimEvent =
     }
   | { type: 'enemyActivated'; enemyId: number }
   | { type: 'enemyHit'; enemyId: number; damage: number; hp: number; x: number; z: number }
-  | { type: 'enemyKilled'; enemyId: number; kind: EnemyKind; x: number; z: number }
+  | {
+      type: 'enemyKilled';
+      enemyId: number;
+      kind: EnemyKind;
+      x: number;
+      z: number;
+      /** Set when this body belonged to a stream; absent for a block or the boss. */
+      streamId?: number;
+    }
+  | { type: 'enemyLeaked'; enemyId: number; streamId: number; x: number; z: number }
+  | { type: 'streamStarted'; streamId: number; lane: Lane; count: number }
+  | { type: 'streamCleared'; streamId: number; lane: Lane; leaked: number }
   | { type: 'enemyShattered'; enemyId: number; x: number; z: number }
   | { type: 'enemySlowed'; enemyId: number; seconds: number }
   | { type: 'splash'; x: number; z: number; radius: number }
   | { type: 'chain'; from: number; to: number }
   | { type: 'weaponChanged'; from: WeaponId; to: WeaponId }
   | { type: 'unitsGained'; amount: number; reason: 'gate' }
-  | { type: 'unitsLost'; amount: number; reason: 'contact' | 'gate' | 'stomp' }
+  | { type: 'unitsLost'; amount: number; reason: UnitLossReason }
   | { type: 'bossActivated'; enemyId: number }
   | { type: 'bossStomp'; x: number; z: number }
   | { type: 'bossEnraged'; enemyId: number }

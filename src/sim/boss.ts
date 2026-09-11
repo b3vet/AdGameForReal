@@ -41,6 +41,7 @@ export class BossController {
     arenaZ: number,
     balance: Balance,
     dt: number,
+    bite = 1,
   ): BossStep {
     const out = this.result;
     out.activated = false;
@@ -81,7 +82,7 @@ export class BossController {
     const contact = balance.enemies.contactDistance;
     boss.z = Math.max(squad.z + contact, boss.z - speed * dt);
     if (boss.z - squad.z <= contact + CONTACT_EPSILON) {
-      this.contactCarry += squad.count * config.contactShare * dt;
+      this.contactCarry += squad.count * config.contactShare * bite * dt;
       const kills = Math.floor(this.contactCarry);
       if (kills > 0) {
         this.contactCarry -= kills;
@@ -94,7 +95,7 @@ export class BossController {
       if (this.stompTimer >= stompInterval) {
         this.stompTimer -= stompInterval;
         out.stomped = true;
-        out.stompKills = stompKills(squad.count, balance);
+        out.stompKills = stompKills(squad.count, balance, bite);
       }
     }
 
@@ -102,9 +103,18 @@ export class BossController {
   }
 }
 
-/** `max(floor, share of the squad)`: a stomp always hurts, and it hurts more the
- *  bigger the crowd standing under the foot. */
-export function stompKills(count: number, balance: Balance): number {
+/**
+ * `max(floor, share of the squad)`: a stomp always hurts, and it hurts more the
+ * bigger the crowd standing under the foot.
+ *
+ * `bite` is the level's own share of that (D31): levels 1 to 3 are generous and
+ * the Milestone 2 numbers come back at full strength from level 6. The boss is
+ * where nearly all of a won run's attrition happens — ten stomps at six percent
+ * take half a squad — so it is the only dial that can move the survivor share
+ * per level without touching the road.
+ */
+export function stompKills(count: number, balance: Balance, bite = 1): number {
   const config = balance.enemies.boss;
-  return Math.max(config.stompKills, Math.ceil(count * config.stompShare));
+  const floor = Math.max(1, Math.round(config.stompKills * bite));
+  return Math.max(floor, Math.ceil(count * config.stompShare * bite));
 }

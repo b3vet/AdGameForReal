@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { emptyLane, staffLane } from '../gateGen';
 import { generateLevel, laneCenter, laneOf, rowOffersGrowth, squadCurve, BOSS_Z_OFFSET } from '../level';
 import type { LevelDef, RowDef } from '../level';
-import type { GateDef } from '../types';
-import { withWeaponGates } from './fixtures';
+import type { GateDef, StreamDef } from '../types';
 import { balance, levelConfig, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
 /** Closer than this and a block's HP label prints over a gate's number. */
-const MIN_GATE_ENEMY_GAP = 4;
+const MIN_GATE_ENEMY_GAP = balance.streams.gateClearance;
+
+/** Rows that carry gates. Threat rows are nudged off the grid; these are not. */
+function gateRowsOf(level: LevelDef): RowDef[] {
+  return level.rows.filter((r) => r.gates.some((g) => g !== null));
+}
+
+function streamsOf(level: LevelDef): StreamDef[] {
+  return level.rows.flatMap((r) => r.streams ?? []);
+}
 
 function everyLevel(fn: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
@@ -53,19 +60,102 @@ describe('generateLevel', () => {
     );
   });
 
-  it('spaces rows evenly from the first row spacing onward', () => {
+  it('stands every gate row on the 18 m grid and nudges only threat rows off it', () => {
     everyLevel((level) => {
       expect(level.rows).toHaveLength(levelConfig(level.index).rows);
       level.rows.forEach((row, i) => {
-        expect(row.z).toBeCloseTo(balance.level.rowSpacing * (i + 1), 9);
+        const grid = balance.level.rowSpacing * (i + 1);
+        if (row.gates.some((g) => g !== null)) {
+          expect(row.z).toBeCloseTo(grid, 9);
+        } else {
+          expect(Math.abs(row.z - grid)).toBeLessThanOrEqual(balance.streams.zJitter);
+        }
+        // The nudge never reorders the road: `Run` walks rows in array order.
+        if (i > 0) expect(row.z).toBeGreaterThan(level.rows[i - 1]?.z ?? -Infinity);
       });
     });
   });
 
+  it('carries the plan\'s eight to twelve gate rows', () => {
+    everyLevel((level, index) => {
+      expect(gateRowsOf(level)).toHaveLength(levelConfig(index).gateRows);
+    });
+    expect(levelConfig(1).gateRows).toBe(8);
+    expect(levelConfig(levelCount).gateRows).toBe(12);
+  });
+
+  it('keeps every stream and every block clear of a gate row', () => {
+    everyLevel((level, index, seed) => {
+      const gateZ = gateRowsOf(level).map((r) => r.z);
+      for (const row of level.rows) {
+        const threats = [
+          ...row.enemies.map((e) => row.z + (e.dz ?? 0)),
+          ...(row.streams ?? []).map(() => row.z),
+        ];
+        for (const z of threats) {
+          for (const gate of gateZ) {
+            const where = `L${String(index)} s${String(seed)} z${z.toFixed(1)}`;
+            const clear = Math.abs(gate - z) >= MIN_GATE_ENEMY_GAP;
+            expect(`${where}: ${String(clear)}`).toBe(`${where}: true`);
+          }
+        }
+      }
+    });
+  });
+
+  it('pours a horde down two different lanes and a stream down one', () => {
+    let hordes = 0;
+    let singles = 0;
+    everyLevel((level, index) => {
+      for (const row of level.rows) {
+        const streams = row.streams ?? [];
+        if (streams.length === 0) continue;
+        // A stream row is never a gate row: the plan puts streams between them.
+        expect(row.gates.every((g) => g === null)).toBe(true);
+        expect(streams.length).toBeLessThanOrEqual(2);
+        if (streams.length === 2) {
+          hordes++;
+          expect(streams[0]?.lane).not.toBe(streams[1]?.lane);
+          // Neighbouring lanes, so the squad can answer both by standing between.
+          expect(Math.abs((streams[0]?.lane ?? 0) - (streams[1]?.lane ?? 0))).toBe(
+            balance.gen.hordeLaneGap,
+          );
+        } else {
+          singles++;
+        }
+      }
+      const wanted = levelConfig(index).hordeRows;
+      expect(level.rows.filter((r) => (r.streams ?? []).length === 2)).toHaveLength(wanted);
+    });
+    expect(hordes).toBeGreaterThan(0);
+    expect(singles).toBeGreaterThan(0);
+  });
+
+  it('keeps level 1 to single light streams and never one before the first gate row', () => {
+    for (const seed of SEEDS) {
+      const first = generateLevel(1, levelConfig(1), seed);
+      expect(levelConfig(1).hordeRows).toBe(0);
+      for (const row of first.rows) expect((row.streams ?? []).length).toBeLessThanOrEqual(1);
+      const firstGateRow = first.rows.findIndex((r) => r.gates.some((g) => g !== null));
+      expect(firstGateRow).toBe(0);
+      const firstStreamRow = first.rows.findIndex((r) => (r.streams ?? []).length > 0);
+      expect(firstStreamRow).toBeGreaterThan(firstGateRow);
+      // Level 1 fills all three lanes, so no row can hand a player nothing.
+      for (const row of first.rows) {
+        if (!row.gates.some((g) => g !== null)) continue;
+        expect(row.gates.every((g) => g !== null)).toBe(true);
+      }
+    }
+  });
+
   it('puts the arena past the last row and the boss past the arena', () => {
-    everyLevel((level) => {
+    everyLevel((level, index) => {
       const last = level.rows[level.rows.length - 1];
-      expect(level.arenaZ).toBeCloseTo((last?.z ?? 0) + balance.level.rowSpacing, 9);
+      // From the grid, not from the last row: a nudged final threat row must
+      // not move the arena, because the level's length is a time budget.
+      const rows = levelConfig(index).rows;
+      expect(level.arenaZ).toBeCloseTo(balance.level.rowSpacing * (rows + 1), 9);
+      expect(level.arenaZ).toBeGreaterThan(last?.z ?? 0);
       expect(BOSS_Z_OFFSET).toBe(balance.level.bossOffset);
       expect(level.boss.units).toBe(Math.ceil(level.boss.hp / balance.enemies.boss.hpPerUnit));
     });
@@ -124,10 +214,15 @@ describe('generateLevel', () => {
     everyLevel((level) => {
       const first = level.rows[0];
       expect(first?.enemies).toHaveLength(0);
+      expect(first?.streams ?? []).toHaveLength(0);
       expect(first?.gates.some((g) => g !== null)).toBe(true);
       expect(first?.gates.some((g) => g?.kind === 'mul' || g?.kind === 'weapon')).toBe(false);
       for (const row of level.rows) {
-        expect(row.gates.some((g) => g !== null) || row.enemies.length > 0).toBe(true);
+        const has =
+          row.gates.some((g) => g !== null) ||
+          row.enemies.length > 0 ||
+          (row.streams ?? []).length > 0;
+        expect(has).toBe(true);
         expect(row.enemies.length).toBeLessThanOrEqual(3);
         for (const enemy of row.enemies) expect(enemy.units).toBeGreaterThan(0);
       }
@@ -150,10 +245,10 @@ describe('generateLevel', () => {
     });
   });
 
-  it('spaces rows the plan\'s eleven metres apart and runs 12 rows to 20', () => {
-    expect(balance.level.rowSpacing).toBe(11);
-    expect(levelConfig(1).rows).toBe(12);
-    expect(levelConfig(levelCount).rows).toBe(20);
+  it('spaces rows the plan\'s eighteen metres apart and runs 16 rows to 19', () => {
+    expect(balance.level.rowSpacing).toBe(18);
+    expect(levelConfig(1).rows).toBe(16);
+    expect(levelConfig(levelCount).rows).toBe(19);
     let previous = 0;
     for (let index = 1; index <= levelCount; index++) {
       const rows = levelConfig(index).rows;
@@ -162,13 +257,31 @@ describe('generateLevel', () => {
     }
   });
 
-  it('runs 28 to 47 seconds of road before the boss', () => {
-    // The plan asks for 30 to 45 s; 12 and 20 rows at 11 m overshoot that band
-    // by about a second and a half at each end, and the row counts win.
+  it('runs 60 to 75 seconds of road before the boss', () => {
     everyLevel((level) => {
       const seconds = level.arenaZ / balance.squad.runSpeed;
-      expect(seconds).toBeGreaterThanOrEqual(28);
-      expect(seconds).toBeLessThanOrEqual(47);
+      expect(seconds).toBeGreaterThanOrEqual(60);
+      expect(seconds).toBeLessThanOrEqual(75);
+    });
+  });
+
+  it('sends a stream nobody has to fight twice, sized to the squad at its row', () => {
+    everyLevel((level, index) => {
+      const config = levelConfig(index);
+      for (const def of streamsOf(level)) {
+        expect(def.count).toBeGreaterThanOrEqual(balance.streams.count.min);
+        expect(def.count).toBeLessThanOrEqual(balance.streams.count.max);
+        expect(def.hpPerEnemy).toBeGreaterThan(0);
+        expect(def.durationSeconds).toBeGreaterThanOrEqual(balance.streams.duration.min);
+        expect(def.durationSeconds).toBeLessThanOrEqual(balance.streams.duration.max);
+        expect(def.speed).toBe(balance.streams.speed);
+      }
+      // Later rows are built for a bigger squad, so they send more bodies.
+      const early = level.rows.slice(0, 6).flatMap((r) => (r.streams ?? []).map((s) => s.count));
+      const late = level.rows.slice(-6).flatMap((r) => (r.streams ?? []).map((s) => s.count));
+      if (early.length > 0 && late.length > 0 && config.peakTarget > config.startCount) {
+        expect(Math.max(...late)).toBeGreaterThan(Math.max(...early));
+      }
     });
   });
 
@@ -226,11 +339,14 @@ describe('generateLevel', () => {
 
   it('deals the same row mix to every seed, so a level is the level it was designed as', () => {
     for (let index = 1; index <= levelCount; index++) {
-      const counts = SEEDS.map((seed) => {
+      const shapes = SEEDS.map((seed) => {
         const level = generateLevel(index, levelConfig(index), seed);
-        return level.rows.filter((r) => r.gates.some((g) => g !== null)).length;
+        const gates = gateRowsOf(level).length;
+        const hordes = level.rows.filter((r) => (r.streams ?? []).length === 2).length;
+        const streams = level.rows.filter((r) => (r.streams ?? []).length > 0).length;
+        return `${String(gates)}/${String(streams)}/${String(hordes)}`;
       });
-      expect(new Set(counts).size).toBe(1);
+      expect(new Set(shapes).size).toBe(1);
     }
   });
 
@@ -243,20 +359,6 @@ describe('generateLevel', () => {
       expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
       previous = config.peakTarget;
     }
-  });
-
-  it('keeps every block clear of a gate row, so their labels never collide', () => {
-    everyLevel((level) => {
-      const gateRowZ = level.rows.filter((r) => r.gates.some((g) => g !== null)).map((r) => r.z);
-      for (const row of level.rows) {
-        for (const enemy of row.enemies) {
-          const z = row.z + (enemy.dz ?? 0);
-          for (const gateZ of gateRowZ) {
-            expect(Math.abs(gateZ - z)).toBeGreaterThanOrEqual(MIN_GATE_ENEMY_GAP);
-          }
-        }
-      }
-    });
   });
 
   it('hides a block behind a gate on mixed rows', () => {
@@ -282,135 +384,11 @@ describe('generateLevel', () => {
     expect(squadCurve(config, 0)).toBeCloseTo(config.startCount, 9);
     expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
 
-    const early = level.rows.slice(0, 3).flatMap((r) => r.enemies.map((e) => e.units));
-    const late = level.rows.slice(-3).flatMap((r) => r.enemies.map((e) => e.units));
+    const early = level.rows.slice(0, 5).flatMap((r) => r.enemies.map((e) => e.units));
+    const late = level.rows.slice(-5).flatMap((r) => r.enemies.map((e) => e.units));
     if (early.length > 0 && late.length > 0) {
       expect(Math.max(...late)).toBeGreaterThan(Math.max(...early));
     }
-  });
-});
-
-describe('staff gates', () => {
-  it('are generated from level 2 on, and never on level 1', () => {
-    // Phase C turned them on (plan, definition of done 5): the renderer draws
-    // the staff a `weapon` panel offers, so the generator may deal them.
-    expect(balance.gen.weaponGatesEnabled).toBe(true);
-    everyLevel((level, index) => {
-      const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
-      if (index < balance.gen.weaponFromLevel) expect(staffs.length).toBe(0);
-    });
-
-    let seen = 0;
-    for (const seed of SEEDS) {
-      seen += gatesOf(generateLevel(2, levelConfig(2), seed)).filter(
-        (g) => g.kind === 'weapon',
-      ).length;
-    }
-    expect(seen).toBeGreaterThan(0);
-  });
-
-  it('leave every row a way to grow and every cursed row a curse', () => {
-    // A staff hands over no units, so it may only take a lane the row can
-    // spare — see `placeWeaponGates`.
-    everyLevel((level) => {
-      for (const row of level.rows) {
-        if (!row.gates.some((g) => g?.kind === 'weapon')) continue;
-        const kinds = row.gates.filter((g) => g !== null).map((g) => g.kind);
-        expect(kinds.some((kind) => kind === 'add' || kind === 'mul')).toBe(true);
-      }
-    });
-  });
-
-  it('appear once before level 4 and at most twice after, never on the first row', () => {
-    withWeaponGates(() => {
-      let seen = 0;
-      everyLevel((level, index, seed) => {
-        const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
-        seen += staffs.length;
-        const allowed =
-          index < balance.gen.weaponFromLevel
-            ? 0
-            : index >= balance.gen.weaponGateManyFromLevel
-              ? balance.gen.weaponGatesLate
-              : balance.gen.weaponGatesEarly;
-        const where = `L${String(index)} s${String(seed)}`;
-        expect(`${where}: ${String(staffs.length)}`).toBe(
-          `${where}: ${String(Math.min(staffs.length, allowed))}`,
-        );
-        expect(level.rows[0]?.gates.some((g) => g?.kind === 'weapon')).toBe(false);
-        for (const gate of staffs) {
-          expect(gate.weaponId).toBeDefined();
-          // Always a change of staff: the run already starts holding ember.
-          expect(gate.weaponId).not.toBe('ember');
-        }
-      });
-      expect(seen).toBeGreaterThan(0);
-    });
-  });
-
-  it('never puts two staff gates on one row', () => {
-    withWeaponGates(() => {
-      everyLevel((level) => {
-        for (const row of level.rows) {
-          expect(row.gates.filter((g) => g?.kind === 'weapon').length).toBeLessThanOrEqual(1);
-        }
-      });
-    });
-  });
-
-  /**
-   * Phase C shipped nine of the forty-five level-seed pairs with no staff gate
-   * at all — every row there was one curse and one grower, so `staffLane` found
-   * nothing it could take. A run on one of those levels could never see two of
-   * its three staffs. `placeWeaponGates` now falls back to a lane that is
-   * already empty, which costs the row nothing.
-   */
-  it('gives every level from level 2 on at least one staff gate, on every seed', () => {
-    everyLevel((level, index, seed) => {
-      if (index < balance.gen.weaponFromLevel) return;
-      const staffs = gatesOf(level).filter((g) => g.kind === 'weapon');
-      const where = `L${String(index)} s${String(seed)}`;
-      expect(`${where}: ${String(staffs.length > 0)}`).toBe(`${where}: true`);
-    });
-  });
-
-  /**
-   * The fallback takes an empty lane, and an enemy row's three lanes are all
-   * empty — but that row's whole job is to be a wall the player picks a way
-   * through, and a panel standing in the gap narrows it.
-   */
-  it('only ever converts a lane of a row that already carries gates', () => {
-    everyLevel((level) => {
-      for (const row of level.rows) {
-        if (!row.gates.some((g) => g?.kind === 'weapon')) continue;
-        expect(row.gates.some((g) => g !== null && g.kind !== 'weapon')).toBe(true);
-      }
-    });
-  });
-
-  describe('the lane a staff may take', () => {
-    const add: GateDef = { kind: 'add', value: 5, cap: 9 };
-    const sub: GateDef = { kind: 'sub', value: 5, cap: 9 };
-    const rate: GateDef = { kind: 'fireRate', value: 0.05, cap: 0.1 };
-
-    it('spends a bonus before a duplicate, and a duplicate before nothing', () => {
-      expect(staffLane([rate, add, sub])).toBe(0);
-      expect(staffLane([add, add, sub])).toBe(1);
-      expect(staffLane([sub, sub, add])).toBe(1);
-      // One curse and one grower: neither may go. This is the row that left
-      // nine level-seed pairs with no staff gate at all.
-      expect(staffLane([sub, null, add])).toBe(-1);
-    });
-
-    it('falls back to an empty lane, but never on a row with no gates', () => {
-      expect(emptyLane([sub, null, add])).toBe(1);
-      expect(emptyLane([null, sub, add])).toBe(0);
-      expect(emptyLane([sub, add, null])).toBe(2);
-      // Full row: nothing to spare here either.
-      expect(emptyLane([sub, add, rate])).toBe(-1);
-      // An enemy row. Its lanes are the gap the player runs through.
-      expect(emptyLane([null, null, null])).toBe(-1);
-    });
   });
 });
 

@@ -332,6 +332,7 @@ function fakeState(): RunState {
     },
     gates: [],
     enemies: [],
+    streams: [],
     projectiles: [],
     boss: null,
     peakCount: DEFAULT_MAGES,

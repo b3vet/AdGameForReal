@@ -48,10 +48,12 @@
       "enrageAt": 0.3,
       "enrageStompInterval": 1.2,
       "enrageSpeedMul": 1.3
-    }
+    },
+    "maxLive": 300,
+    "corpseSeconds": 1.1
   },
   "level": {
-    "rowSpacing": 11,
+    "rowSpacing": 18,
     "bossOffset": 22
   },
   "gates": {
@@ -81,6 +83,7 @@
     "mulX3FromLevel": 6,
     "fireRateChance": 0.16,
     "thirdGateChance": 0.2,
+    "fullGateRowsFromLevel": 2,
     "addShotBonus": 0.6,
     "addValueShare": 1,
     "addJitter": {
@@ -104,14 +107,17 @@
     "weaponFromLevel": 2,
     "weaponGatesEarly": 1,
     "weaponGatesLate": 2,
-    "weaponGateManyFromLevel": 4
+    "weaponGateManyFromLevel": 4,
+    "hordeLaneGap": 1
   },
   "bots": {
     "threatLookahead": 6,
     "gateCommitDistance": 7,
     "weaponLookaheadRows": 3,
     "weaponWorth": 0.8,
-    "weaponSlowWorth": 0.2
+    "weaponSlowWorth": 0.2,
+    "streamLookahead": 44,
+    "weaponLayoutMax": 24
   },
   "input": {
     "sensitivity": 6
@@ -125,5 +131,32 @@
     "bossKillScale": 0.3,
     "bossKillSeconds": 0.6,
     "defeatScale": 0.5
+  },
+  "streams": {
+    "spawnAhead": 34,
+    "speed": 3.0,
+    "footprint": 0.42,
+    "despawnBehind": 8,
+    "aimAssist": 0.8,
+    "jitter": 0.75,
+    "hpPerEnemy": {
+      "min": 1,
+      "max": 400
+    },
+    "count": {
+      "min": 12,
+      "max": 300
+    },
+    "duration": {
+      "min": 7,
+      "max": 13
+    },
+    "laneShare": 1.0,
+    "hordeLaneShare": 0.5,
+    "neighbours": 0.3,
+    "rateBonus": 0.0,
+    "gateClearance": 4,
+    "zJitter": 5,
+    "dpsTrim": 0.38
   }
 }

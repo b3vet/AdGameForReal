@@ -2,16 +2,22 @@
  * Everything the squad's fire does: the shot clock, the projectile pool, and
  * what a staff does when a shot lands.
  *
- * Split out of `Run` in Milestone 2, when weapons turned one hit into an impact,
- * a splash, a chain and a slow.
+ * Milestone 3 added the rule that makes streams work: a volley carries over.
+ * Above the projectile cap a step's shots are summed per lane into one hitscan
+ * batch, and a batch of three hundred shots landing on a body with one hit
+ * point used to throw away the other two hundred and ninety-nine. It now mows
+ * down the lane from the front until its damage is spent, which is both what a
+ * wall of fire into a column of bodies should look like and what makes the
+ * pressure model in `pressure.ts` predict anything at all.
  */
 
-import { unitsOf } from './contact';
-import { enemyFootprint } from './enemies';
+import { killEnemy, unitsOf } from './contact';
+import { enemyHalfWidth } from './enemies';
 import type { EventBuffer } from './events';
 import { formationOffsets } from './formation';
 import { applyGateGrowth } from './gates';
-import { laneCenter, laneOf } from './level';
+import { laneCenter, laneOf } from './lanes';
+import type { Streams } from './streams';
 import type { TargetList, Target } from './targeting';
 import type { EnemyState, Lane, ProjectileState, RunState } from './types';
 import { blockGap, weaponDef, weaponOf } from './weapons';
@@ -21,6 +27,7 @@ export class Firing {
   private readonly balance: Balance;
   private readonly events: EventBuffer;
   private readonly targets: TargetList;
+  private readonly streams: Streams;
   /** Called when a shot kills the boss, so `Run` can end the run in one place. */
   private readonly onBossKilled: () => void;
 
@@ -37,6 +44,11 @@ export class Firing {
   /** Ids already struck by the chain being resolved. Re-used, never re-allocated. */
   private readonly chained: number[] = [];
 
+  /** Scratch for the lane scans, so no closure has to capture a local. */
+  private scanBest: EnemyState | null = null;
+  private scanGap = 0;
+  private scanSplashed = false;
+
   /** The squad's whole output this step, in shots per second. */
   private shotRate = 0;
 
@@ -44,11 +56,13 @@ export class Firing {
     balance: Balance,
     events: EventBuffer,
     targets: TargetList,
+    streams: Streams,
     onBossKilled: () => void,
   ) {
     this.balance = balance;
     this.events = events;
     this.targets = targets;
+    this.streams = streams;
     this.onBossKilled = onBossKilled;
 
     const max = Math.max(1, Math.floor(balance.projectiles.max));
@@ -76,6 +90,7 @@ export class Firing {
     const weapon = weaponDef(weaponOf(state.squad));
     const speed = weapon.projectileSpeed;
     const range = this.balance.projectiles.range;
+    const laneWidth = this.balance.road.laneWidth;
 
     for (let i = live.length - 1; i >= 0; i--) {
       const projectile = live[i];
@@ -85,7 +100,7 @@ export class Firing {
       const nextZ = prevZ + speed * dt;
       // Sweep the whole step, so a fast shot cannot tunnel through a gate.
       const maxZ = (this.spawnZ[projectile.id] ?? prevZ) + range;
-      const hit = this.targets.sweep(projectile.x, prevZ, Math.min(nextZ, maxZ));
+      const hit = this.targets.sweep(projectile.x, prevZ, Math.min(nextZ, maxZ), laneWidth);
       if (hit !== null) {
         this.resolveHit(state, hit, 1, projectile.x);
         this.recycle(state, i);
@@ -147,14 +162,50 @@ export class Firing {
       const lane = (slot - 1) as Lane;
       const x = laneCenter(lane, this.balance.road.laneWidth);
       this.events.projectileFired(x, squad.z);
-      const target = this.targets.sweep(x, squad.z, squad.z + this.balance.projectiles.range);
-      // A batch counts as its own shot count on both sides of the growth rule,
-      // so hitscan and projectiles pump a gate at exactly the same speed.
-      if (target !== null) this.resolveHit(state, target, batched, x);
+      this.volley(state, lane, x, squad.z, squad.z + this.balance.projectiles.range, batched);
       if (state.status !== 'running') return;
     }
   }
 
+  /**
+   * A lane's batched shots, spent from the front of the lane backward.
+   *
+   * A gate swallows the whole batch — it is a wall of glass, and the growth
+   * rule is already written in terms of a batch's own shot count, so hitscan
+   * and projectiles pump a gate at exactly the same speed. Bodies do not: what
+   * is left over after one dies rolls on to the next one behind it.
+   */
+  private volley(
+    state: RunState,
+    lane: Lane,
+    x: number,
+    from: number,
+    to: number,
+    batched: number,
+  ): void {
+    let left = batched;
+    // Bounded so a pathological step cannot loop forever; a batch never kills
+    // more bodies than it has shots.
+    for (let guard = 0; guard < batched && left > 0; guard++) {
+      const target = this.targets.sweepLane(lane, from, to);
+      if (target === null) return;
+
+      const gate = target.gate;
+      if (gate !== null) {
+        this.resolveHit(state, target, left, x);
+        return;
+      }
+
+      const enemy = target.enemy;
+      if (enemy === null) return;
+      const spent = Math.min(left, Math.max(1, Math.ceil(enemy.hp / state.squad.damage)));
+      this.resolveHit(state, target, spent, x);
+      if (state.status !== 'running') return;
+      left -= spent;
+      // The body survived the volley, so there is nothing left to roll on.
+      if (enemy.alive) return;
+    }
+  }
 
   private recycle(state: RunState, index: number): void {
     const live = state.projectiles;
@@ -201,9 +252,11 @@ export class Firing {
   }
 
   /**
-   * Every block within `radius` of the impact takes a share of the shot, falling
-   * off linearly with distance. Measured to the edge of each block, not its
-   * centre, so a wide block in the next lane is genuinely "next to" the blast.
+   * Everything within `radius` of the impact takes a share of the shot, falling
+   * off linearly with distance. Measured to the edge of each body, not its
+   * centre, so a wide block in the next lane is genuinely "next to" the blast —
+   * and read out of the lane lists rather than by walking the whole road, which
+   * is what keeps a splash cheap with three hundred bodies out there.
    */
   private applySplash(
     state: RunState,
@@ -215,22 +268,22 @@ export class Firing {
     falloff: number,
     slow: WeaponSlow | undefined,
   ): void {
-    let splashed = false;
-    for (const enemy of state.enemies) {
-      if (!enemy.alive || enemy === source) continue;
-      const half = enemyFootprint(enemy.kind, enemy.units, this.balance);
+    this.scanSplashed = false;
+    this.targets.forEachNear(z, radius + this.balance.enemies.footprintMax, (enemy) => {
+      if (enemy === source) return true;
+      const half = enemyHalfWidth(enemy, this.balance);
       const gap = blockGap(enemy.x, half, x, 0, enemy.z - z);
-      if (gap > radius) continue;
+      if (gap > radius) return true;
       const share = 1 - falloff * (gap / radius);
-      if (share <= 0) continue;
-      splashed = true;
+      if (share <= 0) return true;
+      this.scanSplashed = true;
       this.damage(state, enemy, damage * share, null, slow);
-      if (state.status !== 'running') return;
-    }
-    if (splashed) this.events.splash(x, z, radius);
+      return state.status === 'running';
+    });
+    if (this.scanSplashed) this.events.splash(x, z, radius);
   }
 
-  /** Up to `count` further blocks, each within `range` of the last one hit. */
+  /** Up to `count` further bodies, each within `range` of the last one hit. */
   private applyChain(
     state: RunState,
     source: EnemyState,
@@ -244,7 +297,7 @@ export class Firing {
 
     let from = source;
     for (let link = 0; link < count; link++) {
-      const next = this.nearestUnchained(state, from, range);
+      const next = this.nearestUnchained(from, range);
       if (next === null) return;
       this.chained.push(next.id);
       this.events.chain(from.id, next.id);
@@ -254,23 +307,25 @@ export class Firing {
     }
   }
 
-  private nearestUnchained(state: RunState, from: EnemyState, range: number): EnemyState | null {
-    let best: EnemyState | null = null;
-    let bestGap = range;
-    for (const enemy of state.enemies) {
-      if (!enemy.alive || this.chained.includes(enemy.id)) continue;
+  private nearestUnchained(from: EnemyState, range: number): EnemyState | null {
+    this.scanBest = null;
+    this.scanGap = range;
+    this.targets.forEachNear(from.z, range, (enemy) => {
+      if (enemy === from || this.chained.includes(enemy.id)) return true;
       const gap = Math.hypot(enemy.x - from.x, enemy.z - from.z);
-      if (gap > bestGap) continue;
-      bestGap = gap;
-      best = enemy;
-    }
-    return best;
+      if (gap <= this.scanGap) {
+        this.scanGap = gap;
+        this.scanBest = enemy;
+      }
+      return true;
+    });
+    return this.scanBest;
   }
 
   /**
-   * Damage on one block, with the staff's slow applied and the death events in
-   * one place. `target` is the target-list entry when the block was hit
-   * directly, so a block killed mid-step stops absorbing later shots.
+   * Damage on one body, with the staff's slow applied and the death events in
+   * one place. `target` is the target-list entry when the body was hit
+   * directly, so one killed mid-step stops absorbing later shots.
    */
   private damage(
     state: RunState,
@@ -279,14 +334,12 @@ export class Firing {
     target: Target | null,
     slow: WeaponSlow | undefined,
   ): void {
-    // A block killed earlier in this same step by a splash or a chain keeps its
+    // A body killed earlier in this same step by a splash or a chain keeps its
     // entry in the target list — only a *direct* kill clears it — so a later
     // shot of the same volley can still land on the corpse. It is absorbed
     // exactly as it was before, because the damage economy is balanced around
-    // that, but the block must not die twice: a second `enemyKilled` is a
-    // second ragdoll burst, a second kill sound and a second hit-stop for one
-    // block. Rare (two of 715 kills across the balance seed set) and entirely
-    // cosmetic, which is why it survived to Phase D.
+    // that, but it must not die twice: a second `enemyKilled` is a second
+    // ragdoll burst, a second kill sound and a second hit-stop for one body.
     if (!enemy.alive) {
       if (target !== null) target.live = false;
       return;
@@ -306,13 +359,13 @@ export class Firing {
       return;
     }
 
-    enemy.hp = 0;
-    enemy.units = 0;
-    enemy.alive = false;
+    const streamId = enemy.streamId;
+    killEnemy(enemy, state.time);
     if (target !== null) target.live = false;
+    if (streamId !== undefined) this.streams.noteKilled(enemy);
     this.events.enemyHit(enemy.id, amount, 0, enemy.x, enemy.z);
-    this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
-    // A frozen block does not fall over, it comes apart.
+    this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z, streamId);
+    // A frozen body does not fall over, it comes apart.
     const shatters = slow?.shatterOnKill === true || (wasSlowed && enemy.slowFactor !== undefined);
     if (shatters) this.events.enemyShattered(enemy.id, enemy.x, enemy.z);
     if (enemy.kind === 'boss') {

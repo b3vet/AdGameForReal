@@ -16,11 +16,20 @@ export {
 } from './level';
 export type { LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
 export { formationOffsets, halfWidth } from './formation';
-export { enemyBalance, enemyFootprint } from './enemies';
+export { enemyBalance, enemyFootprint, enemyHalfWidth } from './enemies';
 export { effectiveSpeed, overlapShare } from './contact';
 export { stompKills } from './boss';
 export { applyGateGrowth, clampCount, countAfterGate, gateCap, isShootable } from './gates';
 export { blockGap, expectedDps, startWeapon, weaponDef, weaponIds, weaponOf } from './weapons';
+export {
+  dpsPerUnit,
+  expectedStreamDps,
+  laneShareOf,
+  sizeStream,
+  streamPressure,
+  streamWindow,
+} from './pressure';
+export type { StreamShape } from './pressure';
 export type { FormationOffset } from './formation';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
@@ -38,5 +47,8 @@ export type {
   RunStatus,
   SimEvent,
   SquadState,
+  StreamDef,
+  StreamState,
+  UnitLossReason,
   WeaponId,
 } from './types';

@@ -5,7 +5,7 @@
 
 import { enemyBalance } from './enemies';
 import { gateCap } from './gates';
-import { laneCenter } from './level';
+import { laneCenter } from './lanes';
 import type { LevelDef } from './level';
 import type { EnemyState, GateState, Lane } from './types';
 import type { Balance } from '@/data/types';
@@ -14,6 +14,8 @@ export interface World {
   gates: GateState[];
   enemies: EnemyState[];
   boss: EnemyState;
+  /** Where stream bodies carry on numbering from, so every id stays unique. */
+  nextId: number;
 }
 
 export function buildWorld(level: LevelDef, balance: Balance): World {
@@ -62,6 +64,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         active: false,
         alive: true,
         slowUntil: 0,
+        diedAt: 0,
       });
     }
   }
@@ -78,8 +81,9 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     active: false,
     alive: true,
     slowUntil: 0,
+    diedAt: 0,
     enraged: false,
   };
 
-  return { gates, enemies, boss };
+  return { gates, enemies, boss, nextId: nextId + 1 };
 }

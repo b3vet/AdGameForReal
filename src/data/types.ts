@@ -107,6 +107,16 @@ export interface Balance {
   };
   enemies: {
     activationDistance: number;
+    /**
+     * Ceiling on live bodies on the road at once (D29). A stream that would
+     * push past it pauses spawning until the squad has thinned the river.
+     */
+    maxLive: number;
+    /**
+     * How long a dead body stays in `state.enemies` before it is compacted
+     * away, so render has time to play the death it was told about.
+     */
+    corpseSeconds: number;
     contactDistance: number;
     /**
      * Smallest share of a block's units a contact can cost, however narrow the
@@ -127,6 +137,62 @@ export interface Balance {
     rowSpacing: number;
     /** The boss stands at `arenaZ + bossOffset`. */
     bossOffset: number;
+  };
+  /** Enemy streams (D29): the river of single bodies that walks down a lane. */
+  streams: {
+    /**
+     * Metres in front of the squad a stream body appears. The squad runs at
+     * `squad.runSpeed`, so a fixed spawn point would be behind it in seconds;
+     * the spawner keeps pace instead and the stream reads as a river coming on.
+     * Set to `projectiles.range` so a body is shootable from the moment it
+     * exists, which is what makes the pressure window well defined.
+     */
+    spawnAhead: number;
+    speed: number;
+    /** Half-width of one body: a stream is bodies, not a block-wide wall. */
+    footprint: number;
+    /**
+     * A body that got past the squad is retired this far behind it — much
+     * sooner than a block, because every body still on the road is one more
+     * entry the lane sweeps walk past.
+     */
+    despawnBehind: number;
+    /**
+     * Widens a body's band for *targeting only* — not for contact, not for
+     * splash. A body is a person, half a metre wide, standing somewhere in a
+     * two-metre lane; without this, most of a squad's shots fly straight past
+     * one and the lane's real damage is a fraction of what the pressure model
+     * says it is. The wizards are aiming.
+     */
+    aimAssist: number;
+    /** Lateral scatter around the lane centre, in metres, each way. */
+    jitter: number;
+    /** Bounds on the HP the generator may give one body. */
+    hpPerEnemy: { min: number; max: number };
+    count: { min: number; max: number };
+    duration: { min: number; max: number };
+    /**
+     * Share of the squad's fire that lands in one lane when the crowd stands on
+     * it. The squad is wider than a lane, so a single stream never takes the
+     * whole output; the pressure model divides by this.
+     */
+    laneShare: number;
+    /** The same for a horde row, where the crowd is split between two lanes. */
+    hordeLaneShare: number;
+    /** Bodies the average body has inside a splash, for `expectedDps`. */
+    neighbours: number;
+    /** Fire-rate bonus the pressure model assumes a player has picked up. */
+    rateBonus: number;
+    /**
+     * The one empirical dial on the model: what the measured greedy leak rates
+     * say the squad really lands, over what the model says it should. Every
+     * other term in `pressure.ts` is derived; this absorbs the rest.
+     */
+    dpsTrim: number;
+    /** No stream or block may stand within this many metres of a gate row. */
+    gateClearance: number;
+    /** How far a threat row may be nudged off the row grid, each way. */
+    zJitter: number;
   };
   gates: {
     /** Absolute ceilings, whatever a gate's own cap works out to. */
@@ -179,6 +245,12 @@ export interface Balance {
     /** Chance a gate row has three gates rather than two. */
     thirdGateChance: number;
     /**
+     * Below this level every gate row fills all three lanes. Level 1 has no
+     * curses, so an empty lane is the only way one of its rows can give a
+     * player nothing, and a player still learning to steer finds it (D31).
+     */
+    fullGateRowsFromLevel: number;
+    /**
      * Expected share of its own printed value a well-shot `add` gate gains on
      * the way in. The generator divides it out of the value it prints, so the
      * curve lands on `peakTarget` for a player who shoots rather than one who
@@ -218,6 +290,8 @@ export interface Balance {
     /** ...and from that level on. */
     weaponGatesLate: number;
     weaponGateManyFromLevel: number;
+    /** Lanes between the two streams of a horde row: 2 means opposite sides. */
+    hordeLaneGap: number;
   };
   bots: {
     /** How far ahead a scripted player looks for a block about to reach it. */
@@ -230,6 +304,10 @@ export interface Balance {
     weaponWorth: number;
     /** What a slow is worth as a share of DPS, since it buys time not damage. */
     weaponSlowWorth: number;
+    /** How far ahead greedy looks for the stream lane it should stand in. */
+    streamLookahead: number;
+    /** Most bodies a staff valuation reads, so a stream cannot swamp it. */
+    weaponLayoutMax: number;
   };
   input: {
     /** Road meters travelled for one full screen width of drag. */
@@ -273,7 +351,13 @@ export interface LevelGenConfig {
   peakTarget: number;
   /** Multiplier on generated enemy block sizes. */
   hpScale: number;
-  boss: { hp: number };
+  /**
+   * `bite` scales what a stomp and boss contact take (D31): levels 1 to 3 are
+   * generous, and the Milestone 2 attrition returns at full strength from
+   * level 6. The fight's *length* stays in the 18 to 32 second band on every
+   * level; only what it costs changes.
+   */
+  boss: { hp: number; bite: number };
   gateValues: {
     mul: ValueRange;
     add: ValueRange;
@@ -281,9 +365,26 @@ export interface LevelGenConfig {
     sub: ValueRange;
     fireRate: ValueRange;
   };
-  rowWeights: {
-    gate: number;
-    enemy: number;
-    mixed: number;
-  };
+  /** How many of this level's rows carry gates (the plan's 8 to 12). */
+  gateRows: number;
+  /** How many of those gate rows also stand a block short of the gate. */
+  mixedRows: number;
+  /** Threat rows that pour two streams at once. */
+  hordeRows: number;
+  /** Threat rows that stand a brute block instead of a stream. */
+  bruteRows: number;
+  /**
+   * The pressure a stream on this level is built to: `count * hp` over
+   * `expected squad dps * window` (docs/09-milestone-3-plan.md, "Stream
+   * pressure"). 0.45 to 0.6 on levels 1 to 3, 0.65 to 0.8 on 4 and 5, 0.85 to
+   * 0.95 from 6.
+   */
+  streamPressure: number;
+  /**
+   * Bodies one stream sends per unit of the squad the row is built for. It is
+   * the density dial — and it is also what a leak costs, since a leak takes one
+   * soldier per body: at 1.0 a three percent leak costs three percent of the
+   * squad at any size.
+   */
+  streamDensity: number;
 }

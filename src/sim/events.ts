@@ -7,7 +7,7 @@
  * longer must be copied, since the next `tick` overwrites these objects.
  */
 
-import type { EnemyKind, GateKind, RunStatus, SimEvent, WeaponId } from './types';
+import type { EnemyKind, GateKind, Lane, RunStatus, SimEvent, UnitLossReason, WeaponId } from './types';
 
 type EventOf<T extends SimEvent['type']> = Extract<SimEvent, { type: T }>;
 
@@ -123,6 +123,28 @@ export class EventBuffer {
     z: 0,
   }));
 
+  private readonly leaks = new Pool<EventOf<'enemyLeaked'>>(() => ({
+    type: 'enemyLeaked',
+    enemyId: 0,
+    streamId: 0,
+    x: 0,
+    z: 0,
+  }));
+
+  private readonly streamStarts = new Pool<EventOf<'streamStarted'>>(() => ({
+    type: 'streamStarted',
+    streamId: 0,
+    lane: 0,
+    count: 0,
+  }));
+
+  private readonly streamClears = new Pool<EventOf<'streamCleared'>>(() => ({
+    type: 'streamCleared',
+    streamId: 0,
+    lane: 0,
+    leaked: 0,
+  }));
+
   private readonly gained = new Pool<EventOf<'unitsGained'>>(() => ({
     type: 'unitsGained',
     amount: 0,
@@ -171,6 +193,9 @@ export class EventBuffer {
     this.activations.reset();
     this.enemyHits.reset();
     this.kills.reset();
+    this.leaks.reset();
+    this.streamStarts.reset();
+    this.streamClears.reset();
     this.gained.reset();
     this.lost.reset();
     this.bossActivations.reset();
@@ -277,12 +302,42 @@ export class EventBuffer {
     this.list.push(e);
   }
 
-  enemyKilled(enemyId: number, kind: EnemyKind, x: number, z: number): void {
+  enemyKilled(enemyId: number, kind: EnemyKind, x: number, z: number, streamId?: number): void {
     const e = this.kills.take();
     e.enemyId = enemyId;
     e.kind = kind;
     e.x = x;
     e.z = z;
+    // Deleted rather than set to `undefined`: the pool re-uses this object, and
+    // `exactOptionalPropertyTypes` means an absent field is the only way to say
+    // "this body was not part of a stream".
+    if (streamId === undefined) delete e.streamId;
+    else e.streamId = streamId;
+    this.list.push(e);
+  }
+
+  enemyLeaked(enemyId: number, streamId: number, x: number, z: number): void {
+    const e = this.leaks.take();
+    e.enemyId = enemyId;
+    e.streamId = streamId;
+    e.x = x;
+    e.z = z;
+    this.list.push(e);
+  }
+
+  streamStarted(streamId: number, lane: Lane, count: number): void {
+    const e = this.streamStarts.take();
+    e.streamId = streamId;
+    e.lane = lane;
+    e.count = count;
+    this.list.push(e);
+  }
+
+  streamCleared(streamId: number, lane: Lane, leaked: number): void {
+    const e = this.streamClears.take();
+    e.streamId = streamId;
+    e.lane = lane;
+    e.leaked = leaked;
     this.list.push(e);
   }
 
@@ -292,7 +347,7 @@ export class EventBuffer {
     this.list.push(e);
   }
 
-  unitsLost(amount: number, reason: 'contact' | 'gate' | 'stomp'): void {
+  unitsLost(amount: number, reason: UnitLossReason): void {
     const e = this.lost.take();
     e.amount = amount;
     e.reason = reason;

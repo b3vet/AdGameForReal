@@ -105,3 +105,46 @@ Tech lead reading:
   typecheck, lint, 188 tests, build, smoke, hosted build all pass.
 - Follow-up sent to the same agent from the phone baseline: shader warm-up
   at level load, ladder retune, allocation audit.
+
+## 2026-09-11 — Phase B1: enemy streams, 18 m rows, pressure bands (verified and committed)
+
+- Streams spawn 34 m ahead of the squad (projectile range) when the squad
+  reaches the row's z, so the plan's window is exact:
+  `duration + spawnAhead / (enemySpeed + runSpeed)`.
+- Per-body HP is 5 to 8 rather than the plan's 1 to 3: at 1 HP a pressure
+  budget is about 14 bodies per soldier and a 3 percent leak would cost 40
+  percent of a small squad. Body count is `streamDensity × expected squad`
+  (0.8 to 1.3 per soldier) and HP divides the pressure budget across them.
+  HP is never shown; the stream shows its remaining count.
+- Three mechanisms were needed before pressure predicted anything: a
+  targeting-only aim assist of 0.8 m (a 0.4 m body in a 2 m lane was
+  otherwise missed by most shots), hitscan batch carry-over (a 300-shot
+  batch used to be absorbed by one body), and an empirical `dpsTrim` of
+  0.38 for fire spent on gates and the squad running under its curve.
+- Pre-existing bug since M2 fixed: projectile sweeps compared against
+  positions taken before targets moved, so a closing target could slip
+  through the seam between two sweeps (about one encounter in eight). The
+  target window now extends by the target's own step.
+- Horde lanes are neighbors so the squad can answer both from between
+  them; level 1 fills all three lanes on every gate row; `LevelDef.boss.bite`
+  scales stomp and contact per level, the one dial that moves survivor
+  share per band without touching the road. `levels.json` now declares
+  gate, mixed, horde and brute rows explicitly.
+- Curve: 16 to 19 rows with 8 to 12 gate rows, 6 to 8 streams per level,
+  pressure 0.45 (level 1) to 0.92 (level 9), leaks per stream 0.9 to 3.1
+  percent, survivor share 0.75 on levels 1 to 3, 0.41 to 0.68 from 4, boss
+  19 to 27 s, road 61 to 72 s.
+- Bots on ten seeds: greedy loses 4 of 100 runs (levels 6, 8, 9; clean on
+  the contract seeds 1 to 5), random clears level 1 on all ten seeds and
+  loses 8.7 of 10 overall, worst loses every level from 2.
+- Perf: 300 live bodies plus 300 units at 0.13 ms per tick; lanes compacted
+  and insertion-sorted once per step, splash and chain binary-search.
+- Contract changes for render, physics, audio and app: `RunState.streams`
+  is required; `state.enemies` holds stream bodies (`units: 1`) and is
+  compacted 1.1 s after death; events `enemyLeaked`, `streamStarted`,
+  `streamCleared`, `unitsLost` reason `leak`; `enemyActivated` fires per
+  body (about 20 per second, to be throttled by audio and physics);
+  `rowSpacing` 18. Tests 152 → 188.
+- Open: the render enemy pool and labels are sized for blocks, not 300
+  bodies (Phase B2); `dpsTrim` must be re-measured if Phase C changes how
+  fire splits between gates and streams.

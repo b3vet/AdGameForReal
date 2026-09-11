@@ -10,10 +10,11 @@
  * run is as reproducible as the sim it drives.
  */
 
-import { enemyFootprint } from './enemies';
+import { enemyFootprint, enemyHalfWidth } from './enemies';
 import { halfWidth } from './formation';
 import { countAfterGate } from './gates';
-import { FIRE_RATE_GATE_WORTH, laneCenter } from './level';
+import { laneCenter, laneOf } from './lanes';
+import { FIRE_RATE_GATE_WORTH } from './level';
 import { mulberry32 } from './rng';
 import type { EnemyState, GateState, Lane, RunState, WeaponId } from './types';
 import { blockGap, expectedDps, weaponOf } from './weapons';
@@ -53,8 +54,18 @@ function fillLayout(state: RunState): void {
   const from = state.squad.z;
   const rows = balance.bots.weaponLookaheadRows + 1;
   const to = from + rows * balance.level.rowSpacing;
+  // A stream is hundreds of bodies and a staff is valued against a layout, not a
+  // census: reading the whole river would swamp the blocks the splash and chain
+  // numbers are also about. Every block counts, and the river is sampled — a
+  // couple of dozen bodies already says "this lane is packed".
+  let sampled = 0;
+  const cap = balance.bots.weaponLayoutMax;
   for (const enemy of state.enemies) {
     if (!enemy.alive || enemy.z < from || enemy.z > to) continue;
+    if (enemy.streamId !== undefined) {
+      if (sampled >= cap) continue;
+      sampled++;
+    }
     layout.push(enemy);
   }
 }
@@ -143,15 +154,84 @@ function pickLane(state: RunState, rowIndex: number, sign: number): Lane {
   return bestLane;
 }
 
-/** True when a block already on its way will run into the squad where it stands. */
+/** Live stream bodies in front of the squad, per lane. Re-used, never re-made. */
+const laneBodies = [0, 0, 0];
+
+/**
+ * Candidate places to stand: the three lane centres and the two gaps between
+ * them, so a horde pouring down two neighbouring lanes can be answered by
+ * standing between them rather than by giving one of them up.
+ */
+const STANDS: readonly number[] = [-2, -1, 0, 1, 2];
+
+/**
+ * Where the squad should stand when there is no gate to go for: the spot its
+ * own width covers the most live stream bodies from (plan, "Enemy streams
+ * (sim)": greedy centres on the densest live stream lane).
+ *
+ * A stream left alone is one lost soldier per body, so coverage is the whole
+ * game between rows. Returns `null` when nothing is streaming, and the bot
+ * falls back to its gate logic.
+ */
+function bestStreamStand(state: RunState): number | null {
+  if (state.streams.length === 0) return null;
+  const squadZ = state.squad.z;
+  const reach = balance.bots.streamLookahead;
+  laneBodies[0] = 0;
+  laneBodies[1] = 0;
+  laneBodies[2] = 0;
+  let seen = 0;
+
+  for (const enemy of state.enemies) {
+    if (!enemy.alive || enemy.streamId === undefined) continue;
+    const gap = enemy.z - squadZ;
+    if (gap < 0 || gap > reach) continue;
+    const slot = laneOf(enemy.x, balance.road.laneWidth) + 1;
+    laneBodies[slot] = (laneBodies[slot] ?? 0) + 1;
+    seen++;
+  }
+  if (seen === 0) return null;
+
+  // How far off its centre the crowd can still put a shot into a body: its own
+  // half-width plus what the body is worth to a shot.
+  const cover =
+    halfWidth(state.squad.count) + balance.streams.footprint + balance.streams.aimAssist;
+
+  let best = state.squad.x;
+  let bestScore = -1;
+  let bestDistance = Infinity;
+  for (const stand of STANDS) {
+    let score = 0;
+    for (const lane of LANES) {
+      if (Math.abs(laneCenter(lane, balance.road.laneWidth) - stand) <= cover) {
+        score += laneBodies[lane + 1] ?? 0;
+      }
+    }
+    const distance = Math.abs(stand - state.squad.x);
+    if (score > bestScore || (score === bestScore && distance < bestDistance)) {
+      best = stand;
+      bestScore = score;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/**
+ * True when a block already on its way will run into a squad standing at `x`.
+ *
+ * Stream bodies are not blocks and are deliberately not counted: one costs a
+ * single soldier, and the squad is standing where it is precisely in order to
+ * shoot the lane it came down. A block costs a share of its whole unit count.
+ */
 function blockedByEnemy(state: RunState): boolean {
   const squad = state.squad;
   const squadHalf = halfWidth(squad.count);
   for (const enemy of state.enemies) {
-    if (!enemy.alive || !enemy.active) continue;
+    if (!enemy.alive || !enemy.active || enemy.streamId !== undefined) continue;
     const gap = enemy.z - squad.z;
     if (gap < 0 || gap > balance.bots.threatLookahead) continue;
-    const half = enemyFootprint(enemy.kind, enemy.units, balance);
+    const half = enemyHalfWidth(enemy, balance);
     if (Math.abs(enemy.x - squad.x) < half + squadHalf) return true;
   }
   return false;
@@ -179,12 +259,19 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
   const sign = kind === 'greedy' ? 1 : -1;
   return function decide(state: RunState): number {
     const row = nextGateRow(state);
+    const committed = row >= 0 && distanceToRow(state, row) <= balance.bots.gateCommitDistance;
+
+    if (kind === 'greedy' && !committed) {
+      // Between rows the squad's job is the river, not the next panel.
+      const stand = bestStreamStand(state);
+      if (stand !== null) return stand;
+      // Nothing streaming: greedy would rather stand and shoot a block than
+      // dodge it, and only swerves once the row is close.
+      if (blockedByEnemy(state)) return state.squad.x;
+    }
+
     // No gates left: hold station and shoot whatever is in front.
     if (row < 0) return state.squad.x;
-    // Between rows greedy would rather stand and shoot a block than dodge it;
-    // close to a row it commits to the lane it wants instead.
-    const committed = distanceToRow(state, row) <= balance.bots.gateCommitDistance;
-    if (kind === 'greedy' && !committed && blockedByEnemy(state)) return state.squad.x;
     return laneCenter(pickLane(state, row, sign), balance.road.laneWidth);
   };
 }

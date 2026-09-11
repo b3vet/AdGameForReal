@@ -26,6 +26,14 @@ export interface PlayResult {
   countAtBoss: number;
   /** Boss hp still standing when the run ended. */
   bossHpLeft: number;
+  /** Units lost to stream bodies walking into the squad. */
+  leaked: number;
+  /** Mean `leaked / count` over the streams that actually started. */
+  leakShare: number;
+  /** Streams that started during the run. */
+  streamsSeen: number;
+  /** Worst single stream's `leaked / count`. */
+  worstLeakShare: number;
 }
 
 export function playLevel(levelIndex: number, seed: number, kind: BotKind): PlayResult {
@@ -48,6 +56,19 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
   }
 
   const state = run.state;
+  let leaked = 0;
+  let shareTotal = 0;
+  let worst = 0;
+  let seen = 0;
+  for (const stream of state.streams) {
+    if (!stream.started) continue;
+    seen++;
+    leaked += stream.leaked;
+    const share = stream.leaked / Math.max(1, stream.count);
+    shareTotal += share;
+    if (share > worst) worst = share;
+  }
+
   return {
     status: state.status === 'won' ? 'won' : 'lost',
     survivors: state.survivors,
@@ -56,6 +77,10 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
     bossSeconds: bossStart < 0 ? 0 : (steps - bossStart) * DT,
     countAtBoss,
     bossHpLeft: state.boss?.hp ?? 0,
+    leaked,
+    leakShare: seen > 0 ? shareTotal / seen : 0,
+    streamsSeen: seen,
+    worstLeakShare: worst,
   };
 }
 

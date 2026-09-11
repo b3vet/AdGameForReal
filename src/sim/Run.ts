@@ -16,11 +16,21 @@ import { EventBuffer } from './events';
 import { Firing } from './firing';
 import { halfWidth } from './formation';
 import { clampCount, countAfterGate } from './gates';
-import { laneOf } from './level';
+import { laneOf } from './lanes';
 import type { LevelDef } from './level';
 import { buildWorld } from './spawn';
+import { Streams } from './streams';
 import { TargetList } from './targeting';
-import type { GateState, RunState, RunStatus, SimEvent, SquadState, WeaponId } from './types';
+import type {
+  EnemyState,
+  GateState,
+  RunState,
+  RunStatus,
+  SimEvent,
+  SquadState,
+  UnitLossReason,
+  WeaponId,
+} from './types';
 import { startWeapon, weaponDef, weaponOf } from './weapons';
 import type { Balance } from '@/data/types';
 
@@ -37,6 +47,7 @@ export class Run {
   private readonly events = new EventBuffer();
   private readonly targets = new TargetList();
   private readonly firing: Firing;
+  private readonly streams: Streams;
   private readonly boss = new BossController();
 
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
@@ -44,8 +55,13 @@ export class Run {
   private nextRow = 0;
 
   /** Bound once, not per frame: `contact.ts` calls back into the loss check. */
-  private readonly hitSquad = (amount: number, reason: 'contact'): void => {
+  private readonly hitSquad = (amount: number, reason: UnitLossReason): void => {
     this.removeUnits(amount, reason);
+  };
+
+  /** The same, for the stream a leaked body belonged to. */
+  private readonly onLeak = (enemy: EnemyState): void => {
+    this.streams.noteLeaked(enemy);
   };
 
   constructor(level: LevelDef, balance: Balance) {
@@ -73,6 +89,7 @@ export class Run {
       squad,
       gates: world.gates,
       enemies: world.enemies,
+      streams: [],
       projectiles: [],
       boss: world.boss,
       peakCount: level.startCount,
@@ -80,7 +97,14 @@ export class Run {
       arenaZ: level.arenaZ,
     };
 
-    this.firing = new Firing(balance, this.events, this.targets, () => {
+    this.streams = new Streams(balance, this.events, this.targets, level.seed, world.nextId);
+    for (const row of level.rows) {
+      for (const def of row.streams ?? []) this.runState.streams.push(this.streams.add(def, row.z));
+    }
+    this.streams.countStanding(world.enemies);
+    this.targets.build(this.runState, balance);
+
+    this.firing = new Firing(balance, this.events, this.targets, this.streams, () => {
       this.finish('won');
     });
   }
@@ -163,14 +187,20 @@ export class Run {
     this.applyCrossedRows();
     if (state.status !== 'running') return;
 
-    this.targets.rebuild(state, this.balance);
+    // Spawn before the lists are refreshed, so a body born this step is sorted
+    // into its lane and can be shot in the same step it appears in.
+    this.streams.spawn(state, dt);
+    this.targets.update(state, this.balance, dt);
     this.firing.beginStep(state);
     this.firing.update(state, dt);
     if (state.status !== 'running') return;
     this.firing.fire(state, dt);
     if (state.status !== 'running') return;
-    advanceEnemies(state, this.balance, this.events, dt, this.hitSquad);
+    advanceEnemies(state, this.balance, this.events, dt, this.hitSquad, this.onLeak);
     if (state.status !== 'running') return;
+    // After everything has moved: heads, counts, the `streamCleared` edge and
+    // the corpse sweep.
+    this.streams.settle(state);
     this.updateBoss(dt);
     if (state.status !== 'running') return;
 
@@ -245,7 +275,14 @@ export class Run {
     const boss = state.boss;
     if (boss === null || !boss.alive) return;
 
-    const step = this.boss.update(boss, state.squad, state.arenaZ, this.balance, dt);
+    const step = this.boss.update(
+      boss,
+      state.squad,
+      state.arenaZ,
+      this.balance,
+      dt,
+      this.level.boss.bite ?? 1,
+    );
     if (step.activated) this.events.bossActivated(boss.id);
     if (step.enraged) this.events.bossEnraged(boss.id);
     if (step.contactKills > 0) {
@@ -258,7 +295,7 @@ export class Run {
     }
   }
 
-  private removeUnits(amount: number, reason: 'contact' | 'gate' | 'stomp'): void {
+  private removeUnits(amount: number, reason: UnitLossReason): void {
     const squad = this.runState.squad;
     const before = squad.count;
     const after = clampCount(before - amount, this.balance);
