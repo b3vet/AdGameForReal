@@ -22,5 +22,6 @@ Index:
 | `05-milestone-2-plan-draft.md` | Milestone 2 draft plan v1, awaiting playtest feedback; final plan will be 06 |
 | `06-milestone-2-plan.md` | Milestone 2 plan, approved: characters, physics, weapons, audio, biome, difficulty retune |
 | `07-milestone-2-log.md` | Milestone 2 process log (append-only) |
+| `08-milestone-3-plan-draft.md` | Milestone 3 draft plan v1: bright casual look, magical projectiles, enemy streams, gate spacing, fonts, performance; awaiting answers |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |

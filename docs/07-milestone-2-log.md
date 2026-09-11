@@ -273,3 +273,21 @@ Carried forward: the six deferred low findings above, the plan's rung for
 brute ragdolls using the minion model, debris not colliding with live
 enemies, and gate growth worth about 4 to 5 units at any squad size (a feel
 question for the product owner).
+
+## 2026-09-11 — Post-close: product owner playtest of the reviewed build
+
+Feedback on the Milestone 2 build (iPhone 17 Pro Max):
+1. Too dark; animations read as realistic; wants brighter, more casual.
+2. From behind and above the squad reads as hats; the 3D models are wasted.
+3. Shots still look like bullets, not magic.
+4. Enemies on the road are too weak; wants hundreds streaming down lanes
+   that the squad eliminates as they come.
+5. Gates are too close together; more space to fight enemies.
+6. First levels can be easier; collecting more soldiers may be enough.
+7. The boss health text blocks the boss model.
+8. Remove unnecessary UI text; the font is generic; wants something magical.
+9. Not smooth enough on the phone; optimization needed before more models.
+
+Tech lead response: Milestone 3 is a look, feel, and performance milestone
+and comes before the Academy or the device wrapper. Draft plan in
+`08-milestone-3-plan-draft.md`.
