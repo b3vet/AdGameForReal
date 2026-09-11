@@ -149,6 +149,7 @@ const state: RunState = {
   squad: { count: 60, x: 0, targetX: 0, z: 0, fireRate: 2, damage: 1, fireRateBonus: 0 },
   gates,
   enemies: [],
+  streams: [],
   projectiles: [],
   boss: null,
   peakCount: 60,

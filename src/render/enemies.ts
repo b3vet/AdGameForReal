@@ -14,12 +14,10 @@
  */
 
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
-import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
-import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
 import type { Crowd } from './characters';
-import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
+import { labelPixels, type NumberLabels } from './labels';
 import { loadCrowd } from './models';
 import { RingPool } from './rings';
 import {
@@ -31,6 +29,7 @@ import {
   ENEMY_CLUSTER_DEPTH,
   ENEMY_COLOR,
   ENEMY_DRAW_RANGE,
+  ENEMY_LABEL_COLOR,
   ENEMY_LABEL_MIN,
   ENEMY_LABEL_SIZE,
   ENEMY_MAX_INSTANCES,
@@ -52,8 +51,8 @@ const LABEL_HEIGHT = 0.95;
 const DEATH_INSTANCES = 8;
 
 interface EnemySlot {
-  anchor: TransformNode;
-  label: TextBlock;
+  /** This slot's label id in the shared atlas; see `src/render/labels.ts`. */
+  label: number;
   enemyId: number;
   kind: EnemyKind;
   x: number;
@@ -65,14 +64,15 @@ interface EnemySlot {
   slow: number;
   footprint: number;
   seen: number;
-  /** Last hp printed, so the label is only re-set when the number changes. */
+  /** Last hp printed, so the string is only rebuilt when the number changes. */
   shownHp: number;
-  /** Last font size applied; see `scaleLabel`. */
-  shownSize: number;
+  /** The string that number produced, handed back to the atlas every frame. */
+  shownText: string;
 }
 
 export class EnemyView {
   private readonly scene: Scene;
+  private readonly labels: NumberLabels;
   private readonly slots: EnemySlot[] = [];
   private readonly byEnemyId = new Map<number, EnemySlot>();
   private readonly rings: RingPool;
@@ -85,8 +85,9 @@ export class EnemyView {
   private bruteDeath = 1;
   private frame = 0;
 
-  constructor(scene: Scene, labels: LabelLayer) {
+  constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
+    this.labels = labels;
     this.rings = new RingPool(scene, 'frostRing', SLOW_RING_COLOR, POOL.slowRings, {
       thickness: 0.1,
       alpha: 0.7,
@@ -95,12 +96,8 @@ export class EnemyView {
     });
 
     for (let i = 0; i < POOL.enemies; i++) {
-      const anchor = new TransformNode(`enemy-${String(i)}`, scene);
-      const label = labels.create({ fontSize: ENEMY_LABEL_SIZE, color: '#ffe9e6', outline: 6 });
-      linkLabel(label, anchor, 0);
       this.slots.push({
-        anchor,
-        label,
+        label: labels.claim(),
         enemyId: -1,
         kind: 'grunt',
         x: 0,
@@ -111,7 +108,7 @@ export class EnemyView {
         footprint: 1,
         seen: 0,
         shownHp: Number.NaN,
-        shownSize: Number.NaN,
+        shownText: '',
       });
     }
   }
@@ -156,7 +153,6 @@ export class EnemyView {
   onKilled(enemyId: number): void {
     const slot = this.byEnemyId.get(enemyId);
     if (slot === undefined || slot.dying >= 0) return;
-    hideLabel(slot.label);
     // Physics is throwing ragdolls for this block: two deaths for one kill
     // would read as double vision.
     if (this.physicsQuality > 0) this.release(slot);
@@ -246,7 +242,6 @@ export class EnemyView {
   }
 
   dispose(): void {
-    for (const slot of this.slots) slot.anchor.dispose();
     this.slots.length = 0;
     this.byEnemyId.clear();
     this.rings.dispose();
@@ -269,7 +264,7 @@ export class EnemyView {
     slot.dying = -1;
     slot.slow = 0;
     slot.shownHp = Number.NaN;
-    slot.shownSize = Number.NaN;
+    slot.shownText = '';
 
     this.byEnemyId.set(enemy.id, slot);
     return slot;
@@ -290,7 +285,6 @@ export class EnemyView {
     slot.z = enemy.z;
     slot.units = Math.max(1, enemy.units);
     slot.footprint = enemyFootprint(enemy.kind, slot.units, balance);
-    slot.anchor.position.set(enemy.x, LABEL_HEIGHT, enemy.z);
 
     // Two sources for the same fact, because both can be missing: the sim's
     // deadline is authoritative when it is there, and the event's countdown
@@ -310,20 +304,21 @@ export class EnemyView {
     const ahead = enemy.z - squadZ;
     const readable =
       ahead < LABEL_RANGE && ahead > -LABEL_BEHIND && !gateCrowdsLabel(gates, enemy, eye);
-    slot.label.isVisible = readable;
     if (!readable) return;
 
     const hp = Math.max(0, Math.round(enemy.hp));
     if (hp !== slot.shownHp) {
       slot.shownHp = hp;
-      slot.label.text = String(hp);
+      slot.shownText = String(hp);
     }
-    slot.shownSize = scaleLabel(
+    this.labels.set(
       slot.label,
-      ENEMY_LABEL_SIZE,
-      ENEMY_LABEL_MIN,
-      ahead,
-      slot.shownSize,
+      slot.shownText,
+      enemy.x,
+      LABEL_HEIGHT,
+      enemy.z,
+      ENEMY_LABEL_COLOR,
+      labelPixels(ENEMY_LABEL_SIZE, ENEMY_LABEL_MIN, ahead),
     );
   }
 
@@ -333,8 +328,7 @@ export class EnemyView {
     slot.dying = -1;
     slot.slow = 0;
     slot.shownHp = Number.NaN;
-    slot.shownSize = Number.NaN;
-    hideLabel(slot.label);
+    slot.shownText = '';
   }
 }
 

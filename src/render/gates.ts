@@ -12,9 +12,8 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
-import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
-import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
+import { labelPixels, type NumberLabels } from './labels';
 import { loadPropMeshes, meshExtent } from './models';
 import {
   GATE_BASE_ALPHA,
@@ -22,6 +21,7 @@ import {
   GATE_DRAW_RANGE,
   GATE_EXIT_DURATION,
   GATE_HEIGHT,
+  GATE_LABEL_COLOR,
   GATE_LABEL_MIN,
   GATE_LABEL_RANGE,
   GATE_LABEL_SIZE,
@@ -68,18 +68,22 @@ const STAFF_NAMES: Record<WeaponId, string> = {
 /** Metres behind the squad at which an exiting panel is dropped outright. */
 const EXIT_CUTOFF_BEHIND = 2;
 
+/** How far the number floats in front of the panel it is printed on. */
+const GATE_LABEL_LIFT = 0.1;
+
 interface GateSlot {
   panel: Mesh;
   material: StandardMaterial;
-  label: TextBlock;
+  /** This slot's label id in the shared atlas; see `src/render/labels.ts`. */
+  label: number;
   gateId: number;
   rowIndex: number;
   /** Last kind painted. A shot-down `sub` gate flips to `add` and must re-tint. */
   kind: GateKind;
   /** Last value printed. Re-building the string every frame allocates. */
   shownValue: number;
-  /** Last font size applied; see `scaleLabel`. */
-  shownSize: number;
+  /** The string that value produced, handed back to the atlas every frame. */
+  shownText: string;
   /** Seconds left on the hit flash. */
   pulse: number;
   exit: Exit;
@@ -94,6 +98,7 @@ export class GateView {
   private readonly slots: GateSlot[] = [];
   private readonly byGateId = new Map<number, GateSlot>();
   private readonly scene: Scene;
+  private readonly labels: NumberLabels;
   /** One floating staff per weapon, shown above the nearest gate offering it. */
   private readonly staffs = new Map<WeaponId, Mesh>();
   /** Rebuilt every frame: which gate, if any, each staff is hovering over. */
@@ -101,8 +106,9 @@ export class GateView {
   private frame = 0;
   private spin = 0;
 
-  constructor(scene: Scene, labels: LabelLayer) {
+  constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
+    this.labels = labels;
     for (let i = 0; i < POOL.gates; i++) {
       const material = new StandardMaterial(`gateMat-${String(i)}`, scene);
       material.specularColor = Color3.Black();
@@ -118,18 +124,15 @@ export class GateView {
       panel.isPickable = false;
       panel.setEnabled(false);
 
-      const label = labels.create({ fontSize: GATE_LABEL_SIZE, color: '#ffffff', outline: 6 });
-      linkLabel(label, panel, 0);
-
       this.slots.push({
         panel,
         material,
-        label,
+        label: labels.claim(),
         gateId: -1,
         rowIndex: -1,
         kind: 'add',
         shownValue: Number.NaN,
-        shownSize: Number.NaN,
+        shownText: '',
         pulse: 0,
         exit: 'none',
         exitAge: 0,
@@ -271,7 +274,7 @@ export class GateView {
     slot.gateId = gate.id;
     slot.rowIndex = gate.rowIndex;
     slot.shownValue = Number.NaN;
-    slot.shownSize = Number.NaN;
+    slot.shownText = '';
     slot.pulse = 0;
     slot.exit = 'none';
     slot.exitAge = 0;
@@ -308,10 +311,7 @@ export class GateView {
       slot.drawn = drawn;
       slot.panel.setEnabled(drawn);
     }
-    if (!drawn) {
-      hideLabel(slot.label);
-      return;
-    }
+    if (!drawn) return;
 
     // Shooting a `sub` gate to zero turns it into an `add` gate: the colour has
     // to follow, or the player reads a red panel offering a bonus.
@@ -328,24 +328,31 @@ export class GateView {
     // metres out the three lanes are close enough on screen that side labels
     // overlap the middle one, and the nearest row has to stay fully readable.
     const range = gate.lane === 0 ? GATE_LABEL_RANGE : SIDE_GATE_LABEL_RANGE;
-    const readable = ahead < range && ahead > -LABEL_BEHIND;
-    slot.label.isVisible = readable;
-    if (readable) {
-      // Only when the number actually moved: building the string every frame
-      // allocates, and the GUI re-measures the block on every `text` write.
-      if (gate.value !== slot.shownValue) {
-        slot.shownValue = gate.value;
-        slot.label.text = gateText(gate.kind, gate.value, gate.weaponId);
-      }
-      const word = gate.kind === 'weapon';
-      slot.shownSize = scaleLabel(
-        slot.label,
+    if (ahead >= range || ahead <= -LABEL_BEHIND) return;
+
+    // Only when the number actually moved: building the string every frame
+    // allocates, and the atlas is handed the cached one.
+    if (gate.value !== slot.shownValue) {
+      slot.shownValue = gate.value;
+      slot.shownText = gateText(gate.kind, gate.value, gate.weaponId);
+    }
+    const word = gate.kind === 'weapon';
+    this.labels.set(
+      slot.label,
+      slot.shownText,
+      slot.panel.position.x,
+      GATE_CENTER_Y,
+      // A hair in front of the panel's own face, toward the camera: the label
+      // does not test depth, but keeping it off the plane stops the two from
+      // z-fighting if that ever changes.
+      slot.panel.position.z - GATE_LABEL_LIFT,
+      GATE_LABEL_COLOR,
+      labelPixels(
         word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
         word ? GATE_WORD_MIN : GATE_LABEL_MIN,
         ahead,
-        slot.shownSize,
-      );
-    }
+      ),
+    );
   }
 
   private tint(slot: GateSlot, kind: GateKind): void {
@@ -361,7 +368,6 @@ export class GateView {
     if (slot.exit !== 'none' || exit === 'none') return;
     slot.exit = exit;
     slot.exitAge = 0;
-    hideLabel(slot.label);
   }
 
   private advanceExit(slot: GateSlot, dt: number, squadZ: number): void {
@@ -387,9 +393,9 @@ export class GateView {
     slot.exitAge = 0;
     slot.pulse = 0;
     slot.drawn = false;
+    slot.shownText = '';
     slot.panel.setEnabled(false);
     slot.panel.scaling.setAll(1);
-    hideLabel(slot.label);
   }
 }
 

@@ -84,3 +84,24 @@ Tech lead reading:
   boss reactions, staff swirls), since the product owner wants it.
 - Target restated for re-measurement: level 8 minimum above 50 fps, rung
   stays at 0 for a full level, render median under 4 ms.
+
+## 2026-09-11 — Phase A: digit atlas, engine flags, glow off (verified and committed)
+
+- Number labels are one thin-instanced quad mesh reading a 512×450 glyph
+  sheet (27 glyphs: digits, `+ - x % .`, the letters of Ember, Storm, Frost,
+  Staff) rasterized once from Cinzel with an outline. Immediate-mode API:
+  `claim()` at init, `set(id, text, x, y, z, color, scale)` per frame,
+  `commit()`. Budget 600 glyphs. The fullscreen GUI texture and the
+  `@babylonjs/gui` package are gone (dependency removal left for the tech
+  lead); the hosted build drops the GUI CDN script.
+- `preserveDrawingBuffer` off except under `?screenshot=1` (smoke URLs
+  carry it); MSAA off at effective pixel ratio 1.5 and above; glow layer no
+  longer constructed, bolts and impacts additive with a brightness boost;
+  pointer-move picking off; road and prop materials and matrices frozen.
+- Stress under SwiftShader, three 30 s runs: render median 8.8 → 6.5 ms,
+  draw calls 37 → 26. Game peaks 37 / 36 / 39 (were 44 / 46 / 47). Boss
+  number now sits above the demon's horns.
+- Verified in the shared tree with the sim phase's in-flight streams:
+  typecheck, lint, 188 tests, build, smoke, hosted build all pass.
+- Follow-up sent to the same agent from the phone baseline: shader warm-up
+  at level load, ladder retune, allocation audit.

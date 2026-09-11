@@ -159,6 +159,15 @@ export const BLOCK_LABEL_CLEARANCE_FRONT = 0.15;
  */
 export const BLOCK_LABEL_LANE_CLEARANCE = 1.2;
 
+/**
+ * Label ink. The digit atlas paints its glyphs white with a near-black outline
+ * and the shader multiplies by these, so a tint only ever darkens the ink and
+ * the outline stays the outline (`src/render/labels.ts`).
+ */
+export const GATE_LABEL_COLOR = new Color3(1, 1, 1);
+export const ENEMY_LABEL_COLOR = new Color3(1, 0.914, 0.902);
+export const BOSS_LABEL_COLOR = new Color3(1, 0.851, 0.824);
+
 /** Full size, and the floor a shrinking distant label is clamped to. */
 export const GATE_LABEL_SIZE = 34;
 export const GATE_LABEL_MIN = 13;
@@ -171,8 +180,14 @@ export const GATE_WORD_SIZE = 22;
 export const GATE_WORD_MIN = 10;
 export const ENEMY_LABEL_SIZE = 30;
 export const ENEMY_LABEL_MIN = 12;
-export const BOSS_LABEL_SIZE = 54;
-export const BOSS_LABEL_MIN = 26;
+/**
+ * The boss's number, above its horns rather than across its chest and much
+ * smaller than Milestone 2's 54 (plan, "Boss text blocks the boss"). The HUD
+ * bar is the primary readout; this is the flavour, and at 54 across the chest
+ * it was covering the model the whole fight.
+ */
+export const BOSS_LABEL_SIZE = 32;
+export const BOSS_LABEL_MIN = 15;
 
 /**
  * Mage height in metres, and the skeletons' relative to it.
@@ -254,9 +269,9 @@ export const BOSS_DEPTH = 1.8;
 /** The Quaternius demon is 2.91 m in its own units at the manifest's scale 1. */
 export const BOSS_MODEL_HEIGHT = 2.91;
 export const BOSS_SCALE = BOSS_HEIGHT / BOSS_MODEL_HEIGHT;
-/** Chest height, not head height: the number is huge and the demon's horns are
- *  the half of it worth seeing. */
-export const BOSS_LABEL_HEIGHT = 1.1;
+/** Clear of the horns: the number floats above the head now, not across the
+ *  chest, so the model the fight is about is never behind it. */
+export const BOSS_LABEL_HEIGHT = BOSS_HEIGHT + 0.55;
 /** Seconds a hit reaction is held before another one may interrupt the walk. */
 export const BOSS_HIT_THROTTLE = 1.5;
 /** Death animation, then the body sinks through the road. */
@@ -273,9 +288,32 @@ export const STOMP_DURATION = 0.5;
  * lands the ring at the squad's front rank, which is what it means.
  */
 export const STOMP_MAX_RADIUS = 5;
-/** Ring alpha and thickness. Dim: the glow pass doubles whatever this is. */
-export const STOMP_ALPHA = 0.3;
+/**
+ * Ring alpha and thickness. Milestone 2 kept this dim because the glow pass
+ * doubled it; the pass is off now, so the ring carries itself.
+ */
+export const STOMP_ALPHA = 0.45;
 export const STOMP_THICKNESS = 0.07;
+
+/**
+ * How much brighter a spell's own emissive runs now that the glow pass is off
+ * by default (Milestone 3 plan, performance step 4).
+ *
+ * The blur used to do this work: a bolt was a small opaque shape that the glow
+ * layer smeared into a halo. Without the pass, brightness has to come from the
+ * material — additive blending plus an emissive above 1, which saturates into a
+ * white-hot core exactly where the bloom used to sit.
+ *
+ * Kept small on purpose. Ember's red channel is already 1, so a big multiplier
+ * clips it and only the green survives: at 2.1 the ember bolts came out yellow,
+ * which is a different spell, not a brighter one. The tail takes the largest
+ * lift because it is the halo — the part of the old look the blur actually
+ * drew — and it is half transparent to begin with.
+ */
+export const BOLT_GLOW_BOOST = 1.35;
+export const IMPACT_GLOW_BOOST = 1.25;
+/** A bolt's tail: the halo the glow pass used to paint around the core. */
+export const TRAIL_GLOW_BOOST = 1.7;
 
 /** Weapon effects. Impacts are pooled per weapon and capped at `POOL.impacts`. */
 export const IMPACT_DURATION = 0.26;

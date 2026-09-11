@@ -93,6 +93,7 @@ export function emptyDevState(level: LevelDef): RunState {
     squad,
     gates,
     enemies,
+    streams: [],
     projectiles,
     boss: null,
     peakCount: level.startCount,

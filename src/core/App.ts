@@ -16,7 +16,7 @@ import { Renderer } from '@/render/Renderer';
 import { runRenderDevScene } from '@/render/dev-scene';
 import { weaponOf } from '@/sim';
 import type { Run, RunState } from '@/sim';
-import { Overlay } from '@/ui';
+import { fontsReady, Overlay } from '@/ui';
 
 import { FrameDriver, NO_EVENTS } from './frame';
 import type { FrameHost } from './frame';
@@ -84,7 +84,12 @@ export class App implements FrameHost {
     this.canvas = canvas;
     this.options = parseQuery(search, levelCount);
     this.muted = this.options.muted;
-    this.renderer = new Renderer(canvas);
+    this.renderer = new Renderer(canvas, {
+      // A readable drawing buffer costs a copy of the back buffer every frame
+      // and only a screenshot tool needs one, so it is opt-in by URL and
+      // `npm run smoke` is the only thing that asks (`src/render/scene.ts`).
+      preserveDrawingBuffer: new URLSearchParams(search).has('screenshot'),
+    });
     this.juice = new Juice(canvas, this.renderer, this.options.turbo === 1);
     this.audio = new GameAudio({ muted: this.muted });
     this.driver = new FrameDriver(this);
@@ -136,6 +141,10 @@ export class App implements FrameHost {
 
   /** Boots the renderer, then flips `window.__arcane.ready` for the smoke test. */
   async start(): Promise<void> {
+    // The digit atlas rasterises Cinzel into a texture once and never again
+    // (`src/render/labels.ts`), so the face has to be in before the renderer
+    // builds it — otherwise a whole run's numbers are the fallback serif.
+    await fontsReady;
     await this.renderer.init();
 
     window.addEventListener('resize', this.onResize);

@@ -16,11 +16,9 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
-import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { Scene } from '@babylonjs/core/scene';
-import type { TextBlock } from '@babylonjs/gui/2D/controls/textBlock';
 
-import { hideLabel, linkLabel, scaleLabel, type LabelLayer } from './labels';
+import { labelPixels, type NumberLabels } from './labels';
 import { liftEmissive, loadAnimatedModel, type AnimatedModel } from './models';
 import { RingPool } from './rings';
 import {
@@ -32,6 +30,7 @@ import {
   BOSS_ENRAGE_SPEED,
   BOSS_HEIGHT,
   BOSS_HIT_THROTTLE,
+  BOSS_LABEL_COLOR,
   BOSS_LABEL_HEIGHT,
   BOSS_LABEL_MIN,
   BOSS_LABEL_SIZE,
@@ -65,8 +64,9 @@ interface Ring {
 
 export class BossView {
   private readonly scene: Scene;
-  private readonly anchor: TransformNode;
-  private readonly label: TextBlock;
+  private readonly labels: NumberLabels;
+  /** This view's label id in the shared atlas; see `src/render/labels.ts`. */
+  private readonly label: number;
   private readonly rings: RingPool;
   private readonly ringState: Ring[] = [];
   private readonly fallback: Mesh;
@@ -83,16 +83,15 @@ export class BossView {
   private dying = -1;
   private enragePhase = 0;
   private shownHp = Number.NaN;
-  private shownSize = Number.NaN;
+  private shownText = '';
   /** Where the body was last drawn, for the sink and for the death burst. */
   private lastX = 0;
   private lastZ = 0;
 
-  constructor(scene: Scene, labels: LabelLayer) {
+  constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
-    this.anchor = new TransformNode('boss-anchor', scene);
-    this.label = labels.create({ fontSize: BOSS_LABEL_SIZE, color: '#ffd9d2', outline: 8 });
-    linkLabel(this.label, this.anchor, 0);
+    this.labels = labels;
+    this.label = labels.claim();
 
     // Thin and dim: the ring is a tell, not the event. The glow pass blooms
     // whatever it is given, so a fat bright ring swallows the boss it is meant
@@ -150,11 +149,10 @@ export class BossView {
     this.hitCooldown = 0;
     this.current = '';
     this.shownHp = Number.NaN;
-    this.shownSize = Number.NaN;
+    this.shownText = '';
     this.enragePhase = 0;
     this.model?.setEnabled(false);
     this.fallback.setEnabled(false);
-    hideLabel(this.label);
     for (const ring of this.ringState) ring.age = -1;
     this.rings.reset();
     this.stopAll();
@@ -191,7 +189,6 @@ export class BossView {
     if (this.dying >= 0) return;
     this.dying = 0;
     this.oneShot = 0;
-    hideLabel(this.label);
     this.play('death', false);
   }
 
@@ -212,7 +209,6 @@ export class BossView {
 
     if (boss === null || !boss.alive) {
       this.show(false);
-      hideLabel(this.label);
       return;
     }
 
@@ -222,7 +218,6 @@ export class BossView {
     // two calls for a body nobody can make out.
     this.show(ahead < BOSS_DRAW_RANGE);
     this.place(boss.x, 0, boss.z);
-    this.anchor.position.set(boss.x, BOSS_LABEL_HEIGHT, boss.z);
 
     const enraged = boss.enraged === true;
     this.paintEnrage(enraged, dt);
@@ -233,24 +228,23 @@ export class BossView {
     this.oneShot = Math.max(0, this.oneShot - dt);
     this.setSpeed(timeScale * (enraged ? BOSS_ENRAGE_SPEED : 1));
 
-    const readable = ahead < LABEL_RANGE;
-    this.label.isVisible = readable;
-    if (readable) {
-      // The boss loses hp every frame, but only whole numbers are printable:
-      // re-set the text when the rounded number moves, not on every hit.
-      const hp = Math.max(0, Math.round(boss.hp));
-      if (hp !== this.shownHp) {
-        this.shownHp = hp;
-        this.label.text = String(hp);
-      }
-      this.shownSize = scaleLabel(
-        this.label,
-        BOSS_LABEL_SIZE,
-        BOSS_LABEL_MIN,
-        ahead,
-        this.shownSize,
-      );
+    if (ahead >= LABEL_RANGE) return;
+    // The boss loses hp every frame, but only whole numbers are printable:
+    // rebuild the string when the rounded number moves, not on every hit.
+    const hp = Math.max(0, Math.round(boss.hp));
+    if (hp !== this.shownHp) {
+      this.shownHp = hp;
+      this.shownText = String(hp);
     }
+    this.labels.set(
+      this.label,
+      this.shownText,
+      boss.x,
+      BOSS_LABEL_HEIGHT,
+      boss.z,
+      BOSS_LABEL_COLOR,
+      labelPixels(BOSS_LABEL_SIZE, BOSS_LABEL_MIN, ahead),
+    );
   }
 
   dispose(): void {
@@ -258,7 +252,6 @@ export class BossView {
     this.model = null;
     this.fallback.dispose();
     this.fallbackMaterial.dispose();
-    this.anchor.dispose();
     this.rings.dispose();
     this.ringState.length = 0;
   }

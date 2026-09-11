@@ -18,7 +18,14 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
-import { EMBER_COLOR, FROST_COLOR, POOL, STORM_COLOR } from './theme';
+import {
+  BOLT_GLOW_BOOST,
+  EMBER_COLOR,
+  FROST_COLOR,
+  POOL,
+  STORM_COLOR,
+  TRAIL_GLOW_BOOST,
+} from './theme';
 import { startWeapon, weaponIds } from '@/sim';
 import type { ProjectileState, WeaponId } from '@/sim';
 
@@ -131,7 +138,7 @@ function buildSet(scene: Scene, id: WeaponId): BoltSet {
     { diameterX: 0.1, diameterY: 0.1, diameterZ: trailLength, segments: 4 },
     scene,
   );
-  trail.material = unlit(scene, `trailMat-${id}`, color.scale(0.6), 0.28, true);
+  trail.material = unlit(scene, `trailMat-${id}`, color.scale(0.6 * TRAIL_GLOW_BOOST), 0.28, true);
 
   return {
     core,
@@ -148,7 +155,7 @@ function buildCore(scene: Scene, id: WeaponId, color: Color3): Mesh {
     // Baked, not set as a rotation: thin instances carry scale and position
     // only, so the shard's roll has to live in its vertices.
     shard.bakeTransformIntoVertices(Matrix.RotationZ(Math.PI / 4));
-    shard.material = unlit(scene, `boltMat-${id}`, color, 1, false);
+    shard.material = unlit(scene, `boltMat-${id}`, color.scale(BOLT_GLOW_BOOST), 1, true);
     return shard;
   }
   // Small: the sim keeps up to 400 bolts alive, and a big squad's barrage is a
@@ -161,11 +168,19 @@ function buildCore(scene: Scene, id: WeaponId, color: Color3): Mesh {
     { diameterX: wide, diameterY: wide, diameterZ: long, segments: 6 },
     scene,
   );
-  bolt.material = unlit(scene, `boltMat-${id}`, color, 1, false);
+  bolt.material = unlit(scene, `boltMat-${id}`, color.scale(BOLT_GLOW_BOOST), 1, true);
   return bolt;
 }
 
-/** A bolt should be the brightest thing on screen at any angle, so: unlit. */
+/**
+ * A bolt should be the brightest thing on screen at any angle, so: unlit, and
+ * additive with an emissive above 1 (`BOLT_GLOW_BOOST`).
+ *
+ * Milestone 2 drew an opaque core and let the glow pass smear a halo round it.
+ * The pass is off now (plan, performance step 4), so the core carries its own
+ * light: additive blending plus a saturating emissive is what still reads as a
+ * spell burning through the air rather than a painted pellet.
+ */
 function unlit(
   scene: Scene,
   name: string,

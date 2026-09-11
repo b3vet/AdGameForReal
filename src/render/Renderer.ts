@@ -22,7 +22,8 @@ import { CameraRig } from './camera';
 import { EffectsView } from './effects';
 import { EnemyView } from './enemies';
 import { GateView } from './gates';
-import { LabelLayer } from './labels';
+import { loadDisplayFont } from './glyphAtlas';
+import { NumberLabels } from './labels';
 import { ProjectileView } from './projectiles';
 import { PropsView } from './props';
 import { RoadView } from './road';
@@ -38,6 +39,11 @@ export interface RendererOptions {
    * 4x screens; past 2x the extra pixels cost frames and buy nothing.
    */
   maxPixelRatio?: number;
+  /**
+   * Keep the drawing buffer readable after present. Only the screenshot path
+   * wants it (`?screenshot=1`); see `createEngine`.
+   */
+  preserveDrawingBuffer?: boolean;
 }
 
 const DEFAULT_MAX_PIXEL_RATIO = 2;
@@ -56,6 +62,7 @@ const scratchTo = { x: 0, z: 0 };
 
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
+  private readonly preserveDrawingBuffer: boolean;
   private maxPixelRatio: number;
 
   private engine: Engine | null = null;
@@ -63,7 +70,7 @@ export class Renderer {
   private rig: CameraRig | null = null;
   private instrumentation: SceneInstrumentation | null = null;
 
-  private labels: LabelLayer | null = null;
+  private labels: NumberLabels | null = null;
   private road: RoadView | null = null;
   private props: PropsView | null = null;
   private squad: SquadView | null = null;
@@ -74,7 +81,14 @@ export class Renderer {
   private boss: BossView | null = null;
 
   private glow: GlowLayer | null = null;
-  private glowEnabled = true;
+  /**
+   * Off by default (Milestone 3 plan, performance step 4). The layer is not
+   * even built until something asks for it, so a phone never pays for its
+   * render target.
+   */
+  private glowEnabled = false;
+  /** The meshes a glow layer would bloom, kept for a later `setGlow(true)`. */
+  private glowTargets: Mesh[] = [];
   private physicsQuality = 2;
   /** The boss's enemy id, so `enemyHit` can be routed to its hit reaction. */
   private bossId = -1;
@@ -88,10 +102,14 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
     this.maxPixelRatio = Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO);
+    this.preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
   }
 
   async init(): Promise<void> {
-    const engine = createEngine(this.canvas);
+    const engine = createEngine(this.canvas, {
+      preserveDrawingBuffer: this.preserveDrawingBuffer,
+      effectivePixelRatio: this.effectivePixelRatio(),
+    });
     this.engine = engine;
     this.applyPixelRatio();
 
@@ -101,7 +119,16 @@ export class Renderer {
 
     this.rig = new CameraRig(scene);
 
-    const labels = new LabelLayer(scene);
+    // Sixty gate materials, three crowds and the biome are all built in the
+    // next few lines. Each `new StandardMaterial` would otherwise re-dirty every
+    // material in the scene; blocking the mechanism makes it one pass at the end.
+    scene.blockMaterialDirtyMechanism = true;
+
+    // The glyph sheet is rasterised from whatever face is installed *now*, so
+    // the font has to be asked for before the atlas is built. Fail-soft and
+    // time-boxed: a missing Cinzel is a fallback serif, never a delayed boot.
+    await loadDisplayFont();
+    const labels = new NumberLabels(scene);
     this.labels = labels;
     this.road = new RoadView(scene);
     this.props = new PropsView(scene);
@@ -127,11 +154,24 @@ export class Renderer {
     ]);
     this.props.build(1, ROAD_START_Z, 200);
 
-    this.buildGlow(scene);
+    this.collectGlowTargets();
+    if (this.glowEnabled) this.glow = createGlow(scene, this.glowTargets);
+
+    scene.blockMaterialDirtyMechanism = false;
 
     // Compiles shaders and uploads buffers, so the first `update` is not a
-    // blank frame that the smoke test would screenshot.
+    // blank frame that the smoke test would screenshot. The labels join in with
+    // one invisible glyph, or their shader would compile on the frame the first
+    // gate comes into range — a stall exactly where the player is deciding.
+    labels.warmUp();
     await scene.whenReadyAsync();
+    labels.commit();
+
+    // After the first readiness pass, never before: a material frozen while its
+    // effect is still compiling never draws. Neither view ever changes what its
+    // materials are made of, so re-checking them every frame is pure cost.
+    this.props?.freeze();
+    this.road?.freeze();
   }
 
   /**
@@ -205,9 +245,17 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
-  /** Degrade ladder rung: the glow pass costs a blur and a second draw. */
+  /**
+   * Degrade ladder rung: the glow pass costs a blur and a second draw of every
+   * mesh it covers. Off in every rung as of Milestone 3, so the layer is only
+   * built if something ever turns it back on.
+   */
   setGlow(enabled: boolean): void {
     this.glowEnabled = enabled;
+    const scene = this.sceneRef;
+    if (enabled && this.glow === null && scene !== null) {
+      this.glow = createGlow(scene, this.glowTargets);
+    }
     if (this.glow !== null) this.glow.isEnabled = enabled;
   }
 
@@ -262,6 +310,10 @@ export class Renderer {
     // follows a frame late shears against the fog on a fast lateral drag.
     const camera = this.rig?.camera;
     if (camera !== undefined) this.road?.update(camera.position.x, camera.position.z, dt);
+
+    // Last, and after the rig: every label is billboarded against the camera's
+    // final pose for this frame, so a number never lags the thing it names.
+    this.labels?.commit();
 
     scene.render();
   }
@@ -431,20 +483,34 @@ export class Renderer {
     return Math.max(0, Math.min(8, dt / frame));
   }
 
-  /** Hands the glow pass the meshes that bloom; see `createGlow`. */
-  private buildGlow(scene: Scene): void {
+  /** The meshes a glow pass would bloom, if one is ever asked for. */
+  private collectGlowTargets(): void {
     const meshes: Mesh[] = [];
     for (const view of [this.projectiles, this.effects, this.enemies, this.boss]) {
       meshes.push(...(view?.glowMeshes() ?? []));
     }
-    this.glow = createGlow(scene, meshes, this.glowEnabled);
+    this.glowTargets = meshes;
   }
 
-  /** Caps the backing-store resolution; `1 / level` is the effective ratio. */
+  /** What the scene actually renders at: the screen's ratio under our cap. */
+  private effectivePixelRatio(): number {
+    const deviceRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    return Math.min(deviceRatio, this.maxPixelRatio);
+  }
+
+  /**
+   * Caps the backing-store resolution; `1 / level` is the effective ratio.
+   *
+   * Guarded, because `setHardwareScalingLevel` resizes the canvas and every
+   * render target hanging off it. This is called from `init`, from a rung
+   * change and from `resize` — never per frame — and the guard keeps a resize
+   * that did not change the ratio from costing a reallocation anyway.
+   */
   private applyPixelRatio(): void {
     const engine = this.engine;
     if (engine === null) return;
-    const deviceRatio = typeof window === 'undefined' ? 1 : (window.devicePixelRatio || 1);
-    engine.setHardwareScalingLevel(1 / Math.min(deviceRatio, this.maxPixelRatio));
+    const level = 1 / this.effectivePixelRatio();
+    if (engine.getHardwareScalingLevel() === level) return;
+    engine.setHardwareScalingLevel(level);
   }
 }

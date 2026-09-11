@@ -7,7 +7,7 @@
  * not bytes. That host does allow `<script src>` from jsdelivr, so this variant
  * loads Babylon from the CDN as UMD globals and inlines only our own code.
  *
- * Output is a *fragment* — title, styles, body markup, three CDN script tags
+ * Output is a *fragment* — title, styles, body markup, two CDN script tags
  * and one inline script — because the hosting wrapper supplies doctype/html/head.
  * Our own assets are not external: they are data URIs inside the inline script
  * (`scripts/inline-assets.mjs`), because the host blocks every runtime fetch.
@@ -35,7 +35,10 @@ const TITLE = 'Arcane Rush';
  */
 const CDN_SCRIPTS = [
   'https://cdn.jsdelivr.net/npm/babylonjs@9.25.0/babylon.js',
-  'https://cdn.jsdelivr.net/npm/babylonjs-gui@9.25.0/babylon.gui.min.js',
+  // No `babylonjs-gui` here any more: Milestone 3 replaced the GUI label layer
+  // with the digit atlas (`src/render/labels.ts`), so nothing in the bundle
+  // imports `@babylonjs/gui` and the second CDN script was 700 KB the page
+  // fetched to register a global no one reads.
   // The glTF loader registers itself with the core bundle's scene loader when
   // this script runs, which is what the ES build's `import '@babylonjs/loaders/glTF'`
   // side effect does. Load order matters: it needs `BABYLON` to exist already.
@@ -116,6 +119,12 @@ async function main() {
   // so a surviving bare specifier would be a blank page rather than a warning.
   if (/["'`]@babylonjs\//.test(bundle.js)) {
     throw new Error('the bundle still references a bare @babylonjs specifier');
+  }
+
+  // The GUI bundle is no longer loaded, so a surviving `BABYLON.GUI` reference
+  // would be a blank page on the host rather than a build warning.
+  if (/BABYLON\.GUI/.test(bundle.js)) {
+    throw new Error('the bundle still references BABYLON.GUI but the GUI CDN script is gone');
   }
 
   const html = await readFile(path.join(ROOT, 'index.html'), 'utf8');

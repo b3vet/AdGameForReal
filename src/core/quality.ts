@@ -1,11 +1,16 @@
 /**
  * The degrade ladder, and the frame-time monitor that walks it.
  *
- * One ladder for the whole app (docs/06-milestone-2-plan.md, "Performance"):
- * pixel ratio 2 → 1.5 → 1, then the glow pass off, then the ragdolls 24 → 8 →
- * 0. It lives here rather than in `src/physics` because three of those five
- * steps are the renderer's and only the app can see all of them; the physics
- * layer keeps `setQuality` and no opinion about when it is called.
+ * One ladder for the whole app: pixel ratio 2 → 1.5 → 1, then the ragdolls
+ * 8 → 4 → 0. It lives here rather than in `src/physics` because the first
+ * three steps are the renderer's and only the app can see all of them; the
+ * physics layer keeps `setQuality` and no opinion about when it is called.
+ *
+ * Milestone 3 dropped the glow rung: the pass is off on every rung now
+ * (plan, performance step 4), so `rung.glow` is the flag that says so rather
+ * than a step the ladder can take. The renderer does not even build the layer
+ * unless something sets it, and the bolts and impacts carry their own
+ * brightness instead.
  *
  * It never climbs. A device that spent a second over budget will spend another
  * one, and a ladder that hunts up and down is worse to play than one that gives
@@ -23,15 +28,19 @@ import type { PhysicsQuality } from '@/physics';
  */
 export interface QualityRung {
   readonly pixelRatio: number;
+  /**
+   * Whether the glow pass runs. False on every rung as of Milestone 3; kept on
+   * the rung rather than deleted because it is still the renderer's switch and
+   * a future rung may want to offer it back on a desktop.
+   */
   readonly glow: boolean;
   readonly physics: PhysicsQuality;
 }
 
 /** The ladder itself, best first. Index into this is the "rung" everywhere. */
 export const QUALITY_RUNGS: readonly QualityRung[] = [
-  { pixelRatio: 2, glow: true, physics: 2 },
-  { pixelRatio: 1.5, glow: true, physics: 2 },
-  { pixelRatio: 1, glow: true, physics: 2 },
+  { pixelRatio: 2, glow: false, physics: 2 },
+  { pixelRatio: 1.5, glow: false, physics: 2 },
   { pixelRatio: 1, glow: false, physics: 2 },
   { pixelRatio: 1, glow: false, physics: 1 },
   { pixelRatio: 1, glow: false, physics: 0 },

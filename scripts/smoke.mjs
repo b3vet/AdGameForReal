@@ -59,11 +59,16 @@ const TURBO = 60;
  * photographed. The `t1/t6/t12` names are historical: they were wall-clock
  * seconds in Milestone 1, and the distances below are where those seconds
  * landed.
+ *
+ * `screenshot=1` is on every URL here and nowhere else: it is what turns
+ * `preserveDrawingBuffer` back on (`src/render/scene.ts`). The flag is off in
+ * play because it makes the driver keep a second copy of the back buffer, and
+ * without it the canvas the compositor hands Playwright can come back empty.
  */
 const RUNS = [
   {
     label: 'greedy level 1',
-    query: `?bot=greedy&level=1&seed=1&turbo=${TURBO}`,
+    query: `?bot=greedy&level=1&seed=1&turbo=${TURBO}&screenshot=1`,
     titleShot: 'title.png',
     shots: [
       { at: 'z', value: 25, name: 't1.png' },
@@ -78,7 +83,7 @@ const RUNS = [
   },
   {
     label: 'random level 3',
-    query: `?bot=random&level=3&seed=2&turbo=${TURBO}`,
+    query: `?bot=random&level=3&seed=2&turbo=${TURBO}&screenshot=1`,
     shots: [],
     endShot: 'end-random.png',
   },
@@ -86,7 +91,7 @@ const RUNS = [
     label: 'greedy level 10',
     // Seed 2 is the one whose level 10 puts a staff gate on row 4 of twenty,
     // so the staff shot has something to photograph early in the run.
-    query: `?bot=greedy&level=10&seed=2&turbo=${TURBO}`,
+    query: `?bot=greedy&level=10&seed=2&turbo=${TURBO}&screenshot=1`,
     shots: [
       // A `weapon` gate on screen: the staff prop over the panel and its name
       // on it (plan, definition of done 5).
@@ -432,7 +437,7 @@ async function main() {
 
     const stressPage = await openPage(browser, failures);
     try {
-      written.push(await driveStress(stressPage, `http://127.0.0.1:${port}/?scene=stress`, failures));
+      written.push(await driveStress(stressPage, `http://127.0.0.1:${port}/?scene=stress&screenshot=1`, failures));
     } finally {
       await stressPage.context().close();
     }

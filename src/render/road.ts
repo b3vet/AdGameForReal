@@ -54,6 +54,7 @@ export class RoadView {
   private readonly runes: Mesh;
   private readonly runeMatrices: Float32Array;
   private readonly runeMaterial: StandardMaterial;
+  private readonly materials: StandardMaterial[];
   private readonly arenaBand: Mesh;
   private readonly arenaPosts: Mesh;
   private readonly arenaPostMatrices: Float32Array;
@@ -101,6 +102,28 @@ export class RoadView {
     for (const mesh of [this.field, this.surface, this.arenaBand]) {
       mesh.isPickable = false;
       mesh.receiveShadows = false;
+    }
+
+    const skyMaterial = this.sky.material;
+    this.materials = [roadMaterial, fieldMaterial, this.runeMaterial, arenaMaterial];
+    if (skyMaterial instanceof StandardMaterial) this.materials.push(skyMaterial);
+  }
+
+  /**
+   * Locks every material here against the per-frame readiness check.
+   *
+   * Called once, after the scene's first `whenReadyAsync` — freezing a material
+   * whose effect is still compiling would leave it never drawn. `freeze` only
+   * skips `isReady`; uniforms and texture scales are still bound each frame, so
+   * the rune pulse and a per-level re-tiling of the stone still land.
+   */
+  freeze(): void {
+    for (const material of this.materials) material.freeze();
+    // Identity world matrices for the life of the view: both meshes are drawn
+    // entirely through their thin-instance buffers.
+    for (const mesh of [this.runes, this.arenaPosts]) {
+      mesh.computeWorldMatrix(true);
+      mesh.freezeWorldMatrix();
     }
   }
 

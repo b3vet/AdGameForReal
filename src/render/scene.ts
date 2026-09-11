@@ -24,21 +24,48 @@ const GLOW_TEXTURE_RATIO = 0.25;
 const GLOW_INTENSITY = 0.5;
 const GLOW_BLUR = 24;
 
+export interface EngineOptions {
+  /**
+   * Keep the drawing buffer around after a frame is presented. Off in play: it
+   * forces the driver to keep a second copy of the back buffer and costs a
+   * blit every frame on a tiled mobile GPU. Only the screenshot path needs it
+   * (`?screenshot=1`, which `npm run smoke` passes).
+   */
+  preserveDrawingBuffer?: boolean;
+  /**
+   * The pixel ratio the scene will actually render at, so the engine can decide
+   * about MSAA before the first frame — the flag is fixed at context creation.
+   */
+  effectivePixelRatio?: number;
+}
+
+/**
+ * Pixel ratio at and above which MSAA is dropped.
+ *
+ * Multisampling and a dense backing store buy the same thing — smooth edges —
+ * and on a phone the second one is already paid for. At 1.5x and up the
+ * resolve costs bandwidth for an edge difference nobody can see at arm's
+ * length; below it (a desktop window, the smoke's 1x frames) MSAA is what
+ * keeps the gate panels' edges clean.
+ */
+const MSAA_PIXEL_RATIO_LIMIT = 1.5;
+
 /**
  * SwiftShader in headless Chromium can refuse a WebGL2 context. Try the normal
- * antialiased WebGL2 engine first, then fall back to WebGL1 without
- * antialiasing rather than letting the whole app fail to boot.
+ * WebGL2 engine first, then fall back to WebGL1 rather than letting the whole
+ * app fail to boot.
  */
-export function createEngine(canvas: HTMLCanvasElement): Engine {
+export function createEngine(canvas: HTMLCanvasElement, options: EngineOptions = {}): Engine {
+  const antialias = (options.effectivePixelRatio ?? 1) < MSAA_PIXEL_RATIO_LIMIT;
   try {
     return new Engine(
       canvas,
-      true,
+      antialias,
       {
         disableWebGL2Support: false,
-        preserveDrawingBuffer: true,
+        preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
         stencil: true,
-        antialias: true,
+        antialias,
         powerPreference: 'high-performance',
       },
       true,
@@ -69,6 +96,13 @@ export function createScene(engine: Engine): Scene {
   key.diffuse = new Color3(1, 0.8, 0.58);
   key.specular = new Color3(0.4, 0.3, 0.22);
 
+  // Nothing in the scene is picked. Steering is read from raw pointer events in
+  // `src/core/input.ts`, and every mesh here is `isPickable = false` anyway, so
+  // a ray cast per pointer move is a scene graph walk for an answer nobody
+  // reads — and a drag is a pointer move every frame.
+  scene.skipPointerMovePicking = true;
+  scene.constantlyUpdateMeshUnderPointer = false;
+
   return scene;
 }
 
@@ -79,14 +113,19 @@ export function createScene(engine: Engine): Scene {
  * itself it would double the frame's draw calls. Only the spell effects are on
  * the list: they are what should bloom, and they are the meshes that are
  * disabled when nothing is happening.
+ *
+ * Built on demand rather than at init (Milestone 3 plan, performance step 4):
+ * the layer allocates a render target and two blur textures the moment it
+ * exists, and the game no longer turns it on. The bolts and impacts carry their
+ * own brightness now (`BOLT_GLOW_BOOST` in `theme.ts`), so nothing is waiting
+ * on this.
  */
-export function createGlow(scene: Scene, meshes: readonly Mesh[], enabled: boolean): GlowLayer {
+export function createGlow(scene: Scene, meshes: readonly Mesh[]): GlowLayer {
   const glow = new GlowLayer('spellGlow', scene, {
     mainTextureRatio: GLOW_TEXTURE_RATIO,
     blurKernelSize: GLOW_BLUR,
   });
   glow.intensity = GLOW_INTENSITY;
-  glow.isEnabled = enabled;
   for (const mesh of meshes) glow.addIncludedOnlyMesh(mesh);
   return glow;
 }

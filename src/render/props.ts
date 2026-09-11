@@ -160,6 +160,22 @@ export class PropsView {
     commitInstances(this.flames, flames);
   }
 
+  /**
+   * Locks the roadside against per-frame work: props never move once `build`
+   * has placed them, and their materials never change at all. Called after the
+   * scene's first `whenReadyAsync`, never before (see `RoadView.freeze`).
+   */
+  freeze(): void {
+    for (const slot of this.slots) {
+      slot.mesh.material?.freeze();
+      slot.mesh.computeWorldMatrix(true);
+      slot.mesh.freezeWorldMatrix();
+    }
+    this.flames.material?.freeze();
+    this.flames.computeWorldMatrix(true);
+    this.flames.freezeWorldMatrix();
+  }
+
   dispose(): void {
     for (const slot of this.slots) {
       slot.mesh.material?.dispose();

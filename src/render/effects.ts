@@ -35,6 +35,7 @@ import {
   EMBER_COLOR,
   FROST_COLOR,
   IMPACT_DURATION,
+  IMPACT_GLOW_BOOST,
   MUZZLE_DURATION,
   POOL,
   SPLASH_DURATION,
@@ -145,7 +146,7 @@ export class EffectsView {
     if (weaponId === this.active) return;
     this.impacts.get(this.active)?.mesh.setEnabled(false);
     this.active = weaponId;
-    this.muzzleMaterial.emissiveColor.copyFrom(tintOf(weaponId));
+    tintOf(weaponId).scaleToRef(IMPACT_GLOW_BOOST, this.muzzleMaterial.emissiveColor);
   }
 
   /** Every spell effect blooms; nothing else in the scene does. */
@@ -403,8 +404,10 @@ function tintOf(id: WeaponId): Color3 {
 
 function unlit(scene: Scene, name: string, color: Color3): StandardMaterial {
   const material = new StandardMaterial(name, scene);
-  // Cloned: the muzzle recolours its own copy when the staff changes.
-  material.emissiveColor = color.clone();
+  // Scaled above 1 because the glow pass no longer blooms these (plan,
+  // performance step 4); additive blending turns the excess into a white core.
+  // Cloned by `scale`: the muzzle recolours its own copy when the staff changes.
+  material.emissiveColor = color.scale(IMPACT_GLOW_BOOST);
   material.diffuseColor = Color3.Black();
   material.specularColor = Color3.Black();
   material.disableLighting = true;
