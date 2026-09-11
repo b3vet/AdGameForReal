@@ -29,3 +29,7 @@
 | D25 | 2026-09-08 | Single-file builds inline assets and the Havok WASM through a Vite plugin at build time; the hosted variant loads Babylon core, GUI and loaders from jsdelivr. | 07 (Phase C) |
 | D26 | 2026-09-08 | Staff gates are placed after level layout into a lane the row can spare, never at the cost of a curse; Storm is at single-target damage parity so a staff is a choice, not a strict upgrade. | 07 (Phase C) |
 | D27 | 2026-09-08 | The degrade ladder is owned by the app (`src/core/quality.ts`), six rungs, never steps up; physics and render only expose setters. | 07 (Phase C) |
+| D28 | 2026-09-11 | Art direction is bright and casual: daylight palette, soft toon ramp, no outlines. Epic stays in boss weight and sound. Supersedes the dark half of D21. | 09 |
+| D29 | 2026-09-11 | Enemies on the road are individual units in streams (hundreds per lane, one soldier lost per touching enemy); brute blocks remain. Stream density is tuned so a good player barely clears each wave (pressure bands). | 09 |
+| D30 | 2026-09-11 | Font: Cinzel for display and numbers, Nunito for body, embedded in builds; number labels move from the GUI texture to a digit atlas. | 09 |
+| D31 | 2026-09-11 | Gate rows return to 18 m with streams between them; levels 1 to 3 are generous, Milestone 2 targets apply from level 6. | 09 |
