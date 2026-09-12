@@ -283,3 +283,19 @@ Tech lead reading:
 Carried forward: the deferred items above; the crowd-width question
 (formation spacing versus the road clamp) from Phase B2; the Phase B1
 `dpsTrim` fudge to re-measure if fire splitting changes.
+
+## 2026-09-13 — Post-close: product owner playtest of the reviewed build
+
+- Level 7 capture on the iPhone 17 Pro Max: 601 frames in 10 s (60 fps
+  average), fps min / median / max 31 / 59 / 111, render ms 1 / 5 / 7 (was
+  1 / 7 / 14 at level 8 before the milestone), physics 0 to 1 ms, draw peak
+  29, rung 0 for the whole level at pixel ratio 2 of 3, squad 149 to 198.
+  Median and average targets met; the ladder no longer degrades; a few long
+  frames remain (minimum 31 fps), carried to Milestone 4 as a spike hunt
+  with a frames-over-20-ms counter instead of a bare minimum.
+- Look, streams, spacing and early levels: "cool for now".
+- Bug: the walking animation is glitchy, most visibly at the start of a run
+  when the camera is close to the mages. Fix started immediately as a
+  post-close task (see Milestone 4 log).
+- Idea: walls between lanes on some levels to raise difficulty. Taken into
+  the Milestone 4 draft.

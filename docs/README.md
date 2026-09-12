@@ -25,5 +25,6 @@ Index:
 | `08-milestone-3-plan-draft.md` | Milestone 3 draft plan v1: bright casual look, magical projectiles, enemy streams, gate spacing, fonts, performance; awaiting answers |
 | `09-milestone-3-plan.md` | Milestone 3 plan, approved: bright casual look, magical projectiles, enemy streams, 18 m rows, Cinzel, performance |
 | `10-milestone-3-log.md` | Milestone 3 process log (append-only) |
+| `11-milestone-4-plan-draft.md` | Milestone 4 draft plan v1: lane walls and 20 levels, coin progression with the Academy, Capacitor device build, polish; awaiting answers |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |
