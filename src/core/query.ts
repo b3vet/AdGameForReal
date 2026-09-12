@@ -11,7 +11,8 @@
  *   ?debug          show the debug panel
  *   ?turbo=8        run the sim this many times faster than the wall clock
  *   ?physics=0|1|2  physics quality: 0 skips Havok entirely
- *   ?quality=3      pin a rung of the degrade ladder (0 best, 5 worst)
+ *   ?quality=3      pin a rung of the degrade ladder (0 best, 4 worst)
+ *   ?screenshot=1   keep the drawing buffer readable, for the smoke's frames
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  */
 
@@ -36,7 +37,8 @@ export interface QueryOptions {
   /**
    * A pinned rung of the degrade ladder (`src/core/quality.ts`), or null for
    * the automatic ladder. Pinning is how a phone's worst case is looked at on
-   * a desktop; a pinned ladder never steps on its own.
+   * a desktop; a pinned ladder never steps on its own. Milestone 3 dropped the
+   * glow rung, so the ladder is five rungs and `clampRung` is what says so.
    */
   qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */

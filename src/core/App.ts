@@ -46,6 +46,17 @@ export interface ArcaneDebugHandle {
   quality: () => number;
   /** Draw calls: the last frame's, and the worst since the run started. */
   draws: () => { current: number; peak: number };
+  /**
+   * Shader programs compiled so far and what the warm-up pass did. The smoke
+   * asserts `programs` does not move across a whole level of play.
+   */
+  shaders: () => {
+    programs: number;
+    warmed: number;
+    skipped: number;
+    failed: number;
+    warming: boolean;
+  };
 }
 
 declare global {
@@ -256,6 +267,10 @@ export class App implements FrameHost {
   /** The degrade ladder and the result-screen beat both ride the wall clock. */
   onFrameEnd(frameDt: number, realDt: number): void {
     this.ladder.track(frameDt);
+    // What the ladder is thinking, for the panel the product owner reads off
+    // the phone: the window's verdict and why the rung last moved.
+    this.driver.stats.qualityP95 = this.ladder.p95Ms;
+    this.driver.stats.qualityReason = this.ladder.reason;
 
     const session = this.session;
     if (session === null || this.currentPhase !== 'playing') return;
@@ -296,6 +311,13 @@ export class App implements FrameHost {
   private startRun(): void {
     // The next title screen draws a fresh preview whatever happens here.
     this.driver.markPreviewDirty();
+    // Cheap when the boot pass already did the work, which is the normal case;
+    // this is the guarantee that nothing compiles inside the run's frames even
+    // if a layer arrived late (`src/render/warmup.ts`).
+    void this.renderer.warmUp();
+    // A level is a fresh measurement: the ladder starts again at rung 0 and
+    // ignores the first seconds of load noise (`src/core/quality.ts`).
+    this.ladder.beginLevel();
     const session = new RunSession(this.options.level, this.options);
     this.session = session;
     this.preview = null;
@@ -352,6 +374,10 @@ export class App implements FrameHost {
     if (level !== null) physics.loadLevel(level);
     // The layer arrived after the ladder settled; hand it the current rung.
     this.ladder.applyCurrent();
+    // Its debris pools are new meshes in the renderer's scene, so their shaders
+    // have to be compiled too or the first kill of the first run pays for them
+    // inside a frame (`src/render/warmup.ts`).
+    await this.renderer.warmUp();
   }
 
   /**
@@ -385,6 +411,7 @@ export class App implements FrameHost {
       physics: () => this.physicsLayer,
       quality: () => this.ladder.rung,
       draws: () => ({ current: this.renderer.drawCalls, peak: this.driver.peakDrawCalls }),
+      shaders: () => this.renderer.shaderStats,
     };
     globalThis.__arcane = handle;
   }

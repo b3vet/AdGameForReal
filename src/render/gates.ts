@@ -99,16 +99,24 @@ export class GateView {
   private readonly byGateId = new Map<number, GateSlot>();
   private readonly scene: Scene;
   private readonly labels: NumberLabels;
-  /** One floating staff per weapon, shown above the nearest gate offering it. */
-  private readonly staffs = new Map<WeaponId, Mesh>();
-  /** Rebuilt every frame: which gate, if any, each staff is hovering over. */
-  private readonly staffTarget = new Map<WeaponId, GateSlot>();
+  /**
+   * One floating staff per weapon, shown above the nearest gate offering it,
+   * and the gate each is hovering over this frame. Both are plain arrays
+   * indexed by `weaponIds`, not maps: the second one is rebuilt every frame,
+   * and iterating a `Map` allocates a two-element array per entry per frame.
+   */
+  private readonly staffMeshes: (Mesh | null)[] = [];
+  private readonly staffTargets: (GateSlot | null)[] = [];
   private frame = 0;
   private spin = 0;
 
   constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
     this.labels = labels;
+    for (let i = 0; i < weaponIds.length; i++) {
+      this.staffMeshes.push(null);
+      this.staffTargets.push(null);
+    }
     for (let i = 0; i < POOL.gates; i++) {
       const material = new StandardMaterial(`gateMat-${String(i)}`, scene);
       material.specularColor = Color3.Black();
@@ -145,14 +153,16 @@ export class GateView {
   /** Pulls the three staff props out of the mage model. */
   async load(): Promise<void> {
     const meshes = await loadPropMeshes(this.scene, 'mage', Object.values(STAFF_MESHES));
-    for (const id of weaponIds) {
+    for (let i = 0; i < weaponIds.length; i++) {
+      const id = weaponIds[i];
+      if (id === undefined) continue;
       const mesh = meshes.get(STAFF_MESHES[id]);
       if (mesh === undefined) continue;
       const height = Math.max(0.01, meshExtent(mesh).y);
       mesh.scaling.setAll(GATE_PROP_HEIGHT / height);
       mesh.isPickable = false;
       mesh.setEnabled(false);
-      this.staffs.set(id, mesh);
+      this.staffMeshes[i] = mesh;
     }
   }
 
@@ -160,8 +170,10 @@ export class GateView {
   reset(): void {
     this.byGateId.clear();
     for (const slot of this.slots) this.release(slot);
-    for (const staff of this.staffs.values()) staff.setEnabled(false);
-    this.staffTarget.clear();
+    for (let i = 0; i < this.staffMeshes.length; i++) {
+      this.staffMeshes[i]?.setEnabled(false);
+      this.staffTargets[i] = null;
+    }
   }
 
   /** A shot landed on this gate: flash it so the player sees the number move. */
@@ -188,7 +200,7 @@ export class GateView {
   update(state: RunState, dt: number): void {
     this.frame++;
     const squadZ = state.squad.z;
-    this.staffTarget.clear();
+    for (let i = 0; i < this.staffTargets.length; i++) this.staffTargets[i] = null;
 
     for (const gate of state.gates) {
       const slot = this.bind(gate);
@@ -205,9 +217,10 @@ export class GateView {
 
       this.paintIdle(slot, gate, squadZ);
       if (gate.kind === 'weapon' && gate.weaponId !== undefined && slot.drawn) {
-        const held = this.staffTarget.get(gate.weaponId);
-        if (held === undefined || slot.panel.position.z < held.panel.position.z) {
-          this.staffTarget.set(gate.weaponId, slot);
+        const at = weaponIds.indexOf(gate.weaponId);
+        const held = at < 0 ? null : (this.staffTargets[at] ?? null);
+        if (at >= 0 && (held === null || slot.panel.position.z < held.panel.position.z)) {
+          this.staffTargets[at] = slot;
         }
       }
     }
@@ -236,8 +249,9 @@ export class GateView {
     }
     this.slots.length = 0;
     this.byGateId.clear();
-    for (const staff of this.staffs.values()) staff.dispose();
-    this.staffs.clear();
+    for (let i = 0; i < this.staffMeshes.length; i++) this.staffMeshes[i]?.dispose();
+    this.staffMeshes.length = 0;
+    this.staffTargets.length = 0;
   }
 
   /**
@@ -246,18 +260,17 @@ export class GateView {
    */
   private placeStaffs(dt: number): void {
     this.spin += dt * GATE_PROP_SPIN;
-    for (const [id, mesh] of this.staffs) {
-      const slot = this.staffTarget.get(id);
-      if (slot === undefined) {
+    const bob = Math.sin(this.spin * 2) * 0.06;
+    for (let i = 0; i < this.staffMeshes.length; i++) {
+      const mesh = this.staffMeshes[i];
+      if (mesh === null || mesh === undefined) continue;
+      const slot = this.staffTargets[i] ?? null;
+      if (slot === null) {
         if (mesh.isEnabled()) mesh.setEnabled(false);
         continue;
       }
       mesh.setEnabled(true);
-      mesh.position.set(
-        slot.panel.position.x,
-        GATE_PROP_Y + Math.sin(this.spin * 2) * 0.06,
-        slot.panel.position.z,
-      );
+      mesh.position.set(slot.panel.position.x, GATE_PROP_Y + bob, slot.panel.position.z);
       mesh.rotation.y = this.spin;
       mesh.rotation.z = 0.35;
     }

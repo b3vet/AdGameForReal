@@ -148,3 +148,27 @@ Tech lead reading:
 - Open: the render enemy pool and labels are sized for blocks, not 300
   bodies (Phase B2); `dpsTrim` must be re-measured if Phase C changes how
   fire splits between gates and streams.
+
+## 2026-09-12 — Phase A follow-up: warm-up, ladder retune, allocations (verified and committed)
+
+- `src/render/warmup.ts` force-compiles every material in the scene with
+  the thin-instance and VAT variants active (an empty disabled pool is given
+  one degenerate instance for the duration so the right variant compiles),
+  at init, when physics pools attach, and at run start. Smoke: 111
+  materials compiled, 18 shader programs before the first frame, 0 compiled
+  during a whole level, identical on all three runs; the smoke fails on any
+  growth.
+- Ladder: p95 of a 3 s window against 20 ms, two consecutive over-budget
+  windows to step, first 2 s after a level start ignored, reset to rung 0
+  at every level start, never up within a level, first step 1.5 never 1.0.
+  Eleven unit tests with synthetic frame sequences: five 200 ms hitches per
+  window do not step, sustained 25 ms frames do. Debug line shows rung,
+  reason, p95, heap and a collection counter.
+- Allocations removed: a per-frame Map iteration and rebuilt array in the
+  staff-gate view, a per-frame Color3 in the boss enrage paint, a spread in
+  the glow-target collector. The rest of the frame path audited clean.
+- `@babylonjs/gui` uninstalled; `?quality=` documented as rungs 0 to 4;
+  `?screenshot=1` documented.
+- Checks: typecheck, lint, 199 tests, build, smoke (draw peaks 37 / 36 /
+  40; stress 26 calls at 7.3 ms), hosted build 9.38 MB.
+- Published as the smoothness-check build for the product owner.

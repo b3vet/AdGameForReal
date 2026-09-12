@@ -55,6 +55,11 @@ const FACING = Math.PI;
 /** The demon is the darkest thing in the pack; it needs the same lift the
  *  crowds get, a little weaker so the enrage pulse still reads on top of it. */
 const BOSS_LIFT = 0.2;
+/**
+ * The stand-in box's calm emissive, built once. `paintEnrage` runs on every
+ * frame of the boss fight, and `Color3.scale` allocates.
+ */
+const BOSS_FALLBACK_EMISSIVE = BOSS_COLOR.scale(0.25);
 
 interface Ring {
   x: number;
@@ -108,7 +113,7 @@ export class BossView {
     // without assets still has a boss to shoot at.
     this.fallbackMaterial = new StandardMaterial('bossFallbackMat', scene);
     this.fallbackMaterial.diffuseColor = BOSS_COLOR;
-    this.fallbackMaterial.emissiveColor = BOSS_COLOR.scale(0.25);
+    this.fallbackMaterial.emissiveColor = BOSS_FALLBACK_EMISSIVE.clone();
     this.fallbackMaterial.specularColor = Color3.Black();
     this.fallback = CreateBox(
       'boss-fallback',
@@ -291,7 +296,7 @@ export class BossView {
     const model = this.model;
     if (model === null) {
       this.fallbackMaterial.emissiveColor.copyFrom(
-        enraged ? BOSS_ENRAGE_COLOR : BOSS_COLOR.scale(0.25),
+        enraged ? BOSS_ENRAGE_COLOR : BOSS_FALLBACK_EMISSIVE,
       );
       return;
     }

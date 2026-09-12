@@ -179,6 +179,37 @@ const RESULT_SETTLE_MS = 20_000;
  */
 const DRAW_CALL_LIMIT = Number(process.env.SMOKE_DRAW_CALLS ?? 52);
 
+/**
+ * How long to wait for the shader warm-up to finish before a run is driven.
+ *
+ * The renderer compiles every pooled material at boot and again when the
+ * physics layer's debris pools arrive (`src/render/warmup.ts`), and the second
+ * pass waits on two megabytes of Havok. Nothing may be photographed or
+ * measured until both are done, or the first frames of the run are exactly the
+ * compilation stalls the pass exists to remove.
+ */
+const WARM_UP_TIMEOUT_MS = 90_000;
+
+/** Waits until the warm-up has run and the physics layer is attached. */
+function waitForWarmUp(page) {
+  return page
+    .waitForFunction(
+      () => {
+        const shaders = globalThis.__arcane?.shaders();
+        return (
+          shaders !== undefined &&
+          shaders.warming === false &&
+          shaders.warmed > 0 &&
+          globalThis.__arcane?.physics() !== null
+        );
+      },
+      null,
+      { timeout: WARM_UP_TIMEOUT_MS },
+    )
+    .then(() => true)
+    .catch(() => false);
+}
+
 /** Resolves when the run reaches `won` or `lost`. */
 function waitForRunEnd(page) {
   return page.waitForFunction(
@@ -274,6 +305,21 @@ async function driveRun(page, url, run, failures) {
 
   const written = [];
 
+  // Nothing is timed or photographed until every material is compiled: the
+  // point of the warm-up is that a run contains no compilation, and a run
+  // started before it finished would contain all of it.
+  const warm = await waitForWarmUp(page);
+  const before = await page.evaluate(() => globalThis.__arcane?.shaders() ?? null);
+  if (!warm) {
+    failures.push(`${run.label}: the shader warm-up never finished`);
+  } else {
+    console.log(
+      `[smoke]   warm-up: ${before.warmed} materials compiled, ${before.skipped} with ` +
+        `nothing to compile, ${before.failed} still unready, ` +
+        `${before.programs} shader programs before the first frame`,
+    );
+  }
+
   // The title screen is part of the definition of done, so it gets a frame of
   // its own before anything is clicked.
   await sleep(300);
@@ -327,6 +373,26 @@ async function driveRun(page, url, run, failures) {
     rung: globalThis.__arcane?.quality() ?? -1,
     physics: globalThis.__arcane?.physics()?.stats.quality ?? -1,
   }));
+  // A whole level of play — every gate kind, every staff, ragdolls, shards, the
+  // boss and its stomp — must not have compiled a single new shader. One that
+  // did is a frame the phone spent inside the driver rather than drawing.
+  const after = await page.evaluate(() => globalThis.__arcane?.shaders() ?? null);
+  const grew = after !== null && before !== null ? after.programs - before.programs : 0;
+  console.log(
+    `[smoke]   shader programs: ${before?.programs ?? -1} before, ` +
+      `${after?.programs ?? -1} after (${grew} compiled during play)`,
+  );
+  if (grew > 0) {
+    failures.push(
+      `${run.label}: ${grew} shader(s) compiled during play; the warm-up missed them`,
+    );
+  }
+  if (before !== null && before.failed > 0) {
+    failures.push(
+      `${run.label}: ${before.failed} material(s) never became ready during the warm-up`,
+    );
+  }
+
   console.log(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
   console.log(
     `[smoke]   draw calls: peak ${draws.peak} (limit ${DRAW_CALL_LIMIT}), ` +

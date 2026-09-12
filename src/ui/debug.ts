@@ -65,6 +65,14 @@ export interface DebugStats {
   physicsQuality: number;
   /** Which rung of the app's degrade ladder is in force; 0 is everything on. */
   qualityRung: number;
+  /** The ladder's last three-second window, as a 95th-percentile frame in ms. */
+  qualityP95: number;
+  /** Why the rung last moved: `start`, `level`, `p95` or `pinned`. */
+  qualityReason: string;
+  /** JS heap in MB where the browser reports it (Chrome only), else 0. */
+  heapMb: number;
+  /** Collections seen since boot; a rising count means the frame allocates. */
+  heapDrops: number;
   /** Backing-store pixels per CSS pixel, which the ladder's top rungs lower. */
   pixelRatio: number;
   /** What the screen offers, so a lowered `pixelRatio` reads as a decision. */
@@ -204,8 +212,12 @@ export class DebugPanel {
       `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms` +
         `  phys ${this.physicsMs.toFixed(2)}ms`,
       `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
-        `  rung ${String(stats.qualityRung)}` +
         `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
+      `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
+        `  p95 ${stats.qualityP95.toFixed(1)}ms` +
+        (stats.heapMb > 0
+          ? `  heap ${stats.heapMb.toFixed(0)}MB gc ${String(stats.heapDrops)}`
+          : ''),
       `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
         `  bodies ${String(stats.physicsBodies)}  physq ${String(stats.physicsQuality)}`,
       `audio ${stats.audio} ${String(stats.audioClips)} clips`,

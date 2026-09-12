@@ -42,6 +42,29 @@ export const NO_EVENTS: readonly SimEvent[] = [];
 /** Wall clock for the debug panel's cost readouts; never used by the sim. */
 const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
 
+/**
+ * Chrome's non-standard heap readout, where it exists. Absent on Safari — which
+ * is the device that matters — so this is a desktop tripwire for the allocation
+ * audit, not a measurement anyone ships on.
+ */
+interface HeapMemory {
+  usedJSHeapSize: number;
+}
+
+function heapBytes(): number {
+  if (typeof performance === 'undefined') return 0;
+  const memory = (performance as unknown as { memory?: HeapMemory }).memory;
+  return memory === undefined ? 0 : memory.usedJSHeapSize;
+}
+
+/**
+ * A drop of this many bytes between two frames reads as a collection rather
+ * than as noise. A steady-state frame that allocates nothing never triggers
+ * one; a frame that allocates a few kilobytes triggers one every few seconds,
+ * which is the signal the audit is looking for.
+ */
+const HEAP_DROP_BYTES = 256 * 1024;
+
 /** What the loop needs from the app. Everything here is read once a frame. */
 export interface FrameHost {
   readonly renderer: Renderer;
@@ -79,6 +102,10 @@ export class FrameDriver {
     physicsBodies: 0,
     physicsQuality: 0,
     qualityRung: 0,
+    qualityP95: 0,
+    qualityReason: 'start',
+    heapMb: 0,
+    heapDrops: 0,
     pixelRatio: 0,
     devicePixelRatio: 1,
     audio: 'off',
@@ -97,6 +124,10 @@ export class FrameDriver {
    * hold the frame budget (plan, "Performance"): one counter read per frame.
    */
   private peak = 0;
+
+  /** Heap watch, `?debug` only: the last sample and how often it has fallen. */
+  private lastHeap = 0;
+  private heapDrops = 0;
 
   /**
    * Whether the title screen's frame still needs drawing. The preview session
@@ -244,6 +275,8 @@ export class FrameDriver {
     const host = this.host;
     if (!host.overlay.debugEnabled) return;
 
+    this.trackHeap();
+
     const physics = host.physics();
     this.stats.drawCalls = host.renderer.drawCalls;
     this.stats.drawCallsPeak = this.peak;
@@ -257,5 +290,23 @@ export class FrameDriver {
     this.stats.audioClips = host.audio.loadedCount;
 
     host.overlay.updateDebug(state, events, dt, host.phaseName(), this.stats);
+  }
+
+  /**
+   * The allocation tripwire.
+   *
+   * Read it as a *relative* number, not an absolute one: the panel it reports
+   * to composes a dozen strings of its own every frame, so `?debug` is itself
+   * the loudest allocator on screen and the count is never zero. What it is
+   * for is comparison — the same level, the same length of play, before and
+   * after a change. A count that jumps is a new allocation in the loop.
+   */
+  private trackHeap(): void {
+    const bytes = heapBytes();
+    if (bytes === 0) return;
+    if (this.lastHeap - bytes > HEAP_DROP_BYTES) this.heapDrops++;
+    this.lastHeap = bytes;
+    this.stats.heapMb = bytes / (1024 * 1024);
+    this.stats.heapDrops = this.heapDrops;
   }
 }

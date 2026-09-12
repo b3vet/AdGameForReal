@@ -30,6 +30,7 @@ import { RoadView } from './road';
 import { createEngine, createGlow, createScene } from './scene';
 import { SquadView } from './squad';
 import { SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { warmUpScene } from './warmup';
 import { startWeapon, weaponOf } from '@/sim';
 import type { LevelDef, RunState, SimEvent, WeaponId } from '@/sim';
 
@@ -96,6 +97,12 @@ export class Renderer {
   private bossBurstDone = false;
   /** The staff in hand, for effects fired by events that do not name one. */
   private lastWeapon: WeaponId = startWeapon;
+
+  /** Warm-up bookkeeping; see `warmUp` and `shaderStats`. */
+  private warmedMaterials = 0;
+  private warmSkipped = 0;
+  private warmFailures = 0;
+  private warmInFlight = false;
 
   private disposed = false;
 
@@ -172,6 +179,11 @@ export class Renderer {
     // materials are made of, so re-checking them every frame is pure cost.
     this.props?.freeze();
     this.road?.freeze();
+
+    // Last: every pooled material compiled while the title screen is still
+    // being put together, so the first bolt, the first gate and the first
+    // ragdoll of a run do not each cost a frame (`./warmup.ts`).
+    await this.warmUp();
   }
 
   /**
@@ -200,6 +212,54 @@ export class Renderer {
   /** Draw calls in the last rendered frame; the budget is 40 at 500 units. */
   get drawCalls(): number {
     return this.instrumentation?.drawCallsCounter.current ?? 0;
+  }
+
+  /**
+   * Shader programs the engine has compiled so far, and what the warm-up pass
+   * has done about them.
+   *
+   * `programs` is read off the engine's own cache of compiled effects, keyed by
+   * define string, so it counts *variants*: it going up during play is the
+   * signal that something compiled inside a frame, which is what
+   * `src/render/warmup.ts` exists to prevent. The smoke asserts it does not
+   * move across a whole level (`scripts/smoke.mjs`).
+   */
+  get shaderStats(): {
+    programs: number;
+    warmed: number;
+    skipped: number;
+    failed: number;
+    warming: boolean;
+  } {
+    return {
+      programs: compiledProgramCount(this.engine),
+      warmed: this.warmedMaterials,
+      skipped: this.warmSkipped,
+      failed: this.warmFailures,
+      warming: this.warmInFlight,
+    };
+  }
+
+  /**
+   * Compiles every material in the scene, so no frame pays for a first use.
+   *
+   * Called at the end of `init` for everything the renderer owns, again when
+   * the physics layer has built its debris pools, and once more as a level
+   * starts — the later calls are nearly free, because a material that is
+   * already ready resolves on the first check.
+   */
+  async warmUp(): Promise<void> {
+    const scene = this.sceneRef;
+    if (scene === null || this.disposed) return;
+    this.warmInFlight = true;
+    try {
+      const result = await warmUpScene(scene);
+      this.warmedMaterials = result.compiled;
+      this.warmSkipped = result.skipped;
+      this.warmFailures = result.failed;
+    } finally {
+      this.warmInFlight = false;
+    }
   }
 
   /**
@@ -486,9 +546,10 @@ export class Renderer {
   /** The meshes a glow pass would bloom, if one is ever asked for. */
   private collectGlowTargets(): void {
     const meshes: Mesh[] = [];
-    for (const view of [this.projectiles, this.effects, this.enemies, this.boss]) {
-      meshes.push(...(view?.glowMeshes() ?? []));
-    }
+    pushAll(meshes, this.projectiles?.glowMeshes());
+    pushAll(meshes, this.effects?.glowMeshes());
+    pushAll(meshes, this.enemies?.glowMeshes());
+    pushAll(meshes, this.boss?.glowMeshes());
     this.glowTargets = meshes;
   }
 
@@ -513,4 +574,29 @@ export class Renderer {
     if (engine.getHardwareScalingLevel() === level) return;
     engine.setHardwareScalingLevel(level);
   }
+}
+
+/** Appends without a spread, which builds an argument array per call. */
+function pushAll(into: Mesh[], from: readonly Mesh[] | undefined): void {
+  if (from === undefined) return;
+  for (let i = 0; i < from.length; i++) {
+    const mesh = from[i];
+    if (mesh !== undefined) into.push(mesh);
+  }
+}
+
+/**
+ * How many distinct shader programs the engine has built.
+ *
+ * Babylon keeps them in a private cache keyed by define string and exposes no
+ * counter for it (`SceneInstrumentation` counts draw calls, `EngineInstrumentation`
+ * counts compilation *time*), so this reads that cache defensively and answers
+ * 0 rather than throwing if a future version moves it. It is a diagnostic —
+ * the debug panel and the smoke — and never read inside a frame.
+ */
+function compiledProgramCount(engine: Engine | null): number {
+  if (engine === null) return 0;
+  const cache = (engine as unknown as { _compiledEffects?: Record<string, unknown> })
+    ._compiledEffects;
+  return cache === undefined ? 0 : Object.keys(cache).length;
 }

@@ -12,9 +12,27 @@
  * unless something sets it, and the bolts and impacts carry their own
  * brightness instead.
  *
- * It never climbs. A device that spent a second over budget will spend another
- * one, and a ladder that hunts up and down is worse to play than one that gives
- * up: every rung is a decision the player only notices once.
+ * ## What the monitor judges, and why it changed
+ *
+ * Milestone 2 judged the *mean* of the last sixty frames and stepped after one
+ * second over budget. The iPhone 17 Pro Max baseline
+ * (docs/10-milestone-3-log.md) is what that costs: a median of 59 fps with
+ * minimums of 23, and a ladder that had walked to pixel ratio 1.0 on a 3×
+ * screen by level 8. A mean is dragged over the line by a handful of hitches,
+ * and the ladder never climbs back, so a session gets blurrier the longer it
+ * runs while the device was never actually short of time.
+ *
+ * So: the 95th percentile of a three-second window, which a burst of spikes
+ * cannot move but a device that is genuinely late every frame can; two
+ * consecutive windows before a step, so one bad window is not a decision; the
+ * first two seconds after a level start ignored, because that is level
+ * generation, pool hand-out and the first frames of a crowd; and a reset to
+ * rung 0 at every level start, because a level is a fresh measurement and the
+ * last one's verdict should not be inherited.
+ *
+ * It still never climbs *within* a level. A ladder that hunts up and down
+ * mid-run is worse to play than one that settles: every rung is a decision the
+ * player only notices once.
  *
  * `?quality=n` pins a rung, for testing a phone's worst case on a desktop; a
  * pinned ladder never steps on its own.
@@ -37,7 +55,14 @@ export interface QualityRung {
   readonly physics: PhysicsQuality;
 }
 
-/** The ladder itself, best first. Index into this is the "rung" everywhere. */
+/**
+ * The ladder itself, best first. Index into this is the "rung" everywhere.
+ *
+ * The first step is to 1.5, never straight to 1.0: on the product owner's 3×
+ * screen rung 0 already renders at 2, and 1.5 is still a denser backing store
+ * than most of what the phone draws for itself. Dropping two stops at once is
+ * what made the Milestone 2 build look soft.
+ */
 export const QUALITY_RUNGS: readonly QualityRung[] = [
   { pixelRatio: 2, glow: false, physics: 2 },
   { pixelRatio: 1.5, glow: false, physics: 2 },
@@ -49,14 +74,32 @@ export const QUALITY_RUNGS: readonly QualityRung[] = [
 export const MAX_QUALITY_RUNG = QUALITY_RUNGS.length - 1;
 
 /**
- * Frame-time budget. The mean of the last second of frames has to stay above
- * `FRAME_BUDGET` for `DEGRADE_AFTER` seconds before the ladder takes a step —
- * one bad frame is a garbage collection, a bad second is a device that cannot
- * keep up.
+ * Frame-time budget, in seconds: the p95 a window has to beat.
+ *
+ * 20 ms is 50 fps, the floor the milestone's re-measurement target names for
+ * level 8. A 60 fps device that misses a vsync here and there sits at 16.7 ms
+ * at p95 and is left alone; one that is genuinely drawing 40 fps is at 25 and
+ * is not.
  */
-const FRAME_WINDOW = 60;
 const FRAME_BUDGET = 0.02;
-const DEGRADE_AFTER = 1;
+/** Seconds of frames each verdict is taken over. */
+const WINDOW_SECONDS = 3;
+/** Consecutive over-budget windows before the ladder steps. */
+const WINDOWS_TO_STEP = 2;
+/**
+ * Seconds after a level start that are not measured at all: the generator, the
+ * pools being handed out, the first crowd upload and whatever the browser was
+ * doing while the level screen was up.
+ */
+const SETTLE_SECONDS = 2;
+/**
+ * Frames one window can hold. Three seconds at 170 fps, so a ProMotion phone
+ * never overflows it; a longer window simply stops sampling, which biases
+ * nothing because the samples it kept are the window's first three seconds.
+ */
+const WINDOW_SAMPLES = 512;
+/** Where in the sorted window the verdict is read. */
+const PERCENTILE = 0.95;
 
 export interface QualityLadderOptions {
   /** Pin a rung and stop the monitor. `?quality=`; null means automatic. */
@@ -71,18 +114,32 @@ export class QualityLadder {
 
   private index = 0;
 
-  /** Ring buffer of the last `FRAME_WINDOW` frame times, and its running sum. */
-  private readonly frames = new Float32Array(FRAME_WINDOW);
-  private at = 0;
-  private filled = 0;
-  private sum = 0;
-  private over = 0;
+  /** The window being filled, and a scratch copy `p95` sorts in place. */
+  private readonly samples = new Float32Array(WINDOW_SAMPLES);
+  private readonly sorted = new Float32Array(WINDOW_SAMPLES);
+  private count = 0;
+  /** Seconds of frames in the window so far. */
+  private elapsed = 0;
+  /** Seconds since the level started; nothing is judged below `SETTLE_SECONDS`. */
+  private sinceLevel = 0;
+  /** Consecutive windows whose p95 was over budget. */
+  private overWindows = 0;
+
+  /** The last completed window's p95, in seconds. 0 before the first one. */
+  private lastP95 = 0;
+  /** Verdicts taken since the level started; the tests step window by window. */
+  private windowCount = 0;
+  /** Why the ladder last moved, for the debug panel. */
+  private lastReason = 'start';
 
   constructor(options: QualityLadderOptions) {
     this.apply = options.apply;
     const forced = options.forced ?? null;
     this.forced = forced !== null;
-    if (forced !== null) this.index = clampRung(forced);
+    if (forced !== null) {
+      this.index = clampRung(forced);
+      this.lastReason = 'pinned';
+    }
     this.applyCurrent();
   }
 
@@ -102,6 +159,41 @@ export class QualityLadder {
     return this.forced;
   }
 
+  /** The last completed window's 95th percentile frame time, in milliseconds. */
+  get p95Ms(): number {
+    return this.lastP95 * 1000;
+  }
+
+  /** How many windows have been judged since the level started. */
+  get windows(): number {
+    return this.windowCount;
+  }
+
+  /** One word for why the rung is where it is: `start`, `pinned` or `p95`. */
+  get reason(): string {
+    return this.lastReason;
+  }
+
+  /**
+   * A level is starting: back to rung 0 and a fresh measurement.
+   *
+   * Not a climb — it is the *end* of the measurement the last level made. The
+   * device's verdict from a 300-unit level 8 has nothing to say about level 1,
+   * and inheriting it is what left the Milestone 2 build rendering every later
+   * session at pixel ratio 1.
+   */
+  beginLevel(): void {
+    this.resetWindow();
+    this.sinceLevel = 0;
+    this.overWindows = 0;
+    this.lastP95 = 0;
+    this.windowCount = 0;
+    if (this.forced || this.index === 0) return;
+    this.index = 0;
+    this.lastReason = 'level';
+    this.applyCurrent();
+  }
+
   /**
    * One frame of wall-clock time. Returns true on the frame it steps down.
    * `dt` is real seconds — never the app's scaled time, or hit-stop would read
@@ -109,8 +201,29 @@ export class QualityLadder {
    */
   track(dt: number): boolean {
     if (this.forced || this.index >= MAX_QUALITY_RUNG) return false;
-    if (!this.overBudget(dt)) return false;
+
+    this.sinceLevel += dt;
+    if (this.sinceLevel < SETTLE_SECONDS) return false;
+
+    if (this.count < WINDOW_SAMPLES) this.samples[this.count++] = dt;
+    this.elapsed += dt;
+    if (this.elapsed < WINDOW_SECONDS) return false;
+
+    const p95 = this.percentile();
+    this.lastP95 = p95;
+    this.windowCount++;
+    this.resetWindow();
+
+    if (p95 <= FRAME_BUDGET) {
+      this.overWindows = 0;
+      return false;
+    }
+    this.overWindows++;
+    if (this.overWindows < WINDOWS_TO_STEP) return false;
+
+    this.overWindows = 0;
     this.index++;
+    this.lastReason = 'p95';
     this.applyCurrent();
     return true;
   }
@@ -120,27 +233,22 @@ export class QualityLadder {
     this.apply(this.current, this.index);
   }
 
-  /** The ring buffer, and whether it has been over budget for long enough. */
-  private overBudget(dt: number): boolean {
-    this.sum -= this.frames[this.at] ?? 0;
-    this.frames[this.at] = dt;
-    this.sum += dt;
-    this.at = (this.at + 1) % FRAME_WINDOW;
+  /** The window's 95th percentile, in seconds. 0 for an empty window. */
+  private percentile(): number {
+    const count = this.count;
+    if (count === 0) return 0;
+    this.sorted.set(this.samples);
+    // Everything past the live samples sorts to the end rather than to the
+    // front, where a run of zeros would drag the percentile down.
+    this.sorted.fill(Number.POSITIVE_INFINITY, count);
+    this.sorted.sort();
+    const at = Math.min(count - 1, Math.floor(PERCENTILE * (count - 1)));
+    return this.sorted[at] ?? 0;
+  }
 
-    // Nothing is judged until the window holds a full second, so the cost of
-    // the first frames — shaders, textures, the Havok warm-up — is ignored.
-    if (this.filled < FRAME_WINDOW) {
-      this.filled++;
-      return false;
-    }
-    if (this.sum / FRAME_WINDOW <= FRAME_BUDGET) {
-      this.over = 0;
-      return false;
-    }
-    this.over += dt;
-    if (this.over < DEGRADE_AFTER) return false;
-    this.over = 0;
-    return true;
+  private resetWindow(): void {
+    this.count = 0;
+    this.elapsed = 0;
   }
 }
 

@@ -17,7 +17,7 @@ iOS and Android later.
 
 ## Stack
 
-- Babylon.js 9 (`@babylonjs/core`, `@babylonjs/gui`), TypeScript strict, Vite,
+- Babylon.js 9 (`@babylonjs/core`, `@babylonjs/loaders`; no GUI package, labels are a glyph atlas), TypeScript strict, Vite,
   Vitest, Playwright 1.56.1 (pinned: the browser at `/opt/pw-browsers` is 1194).
 - Physics: Havok (`@babylonjs/havok`) as a presentation-only layer in `src/physics` from Milestone 2; the sim never reads it.
 - No ads, no IAP, no analytics SDKs. Do not add any.

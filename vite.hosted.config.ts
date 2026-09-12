@@ -8,25 +8,28 @@ import { defineConfig } from 'vite';
  * artifact — something inside the inlined Babylon bundle trips it, not the size.
  * It does allow `<script src>` from jsdelivr, so this config builds *only our
  * code* as a single IIFE and leaves Babylon external, to be supplied by the
- * `babylonjs`, `babylonjs-gui` and `babylonjs-loaders` UMD bundles as the
- * `BABYLON` and `BABYLON.GUI` globals. The loaders bundle exports nothing we
- * name — it registers the glTF plugin with the core bundle as a side effect,
- * exactly as `import '@babylonjs/loaders/glTF'` does in the ES build.
+ * `babylonjs` and `babylonjs-loaders` UMD bundles as the `BABYLON` global. The
+ * loaders bundle exports nothing we name — it registers the glTF plugin with
+ * the core bundle as a side effect, exactly as `import '@babylonjs/loaders/glTF'`
+ * does in the ES build.
+ *
+ * `babylonjs-gui` was the third bundle until Milestone 3: the digit atlas
+ * (`src/render/labels.ts`) replaced the GUI label layer, nothing imports
+ * `@babylonjs/gui` any more, and the package is gone from `package.json`.
  *
  * `scripts/build-hosted.mjs` drives this into a temp dir and assembles the
  * fragment. Not used by `npm run build` — that stays a normal module build.
  */
 
-/** Every `@babylonjs/core`, `gui` and `loaders` id, root or deep. */
-const BABYLON_EXTERNAL = /^@babylonjs\/(core|gui|loaders)(\/.*)?$/;
+/** Every `@babylonjs/core` and `loaders` id, root or deep. */
+const BABYLON_EXTERNAL = /^@babylonjs\/(core|loaders)(\/.*)?$/;
 
 /**
- * Deep ES imports collapse onto the two UMD globals: the UMD bundles are flat,
- * so `@babylonjs/core/Meshes/Builders/boxBuilder` is just `BABYLON.CreateBox`.
+ * Deep ES imports collapse onto the one UMD global: the UMD bundle is flat, so
+ * `@babylonjs/core/Meshes/Builders/boxBuilder` is just `BABYLON.CreateBox`.
  */
 function babylonGlobal(id: string): string {
-  if (/^@babylonjs\/gui(\/.*)?$/.test(id)) return 'BABYLON.GUI';
-  if (/^@babylonjs\/(core|loaders)(\/.*)?$/.test(id)) return 'BABYLON';
+  if (BABYLON_EXTERNAL.test(id)) return 'BABYLON';
   throw new Error(`vite.hosted.config.ts: no UMD global for external module "${id}"`);
 }
 
