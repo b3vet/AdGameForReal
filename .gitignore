@@ -7,3 +7,11 @@ artifacts/
 *.log
 .DS_Store
 *.local
+
+# iOS build products only. `ios/` itself is committed once `npx cap add ios`
+# creates it on the Mac (D34, docs/DEVICE.md): it carries the Xcode project,
+# the signing settings and the app icons, and it also ships its own .gitignore
+# for the rest of the noise (the synced web copy, xcuserdata).
+ios/App/Pods/
+ios/App/build/
+DerivedData/

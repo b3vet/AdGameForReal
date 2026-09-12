@@ -3,6 +3,8 @@
  */
 
 import { App } from '@/core/App';
+// Native shell and haptics, on a device only; a no-op in every browser (D34).
+import '@/device';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
 const overlayRoot = document.querySelector<HTMLElement>('#overlay-root');
