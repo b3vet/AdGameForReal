@@ -119,3 +119,28 @@
 - Open: `src/core/player.ts` deep-imports `@/sim/player` until the sim
   index re-exports the meta layer; the first Yard reveal is silent because
   audio is locked before the first gesture.
+
+## 2026-09-13 — Phase B2: wall fences, wisp, evolution visuals, Academy backdrop (verified and committed)
+
+- Walls: each stretch becomes fence pieces at x = ±1 placed once per level
+  and culled per frame; two draw calls (a merged stone post-and-rail piece
+  and an additive amber rune cap that breathes); the first post's cap is
+  taller and a rune plate marks the road where the sim's approach clamp
+  begins; `wallBlocked` flares the nearest post. Stone re-tinted cool grey
+  after the warm post vanished into the warm road.
+- Wisp: orb, motes and 1 to 3 counter-rotating rings on the existing sprite
+  layer; a spark's flight time is computed from the sim's own distance and
+  speed and homes each frame so it lands on the frame the damage applies;
+  a target that dies mid-flight fizzles.
+- Evolutions: burn read off the enemy state as an ember wash sized by the
+  footprint; storm's extra hop from the chain events with the pool raised
+  18; frost's shatter splash told from an ember blast by position.
+- Academy backdrop: `setPreviewPlayer` drives camera drift, the selected
+  staff and the wisp on the home screen; the backdrop camera stands back
+  so the crowd sits above the card panel.
+- Pools from level data (176 posts, 208 runes, 32 sparks); no truncation
+  at level 20. Draw peaks 35 / 34 / 39 / 40 across the smoke's four runs,
+  39 at level 20 fully upgraded; 105 materials warmed, 0 compiles during
+  play; hosted 9.86 MB, artifact 13.20 MB.
+- Open: `Renderer.ts` at 523 lines and `theme.ts` at 513 (Phase C splits);
+  `setPreviewPlayer` must be called before the preview is marked dirty.

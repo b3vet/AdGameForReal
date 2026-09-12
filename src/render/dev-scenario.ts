@@ -11,6 +11,7 @@
  */
 
 import { DevCombat } from './dev-combat';
+import { DevExtras } from './dev-extras';
 import { buildDevLevel, emptyDevState } from './dev-fixture';
 import { DevStreams } from './dev-streams';
 import { balance } from '@/data';
@@ -77,6 +78,8 @@ export class DevScenario {
   private readonly events: SimEvent[] = [];
   private readonly combat: DevCombat;
   private readonly streams: DevStreams;
+  /** The wisp and the fences; see `./dev-extras.ts`. */
+  private readonly extras: DevExtras;
 
   private rowsPassed = 0;
   private stompTimer = 0;
@@ -93,6 +96,7 @@ export class DevScenario {
       this.endRunOnBossKill();
     });
     this.streams = new DevStreams(this.state, this.events);
+    this.extras = new DevExtras(this.state, this.events, this.level.walls ?? []);
     this.populate();
   }
 
@@ -133,6 +137,9 @@ export class DevScenario {
     state.time += dt;
     if (state.squad.count < this.floorCount) state.squad.count = this.floorCount;
     this.moveSquad(dt);
+    // After the squad has been steered and before anything shoots: the fences
+    // clamp where it ended up, and the wisp follows it there.
+    this.extras.step(dt);
     this.combat.step(dt);
     this.streams.step(dt);
     this.moveEnemies(dt);
@@ -229,6 +236,7 @@ export class DevScenario {
 
     this.combat.reset();
     this.streams.reset();
+    this.extras.reset();
 
     const bossHp = Math.min(DEV_BOSS_MAX_HP, Math.max(DEV_BOSS_MIN_HP, level.boss.hp));
     state.boss = {

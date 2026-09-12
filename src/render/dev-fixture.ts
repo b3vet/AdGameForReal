@@ -15,6 +15,7 @@ import type {
   RowDef,
   RunState,
   SquadState,
+  WallDef,
   WeaponId,
 } from '@/sim';
 
@@ -23,8 +24,37 @@ export function buildDevLevel(): LevelDef {
   const config = levelConfig(1);
   const generated = generateLevel(1, config, config.seed);
   const level = generated.rows.length > 0 ? generated : handBuiltLevel();
-  return withStaffGates(level);
+  return withWalls(withStaffGates(level));
 }
+
+/**
+ * Forces two wall stretches into the fixture's level, one per boundary (D32).
+ *
+ * Level 1 has `wallRows: 0` — walls start at level 4 — so without this the one
+ * thing Phase B2 added to the road would never appear in the scene the render
+ * layer is reviewed in. The geometry follows the generator's own rule: a
+ * stretch ends `walls.gateClearance` short of the row it guards, so the row is
+ * still approachable from both of its sides.
+ */
+function withWalls(level: LevelDef): LevelDef {
+  const clearance = balance.walls.gateClearance;
+  const walls: WallDef[] = [];
+  let boundary: 1 | -1 = 1;
+  for (const index of WALL_ROWS) {
+    const row = level.rows[index];
+    const previous = level.rows[index - 1];
+    if (row === undefined || previous === undefined) continue;
+    const zEnd = row.z - clearance;
+    const zStart = Math.max(previous.z + clearance, zEnd - balance.walls.length.max);
+    if (zEnd - zStart < balance.walls.minLength) continue;
+    walls.push({ boundary, zStart, zEnd });
+    boundary = boundary === 1 ? -1 : 1;
+  }
+  return { ...level, walls };
+}
+
+/** Which rows the fixture walls the approach to; one per boundary. */
+const WALL_ROWS = [2, 5];
 
 /**
  * Forces two staff gates into the fixture's level.
@@ -99,5 +129,9 @@ export function emptyDevState(level: LevelDef): RunState {
     peakCount: level.startCount,
     survivors: level.startCount,
     arenaZ: level.arenaZ,
+    // The wisp and the walls are the fixture's to drive (`dev-extras.ts`); both
+    // are optional on `RunState`, and both are written by `DevExtras.reset`.
+    familiar: null,
+    walls: level.walls ?? [],
   };
 }

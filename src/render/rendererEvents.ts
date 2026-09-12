@@ -19,6 +19,8 @@ import type { GateView } from './gates';
 import type { ProjectileView } from './projectiles';
 import type { SquadView } from './squad';
 import { SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import type { WallView } from './walls';
+import type { WispView } from './wisp';
 import { startWeapon } from '@/sim';
 import type { SimEvent, WeaponId } from '@/sim';
 
@@ -30,12 +32,22 @@ export interface EventViews {
   gates: GateView;
   enemies: EnemyView;
   boss: BossView;
+  walls: WallView;
+  wisp: WispView;
   shake: (strength: number, seconds: number) => void;
 }
 
 /** Scratch for the position lookups, which must not allocate per event. */
 const scratchFrom = { x: 0, z: 0 };
 const scratchTo = { x: 0, z: 0 };
+
+/**
+ * Shatters remembered inside one batch, so the `splash` the sim emits straight
+ * after one can be told from an ember blast. Eight is plenty: the sim guards
+ * against a shatter cascading (`Firing.applyShatter`), so one step can only
+ * resolve as many as the volley had direct kills on frozen bodies.
+ */
+const SHATTER_MEMORY = 8;
 
 export class RendererEvents {
   private readonly views: EventViews;
@@ -47,8 +59,36 @@ export class RendererEvents {
   /** The staff in hand, for effects fired by events that do not name one. */
   private lastWeapon: WeaponId = startWeapon;
 
+  /**
+   * Where the bodies that shattered in the batch being applied stood.
+   *
+   * Frost's evolution resolves as a splash centred on the body that came apart
+   * (`Firing.applyShatter`), and the sim emits it as an ordinary `splash` — the
+   * same event ember's blast uses. The two want different pictures, and the
+   * only thing that tells them apart without the renderer knowing the player's
+   * staff tiers is that a shatter's splash is centred exactly on the position
+   * the `enemyShattered` just before it carried. Ember's is centred on the
+   * *shooter's* x, so the pair cannot collide by construction.
+   */
+  private readonly shatterX = new Float64Array(SHATTER_MEMORY);
+  private readonly shatterZ = new Float64Array(SHATTER_MEMORY);
+  private shatterCount = 0;
+
   constructor(views: EventViews) {
     this.views = views;
+  }
+
+  /**
+   * Where an enemy is, for the wisp's spark to home on. Bound once: it is
+   * handed to `WispView.update` every frame and a closure per frame is an
+   * allocation in the steady-state path.
+   */
+  private readonly positionOf = (enemyId: number, out: { x: number; z: number }): boolean =>
+    this.views.enemies.positionOf(enemyId, out);
+
+  /** The lookup a spark follows its target with; see `positionOf`. */
+  get targetLookup(): (enemyId: number, out: { x: number; z: number }) => boolean {
+    return this.positionOf;
   }
 
   /**
@@ -60,6 +100,7 @@ export class RendererEvents {
   reset(): void {
     this.bossId = -1;
     this.bossBurstDone = false;
+    this.shatterCount = 0;
     this.setWeapon(startWeapon);
   }
 
@@ -72,6 +113,9 @@ export class RendererEvents {
   apply(events: readonly SimEvent[]): void {
     const effects = this.views.effects;
     const enemies = this.views.enemies;
+    // A shatter and the splash it throws are always in the same batch, because
+    // they are emitted in the same sim step.
+    this.shatterCount = 0;
 
     for (const event of events) {
       switch (event.type) {
@@ -82,7 +126,11 @@ export class RendererEvents {
           effects?.onImpact(event.weaponId, event.x, event.z);
           break;
         case 'splash':
-          effects?.onSplash(event.x, event.z, event.radius);
+          if (this.takeShatter(event.x, event.z)) {
+            effects?.onShatterPuff(event.x, event.z, event.radius);
+          } else {
+            effects?.onSplash(event.x, event.z, event.radius);
+          }
           break;
         case 'chain':
           // The event carries block ids, not positions: the view that draws
@@ -123,6 +171,7 @@ export class RendererEvents {
           // flash would only be a second burst on top of the `projectileHit`
           // already drawn on the same spot — twenty a second out of a pool of
           // twenty-four, which is the real impacts starved by ice chips.
+          this.noteShatter(event.x, event.z);
           if (event.streamId !== undefined) break;
           effects?.onImpact('frost', event.x, event.z);
           break;
@@ -139,6 +188,12 @@ export class RendererEvents {
           } else {
             enemies?.onKilled(event.enemyId);
           }
+          break;
+        case 'familiarShot':
+          this.views.wisp?.onShot(event.x, event.z, event.targetId, this.positionOf);
+          break;
+        case 'wallBlocked':
+          this.views.walls?.onBlocked(event.boundary, event.z);
           break;
         case 'bossActivated':
           this.bossId = event.enemyId;
@@ -173,6 +228,32 @@ export class RendererEvents {
     this.views.squad?.setWeapon(weaponId);
     this.views.projectiles?.setWeapon(weaponId);
     this.views.effects?.setWeapon(weaponId);
+  }
+
+  /** Remembers where a body came apart, for the `splash` that may follow it. */
+  private noteShatter(x: number, z: number): void {
+    // A ring rather than a bounded push: on the rare step that overruns the
+    // memory, the newest shatter is the one whose splash is still coming.
+    const at = this.shatterCount % SHATTER_MEMORY;
+    this.shatterX[at] = x;
+    this.shatterZ[at] = z;
+    this.shatterCount++;
+  }
+
+  /** True if `(x, z)` is a shatter this batch recorded; consumes the match. */
+  private takeShatter(x: number, z: number): boolean {
+    const kept = Math.min(this.shatterCount, SHATTER_MEMORY);
+    for (let i = 0; i < kept; i++) {
+      if (this.shatterX[i] !== x || this.shatterZ[i] !== z) continue;
+      // Consumed by moving the last live entry over it, so one shatter cannot
+      // claim two splashes.
+      const last = kept - 1;
+      this.shatterX[i] = this.shatterX[last] ?? 0;
+      this.shatterZ[i] = this.shatterZ[last] ?? 0;
+      this.shatterCount = last;
+      return true;
+    }
+    return false;
   }
 
   /**

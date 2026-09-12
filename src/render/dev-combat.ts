@@ -13,7 +13,14 @@
  */
 
 import { balance } from '@/data';
-import { applyGateGrowth, formationOffsets, isShootable, laneCenter, weaponDef } from '@/sim';
+import {
+  applyGateGrowth,
+  formationOffsets,
+  isShootable,
+  laneCenter,
+  progression,
+  weaponDef,
+} from '@/sim';
 import type { EnemyState, ProjectileState, RunState, SimEvent, WeaponId } from '@/sim';
 
 const DEV_SHOTS_PER_UNIT = 2;
@@ -21,6 +28,15 @@ const DEV_MAX_SHOTS_PER_SECOND = 90;
 /** How wide a block is to a bullet. The renderer uses the sim's own footprint;
  *  the fixture only needs something that feels the same size. */
 const BOSS_HALF_WIDTH = 1.3;
+
+/**
+ * The fixture plays every staff at tier 2 (D33), because the evolutions are
+ * three of the visuals Phase B2 added and none of them appears at tier 1:
+ * ember's burn, storm's extra chain hop and frost's shatter puff. What each one
+ * is worth comes from `progression.json`, so the reach and the timing on screen
+ * are the ones the sim will give them.
+ */
+const EVOLVED = true;
 
 export class DevCombat {
   private readonly travelled: Float32Array;
@@ -77,6 +93,19 @@ export class DevCombat {
     // instead of falling over.
     if (frozen && weaponDef(this.weapon()).slow?.shatterOnKill === true) {
       this.events.push({ type: 'enemyShattered', enemyId: enemy.id, x: enemy.x, z: enemy.z });
+      // Frost's evolution. The sim emits the shatter's reach as an ordinary
+      // `splash` centred on the body that came apart, and the renderer tells
+      // that from an ember blast by exactly that — same batch, same position
+      // (`rendererEvents.ts`), so the fixture has to emit the pair the same way.
+      const shatter = progression.evolutions.frost.shatter;
+      if (EVOLVED && shatter !== undefined) {
+        this.events.push({
+          type: 'splash',
+          x: enemy.x,
+          z: enemy.z,
+          radius: shatter.radius,
+        });
+      }
     }
 
     if (enemy.kind === 'boss') {
@@ -227,10 +256,34 @@ export class DevCombat {
     if (chain !== undefined) {
       // A wider reach than the sim's, because the fixture's blocks sit a whole
       // row apart and a chain that never fires proves nothing.
-      const neighbour = this.nearestOther(enemy, chain.range * 4);
-      if (neighbour !== null) {
-        this.events.push({ type: 'chain', from: enemy.id, to: neighbour.id });
+      let from = enemy;
+      // Storm's evolution is one more link on the same arc, so this is the
+      // fixture's own budget plus `extraChains` rather than a second mechanic.
+      const links = 1 + (EVOLVED ? (progression.evolutions.storm.extraChains ?? 0) : 0);
+      for (let link = 0; link < links; link++) {
+        const neighbour = this.nearestOther(from, chain.range * 4, enemy);
+        if (neighbour === null) break;
+        this.events.push({ type: 'chain', from: from.id, to: neighbour.id });
+        from = neighbour;
       }
+    }
+
+    // Ember's evolution: the struck body is set alight for a couple of seconds,
+    // written onto the body itself exactly as `Burn.ignite` does — which is
+    // where `BurnView` reads it from.
+    const burn = progression.evolutions.ember.burn;
+    if (EVOLVED && burn !== undefined && weapon === 'ember' && enemy.alive) {
+      enemy.burning = true;
+      enemy.burnUntil = this.state.time + burn.seconds;
+      enemy.burnPerTick = 1;
+      enemy.burnNextAt = this.state.time + burn.tickSeconds;
+      this.events.push({
+        type: 'enemyBurning',
+        enemyId: enemy.id,
+        x: enemy.x,
+        z: enemy.z,
+        seconds: burn.seconds,
+      });
     }
 
     const slow = def.slow;
@@ -241,11 +294,15 @@ export class DevCombat {
     }
   }
 
-  private nearestOther(enemy: EnemyState, range: number): EnemyState | null {
+  private nearestOther(
+    enemy: EnemyState,
+    range: number,
+    exclude: EnemyState | null = null,
+  ): EnemyState | null {
     let best: EnemyState | null = null;
     let bestGap = range;
     for (const other of this.state.enemies) {
-      if (other === enemy || !other.alive) continue;
+      if (other === enemy || other === exclude || !other.alive) continue;
       const gap = Math.hypot(other.x - enemy.x, other.z - enemy.z);
       if (gap >= bestGap) continue;
       best = other;

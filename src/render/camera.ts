@@ -11,7 +11,18 @@ import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { CAMERA } from './theme';
+import {
+  CAMERA,
+  PREVIEW_BLEND_RATE,
+  PREVIEW_DRIFT_PERIOD,
+  PREVIEW_DRIFT_PERIOD_Y,
+  PREVIEW_DRIFT_X,
+  PREVIEW_DRIFT_Y,
+  PREVIEW_BEHIND,
+  PREVIEW_HEIGHT,
+  PREVIEW_LOOK_AHEAD,
+  PREVIEW_LOOK_HEIGHT,
+} from './theme';
 import type { SquadState } from '@/sim';
 
 export class CameraRig {
@@ -34,6 +45,24 @@ export class CameraRig {
   /** Its own RNG state so a kick never touches the sim's deterministic stream. */
   private seed = 0x9e37_79b9;
 
+  /**
+   * The Academy backdrop's slow breath (docs/12-milestone-4-plan.md).
+   *
+   * A preview run never ticks, so without this the home screen is one frame
+   * repeated: the crowd's idle sway is there, but the shot behind it is dead
+   * still and the whole thing reads as a paused game. On, the pose drifts a
+   * little over half a metre sideways and a fifth of a metre up on two periods
+   * that do not divide into each other, so the loop never lands on itself.
+   *
+   * It is added on top of the eased pose exactly like the shake, and for the
+   * same reason: feeding it back into the ease would turn a drift into a
+   * wander.
+   */
+  private drifting = false;
+  private driftPhase = 0;
+  /** 0 while playing, 1 on the Academy; everything preview eases on it. */
+  private previewBlend = 0;
+
   constructor(scene: Scene) {
     const camera = new UniversalCamera(
       'camera',
@@ -55,11 +84,24 @@ export class CameraRig {
     return this.settled;
   }
 
+  /** The Academy is up (or is not): see `drifting`. */
+  setDrift(on: boolean): void {
+    if (this.drifting === on) return;
+    this.drifting = on;
+    if (!on) this.driftPhase = 0;
+  }
+
+  /** A fresh level snaps the framing too: no swing behind the loading frame. */
+  private snapPreview(): void {
+    this.previewBlend = this.drifting ? 1 : 0;
+  }
+
   /** A fresh level snaps rather than easing in from wherever the last one ended. */
   reset(): void {
     this.ready = false;
     this.settled = false;
     this.shakeLeft = 0;
+    this.snapPreview();
   }
 
   /**
@@ -84,9 +126,19 @@ export class CameraRig {
     const pullback = Math.min(CAMERA.pullbackMax, squad.count * CAMERA.pullbackPerUnit);
     const lateral = squad.x * CAMERA.lateralFollow;
 
+    // The backdrop stands further back and lower than the game does, so the
+    // crowd sits above the Academy's cards rather than behind them (see
+    // `PREVIEW_BEHIND` for the one angle that decides it).
+    const target = this.drifting ? 1 : 0;
+    this.previewBlend += (target - this.previewBlend) * (1 - Math.exp(-PREVIEW_BLEND_RATE * dt));
+    const behind = mix(CAMERA.behind, PREVIEW_BEHIND, this.previewBlend);
+    const height = mix(CAMERA.height, PREVIEW_HEIGHT, this.previewBlend);
+    const lookAhead = mix(CAMERA.lookAhead, PREVIEW_LOOK_AHEAD, this.previewBlend);
+    const lookHeight = mix(CAMERA.lookHeight, PREVIEW_LOOK_HEIGHT, this.previewBlend);
+
     const wantX = lateral;
-    const wantY = CAMERA.height + pullback;
-    const wantZ = squad.z - CAMERA.behind - pullback;
+    const wantY = height + pullback;
+    const wantZ = squad.z - behind - pullback;
 
     // A fresh level snaps; every other frame eases at a rate independent of
     // frame time, so 30 fps and 120 fps feel the same.
@@ -133,8 +185,20 @@ export class CameraRig {
       this.settled = false;
     }
 
-    this.camera.position.set(x + shakeX, y + shakeY, z);
-    this.target.set(lateral, CAMERA.lookHeight, squad.z + CAMERA.lookAhead);
+    let driftX = 0;
+    let driftY = 0;
+    if (this.drifting) {
+      this.driftPhase += dt;
+      driftX = Math.sin((this.driftPhase / PREVIEW_DRIFT_PERIOD) * Math.PI * 2) * PREVIEW_DRIFT_X;
+      driftY = Math.sin((this.driftPhase / PREVIEW_DRIFT_PERIOD_Y) * Math.PI * 2) * PREVIEW_DRIFT_Y;
+      this.settled = false;
+    }
+
+    this.camera.position.set(x + shakeX + driftX, y + shakeY + driftY, z);
+    // The look point takes half the lateral drift, so the shot pans rather than
+    // strafes: a pure position offset slides the road sideways under a fixed
+    // aim, which at this distance reads as a camera bump.
+    this.target.set(lateral + driftX * 0.5, lookHeight, squad.z + lookAhead);
     this.camera.setTarget(this.target);
   }
 
@@ -151,4 +215,9 @@ export class CameraRig {
     this.seed = x;
     return (x >>> 0) / 4294967296;
   }
+}
+
+/** Linear blend; the preview framing is the only thing that needs one. */
+function mix(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
 }

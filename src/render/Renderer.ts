@@ -16,6 +16,7 @@ import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstr
 import type { Scene } from '@babylonjs/core/scene';
 
 import { BossView } from './boss';
+import { BurnView } from './burn';
 import { CameraRig } from './camera';
 import { EffectsView } from './effects';
 import { EnemyView } from './enemies';
@@ -23,6 +24,7 @@ import { GateView } from './gates';
 import { loadDisplayFont } from './glyphAtlas';
 import { NumberLabels } from './labels';
 import { ProjectileView } from './projectiles';
+import { PreviewBackdrop } from './preview';
 import { PropsView } from './props';
 import { RoadView } from './road';
 import { createEngine, createScene } from './scene';
@@ -31,10 +33,12 @@ import { SquadView } from './squad';
 import { RendererEvents } from './rendererEvents';
 import { POOL } from './theme';
 import { applyToonRampToScene } from './toonRamp';
+import { WallView } from './walls';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
+import { WispView } from './wisp';
 import { weaponOf } from '@/sim';
-import type { LevelDef, RunState, SimEvent } from '@/sim';
+import type { LevelDef, PlayerState, RunState, SimEvent } from '@/sim';
 
 export interface RendererOptions {
   /**
@@ -52,12 +56,23 @@ export interface RendererOptions {
 const DEFAULT_MAX_PIXEL_RATIO = 2;
 
 /**
- * The road runs from before the first row to well past the arena. The tail is
- * longer than the plan's 40 m on purpose: the far edge has to sit beyond
- * `FOG_END` from the camera, or the player sees the road stop in mid-air.
+ * The road runs from before the first row to well past the arena. Both ends are
+ * longer than the plan's 40 m on purpose: each has to sit outside the frame
+ * from wherever the camera can stand, or the player sees the road stop in
+ * mid-air.
+ *
+ * The near end moved from -10 to -30 in Milestone 4 for the Academy backdrop:
+ * that camera stands twenty metres behind the squad and looks along the road
+ * rather than down at it (`PREVIEW_BEHIND`), so the bottom of its frame reaches
+ * about `z = -14` — four metres past where the road used to start, which put a
+ * band of grass and the road's own near edge under the Academy's cards.
  */
-const ROAD_START_Z = -10;
+const ROAD_START_Z = -30;
 const ROAD_PAST_ARENA = 70;
+
+/** A lookup that never finds anything, for a frame drawn before `init` wired
+ *  the event router up. A spark with no target simply fizzles. */
+const noTarget = (): boolean => false;
 
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
@@ -80,6 +95,11 @@ export class Renderer {
   private gates: GateView | null = null;
   private enemies: EnemyView | null = null;
   private boss: BossView | null = null;
+  /** Lane walls (D32) and the familiar (D33). */
+  private walls: WallView | null = null;
+  private wisp: WispView | null = null;
+  /** Ember's burn (D33, tier 2), read off the bodies themselves. */
+  private burn: BurnView | null = null;
 
   /**
    * Who draws a death, mirrored from the physics layer by `setPhysicsQuality`.
@@ -94,6 +114,9 @@ export class Renderer {
   private physicsQuality = 0;
   /** Built in `init`, once every view it writes to exists (`./rendererEvents.ts`). */
   private events: RendererEvents | null = null;
+
+  /** The Academy backdrop, when one is up; see `./preview.ts`. */
+  private readonly preview = new PreviewBackdrop();
 
   /** Warm-up bookkeeping; see `warmUp` and `./warmup.ts`. */
   private readonly warmUpTracker = new WarmUpTracker();
@@ -141,6 +164,9 @@ export class Renderer {
     this.gates = new GateView(scene, labels);
     this.enemies = new EnemyView(scene, labels);
     this.boss = new BossView(scene, labels);
+    this.walls = new WallView(scene, sprites);
+    this.wisp = new WispView(sprites);
+    this.burn = new BurnView(sprites);
     this.events = new RendererEvents({
       squad: this.squad,
       projectiles: this.projectiles,
@@ -148,6 +174,8 @@ export class Renderer {
       gates: this.gates,
       enemies: this.enemies,
       boss: this.boss,
+      walls: this.walls,
+      wisp: this.wisp,
       shake: (strength, seconds) => {
         this.shake(strength, seconds);
       },
@@ -198,7 +226,25 @@ export class Renderer {
    * frames until something does (see `App.frame`).
    */
   isSettled(): boolean {
+    // Never, while the Academy backdrop is up: the drift is the whole point of
+    // the preview, and a settled frame is a paused game (`./preview.ts`).
+    if (this.preview.active) return false;
     return this.rig?.isSettled() ?? false;
+  }
+
+  /**
+   * The Academy's backdrop follows this player (D33): the staff on the mages,
+   * the wisp beside them, and a camera that breathes rather than freezing.
+   *
+   * `null` ends the preview, which the app calls as a run starts. The staff
+   * needs nothing beyond this call — the app builds its preview through `Run`
+   * with the same player, so `state.squad.weaponId` is already the chosen one
+   * and `SquadView` draws the crowd carrying it. See `./preview.ts` for what
+   * the wisp needs.
+   */
+  setPreviewPlayer(player: PlayerState | null): void {
+    this.preview.setPlayer(player);
+    this.rig?.setDrift(this.preview.active);
   }
 
   /**
@@ -230,6 +276,20 @@ export class Renderer {
 
   get labelStats(): { labels: number; glyphs: number; dropped: number } {
     return this.labels?.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
+  }
+
+  /**
+   * Fence pieces, wisp sparks and burning bodies drawn last frame: what
+   * Milestone 4 added to the road, and all three have a pool a level can run
+   * into. The debug panel and the dev harness print them beside the draw calls.
+   */
+  get featureStats(): { walls: number; wisp: boolean; sparks: number; burning: number } {
+    return {
+      walls: this.walls?.drawn ?? 0,
+      wisp: this.wisp?.drawn ?? false,
+      sparks: this.wisp?.sparksInFlight ?? 0,
+      burning: this.burn?.drawn ?? 0,
+    };
   }
 
   /** Shader programs compiled so far, and what the warm-up pass did (`./warmup.ts`). */
@@ -305,6 +365,10 @@ export class Renderer {
     const endZ = level.arenaZ + ROAD_PAST_ARENA;
     this.road?.setExtent(ROAD_START_Z, endZ, level.arenaZ);
     this.props?.build(level.index, ROAD_START_Z, endZ);
+    // The fences are placed once here and only culled per frame afterwards
+    // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that
+    // predate D32, and an absent list is simply a level with no walls.
+    this.walls?.setWalls(level.walls);
     this.squad?.reset();
     this.sprites?.reset();
     this.projectiles?.reset();
@@ -312,6 +376,8 @@ export class Renderer {
     this.gates?.reset();
     this.enemies?.reset();
     this.boss?.reset();
+    this.wisp?.reset();
+    this.burn?.reset();
     this.events?.reset();
     this.rig?.reset();
   }
@@ -342,6 +408,12 @@ export class Renderer {
     this.enemies?.update(state, dt);
     this.boss?.update(state.boss, state.squad.z, dt, this.timeScale(dt));
     this.effects?.update(dt);
+    // After the enemies, because both read positions the enemy view has just
+    // refreshed: the wall's flare sprite and the wisp's spark, which homes on
+    // its target through `EnemyView.positionOf`.
+    this.walls?.update(state.squad.z, dt);
+    this.wisp?.update(this.preview.familiarFor(state), this.events?.targetLookup ?? noTarget, dt);
+    this.burn?.update(state, dt);
     this.sprites?.end();
 
     this.rig?.update(state.squad, dt);
@@ -385,6 +457,7 @@ export class Renderer {
     this.gates?.dispose();
     this.enemies?.dispose();
     this.boss?.dispose();
+    this.walls?.dispose();
     this.props?.dispose();
     this.road?.dispose();
     this.labels?.dispose();
@@ -396,6 +469,9 @@ export class Renderer {
     this.gates = null;
     this.enemies = null;
     this.boss = null;
+    this.walls = null;
+    this.wisp = null;
+    this.burn = null;
     this.events = null;
     this.props = null;
     this.road = null;

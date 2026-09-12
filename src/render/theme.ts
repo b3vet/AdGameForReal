@@ -21,6 +21,7 @@ export {
   ARENA_COLOR,
   BOSS_ENRAGE_COLOR,
   BOSS_LABEL_COLOR,
+  BURN_COLOR,
   EMBER_COLOR,
   ENEMY_COLOR,
   ENEMY_LABEL_COLOR,
@@ -42,8 +43,13 @@ export {
   STOMP_COLOR,
   STORM_COLOR,
   STREAM_LABEL_COLOR,
+  WALL_RUNE_COLOR,
+  WALL_STONE_COLOR,
+  WISP_COLOR,
 } from './palette';
-export { POOL } from './pools';
+export { POOL, WALL_POST_SPACING } from './pools';
+export * from './wallLook';
+export * from './spellLook';
 
 export const LANE_WIDTH = balance.road.laneWidth;
 export const ROAD_HALF_WIDTH = balance.road.halfWidth;
@@ -455,3 +461,53 @@ export const CAMERA = {
    */
   settleEpsilon: 0.002,
 } as const;
+
+/**
+ * The Academy backdrop's breath (docs/12-milestone-4-plan.md).
+ *
+ * The home screen is a still frame of a generated level — a preview run that is
+ * never ticked — and a still frame of a crowd that is already swaying reads as
+ * a paused game. So while a preview is up the camera drifts: half a metre
+ * sideways and a fifth of a metre up, on two periods that do not divide into
+ * each other so the loop never lands on itself, both slow enough that no single
+ * glance sees it move.
+ */
+export const PREVIEW_DRIFT_X = 0.55;
+export const PREVIEW_DRIFT_Y = 0.22;
+export const PREVIEW_DRIFT_PERIOD = 17;
+export const PREVIEW_DRIFT_PERIOD_Y = 11;
+
+/**
+ * And where the backdrop stands, which is not where the game stands.
+ *
+ * The play framing puts the squad about four fifths of the way down the screen,
+ * because in a run the road ahead is what is being decided about and the crowd
+ * only has to be within reach of a thumb. The Academy's cards own the bottom
+ * two fifths, so that framing parks the mages *behind the panel* and the
+ * backdrop is an empty road — which is what `artifacts/smoke/academy.png` and
+ * `title.png` show today.
+ *
+ * Where the crowd lands is set by one angle: how far below the horizon it sits,
+ * `atan((height - unitMid) / behind)`, which at the play rig is 26 degrees out
+ * of a 47-degree frame. No amount of re-aiming can lift it past that — aiming
+ * nearer tips the horizon off the top of the screen long before the crowd
+ * clears the cards. The angle itself has to shrink, and that means standing
+ * further back and a little lower:
+ *
+ *   play      behind 11, height 5.6  ->  26.0 deg below the horizon
+ *   backdrop  behind 20, height 4.6  ->  11.9 deg
+ *
+ * With the shot then aimed just in front of the crowd, the horizon sits about a
+ * third of the way down, the squad two fifths, and the cards begin below both.
+ * A mage is still forty pixels tall at that distance, and the first gate row is
+ * inside the fog, so the backdrop is a place rather than a strip of road.
+ * Measured against the 390x844 frame the rest of the camera was measured at; if
+ * the Academy's panel moves, these move with it.
+ */
+export const PREVIEW_BEHIND = 20;
+export const PREVIEW_HEIGHT = 4.6;
+export const PREVIEW_LOOK_AHEAD = 2.2;
+export const PREVIEW_LOOK_HEIGHT = 0.9;
+/** Seconds the framing takes to swing between the two, so neither one cuts. */
+export const PREVIEW_BLEND_RATE = 4;
+

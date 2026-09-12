@@ -38,6 +38,9 @@ import {
   MUZZLE_SIZE,
   MUZZLE_Y,
   POOL,
+  SHATTER_PUFF_DURATION,
+  SHATTER_PUFF_SIZE,
+  SHATTER_PUFF_SPOKES,
   SPLASH_DURATION,
   STORM_COLOR,
 } from './theme';
@@ -202,6 +205,34 @@ export class EffectsView {
       PUFF_COLOR.g,
       PUFF_COLOR.b,
     );
+  }
+
+  /**
+   * Frost's evolution (D33, tier 2): the body came apart and took its
+   * neighbours with it.
+   *
+   * A ring of chips thrown out to the shatter's own radius rather than the
+   * ember splash ring, which is a torus in the ember hue and would read as a
+   * fire blast on an ice kill. The radius is the sim's — it comes off the
+   * `splash` event the shatter emits — so what the player sees is exactly how
+   * far the damage reached.
+   */
+  onShatterPuff(x: number, z: number, radius: number): void {
+    const tint = tintOf('frost');
+    for (let i = 0; i < SHATTER_PUFF_SPOKES; i++) {
+      const angle = (i / SHATTER_PUFF_SPOKES) * Math.PI * 2 + 0.4;
+      this.push(
+        'frostImpact',
+        x + Math.cos(angle) * radius * 0.75,
+        IMPACT_Y,
+        z + Math.sin(angle) * radius * 0.75,
+        SHATTER_PUFF_SIZE,
+        SHATTER_PUFF_DURATION,
+        tint.r * IMPACT_GLOW_BOOST,
+        tint.g * IMPACT_GLOW_BOOST,
+        tint.b * IMPACT_GLOW_BOOST,
+      );
+    }
   }
 
   onSplash(x: number, z: number, radius: number): void {

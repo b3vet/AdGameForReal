@@ -92,3 +92,38 @@ export const STREAM_LABEL_COLOR = new Color3(0.93, 0.97, 1);
 
 /** The ring under a frost-slowed block: the frost staff's own hue. */
 export const SLOW_RING_COLOR = FROST_COLOR;
+
+/**
+ * Lane walls (D32). Cool grey stone for the posts and rails, and an amber rune
+ * for the top edge.
+ *
+ * The stone started in the road's own warm family and vanished into it: a fence
+ * at `x = ±1` stands on light stone with green either side, and at twenty
+ * metres a warm grey post against a warm stone road is the same pixel. Cooling
+ * and darkening it is what gives the posts an edge; the rune then reads as the
+ * lit part of a solid thing rather than as a line floating over the road.
+ *
+ * Amber rather than another of the spell hues: the fence is in frame for ten to
+ * twenty metres at a time, right next to the gate panels, and every saturated
+ * hue in the palette already means something the player has to decide about
+ * (green add, red sub, blue mul and the lane runes, yellow fire rate, violet
+ * staff). Amber is the one warm accent nothing else claims on the road, and it
+ * reads as "carved stone lit from inside" against the light stone it sits on.
+ */
+export const WALL_STONE_COLOR = new Color3(0.6, 0.57, 0.53);
+export const WALL_RUNE_COLOR = new Color3(1, 0.66, 0.2);
+
+/**
+ * The wisp (D33). A pale green-white will-o'-the-wisp: the one hue on the road
+ * that is neither a staff nor a gate, so a familiar hovering beside the squad
+ * is never mistaken for the squad's own fire. The sprite sheet carries a
+ * white-hot core, so this only has to say which way the rim leans.
+ */
+export const WISP_COLOR = new Color3(0.68, 1, 0.72);
+
+/**
+ * Ember's burn (D33). Hotter and yellower than `EMBER_COLOR`: a body alight is
+ * lit from inside, and the flame has to read on top of the ember impacts
+ * already going off on the same body.
+ */
+export const BURN_COLOR = new Color3(1, 0.62, 0.14);
