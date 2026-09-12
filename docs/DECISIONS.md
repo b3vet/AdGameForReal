@@ -33,3 +33,7 @@
 | D29 | 2026-09-11 | Enemies on the road are individual units in streams (hundreds per lane, one soldier lost per touching enemy); brute blocks remain. Stream density is tuned so a good player barely clears each wave (pressure bands). | 09 |
 | D30 | 2026-09-11 | Font: Cinzel for display and numbers, Nunito for body, embedded in builds; number labels move from the GUI texture to a digit atlas. | 09 |
 | D31 | 2026-09-11 | Gate rows return to 18 m with streams between them; levels 1 to 3 are generous, Milestone 2 targets apply from level 6. | 09 |
+| D32 | 2026-09-13 | Lane walls are low: the squad cannot cross a walled boundary, shots and streams are unaffected. From level 4; 20 levels. | 12 |
+| D33 | 2026-09-13 | Progression is coins only: a training yard (five upgrades), a workbench (staff unlocks and one evolution each), a Sanctum (wisp familiar), a bestiary; versioned save v2. | 12 |
+| D34 | 2026-09-13 | The device build is a Capacitor wrapper around the unchanged web build with haptics and a full-screen shell; the product owner runs the Xcode steps from `docs/DEVICE.md`. | 12 |
+| D35 | 2026-09-13 | Upgrades apply as multipliers in the sim through an optional PlayerState; balance bands are defined for a player with no upgrades. | 12 |
