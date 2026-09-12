@@ -28,5 +28,7 @@ Index:
 | `11-milestone-4-plan-draft.md` | Milestone 4 draft plan v1: lane walls and 20 levels, coin progression with the Academy, Capacitor device build, polish; awaiting answers |
 | `12-milestone-4-plan.md` | Milestone 4 plan, approved: lane walls and 20 levels, coin progression with the Academy and a wisp familiar, Capacitor device build, polish |
 | `13-milestone-4-log.md` | Milestone 4 process log (append-only) |
+| `14-milestone-5-plan.md` | Milestone 5 plan, approved: studio-quality look and feel, palette, formation and movement, rendering quality, gates, road, game UI |
+| `15-milestone-5-log.md` | Milestone 5 process log (append-only) |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |

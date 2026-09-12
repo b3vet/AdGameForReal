@@ -222,3 +222,13 @@ half the road so the wall budget can rise; the boss-HP step from level 10
 to 11 is a row-mix matter; the wall clamp versus crowd half-width; the
 picker page after a level-10 first clear; the backdrop frame cap behind
 room panels; app icon and splash art for the device build.
+
+## 2026-09-15 — Post-close: product owner playtest of the reviewed build
+
+- The squad reads as a disc at high counts; it should fill the road in
+  lines. Movement of the horde and of individual wizards must be smoother.
+- Graphics judged poor: visibility range far too short, resolution low.
+- Direction for the next milestone: design and graphics. The UI looks like
+  an app, gates are basic, the road texture is bad, colors read as random
+  rather than coherent. Target: visuals that look designed by a studio.
+- Taken into `14-milestone-5-plan.md`.

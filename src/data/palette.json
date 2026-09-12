@@ -1,0 +1,21 @@
+{
+  "$comment": "Single source of truth for color. Render reads it for materials and effects; UI generates CSS variables from it. Roles, not names, are what code references.",
+  "arcane":   { "base": "#6d4fd6", "light": "#a48cff", "deep": "#3b2a7a" },
+  "gold":     { "base": "#f2b33d", "light": "#ffd97a", "deep": "#b5741c" },
+  "sky":      { "top": "#4f9de6", "mid": "#8fc6f2", "horizon": "#e2f1fb", "haze": "#f6e7cf" },
+  "grass":    { "base": "#7cc35a", "deep": "#4f9a3c", "light": "#a6dd7f" },
+  "stone":    { "base": "#c9b79a", "deep": "#8f7f66", "light": "#e6d9c2", "kerb": "#a89a80" },
+  "ink":      { "base": "#1e1633", "soft": "#4a3f66", "muted": "#8a80a3" },
+  "parchment":{ "base": "#f7efe2", "panel": "#fbf6ec", "shade": "#e8dcc6" },
+  "bone":     { "base": "#e9dcc4", "deep": "#b8a88b" },
+  "danger":   { "base": "#e0483f", "light": "#ff8a7a", "deep": "#9a2a24" },
+  "spell": {
+    "ember": { "core": "#ffd06b", "body": "#ff7a2f", "edge": "#c8341a" },
+    "storm": { "core": "#e0d4ff", "body": "#9d7bff", "edge": "#5a3fd0" },
+    "frost": { "core": "#e6fbff", "body": "#6fe0ff", "edge": "#2a8fc0" }
+  },
+  "gate": {
+    "add": "#4fd27a", "sub": "#e0483f", "mul": "#f2b33d", "fireRate": "#5ec8ff", "weapon": "#a48cff"
+  },
+  "shadow": { "blob": "#2a1f3d" }
+}

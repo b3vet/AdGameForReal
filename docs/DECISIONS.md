@@ -37,3 +37,7 @@
 | D33 | 2026-09-13 | Progression is coins only: a training yard (five upgrades), a workbench (staff unlocks and one evolution each), a Sanctum (wisp familiar), a bestiary; versioned save v2. | 12 |
 | D34 | 2026-09-13 | The device build is a Capacitor wrapper around the unchanged web build with haptics and a full-screen shell; the product owner runs the Xcode steps from `docs/DEVICE.md`. | 12 |
 | D35 | 2026-09-13 | Upgrades apply as multipliers in the sim through an optional PlayerState; balance bands are defined for a player with no upgrades. | 12 |
+| D36 | 2026-09-15 | `src/data/palette.json` is the single source of color for render and UI; code references roles, never hex. | 14 |
+| D37 | 2026-09-15 | The formation fills the available road width in staggered lines and narrows under walls; lateral motion is a damped spring; drawn units follow their slots with per-row lag. | 14 |
+| D38 | 2026-09-15 | Rung 0 renders at native device pixel ratio up to 3 without multisampling; fog 120 to 260 m; tone mapping in materials; blob shadows. | 14 |
+| D39 | 2026-09-15 | Game UI from Kenney Fantasy UI Borders, UI Pack and Game Icons (CC0); gates are dungeon-piece arches with rune plaques. | 14 |

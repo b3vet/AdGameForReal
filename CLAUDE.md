@@ -56,7 +56,7 @@ docs/         plans, decisions, logs (see docs/README.md)
 - TypeScript strict, no `any`, no non-null assertions without a comment.
 - `src/sim` is deterministic: fixed timestep, seeded RNG, no Date, no Math.random.
 - Everything that moves every frame is pooled. No per-frame allocations in hot loops.
-- All tuning numbers live in `src/data/*.json`, never inline in code.
+- All tuning numbers live in `src/data/*.json`, never inline in code. All colors come from `src/data/palette.json` by role.
 - Render reads sim state; it never mutates it. Sim never knows about render.
 - Keep files under ~400 lines; split by responsibility.
 - Comments explain why, not what.
