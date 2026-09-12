@@ -1,5 +1,5 @@
 /**
- * Scene plumbing: the engine, the lights and the glow pass.
+ * Scene plumbing: the engine, the lights and the fog.
  *
  * Pulled out of `Renderer` so that file is about what happens every frame.
  *
@@ -11,20 +11,13 @@
  */
 
 import { Engine } from '@babylonjs/core/Engines/engine';
-import { GlowLayer } from '@babylonjs/core/Layers/glowLayer';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Scene } from '@babylonjs/core/scene';
 
 import { FOG_COLOR, FOG_END, FOG_START, SKY } from './theme';
-
-/** Glow: a quarter-size buffer, per the plan, so a phone can afford the pass. */
-const GLOW_TEXTURE_RATIO = 0.25;
-const GLOW_INTENSITY = 0.5;
-const GLOW_BLUR = 24;
 
 export interface EngineOptions {
   /**
@@ -122,26 +115,3 @@ export function createScene(engine: Engine): Scene {
   return scene;
 }
 
-/**
- * The glow pass, on an explicit include list.
- *
- * A glow layer redraws every mesh it covers into its own buffer, so left to
- * itself it would double the frame's draw calls. Only the spell effects are on
- * the list: they are what should bloom, and they are the meshes that are
- * disabled when nothing is happening.
- *
- * Built on demand rather than at init (Milestone 3 plan, performance step 4):
- * the layer allocates a render target and two blur textures the moment it
- * exists, and the game no longer turns it on. The bolts and impacts carry their
- * own brightness now (`BOLT_GLOW_BOOST` in `theme.ts`), so nothing is waiting
- * on this.
- */
-export function createGlow(scene: Scene, meshes: readonly Mesh[]): GlowLayer {
-  const glow = new GlowLayer('spellGlow', scene, {
-    mainTextureRatio: GLOW_TEXTURE_RATIO,
-    blurKernelSize: GLOW_BLUR,
-  });
-  glow.intensity = GLOW_INTENSITY;
-  for (const mesh of meshes) glow.addIncludedOnlyMesh(mesh);
-  return glow;
-}

@@ -20,11 +20,11 @@ import type { GateKind } from '@/sim';
  *
  * The ragdoll pool is eight where the plan said twenty-four. A live ragdoll is
  * a skinned mesh in its own pose, so it is a draw call that nothing can batch,
- * and measured at the peak of a level-1 run the frame is 24 scene meshes, 6 to
- * 8 gate panels, 3 shard meshes, ~8 for the glow pass — and then one per
- * corpse. Sixteen corpses put the peak at 54; eight puts it at the budget
- * (Phase C perf pass). Shards cost three draw calls however many are live, so
- * their cap is untouched.
+ * and measured at the peak of a level-1 run the frame is about two dozen scene
+ * meshes, 6 to 8 gate panels and 3 shard meshes — and then one per corpse.
+ * Sixteen corpses put the peak over the budget; eight keeps it inside it.
+ * Shards cost three draw calls however many are live, so their cap is
+ * untouched.
  */
 export const RAGDOLL_CAPACITY = 8;
 export const SHARD_CAPACITY = 64;
@@ -70,6 +70,15 @@ export const RAGDOLL_SPIN = 7;
  * lump instead of a spill.
  */
 export const RAGDOLL_SPREAD = 0.8;
+/**
+ * How much of a block's knockback a single stream body gets (Milestone 3).
+ *
+ * A block coming apart throws its skeletons; one grunt shot off its feet in a
+ * river of them should topple and slide, not fly — and the bodies behind it are
+ * still walking through the same metre of road, so a long throw lands the
+ * corpse inside the next rank.
+ */
+export const STREAM_PUSH_SCALE = 0.6;
 /** Spawned this far above the road so the first step is not a penetration. */
 export const RAGDOLL_LIFT = 0.04;
 
@@ -135,9 +144,9 @@ export const GATE_PANEL_CENTER_Y = 1.15;
 export const GATE_PANEL_HALF_WIDTH = 0.9;
 
 /*
- * The degrade ladder used to live here. It is `src/core/quality.ts` now: most
- * of its rungs are the renderer's (pixel ratio, glow) and only the app can see
- * all of them, so the physics layer keeps `setQuality` and no clock.
+ * The degrade ladder used to live here. It is `src/core/quality.ts` now: its
+ * first rungs are the renderer's (pixel ratio) and only the app can see all of
+ * them, so the physics layer keeps `setQuality` and no clock.
  */
 
 /** Parked bodies live down here, spread out so they do not pile into one cell. */

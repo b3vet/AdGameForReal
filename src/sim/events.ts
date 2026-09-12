@@ -241,11 +241,15 @@ export class EventBuffer {
     this.list.push(e);
   }
 
-  enemyShattered(enemyId: number, x: number, z: number): void {
+  enemyShattered(enemyId: number, x: number, z: number, streamId?: number): void {
     const e = this.shatters.take();
     e.enemyId = enemyId;
     e.x = x;
     e.z = z;
+    // Deleted rather than set to `undefined`, for the reason `enemyKilled`
+    // gives below.
+    if (streamId === undefined) delete e.streamId;
+    else e.streamId = streamId;
     this.list.push(e);
   }
 

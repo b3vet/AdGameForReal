@@ -21,6 +21,20 @@ interface AssetBase {
 }
 
 /**
+ * A rectangle of the model's atlas and the albedo multiplier its texels get.
+ *
+ * `u` and `v` are `[min, max]` in texture coordinates, inclusive; an omitted
+ * axis matches all of it. The bounds are read off the model itself, so `note`
+ * says which patch of the atlas the numbers are — nothing else here does.
+ */
+export interface TintPatch {
+  u?: readonly number[];
+  v?: readonly number[];
+  tint: readonly number[];
+  note?: string;
+}
+
+/**
  * A glTF model. `animations` maps the id the game uses to the name the artist
  * gave the clip, so gameplay code never repeats a KayKit or Quaternius string.
  */
@@ -47,10 +61,19 @@ export interface ModelAsset extends AssetBase {
    * Per-mesh albedo multipliers, baked into the merged mesh as vertex colours
    * (`[r, g, b]`, above 1 to lighten). One material and one atlas serve the
    * whole character, so this is the only way to lift one part of it: the mage's
-   * hat is a black brim seen from the camera's pitch, and a crowd of them reads
-   * as a field of dark discs rather than as five hundred wizards.
+   * hat is a near-black navy in the file, and a crowd of them reads as a field
+   * of dark discs rather than as five hundred wizards.
    */
   tints?: Record<string, readonly number[]>;
+  /**
+   * Overrides inside one mesh, by where its UVs land on the atlas
+   * (`src/render/characters/tint.ts`). The mage's hat and its band are the same
+   * mesh with the same material, and the band is a different patch of the same
+   * atlas, so a per-mesh multiplier can only ever have one opinion about both.
+   * The first patch that contains a vertex wins; anything no patch claims keeps
+   * the mesh's entry in `tints`.
+   */
+  tintPatches?: Record<string, readonly TintPatch[]>;
   /**
    * Per-mesh uniform scale applied about that mesh's own node origin before it
    * is merged into the character (Milestone 3, "squad reads as hats").
@@ -60,6 +83,14 @@ export interface ModelAsset extends AssetBase {
    * scale lives here rather than in `scripts/bake-vat.mjs` because a VAT is bone
    * matrices: the bake never sees mesh data, and shrinking the head bone would
    * shrink the head with the hat. `asset.ts` applies it in the merge instead.
+   *
+   * There is a floor on it, which Phase C found the hard way: the scale is
+   * uniform and about the hat's own origin, so it shrinks the crown's radius as
+   * well as the brim's, and below about 0.85 the crown is narrower than the
+   * skull it sits on and the mage's hair comes through it. Phase B2's 0.6 was
+   * under that floor — what read as "near-black hats" in the frame review was
+   * the hair, wearing the hat as a ring. 0.88 is the widest the brim may be and
+   * the narrowest the crown may be at once.
    */
   partScales?: Record<string, number>;
 }

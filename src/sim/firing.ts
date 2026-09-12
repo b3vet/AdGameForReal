@@ -367,7 +367,7 @@ export class Firing {
     this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z, streamId);
     // A frozen body does not fall over, it comes apart.
     const shatters = slow?.shatterOnKill === true || (wasSlowed && enemy.slowFactor !== undefined);
-    if (shatters) this.events.enemyShattered(enemy.id, enemy.x, enemy.z);
+    if (shatters) this.events.enemyShattered(enemy.id, enemy.x, enemy.z, streamId);
     if (enemy.kind === 'boss') {
       this.events.bossKilled();
       this.onBossKilled();

@@ -6,11 +6,9 @@
  * three steps are the renderer's and only the app can see all of them; the
  * physics layer keeps `setQuality` and no opinion about when it is called.
  *
- * Milestone 3 dropped the glow rung: the pass is off on every rung now
- * (plan, performance step 4), so `rung.glow` is the flag that says so rather
- * than a step the ladder can take. The renderer does not even build the layer
- * unless something sets it, and the bolts and impacts carry their own
- * brightness instead.
+ * Milestone 3 dropped the glow rung entirely (plan, performance step 4): the
+ * pass is gone from the renderer, the bolts and impacts carry their own
+ * brightness, and a rung is now a pixel ratio and a physics quality.
  *
  * ## What the monitor judges, and why it changed
  *
@@ -46,12 +44,6 @@ import type { PhysicsQuality } from '@/physics';
  */
 export interface QualityRung {
   readonly pixelRatio: number;
-  /**
-   * Whether the glow pass runs. False on every rung as of Milestone 3; kept on
-   * the rung rather than deleted because it is still the renderer's switch and
-   * a future rung may want to offer it back on a desktop.
-   */
-  readonly glow: boolean;
   readonly physics: PhysicsQuality;
 }
 
@@ -64,11 +56,11 @@ export interface QualityRung {
  * what made the Milestone 2 build look soft.
  */
 export const QUALITY_RUNGS: readonly QualityRung[] = [
-  { pixelRatio: 2, glow: false, physics: 2 },
-  { pixelRatio: 1.5, glow: false, physics: 2 },
-  { pixelRatio: 1, glow: false, physics: 2 },
-  { pixelRatio: 1, glow: false, physics: 1 },
-  { pixelRatio: 1, glow: false, physics: 0 },
+  { pixelRatio: 2, physics: 2 },
+  { pixelRatio: 1.5, physics: 2 },
+  { pixelRatio: 1, physics: 2 },
+  { pixelRatio: 1, physics: 1 },
+  { pixelRatio: 1, physics: 0 },
 ];
 
 export const MAX_QUALITY_RUNG = QUALITY_RUNGS.length - 1;
@@ -151,7 +143,7 @@ export class QualityLadder {
   get current(): QualityRung {
     // The index is clamped on every write, so this is never undefined; the
     // fallback is here because `noUncheckedIndexedAccess` cannot know that.
-    return QUALITY_RUNGS[this.index] ?? { pixelRatio: 1, glow: false, physics: 0 };
+    return QUALITY_RUNGS[this.index] ?? { pixelRatio: 1, physics: 0 };
   }
 
   /** True while the rung came from `?quality=` rather than from the clock. */

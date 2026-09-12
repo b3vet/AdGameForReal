@@ -42,6 +42,35 @@ const now = (): number => (typeof performance === 'undefined' ? 0 : performance.
 /** Seeded so a replayed run sounds the same twice (CLAUDE.md: no Math.random). */
 const PITCH_SEED = 0x51_04_c0_de;
 
+/**
+ * A sliding window: at most `max` plays in any `windowMs`.
+ *
+ * Two event classes need this rather than a minimum interval — shots and stream
+ * kills — because both arrive in bursts that an interval would thin to a
+ * metronome: an interval plays one of every twenty shots, evenly spaced, which
+ * is the sound of a machine and not of a volley. A window lets the first eight
+ * through together and then holds, which is what a crackle is.
+ */
+class Burst {
+  private start = 0;
+  private count = 0;
+
+  allow(at: number, windowMs: number, max: number): boolean {
+    if (at - this.start >= windowMs) {
+      this.start = at;
+      this.count = 0;
+    }
+    if (this.count >= max) return false;
+    this.count++;
+    return true;
+  }
+
+  reset(): void {
+    this.start = 0;
+    this.count = 0;
+  }
+}
+
 export class GameAudio {
   private engine: AudioEngineV2 | null = null;
   private readonly sounds = new Map<string, StaticSound>();
@@ -65,9 +94,8 @@ export class GameAudio {
   /** Last time each throttled event class played, in `now()` milliseconds. */
   private readonly lastPlayed = new Map<string, number>();
 
-  /** Sliding window for shots: how many have played since `shotWindowStart`. */
-  private shotWindowStart = 0;
-  private shotsInWindow = 0;
+  private readonly shotBurst = new Burst();
+  private readonly streamKillBurst = new Burst();
 
   /**
    * Displayed value of each gate the last time it ticked. The gate tick follows
@@ -159,8 +187,8 @@ export class GameAudio {
   beginRun(): void {
     this.lastPlayed.clear();
     this.gateShown.clear();
-    this.shotsInWindow = 0;
-    this.shotWindowStart = 0;
+    this.shotBurst.reset();
+    this.streamKillBurst.reset();
   }
 
   /** A button was tapped. Separate from `onEvents`: buttons are not sim events. */
@@ -196,8 +224,20 @@ export class GameAudio {
           break;
         case 'enemyKilled':
           if (event.kind === 'boss') break;
-          if (!this.throttled('blockKill', audioMix.minIntervalMs.blockKill)) {
+          if (event.streamId !== undefined) {
+            this.playStreamKill();
+          } else if (!this.throttled('blockKill', audioMix.minIntervalMs.blockKill)) {
             this.play('sfx_block_kill');
+          }
+          break;
+        case 'enemyLeaked':
+          if (!this.throttled('leak', audioMix.minIntervalMs.leak)) {
+            this.play(audioMix.leak.sound, audioMix.leak.playbackRate);
+          }
+          break;
+        case 'streamCleared':
+          if (!this.throttled('streamClear', audioMix.minIntervalMs.streamClear)) {
+            this.play(audioMix.streamClear.sound, audioMix.streamClear.playbackRate);
           }
           break;
         case 'enemyShattered':
@@ -232,6 +272,9 @@ export class GameAudio {
           }
           break;
         case 'unitsLost':
+          // A leak is already saying this in its own voice, one body at a time:
+          // playing both would double every tick of a stream getting through.
+          if (event.reason === 'leak') break;
           if (!this.throttled('unitsLost', audioMix.minIntervalMs.unitsLost)) {
             this.play('sfx_units_lost');
           }
@@ -246,9 +289,11 @@ export class GameAudio {
           this.play(event.status === 'won' ? 'sfx_win_fanfare' : 'sfx_lose_sting');
           break;
         default:
-          // projectileHit, splash, chain, enemySlowed, enemyActivated,
-          // bossActivated and bossEnraged are carried by the sounds above or
-          // by the renderer's effects.
+          // projectileHit, splash, chain, enemySlowed, streamStarted,
+          // bossActivated and bossEnraged are carried by the sounds above or by
+          // the renderer's effects. `enemyActivated` is deliberately silent:
+          // since Milestone 3 it fires once per stream body, about twenty a
+          // second, and a stream walking into range is a thing you can see.
           break;
       }
     }
@@ -297,16 +342,16 @@ export class GameAudio {
 
   /** Shots: a window rather than an interval, and a little pitch each time. */
   private playShot(state: Readonly<RunState>): void {
-    const at = now();
-    if (at - this.shotWindowStart >= audioMix.shot.windowMs) {
-      this.shotWindowStart = at;
-      this.shotsInWindow = 0;
-    }
-    if (this.shotsInWindow >= audioMix.shot.windowMax) return;
-    this.shotsInWindow++;
-
+    if (!this.shotBurst.allow(now(), audioMix.shot.windowMs, audioMix.shot.windowMax)) return;
     const id = audioMix.shot.sound[weaponOf(state.squad)] ?? 'sfx_shot_ember';
     this.play(id, 1 + (this.random() * 2 - 1) * audioMix.shot.pitchSpread);
+  }
+
+  /** One body out of a stream: eight a second, each at its own pitch. */
+  private playStreamKill(): void {
+    const mix = audioMix.streamKill;
+    if (!this.streamKillBurst.allow(now(), mix.windowMs, mix.windowMax)) return;
+    this.play(mix.sound, mix.playbackRate + (this.random() * 2 - 1) * mix.pitchSpread);
   }
 
   /** One click per number the gate's panel actually shows. */

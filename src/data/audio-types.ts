@@ -35,6 +35,10 @@ export interface AudioMix {
     unitsLost: number;
     stomp: number;
     uiTap: number;
+    /** One body walked into the squad. The plan's "six a second". */
+    leak: number;
+    /** A stream ran out. Two lanes of a horde clear together; this is the flam. */
+    streamClear: number;
   };
   /**
    * Shots are the one event that can arrive hundreds of times in a frame, so
@@ -55,4 +59,34 @@ export interface AudioMix {
    * heavily. No new asset, and it cannot be mistaken for a different gate.
    */
   swap: { playbackRate: number };
+  /**
+   * A single stream body dying (Milestone 3, D29).
+   *
+   * Streams kill dozens of bodies a second, so this gets the same sliding
+   * window the shots do rather than an interval: eight in any second, each at
+   * its own pitch, so a stream reads as a crackle running down the lane instead
+   * of one sample machine-gunning. The clip is the light hit rather than
+   * `block_kill` — that heavy punch is a whole block collapsing, and a grunt is
+   * one skeleton — pitched down a little so a kill still lands under the hits.
+   */
+  streamKill: {
+    windowMs: number;
+    windowMax: number;
+    playbackRate: number;
+    pitchSpread: number;
+    sound: string;
+  };
+  /**
+   * A body reached the squad and cost a soldier: the units-lost thud dropped an
+   * octave and a bit, which is short, low and unmistakably bad news. It stands
+   * in for the `unitsLost` sound on a leak, which would otherwise say the same
+   * thing twice in the same millisecond.
+   */
+  leak: { sound: string; playbackRate: number };
+  /**
+   * A stream is spent: the gate's own good-news latch pitched up into a bright
+   * tick. Nothing else in the mix is that high, and it cannot be mistaken for a
+   * gate because a gate is a panel the squad is standing in.
+   */
+  streamClear: { sound: string; playbackRate: number };
 }

@@ -260,10 +260,11 @@ export const BOSS_LABEL_MIN = 15;
  * Milestone 2 settled on 0.66 m because a full-size KayKit hat is wider than
  * the mage's shoulders and, from a 36-degree camera, a crowd of them was a
  * field of brims. Milestone 3 fixes the cause rather than the symptom (plan,
- * "Squad reads as hats"): the hat is scaled to 0.8 in the merge
- * (`assets.json` → `partScales`), the camera drops to about 26 degrees so the
- * units are seen from nearer their own height, and the formation spacing is
- * wider. With all three, 0.78 m is faces, robes and staffs rather than brims.
+ * "Squad reads as hats"): the hat is scaled to 0.88 in the merge
+ * (`assets.json` → `partScales`, which says why it cannot go lower), the camera
+ * drops to about 26 degrees so the units are seen from nearer their own height,
+ * and the formation spacing is wider. With all three, 0.78 m is faces, robes
+ * and staffs rather than brims.
  */
 export const MAGE_HEIGHT = 0.78;
 export const GRUNT_HEIGHT = 0.72;

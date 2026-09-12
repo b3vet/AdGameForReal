@@ -21,6 +21,8 @@ interface KilledEvent {
   kind: EnemyKind;
   x: number;
   z: number;
+  /** Copied too: the layer's debris rule turns on it (Milestone 3, D29). */
+  streamId?: number;
 }
 
 interface ShatteredEvent {
@@ -28,6 +30,7 @@ interface ShatteredEvent {
   enemyId: number;
   x: number;
   z: number;
+  streamId?: number;
 }
 
 interface GatePassedEvent {
@@ -125,6 +128,11 @@ export class PhysicsEventQueue {
           slot.kind = event.kind;
           slot.x = event.x;
           slot.z = event.z;
+          // Deleted rather than left over from the last body this slot carried:
+          // a pooled object that kept a stale `streamId` would tell the physics
+          // layer a block was a stream body and swallow its ragdolls.
+          if (event.streamId === undefined) delete slot.streamId;
+          else slot.streamId = event.streamId;
           this.list.push(slot);
           break;
         }
@@ -133,6 +141,8 @@ export class PhysicsEventQueue {
           slot.enemyId = event.enemyId;
           slot.x = event.x;
           slot.z = event.z;
+          if (event.streamId === undefined) delete slot.streamId;
+          else slot.streamId = event.streamId;
           this.list.push(slot);
           break;
         }

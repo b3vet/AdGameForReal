@@ -125,7 +125,6 @@
   "ui": {
     "resultDelay": 0.8,
     "keySpeed": 900,
-    "legendSeconds": 6,
     "hitStopSeconds": 0.04,
     "hitStopCooldown": 0.25,
     "bossKillScale": 0.3,

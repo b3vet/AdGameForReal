@@ -162,12 +162,6 @@ export class EffectsView {
     this.active = weaponId;
   }
 
-  /** Only the two mesh effects are left for a glow pass to bloom, if one is
-   *  ever turned back on; the sprites carry their own brightness. */
-  glowMeshes(): Mesh[] {
-    return [this.chainMesh, this.splashRings.mesh];
-  }
-
   /**
    * The flash at a staff's tip. A sparkle rather than a small impact: a muzzle
    * happens twice a second per unit, so at three hundred units there are a

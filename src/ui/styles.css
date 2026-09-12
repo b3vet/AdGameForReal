@@ -54,6 +54,9 @@
   /* Light panels; `--chip` is the dark plate used where the scene shows through. */
   --paper: rgba(255, 250, 243, 0.94);
   --paper-soft: rgba(255, 250, 243, 0.7);
+  /* The title's plate: opaque enough to read ink on, sheer enough to see the
+     road through. */
+  --frost: rgba(255, 249, 240, 0.84);
   --chip: rgba(38, 26, 62, 0.55);
   --chip-strong: rgba(38, 26, 62, 0.72);
 
@@ -155,19 +158,50 @@ body {
 
 /*
  * The title is a shop window: the dressed road and the idle mages behind it are
- * the first thing a player sees, so it only warms the scene rather than dimming
- * it. The result screen is the opposite — the run is over and the numbers are
- * the point — so it lays a near-opaque sheet of paper over the whole thing.
+ * the first thing a player sees, so it does not dim the scene at all. Milestone
+ * 2's dark violet wash down from the top is gone with the dusk it was drawn
+ * for — over D28's daylight sky it read as a bruise — and what is left is a
+ * breath of warm light off the road. The controls carry their own panel
+ * instead (`.screen__panel`), which is what a bright scene needs.
+ *
+ * The result screen is the opposite: the run is over and the numbers are the
+ * point, so it lays a near-opaque sheet of paper over the whole thing.
  */
 .screen--title {
-  background:
-    radial-gradient(150% 50% at 50% 100%, rgba(255, 247, 233, 0.5), rgba(255, 247, 233, 0) 62%),
-    linear-gradient(
-      180deg,
-      rgba(46, 30, 74, 0.44) 0%,
-      rgba(46, 30, 74, 0.14) 24%,
-      rgba(46, 30, 74, 0) 44%
-    );
+  background: radial-gradient(
+    150% 50% at 50% 100%,
+    rgba(255, 247, 233, 0.35),
+    rgba(255, 247, 233, 0) 62%
+  );
+}
+
+/*
+ * The frosted plate the title's controls sit on. Warm white rather than neutral
+ * so it belongs to the same daylight as the road, and translucent so the scene
+ * behind it still reads as the shop window it is.
+ */
+.screen__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.1rem 1.1rem 1.25rem;
+  border-radius: 1.75rem;
+  background: var(--frost);
+  box-shadow:
+    0 0.6rem 1.6rem rgba(46, 30, 74, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  /* Progressive: a browser without it keeps the semi-opaque white, which is
+     what makes the text readable — the blur is only polish. */
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+
+/* Inside the panel the two rows are packed, not spread down the screen. */
+.screen__panel .screen__middle {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .screen--result {
@@ -219,12 +253,19 @@ body {
   line-height: 1.05;
 }
 
-/* On the title the wordmark floats over the road, so it carries its own edge. */
+/*
+ * On the title the wordmark floats over the sky with nothing behind it — the
+ * dark wash that used to back it is gone — so it carries its own edge: a stroke
+ * to cut it out of the pale blue, and a tight drop shadow under the stroke so
+ * it does not lie flat on the dome.
+ */
 .screen--title .screen__title {
   color: var(--ink-bright);
   -webkit-text-stroke: 0.16rem var(--outline);
   paint-order: stroke fill;
-  text-shadow: 0 0.2rem 1.1rem rgba(32, 18, 58, 0.45);
+  text-shadow:
+    0 0.16rem 0.06rem rgba(46, 30, 74, 0.4),
+    0 0.24rem 1.1rem rgba(32, 18, 58, 0.4);
 }
 
 /* On the result sheet it is ink on paper. */
@@ -287,14 +328,14 @@ body {
 
 /* --- Title: level picker ------------------------------------------------- */
 
+/* Ink on the frosted plate, not bright ink over the road it used to float on. */
 .picker__caption {
   margin: 0;
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.22em;
-  color: var(--ink-bright);
-  text-shadow: 0 0.1rem 0.5rem rgba(32, 18, 58, 0.75);
+  color: var(--ink-soft);
 }
 
 .picker {
@@ -314,8 +355,12 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  background: var(--paper);
-  box-shadow: 0 0.2rem 0 rgba(126, 108, 168, 0.4);
+  /* Opaque white with a violet ring: on the frosted plate a translucent chip
+     had no edge at all. */
+  background: #fffdf9;
+  box-shadow:
+    0 0.2rem 0 rgba(126, 108, 168, 0.4),
+    inset 0 0 0 1px rgba(123, 76, 255, 0.22);
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
@@ -330,8 +375,8 @@ body {
 
 .picker__level:disabled {
   color: rgba(43, 33, 64, 0.35);
-  background: var(--paper-soft);
-  box-shadow: none;
+  background: rgba(238, 232, 244, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.1);
   cursor: default;
   pointer-events: none;
 }

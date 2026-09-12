@@ -79,15 +79,6 @@ export class ProjectileView {
     this.active = weaponId;
   }
 
-  /**
-   * Nothing here is its own mesh any more, so there is nothing for a glow pass
-   * to include: the sprites carry their own brightness through additive
-   * blending and a sheet painted white-hot in the middle.
-   */
-  glowMeshes(): never[] {
-    return [];
-  }
-
   reset(): void {
     this.sparkleCount = 0;
     this.phase = 0;

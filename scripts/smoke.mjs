@@ -138,23 +138,38 @@ const SHOT_TIMEOUT_MS = Number(process.env.SMOKE_SHOT_TIMEOUT_MS ?? 120_000);
 const STRESS_SECONDS = 8;
 
 /**
+ * Live stream bodies the measured frame must still have. The scene starts 300
+ * and kills twenty a second, so a healthy run sits just under 300 as the corpse
+ * window recycles them; anything far below that means the river drained and the
+ * frame measured an empty road.
+ */
+const STRESS_MIN_STREAM_BODIES = 240;
+
+/**
  * Tripwire on the stress scene's median `scene.render` cost, in milliseconds.
  *
- * Measured here under SwiftShader with 500 mages, 40 skeletons and 8 to 16
- * live ragdolls: 7.4, 10.3, 12.6, 16.1 and — on a run where the machine was
- * also building something else — 62.4 ms. The first frame of each run is 490
- * to 1050 ms of shader compilation, which the median excludes, and the wall
- * clock is 540 to 1300 ms per frame because the software rasteriser finishes
- * long after `scene.render` returns; that is also why only two to four frames
- * fit in the eight-second window, so the median is over a handful of samples
- * and moves with whatever else the machine is doing.
+ * Re-baselined in Milestone 3 Phase C, for two reasons. The scene is heavier —
+ * 500 mages, 40 skeletons and 300 live stream bodies, with a kill every 50 ms
+ * and 7 to 8 live ragdolls — and it is also *cheaper*, because it now runs the
+ * renderer's warm-up pass before it measures anything: without it the first
+ * frame that drew a corpse compiled its shader inside `scene.render` and cost
+ * twelve to fifteen seconds under SwiftShader, which the median excluded and
+ * nobody could see.
  *
- * The limit is therefore twice the top of the *observed* band rather than
- * twice a single reading: a change that doubles the renderer's cost still
- * trips it, and a busy machine does not. The number every run prints is the
- * real signal — watch it drift. `SMOKE_STRESS_RENDER_MS` overrides.
+ * Measured with the warm-up, four runs on this machine: medians 4.2, 4.6, 5.2
+ * and 5.7 ms; worst frames 18 to 29 ms; first frames 30 to 34 ms, where they
+ * were 490 to 1050 ms before the pass. The wall clock is still 600 to 900 ms
+ * per frame, because the software rasteriser finishes long after
+ * `scene.render` returns — which is why only three or four frames fit in the
+ * eight-second window and the median is over a handful of samples.
+ *
+ * The limit is twice the top of that band, which is a real tripwire rather
+ * than the old 125 ms formality: a change that doubles the renderer's cost
+ * trips it. A machine that is also building something else may trip it too,
+ * which is what `SMOKE_STRESS_RENDER_MS` is for. The number every run prints
+ * next to it is the real signal — watch it drift.
  */
-const STRESS_RENDER_MS_LIMIT = Number(process.env.SMOKE_STRESS_RENDER_MS ?? 125);
+const STRESS_RENDER_MS_LIMIT = Number(process.env.SMOKE_STRESS_RENDER_MS ?? 12);
 
 /**
  * How long to wait for a run to reach a terminal status. A greedy level-10 run
@@ -415,10 +430,12 @@ async function driveRun(page, url, run, failures) {
 }
 
 /**
- * The performance scene (`?scene=stress`): 500 mages, 40 skeletons and live
- * ragdolls, held for `STRESS_SECONDS` and then measured. This is the frame that
- * says whether the crowd still draws in one call each and whether a change made
- * the renderer twice as expensive (docs/06-milestone-2-plan.md, "Performance").
+ * The performance scene (`?scene=stress`): 500 mages, 40 skeletons, 300 live
+ * stream bodies dying twenty times a second, and the ragdolls that rule throws,
+ * held for `STRESS_SECONDS` and then measured. This is the frame that says
+ * whether the crowd still draws in one call each and whether a change made the
+ * renderer twice as expensive (docs/06-milestone-2-plan.md, "Performance";
+ * docs/09-milestone-3-plan.md, "300 units plus 200 live stream enemies").
  */
 async function driveStress(page, url, failures) {
   console.log(`[smoke] stress scene: ${url.slice(url.indexOf('?'))}`);
@@ -444,8 +461,8 @@ async function driveStress(page, url, failures) {
   }
 
   console.log(
-    `[smoke] stress: ${stats.mages} mages + ${stats.skeletons} skeletons in ` +
-      `${stats.drawCalls} draw calls\n` +
+    `[smoke] stress: ${stats.mages} mages + ${stats.skeletons} skeletons + ` +
+      `${stats.streamBodies} stream bodies in ${stats.drawCalls} draw calls\n` +
       `[smoke]   render ${stats.renderMs.toFixed(1)} ms median of ${stats.renderSamples} ` +
       `frames (worst ${stats.renderMsMax.toFixed(0)} ms, first frame ` +
       `${stats.renderMsFirst.toFixed(0)} ms, tripwire ${STRESS_RENDER_MS_LIMIT} ms)\n` +
@@ -467,6 +484,14 @@ async function driveStress(page, url, failures) {
       stats.quality === 0
         ? '[smoke] note: no ragdolls — the physics layer degraded to quality 0'
         : '[smoke] note: no ragdolls were live in the measured frames',
+    );
+  }
+  // The river is the point of the scene now: a frame measured without it is a
+  // measurement of the old worst case, not of this one.
+  if (stats.streamBodies < STRESS_MIN_STREAM_BODIES) {
+    failures.push(
+      `stress scene: only ${stats.streamBodies} stream bodies were on their feet ` +
+        `(expected at least ${STRESS_MIN_STREAM_BODIES})`,
     );
   }
 

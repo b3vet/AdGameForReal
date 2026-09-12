@@ -48,6 +48,29 @@ describe('PhysicsEventQueue', () => {
     expect(queue.events[1]).toMatchObject({ enemyId: 2, x: 99, z: 99 });
   });
 
+  /**
+   * The physics layer's whole stream rule turns on `streamId`, and the slot it
+   * is copied into is pooled — so a block re-using the slot of a stream body
+   * would inherit its id and lose its ragdolls.
+   */
+  it('carries streamId, and does not leave it on the next body in the slot', () => {
+    const queue = new PhysicsEventQueue();
+    queue.absorb([
+      { type: 'enemyKilled', enemyId: 1, kind: 'grunt', x: 0, z: 0, streamId: 4 },
+      { type: 'enemyShattered', enemyId: 1, x: 0, z: 0, streamId: 4 },
+    ]);
+    expect(queue.events[0]).toMatchObject({ streamId: 4 });
+    expect(queue.events[1]).toMatchObject({ streamId: 4 });
+
+    queue.clear();
+    queue.absorb([
+      { type: 'enemyKilled', enemyId: 2, kind: 'brute', x: 0, z: 0 },
+      { type: 'enemyShattered', enemyId: 2, x: 0, z: 0 },
+    ]);
+    expect(queue.events[0]).not.toHaveProperty('streamId');
+    expect(queue.events[1]).not.toHaveProperty('streamId');
+  });
+
   it('re-uses its pool across frames without leaking the last one', () => {
     const queue = new PhysicsEventQueue();
     queue.absorb([

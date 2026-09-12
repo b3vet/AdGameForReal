@@ -319,8 +319,6 @@ export interface Balance {
     resultDelay: number;
     /** CSS pixels per second of held steering key, matched to a brisk drag. */
     keySpeed: number;
-    /** How long the level-1 gate legend stays on screen. */
-    legendSeconds: number;
     /** Hit-stop on a block kill, and the gap before another one may fire. */
     hitStopSeconds: number;
     hitStopCooldown: number;

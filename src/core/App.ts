@@ -387,7 +387,6 @@ export class App implements FrameHost {
    */
   private applyQuality(rung: QualityRung, index: number): void {
     this.renderer.setMaxPixelRatio(rung.pixelRatio);
-    this.renderer.setGlow(rung.glow);
     const physics = this.physicsLayer;
     if (physics !== null) {
       // The rung is a ceiling, not an instruction: `?physics=1` asked for less

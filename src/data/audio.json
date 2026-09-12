@@ -43,7 +43,9 @@
     "unitsGained": 140,
     "unitsLost": 140,
     "stomp": 150,
-    "uiTap": 60
+    "uiTap": 60,
+    "leak": 167,
+    "streamClear": 200
   },
   "shot": {
     "windowMs": 100,
@@ -57,5 +59,20 @@
   },
   "swap": {
     "playbackRate": 0.55
+  },
+  "streamKill": {
+    "windowMs": 1000,
+    "windowMax": 8,
+    "playbackRate": 0.82,
+    "pitchSpread": 0.16,
+    "sound": "sfx_enemy_hit"
+  },
+  "leak": {
+    "sound": "sfx_units_lost",
+    "playbackRate": 0.68
+  },
+  "streamClear": {
+    "sound": "sfx_gate_pass_good",
+    "playbackRate": 1.55
   }
 }

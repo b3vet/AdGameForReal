@@ -35,10 +35,6 @@ const TITLE = 'Arcane Rush';
  */
 const CDN_SCRIPTS = [
   'https://cdn.jsdelivr.net/npm/babylonjs@9.25.0/babylon.js',
-  // No `babylonjs-gui` here any more: Milestone 3 replaced the GUI label layer
-  // with the digit atlas (`src/render/labels.ts`), so nothing in the bundle
-  // imports `@babylonjs/gui` and the second CDN script was 700 KB the page
-  // fetched to register a global no one reads.
   // The glTF loader registers itself with the core bundle's scene loader when
   // this script runs, which is what the ES build's `import '@babylonjs/loaders/glTF'`
   // side effect does. Load order matters: it needs `BABYLON` to exist already.

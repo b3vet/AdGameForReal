@@ -3,13 +3,14 @@
  *
  *   /dev/stress-test.html
  *
- * 500 mages, 40 skeletons and a physics layer taking a scripted kill a second,
- * drawn by the real `Renderer` so the draw-call count is the game's own. The
- * scene itself is `src/core/stress.ts`, because the smoke test drives the same
- * thing through the app as `?scene=stress` and `dist/` carries no dev pages.
+ * 500 mages, 40 skeletons, 300 stream bodies and a physics layer taking their
+ * kills, drawn by the real `Renderer` so the draw-call count is the game's own.
+ * The scene itself is `src/core/stress.ts`, because the smoke test drives the
+ * same thing through the app as `?scene=stress` and `dist/` carries no dev pages.
  *
  *   ?mages=500 ?skeletons=40   crowd sizes
- *   ?kill=1                    seconds between scripted kills; 0 turns them off
+ *   ?stream=300                live bodies in the two stream lanes; 0 for none
+ *   ?kill=0.05                 seconds between stream kills; 0 turns them off
  *   ?physics=0|1|2             starting physics quality
  *
  * A screenshot script waits for `__stress.ready` and reads `__stress.stats()`.
@@ -44,7 +45,8 @@ async function main(): Promise<void> {
   const stress = await runStressScene(renderer, {
     mages: Math.round(number('mages', 500)),
     skeletons: Math.round(number('skeletons', 40)),
-    killEvery: number('kill', 1),
+    streamBodies: Math.round(number('stream', 300)),
+    killEvery: number('kill', 0.05),
     quality,
   });
 
@@ -58,7 +60,8 @@ async function main(): Promise<void> {
       `<b>draw calls</b> ${String(stats.drawCalls)}   <b>fps</b> ${stats.fps.toFixed(0)}\n` +
       `<b>render</b> ${stats.renderMs.toFixed(2)} ms   ` +
       `<b>worst</b> ${stats.renderMsMax.toFixed(2)} ms\n` +
-      `<b>units</b> ${String(stats.mages)} mages + ${String(stats.skeletons)} skeletons\n` +
+      `<b>units</b> ${String(stats.mages)} mages + ${String(stats.skeletons)} skeletons + ` +
+      `${String(stats.streamBodies)} stream\n` +
       `<b>ragdolls</b> ${String(stats.ragdolls)}   <b>shards</b> ${String(stats.shards)}` +
       `   <b>quality</b> ${String(stats.quality)}   <b>t</b> ${stats.seconds.toFixed(1)}s`;
   }, 250);

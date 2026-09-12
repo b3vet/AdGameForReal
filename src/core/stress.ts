@@ -1,6 +1,6 @@
 /**
- * The performance stress scene: 500 mages, 40 skeletons and a physics layer
- * being fed a kill a second, on top of the real renderer's scene.
+ * The performance stress scene: 500 mages, 40 skeletons, 300 stream bodies and
+ * a physics layer being fed a kill every 50 ms, on top of the renderer's scene.
  *
  * It lives in `src/core` rather than in `dev/` because the smoke test drives it
  * through the app (`?scene=stress`) and `dist/` carries no dev pages;
@@ -10,6 +10,11 @@
  *
  * What it is for (docs/06-milestone-2-plan.md, "Performance"): draw calls under
  * 40 at 500 units, and a render-millisecond tripwire the smoke can fail on.
+ * Milestone 3 adds the horde the target is now stated against (plan,
+ * "Performance": 60 fps at 300 units plus 200 live stream enemies) — three
+ * hundred walking bodies in the *same* crowd as the block skeletons, so they
+ * cost instances and animation but not a draw call, dying twenty times a second
+ * so the death range, the corpse recycle and the ragdoll rule are all in frame.
  */
 
 import { PhysicsLayer } from '@/physics';
@@ -22,9 +27,13 @@ import { balance } from '@/data';
 import { formationOffsets, mulberry32 } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
 
+import { StressBodies } from './stressBodies';
+
 export interface StressOptions {
   mages?: number;
   skeletons?: number;
+  /** Live bodies in the two stream lanes. 0 leaves the road empty. */
+  streamBodies?: number;
   /** Seconds between scripted kills. 0 turns the physics script off. */
   killEvery?: number;
   quality?: PhysicsQuality;
@@ -64,6 +73,8 @@ export interface StressStats {
   frames: number;
   mages: number;
   skeletons: number;
+  /** Stream bodies on their feet in the measured frame. */
+  streamBodies: number;
   ragdolls: number;
   shards: number;
   quality: number;
@@ -92,7 +103,16 @@ declare global {
 
 const DEFAULT_MAGES = 500;
 const DEFAULT_SKELETONS = 40;
-const DEFAULT_KILL_EVERY = 1;
+/** The plan's horde: two lanes of the sim's own ceiling on live bodies. */
+const DEFAULT_STREAM_BODIES = 300;
+/** The lanes a horde row pours down: neighbours, so the squad can answer both. */
+const STREAM_LANES = [-1, 0] as const;
+/**
+ * Seconds between scripted kills. Twenty a second is what a squad clearing a
+ * stream at the pressure bands actually does, and it is what keeps a death
+ * animation, a corpse recycle and a ragdoll in every frame.
+ */
+const DEFAULT_KILL_EVERY = 0.05;
 
 /** Where the crowd stands: the camera's default pose looks straight at it. */
 const CROWD_Z = 2;
@@ -101,6 +121,9 @@ const ARENA_Z = 40;
 
 /** Frame delta ceiling, matching the app's own. */
 const MAX_DT = 0.05;
+
+/** A block coming apart, on top of the river: the six-corpse burst, once a second. */
+const BLOCK_KILL_EVERY = 1;
 
 /** Smoothing weight for the rolling frame interval. */
 const AVERAGE_WEIGHT = 0.1;
@@ -130,6 +153,7 @@ export async function runStressScene(
   const mageCount = options.mages ?? DEFAULT_MAGES;
   const skeletonCount = options.skeletons ?? DEFAULT_SKELETONS;
   const killEvery = options.killEvery ?? DEFAULT_KILL_EVERY;
+  const streamCount = options.streamBodies ?? DEFAULT_STREAM_BODIES;
 
   const scene = renderer.scene;
   const random = mulberry32(0x57_2e_55);
@@ -137,7 +161,12 @@ export async function runStressScene(
   const mageAsset = await loadCharacterAsset(scene, 'mage', { variant: 'ember' });
   const mages = new VatCrowd(mageAsset, mageCount);
   const skeletonAsset = await loadCharacterAsset(scene, 'skeleton_minion');
-  const skeletons = new VatCrowd(skeletonAsset, skeletonCount);
+  // One crowd for the block skeletons *and* the river, exactly as the game
+  // packs them: two crowds of the same character would be a second draw call
+  // this scene is supposed to prove the game does not pay.
+  const skeletons = new VatCrowd(skeletonAsset, skeletonCount + streamCount);
+  const stream = new StressBodies(streamCount, STREAM_LANES, killEvery);
+  stream.setDeathSeconds(skeletons.durationOf('death'));
 
   // The sim's own formation, not an approximation of it: the crowd this scene
   // measures has to be the shape and density the game will actually draw.
@@ -176,6 +205,8 @@ export async function runStressScene(
       (i % 11) * 0.05,
     );
   }
+  // The blocks are static and written once; the river is rewritten every frame
+  // from `skeletonCount` on.
   skeletons.setCount(skeletonCount);
   skeletons.commit();
 
@@ -187,6 +218,14 @@ export async function runStressScene(
     console.warn('[stress] physics unavailable', error);
     physics.setQuality(0);
   }
+
+  // The same pass the game runs before a level (`src/render/warmup.ts`): the
+  // crowds and the ragdoll pool are built after `Renderer.init` warmed the
+  // scene, so without this the first frame that draws a corpse compiles its
+  // shader — which under SwiftShader is a twelve-second frame in the middle of
+  // the measurement, and on the phone is exactly the hitch the pass exists to
+  // remove. Measured with it: one 14.6 s frame in seven became none.
+  await renderer.warmUp();
 
   const state = fakeState();
   const events: SimEvent[] = [];
@@ -231,9 +270,13 @@ export async function runStressScene(
 
     events.length = 0;
     if (killEvery > 0) {
+      // The river's own kills: twenty a second, each one a stream body, so the
+      // physics layer takes the `usesRagdoll` path the game takes.
+      stream.update(dt, real, events);
+      // And one block a second on top, which is the burst of six corpses.
       sinceKill += real;
-      if (sinceKill >= killEvery) {
-        sinceKill -= killEvery;
+      if (sinceKill >= BLOCK_KILL_EVERY) {
+        sinceKill -= BLOCK_KILL_EVERY;
         events.push({
           type: 'enemyKilled',
           enemyId: ++enemyId,
@@ -243,6 +286,9 @@ export async function runStressScene(
         });
       }
     }
+    const written = stream.write(skeletons, skeletonCount, physics.stats.quality);
+    skeletons.setCount(skeletonCount + written);
+    skeletons.commit();
     physics.onEvents(events, state);
     physics.update(dt);
 
@@ -277,6 +323,7 @@ export async function runStressScene(
       frames,
       mages: mageCount,
       skeletons: skeletonCount,
+      streamBodies: stream.liveCount,
       ragdolls: physics.stats.ragdolls,
       shards: physics.stats.shards,
       quality: physics.stats.quality,

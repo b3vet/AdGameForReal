@@ -13,10 +13,6 @@ import { defineConfig } from 'vite';
  * the core bundle as a side effect, exactly as `import '@babylonjs/loaders/glTF'`
  * does in the ES build.
  *
- * `babylonjs-gui` was the third bundle until Milestone 3: the digit atlas
- * (`src/render/labels.ts`) replaced the GUI label layer, nothing imports
- * `@babylonjs/gui` any more, and the package is gone from `package.json`.
- *
  * `scripts/build-hosted.mjs` drives this into a temp dir and assembles the
  * fragment. Not used by `npm run build` — that stays a normal module build.
  */

@@ -37,14 +37,14 @@
       },
       "tints": {
         "Mage_Hat": [
-          7.0,
-          6.0,
-          8.5
+          2.0,
+          0.8,
+          3.0
         ],
         "Mage_Head": [
-          3.2,
-          2.9,
-          2.9
+          1.1,
+          1.1,
+          1.1
         ],
         "Mage_Cape": [
           2.6,
@@ -57,8 +57,37 @@
           1.65
         ]
       },
+      "tintPatches": {
+        "Mage_Hat": [
+          {
+            "note": "hat band: the orange strip of the atlas, kept warm gold instead of clipping to white",
+            "u": [0.63, 0.72],
+            "v": [0.0, 0.16],
+            "tint": [1.1, 2.6, 1.35]
+          },
+          {
+            "note": "band buckle: the steel patch, taken gold so it reads as a buckle and not a hole",
+            "u": [0.38, 0.48],
+            "v": [0.0, 0.16],
+            "tint": [2.4, 1.6, 0.6]
+          },
+          {
+            "note": "brim and the crown's flare: the dark end of the hat's gradient strip, lifted above the crown so the brim edge is the light rim of the silhouette",
+            "v": [0.4, 1.0],
+            "tint": [12.1, 7.5, 9.0]
+          }
+        ],
+        "Mage_Head": [
+          {
+            "note": "hair: three quarters of the head mesh and near-black in the atlas, which is what made a squad of a hundred read as a dark mass",
+            "u": [0.1, 0.26],
+            "v": [0.0, 0.22],
+            "tint": [30.0, 22.0, 13.0]
+          }
+        ]
+      },
       "partScales": {
-        "Mage_Hat": 0.6
+        "Mage_Hat": 0.88
       }
     },
     {

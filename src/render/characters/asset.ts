@@ -35,6 +35,8 @@ import type { Scene } from '@babylonjs/core/scene';
 // Side-effect import: registers the glTF 2.0 loader with `ImportMeshAsync`.
 import '@babylonjs/loaders/glTF/2.0';
 
+import type { TintPatch } from '@/data/assets-types';
+
 import {
   assetBytes,
   assetJson,
@@ -44,6 +46,7 @@ import {
   vatAsset,
 } from './manifest';
 import type { ModelAsset, VatMeta } from './manifest';
+import { tintColors } from './tint';
 
 /** What `VatCrowd` needs to draw a character, and what the caller must dispose. */
 export interface CharacterAsset {
@@ -127,7 +130,7 @@ export async function loadCharacterAssets(
       return found;
     });
 
-    const merged = mergeCharacter(sources, skeleton, model.tints, model.partScales);
+    const merged = mergeCharacter(sources, skeleton, model);
     const mesh = new Mesh(`${model.id}:${variant}`, scene);
     merged.applyToMesh(mesh, false);
     material ??= pickMaterial(sources);
@@ -205,21 +208,25 @@ function unmirror(data: Float32Array): void {
  * Merges the source meshes into one skinned `VertexData` in the rig's bind
  * space, re-skinning any mesh that is parented to a bone rather than skinned.
  *
- * `tints` recolours single parts on the way in. Every part gets a colour
- * attribute, white unless the manifest names it: `VertexData.merge` needs the
- * same attributes on every part, and a white multiplier is the source texture
- * unchanged.
+ * The manifest's `tints` and `tintPatches` recolour single parts, and single
+ * patches of the atlas inside a part, on the way in (`./tint.ts`). Every part
+ * gets a colour attribute, white unless the manifest names it:
+ * `VertexData.merge` needs the same attributes on every part, and a white
+ * multiplier is the source texture unchanged.
  */
 function mergeCharacter(
   sources: readonly Mesh[],
   skeleton: Skeleton,
-  tints?: Record<string, readonly number[]>,
-  partScales?: Record<string, number>,
+  model: ModelAsset,
 ): VertexData {
   const parts: VertexData[] = [];
   const boneIndex = new Map(skeleton.bones.map((bone, index) => [bone.name, index]));
   const bindInverse = bindSpaceInverse(sources);
-  const anyTint = tints !== undefined && Object.keys(tints).length > 0;
+  const tints = model.tints;
+  const patches: Record<string, readonly TintPatch[]> | undefined = model.tintPatches;
+  const anyTint =
+    (tints !== undefined && Object.keys(tints).length > 0) ||
+    (patches !== undefined && Object.keys(patches).length > 0);
 
   for (const source of sources) {
     // `ExtractFromMesh` leaves an absent attribute `undefined` rather than
@@ -231,7 +238,7 @@ function mergeCharacter(
     // Before the re-skin, so the shrink happens in the part's *own* local
     // space, about its node origin — which for the hat is where it sits on the
     // head, so a 0.8 hat keeps its grip and loses only brim.
-    const partScale = partScales?.[source.name];
+    const partScale = model.partScales?.[source.name];
     if (partScale !== undefined && partScale !== 1) scaleAbout(positions, partScale);
 
     if (array(data.matricesIndices) === null || array(data.matricesWeights) === null) {
@@ -242,7 +249,14 @@ function mergeCharacter(
     const normals = array(data.normals);
     if (normals !== null) unmirror(normals);
     reverseWinding(data);
-    if (anyTint) data.colors = tintColors(positions.length / 3, tints[source.name]);
+    if (anyTint) {
+      data.colors = tintColors(
+        positions.length / 3,
+        tints?.[source.name],
+        patches?.[source.name],
+        array(data.uvs),
+      );
+    }
     parts.push(data);
   }
 
@@ -316,21 +330,6 @@ function reskinToParentBone(
   data.normals = normals;
   data.matricesIndices = indices;
   data.matricesWeights = weights;
-}
-
-/** One RGBA per vertex: the part's multiplier, or white when it has none. */
-function tintColors(count: number, tint: readonly number[] | undefined): Float32Array {
-  const colors = new Float32Array(count * 4);
-  const r = tint?.[0] ?? 1;
-  const g = tint?.[1] ?? 1;
-  const b = tint?.[2] ?? 1;
-  for (let i = 0; i < count; i++) {
-    colors[i * 4] = r;
-    colors[i * 4 + 1] = g;
-    colors[i * 4 + 2] = b;
-    colors[i * 4 + 3] = 1;
-  }
-  return colors;
 }
 
 /** A mirror flips handedness, so the triangles have to be wound back. */

@@ -19,7 +19,6 @@
  * 0 there is no Havok at all and the baked `death` range plays here instead.
  */
 
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
@@ -135,11 +134,6 @@ export class EnemyView {
     this.gruntDeath = grunts.durationOf('death');
     this.bruteDeath = brutes.durationOf('death');
     this.streams.setDeathSeconds(this.gruntDeath);
-  }
-
-  /** The frost decal glows; the skeletons themselves are lit, not emissive. */
-  glowMeshes(): Mesh[] {
-    return [this.rings.mesh];
   }
 
   /** 0 means no Havok, so this view owes the player a death animation. */

@@ -13,8 +13,6 @@
 
 import type { Engine } from '@babylonjs/core/Engines/engine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
-import type { GlowLayer } from '@babylonjs/core/Layers/glowLayer';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
 import { BossView } from './boss';
@@ -27,7 +25,7 @@ import { NumberLabels } from './labels';
 import { ProjectileView } from './projectiles';
 import { PropsView } from './props';
 import { RoadView } from './road';
-import { createEngine, createGlow, createScene } from './scene';
+import { createEngine, createScene } from './scene';
 import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
 import { POOL, SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
@@ -85,15 +83,11 @@ export class Renderer {
   private enemies: EnemyView | null = null;
   private boss: BossView | null = null;
 
-  private glow: GlowLayer | null = null;
   /**
    * Off by default (Milestone 3 plan, performance step 4). The layer is not
    * even built until something asks for it, so a phone never pays for its
    * render target.
    */
-  private glowEnabled = false;
-  /** The meshes a glow layer would bloom, kept for a later `setGlow(true)`. */
-  private glowTargets: Mesh[] = [];
   private physicsQuality = 2;
   /** The boss's enemy id, so `enemyHit` can be routed to its hit reaction. */
   private bossId = -1;
@@ -166,9 +160,6 @@ export class Renderer {
       this.props.load(),
     ]);
     this.props.build(1, ROAD_START_Z, 200);
-
-    this.collectGlowTargets();
-    if (this.glowEnabled) this.glow = createGlow(scene, this.glowTargets);
 
     scene.blockMaterialDirtyMechanism = false;
 
@@ -316,20 +307,6 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
-  /**
-   * Degrade ladder rung: the glow pass costs a blur and a second draw of every
-   * mesh it covers. Off in every rung as of Milestone 3, so the layer is only
-   * built if something ever turns it back on.
-   */
-  setGlow(enabled: boolean): void {
-    this.glowEnabled = enabled;
-    const scene = this.sceneRef;
-    if (enabled && this.glow === null && scene !== null) {
-      this.glow = createGlow(scene, this.glowTargets);
-    }
-    if (this.glow !== null) this.glow.isEnabled = enabled;
-  }
-
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
@@ -426,7 +403,6 @@ export class Renderer {
     this.props?.dispose();
     this.road?.dispose();
     this.labels?.dispose();
-    this.glow?.dispose();
 
     this.squad = null;
     this.projectiles = null;
@@ -438,7 +414,6 @@ export class Renderer {
     this.props = null;
     this.road = null;
     this.labels = null;
-    this.glow = null;
     this.rig?.dispose();
     this.rig = null;
 
@@ -572,18 +547,6 @@ export class Renderer {
     return Math.max(0, Math.min(8, dt / frame));
   }
 
-  /** The meshes a glow pass would bloom, if one is ever asked for. */
-  private collectGlowTargets(): void {
-    const meshes: Mesh[] = [];
-    // The projectiles are sprites now and carry their own brightness, so they
-    // are not on the list: an additive quad gains nothing from a blur.
-    pushAll(meshes, this.projectiles?.glowMeshes());
-    pushAll(meshes, this.effects?.glowMeshes());
-    pushAll(meshes, this.enemies?.glowMeshes());
-    pushAll(meshes, this.boss?.glowMeshes());
-    this.glowTargets = meshes;
-  }
-
   /** What the scene actually renders at: the screen's ratio under our cap. */
   private effectivePixelRatio(): number {
     const deviceRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
@@ -604,15 +567,6 @@ export class Renderer {
     const level = 1 / this.effectivePixelRatio();
     if (engine.getHardwareScalingLevel() === level) return;
     engine.setHardwareScalingLevel(level);
-  }
-}
-
-/** Appends without a spread, which builds an argument array per call. */
-function pushAll(into: Mesh[], from: readonly Mesh[] | undefined): void {
-  if (from === undefined) return;
-  for (let i = 0; i < from.length; i++) {
-    const mesh = from[i];
-    if (mesh !== undefined) into.push(mesh);
   }
 }
 

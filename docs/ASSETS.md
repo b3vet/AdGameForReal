@@ -88,30 +88,67 @@ the game's about screen when there is one.
 
 ## Files
 
-Sizes are the shipped file, after trimming. `assets/` totals **3.0 MB**, against
-a 12 MB budget.
+Sizes are the shipped file, after trimming. `assets/` totals **3.4 MB**, against
+a 12 MB budget (it was 3.0 MB before the Milestone 3 re-bake added a clip to
+each character).
 
 ### Models — `assets/models/`
 
 | File | Size | Source | Use |
 |---|---|---|---|
-| `mage.glb` | 472 KB | KayKit Adventurers, `Characters/gltf/Mage.glb` | The squad. Carries the body meshes, hat, cape, and the `2H_Staff` / `1H_Wand` / `Spellbook_open` accessories the three staffs use. Trimmed to 4 clips. |
-| `skeleton_minion.glb` | 428 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Minion.glb` | Grunt units inside an enemy block. Trimmed to 2 clips. |
-| `skeleton_warrior.glb` | 456 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Warrior.glb` | Brute units; comes with its own helmet. Trimmed to 2 clips. |
+| `mage.glb` | 526 KB | KayKit Adventurers, `Characters/gltf/Mage.glb` | The squad. Carries the body meshes, hat, cape, and the `2H_Staff` / `1H_Wand` / `Spellbook_open` accessories the three staffs use. Trimmed to 5 clips (Milestone 3 added `Spellcast_Raise` as `cast2`). |
+| `skeleton_minion.glb` | 467 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Minion.glb` | Grunt units inside an enemy block, and every body in a stream. Trimmed to 3 clips (Milestone 3 added `Running_C` as `walk2`). |
+| `skeleton_warrior.glb` | 495 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Warrior.glb` | Brute units; comes with its own helmet. Trimmed to 3 clips (Milestone 3 added `Running_C` as `walk2`). |
 | `boss_demon.glb` | 408 KB | Quaternius Ultimate Monsters, `Big/glTF/Demon.gltf` | The biome-1 boss. Trimmed to 5 clips. |
+
+#### The mage's colours, and where the numbers came from
+
+One material and one atlas serve the whole character, so the only handle the
+renderer has on a part of it is the vertex colour the shader multiplies the
+albedo by: `tints` in `assets.json` per mesh, and `tintPatches` per rectangle of
+the atlas (`src/render/characters/tint.ts`). The atlas is a palette of flat
+patches and short gradient strips, which is what makes a rectangle a meaningful
+unit. The rectangles below were read off `assets/models/mage.glb` by sampling
+the texture at each triangle's own UVs; re-read them if the pack is ever
+re-exported.
+
+| Part of the mage | Atlas rectangle | In the file | On screen now |
+|---|---|---|---|
+| Hat crown | u 0.13–0.22, v 0.26–0.40 (the light half of a gradient strip) | navy, 76–108 grey levels | saturated mid-violet |
+| Hat brim and the crown's flare | the same strip, v 0.40–0.47 | the darkest end, 36–51 | a lighter violet, so the brim edge is the light rim of the silhouette |
+| Hat band | u 0.66–0.69, v 0.04–0.13 | orange, 182–222 | warm gold (it used to clip to white under the one hat multiplier) |
+| Band buckle | u 0.41–0.46, v 0.02–0.13 | steel blue-grey | pale gold |
+| Hair | u 0.14–0.23, v 0.03–0.16, three quarters of the head mesh | near-black, 19–49 | warm sandy brown |
+| Face | u 0.01–0.10, v 0.05–0.21 | skin, 243–247 | untouched (it used to clip to white) |
+
+Robes and cape are unchanged from Milestone 3 Phase B2.
 
 ### Baked animation — `assets/vat/`
 
 | File | Size | Texture | Ranges |
 |---|---|---|---|
-| `mage.bin` + `.json` | 176 KB | 168 × 134, half-float RGBA | idle 0–31, run 32–55, cast 56–83, cheer 84–133 |
-| `skeleton_minion.bin` + `.json` | 144 KB | 168 × 109 | walk 0–47, death 48–108 |
-| `skeleton_warrior.bin` + `.json` | 96 KB | 168 × 73 | walk 0–47, death 48–72 |
+| `mage.bin` + `.json` | 259 KB | 168 × 197, half-float RGBA | idle 0–31, run 32–55, cast 56–83, cast2 84–146, cheer 147–196 |
+| `skeleton_minion.bin` + `.json` | 175 KB | 168 × 133 | walk 0–47, walk2 48–71, death 72–132 |
+| `skeleton_warrior.bin` + `.json` | 127 KB | 168 × 97 | walk 0–47, walk2 48–71, death 72–96 |
+
+Sizes and ranges above are the Milestone 3 re-bake, which added `cast2` to the
+mage and `walk2` to both skeletons (docs/10-milestone-3-log.md, Phase B2). The
+bake fails above 300 KB, which the mage is now within 40 KB of: a sixth mage
+clip needs either a smaller one or a second texture.
 
 Width is `(bones + 1) × 4` texels — 41 bones on the shared KayKit rig. Height is
 one row per baked frame at 30 fps (the source is 60; half the rows for units
 twenty pixels tall). Looping ranges drop their last frame, which duplicates the
 first.
+
+A VAT is bone matrices, so nothing about a *mesh* can be baked into it. That is
+why the mage's hat is resized in the merge instead, by `partScales` in
+`assets.json` (`src/render/characters/asset.ts`): **0.88** as of Milestone 3
+Phase C, scaled about the hat's own node origin, before the re-skin and the
+un-mirror. It cannot go much lower — the scale is uniform, so below about 0.85
+the crown is narrower than the skull it sits on and the mage's hair comes
+through the hat. Phase B2's 0.6 was under that floor, which is what the frame
+review saw as "near-black hats": the dark dome was the hair.
 
 ### Props — `assets/props/`
 

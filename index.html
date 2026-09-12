@@ -23,14 +23,20 @@
             <h1 id="title-wordmark" class="screen__title">Arcane&nbsp;Rush</h1>
           </div>
 
-          <div class="screen__middle">
-            <p class="picker__caption">Level</p>
-            <!-- Filled by src/ui/overlay.ts from the save's unlocked level. -->
-            <div id="level-picker" class="picker"></div>
-          </div>
+          <!-- One frosted panel behind the caption, the picker and Play: they
+               sit on the lit road now that the title no longer dims the scene,
+               and light-on-light was unreadable. Inert like the rest of the
+               overlay, so a drag that starts on it still steers. -->
+          <div class="screen__panel">
+            <div class="screen__middle">
+              <p class="picker__caption">Level</p>
+              <!-- Filled by src/ui/overlay.ts from the save's unlocked level. -->
+              <div id="level-picker" class="picker"></div>
+            </div>
 
-          <div class="screen__actions">
-            <button id="play-button" class="button" type="button">Play</button>
+            <div class="screen__actions">
+              <button id="play-button" class="button" type="button">Play</button>
+            </div>
           </div>
         </div>
 

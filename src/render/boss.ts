@@ -106,9 +106,9 @@ export class BossView {
     this.labels = labels;
     this.label = labels.claim();
 
-    // Thin and dim: the ring is a tell, not the event. The glow pass blooms
-    // whatever it is given, so a fat bright ring swallows the boss it is meant
-    // to sell — which is exactly what the Phase B2 frames showed.
+    // Thin: the ring is a tell, not the event. A fat bright ring swallows the
+    // boss it is meant to sell — which is exactly what the Phase B2 frames
+    // showed, and the additive blend does the rest.
     this.rings = new RingPool(scene, 'stomp', STOMP_COLOR, POOL.stompRings, {
       thickness: STOMP_THICKNESS,
       alpha: STOMP_ALPHA,
@@ -150,11 +150,6 @@ export class BossView {
   positionOf(out: { x: number; z: number }): void {
     out.x = this.lastX;
     out.z = this.lastZ;
-  }
-
-  /** The stomp shockwave blooms; the demon itself is lit. */
-  glowMeshes(): Mesh[] {
-    return [this.rings.mesh];
   }
 
   reset(): void {

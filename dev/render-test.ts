@@ -49,14 +49,10 @@ const hud = document.querySelector<HTMLElement>('#hud');
 
 const params = new URLSearchParams(window.location.search);
 const floorCount = Number(params.get('count') ?? Number.NaN);
-/** `?glow=0` proves the degrade ladder's glow rung on a real scene. */
-const glow = params.get('glow') !== '0';
-
 const renderer = new Renderer(canvas);
 
 async function main(): Promise<void> {
   await renderer.init();
-  renderer.setGlow(glow);
   if (params.has('physics')) {
     // No Havok in this harness, so quality 0 is also how the baked death
     // animation on a killed block gets exercised.

@@ -37,8 +37,8 @@ export interface QueryOptions {
   /**
    * A pinned rung of the degrade ladder (`src/core/quality.ts`), or null for
    * the automatic ladder. Pinning is how a phone's worst case is looked at on
-   * a desktop; a pinned ladder never steps on its own. Milestone 3 dropped the
-   * glow rung, so the ladder is five rungs and `clampRung` is what says so.
+   * a desktop; a pinned ladder never steps on its own. The ladder is five
+   * rungs, 0 to 4, and `clampRung` is what says so.
    */
   qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */

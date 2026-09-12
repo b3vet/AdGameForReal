@@ -192,7 +192,19 @@ export type SimEvent =
   | { type: 'enemyLeaked'; enemyId: number; streamId: number; x: number; z: number }
   | { type: 'streamStarted'; streamId: number; lane: Lane; count: number }
   | { type: 'streamCleared'; streamId: number; lane: Lane; leaked: number }
-  | { type: 'enemyShattered'; enemyId: number; x: number; z: number }
+  | {
+      type: 'enemyShattered';
+      enemyId: number;
+      x: number;
+      z: number;
+      /**
+       * Set when this body belonged to a stream, exactly as on `enemyKilled`.
+       * A stream is hundreds of single bodies (D29) and the physics layer
+       * throws no debris for them, so it has to be able to tell one apart from
+       * a block without holding the kill event that came just before.
+       */
+      streamId?: number;
+    }
   | { type: 'enemySlowed'; enemyId: number; seconds: number }
   | { type: 'splash'; x: number; z: number; radius: number }
   | { type: 'chain'; from: number; to: number }

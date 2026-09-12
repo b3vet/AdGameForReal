@@ -210,3 +210,32 @@ Tech lead reading:
   Both go to Phase C with the physics ragdoll rule, audio for leaks and
   stream clears, the stress scene's stream bodies, and the ASSETS.md rows
   for the re-baked files.
+
+## 2026-09-12 — Phase C: integration of streams, audio, physics, look fixes (verified and committed)
+
+- Physics: a stream kill ragdolls only when `usesRagdoll(enemyId)`, the
+  same rule the render skips on; stream kills throw no shards; blocks,
+  brutes and the boss keep their bursts. Bug found: the turbo event copier
+  dropped `streamId`, so the rule could not have worked; fixed with a test.
+  Burst geometry moved to `src/physics/bursts.ts`.
+- Audio: stream kills reuse the hit clip at a lower pitch capped at 8 per
+  second, leaks reuse the units-lost clip at 6 per second, a cleared stream
+  plays a bright chime; `enemyActivated` is silent; numbers in
+  `src/data/audio.json`; six tests.
+- Look: the dark mass was the mages' hair, not the hat, and the hat at
+  0.6 sat below the fit floor (about 0.85) so it was worn as a ring; hat at
+  0.88 with per-UV-patch tints (violet crown, lighter brim, gold band,
+  sandy hair). Title: purple gradient gone, frosted warm panel behind the
+  picker and Play.
+- Stress scene now includes 300 stream bodies in the same crowd as the
+  block skeletons (25 draw calls). Bug found: the stress scene never ran
+  the warm-up, so its first corpse compiled a shader inside `scene.render`
+  (a reproducible 14.6 s frame); fixed. Tripwire re-baselined to 12 ms
+  (twice the measured median band); `SMOKE_STRESS_RENDER_MS` overrides.
+- Cleanups: glow code and rung removed everywhere, `legendSeconds` gone,
+  ASSETS.md refreshed for the re-baked files (3.4 MB total).
+- Numbers: draw peaks 35 / 34 / 38; stress 5.0 ms median; warm-up 103
+  materials, 0 compiles during play; tests 206; hosted 9.77 MB, artifact
+  13.11 MB; both verified offline at physics quality 2 with Cinzel loaded.
+- Published to the product owner as the full Milestone 3 build for the
+  look check and the frame-rate re-measurement.
