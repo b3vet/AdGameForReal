@@ -3,26 +3,26 @@
   "source": "models/skeleton_minion.glb",
   "boneCount": 41,
   "width": 168,
-  "height": 133,
+  "height": 135,
   "fps": 30,
   "format": "half-float-rgba",
   "ranges": {
     "walk": {
       "animation": "Walking_D_Skeletons",
       "from": 0,
-      "to": 47,
+      "to": 48,
       "loop": true
     },
     "walk2": {
       "animation": "Running_C",
-      "from": 48,
-      "to": 71,
+      "from": 49,
+      "to": 73,
       "loop": true
     },
     "death": {
       "animation": "Death_C_Skeletons",
-      "from": 72,
-      "to": 132,
+      "from": 74,
+      "to": 134,
       "loop": false
     }
   }

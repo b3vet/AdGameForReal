@@ -209,6 +209,28 @@ export const CAST2_CLIP_SPEED = 1.8;
 export const IDLE_CLIP_SPEED = 1;
 
 /**
+ * How the squad decides it is running rather than standing still.
+ *
+ * The renderer has no "advancing" flag from the sim, only the squad's z, and z
+ * moves in the sim's own fixed 1/60 s steps behind an accumulator. A frame that
+ * happens to fall between two steps sees *no* movement at all, and a frame on a
+ * 120 Hz display sees none every other frame — so a per-frame delta made the
+ * whole crowd cut from `run` to `idle` and back, with the idle sway snapping on
+ * top of it. That was the "glitchy walking" of the Milestone 3 playtest
+ * (Milestone 4, task P): measured at 8.3 ms frames, 120 frames in 240 were
+ * drawn standing still.
+ *
+ * So the view low-passes the speed it measures over `ADVANCE_SMOOTHING`
+ * seconds — long enough to swallow a step the sim has not taken yet, short
+ * enough that the squad stops looking like it is running about a fifth of a
+ * second after it stops — and switches on hysteresis, so a squad hovering at
+ * the threshold cannot flicker.
+ */
+export const ADVANCE_SMOOTHING = 0.12;
+export const ADVANCE_START_SPEED = 0.5;
+export const ADVANCE_STOP_SPEED = 0.2;
+
+/**
  * Idle sway. A VAT cannot blend, and the mage rig has one idle clip, so the
  * variety is added on top of it: each unit rocks a few degrees of yaw and a
  * centimetre of height on its own phase, which is what turns a hundred

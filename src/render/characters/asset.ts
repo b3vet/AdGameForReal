@@ -47,6 +47,7 @@ import {
 } from './manifest';
 import type { ModelAsset, VatMeta } from './manifest';
 import { tintColors } from './tint';
+import { prepareVatSampling } from './vatSampling';
 
 /** What `VatCrowd` needs to draw a character, and what the caller must dispose. */
 export interface CharacterAsset {
@@ -360,6 +361,9 @@ async function loadVatTexture(
     throw new Error(`${entry.url}: ${String(data.length)} halfs, expected ${String(expected)}`);
   }
 
+  // The sampler and the filter mode are one decision, made in `./vatSampling.ts`
+  // for the whole session: the interpolating shader reads a row *between* two
+  // rows and wants the hardware to blend them.
   const texture = RawTexture.CreateRGBATexture(
     data,
     meta.width,
@@ -367,9 +371,13 @@ async function loadVatTexture(
     scene,
     false,
     false,
-    Texture.NEAREST_NEAREST,
+    prepareVatSampling(scene.getEngine()),
     Constants.TEXTURETYPE_HALF_FLOAT,
   );
   texture.name = `vat:${meta.rig}`;
+  // A bone matrix is four texels of one row; nothing may wrap round to the
+  // opposite edge of the texture, whichever way it is filtered.
+  texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+  texture.wrapV = Texture.CLAMP_ADDRESSMODE;
   return { vat: meta, texture };
 }

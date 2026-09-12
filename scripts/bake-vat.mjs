@@ -48,9 +48,15 @@ const ASSETS = path.join(ROOT, 'assets');
 const FPS = 30;
 
 /**
- * What to bake, and the game-facing id each source animation answers to. A
- * looping range drops its last frame because it duplicates the first, which
- * would otherwise show up as a hitch every cycle.
+ * What to bake, and the game-facing id each source animation answers to.
+ *
+ * A looping range **keeps** its last frame, which duplicates the first. That
+ * repeat is the loop's wrap partner and both samplers need it: Babylon's own
+ * `bakedVertexAnimation` plays `from + 1 .. to` once its clock passes one
+ * cycle, and ours (`src/render/characters/vatSampling.ts`) interpolates from
+ * `to - 1` into `to`. Milestone 3 dropped it on the theory that a repeated
+ * pose is a hitch; what it actually produced was a *skipped* pose — the wrap
+ * stepped two baked frames at once, once per cycle (Milestone 4 task P).
  */
 const RIGS = [
   {
@@ -133,18 +139,23 @@ function unmirror(matrices) {
 /**
  * Steps one animation group frame by frame and returns the skeleton's
  * transform matrices for each sample.
+ *
+ * `count` is the number of *intervals*, so the range is `count + 1` rows and
+ * the last one sits on the clip's end pose. For a loop that end pose is the
+ * start pose again, which is exactly the wrap partner the sampler reads; the
+ * clip's own duration is therefore `count / FPS`, not `rows / FPS`.
  */
-function sampleRange(scene, skeleton, group, loop) {
+function sampleRange(scene, skeleton, group) {
   const seconds = (group.to - group.from) / SOURCE_FPS;
   const count = Math.max(2, Math.round(seconds * FPS));
-  const samples = loop ? count : count + 1;
+  const samples = count + 1;
 
   group.play(false);
   group.pause();
 
   const frames = [];
   for (let i = 0; i < samples; i++) {
-    const t = loop ? i / count : i / Math.max(1, count);
+    const t = i / count;
     group.goToFrame(group.from + t * (group.to - group.from));
     // `prepare` pulls each bone's local matrix from the transform node the
     // glTF loader linked to it, then fills `_transformMatrices`.
@@ -177,7 +188,7 @@ async function bakeRig(engine, spec) {
     if (group === undefined) {
       throw new Error(`${spec.model} has no animation "${range.animation}"`);
     }
-    const frames = sampleRange(scene, skeleton, group, range.loop);
+    const frames = sampleRange(scene, skeleton, group);
     ranges[range.id] = {
       animation: range.animation,
       from: rows.length,

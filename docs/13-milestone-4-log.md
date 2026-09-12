@@ -31,3 +31,27 @@
   dark indigo; it should match the page's light sky. App icon and splash
   art still to do with `@capacitor/assets` later. The product owner must
   pick a unique app id and sign with a personal team.
+
+## 2026-09-13 — Task P: walking glitch (verified and committed)
+
+- Three confirmed causes. (1) The squad view decided "advancing" from a
+  single frame's z delta, but the sim moves in fixed 1/60 s steps behind an
+  accumulator; at the phone's 120 Hz display half the frames saw no
+  movement, so the crowd cut between run and idle every frame with the
+  idle sway snapping on. (2) A 30 fps bake played at 1.3× on a 60 Hz
+  display holds poses in a 2-1-2-2-1 pattern. (3) Babylon's frame
+  correction expects the loop's end frame to repeat the first; the M3 bake
+  dropped it, so every wrap skipped a pose. Per-body speed jitter was ruled
+  out (constant per body).
+- Fixes: looping ranges keep the repeated end frame; a new
+  `vatSampling.ts` replaces Babylon's baked-animation includes with
+  phase-in-frames math and a fractional row sample (one bilinear fetch
+  where half-float filtering exists, otherwise two fetches and a mix),
+  verified pixel-identical between paths; `durationOf` counts intervals
+  (a corpse's last frame no longer pops to frame 0); the advancing
+  decision is a low-passed speed with hysteresis.
+- Results: idle flips 240 → 0 at both 60 and 120 Hz; frame-to-frame
+  motion coefficient of variation 0.30 → 0.046. VAT sizes 265 / 177 /
+  130 KB. Smoke passes with 0 compiles during play; no stress regression.
+- Note for the record: the iPhone 17 Pro Max runs the page at 120 Hz, which
+  also explains the capture maxima above 100 fps.

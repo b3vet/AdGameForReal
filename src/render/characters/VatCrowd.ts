@@ -6,10 +6,13 @@
  * draw call however many units there are, no per-unit skeleton, and no
  * allocation in `setInstance` — it is a hot loop that runs 500 times a frame.
  *
- * The one thing a VAT cannot do is blend. `bakedVertexAnimation` picks a single
- * texture row, so switching a unit from `run` to `cast` is a cut, not a
- * cross-fade. Stagger `timeOffset` across the crowd and the cut disappears into
- * the mass; a hero unit that needs blending has to be a normal skinned mesh.
+ * The one thing a VAT cannot do is blend *between clips*. A row of the texture
+ * is one pose of one clip, so switching a unit from `run` to `cast` is a cut,
+ * not a cross-fade. Stagger `timeOffset` across the crowd and the cut
+ * disappears into the mass; a hero unit that needs blending has to be a normal
+ * skinned mesh. Inside a clip the sampler does interpolate between the two rows
+ * either side of the current time — see `./vatSampling.ts`, which is what makes
+ * a 30 fps bake played at 1.3x look like motion rather than stepping.
  */
 
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
@@ -83,10 +86,10 @@ export class VatCrowd implements Crowd {
    * lockstep; it wraps within the range, so any value is valid.
    *
    * `speed` scales this instance's playback. Zero is the useful special case:
-   * the shader's clock is `fract(time * speed / frames)`, so at speed 0 the
-   * instance holds the single frame `timeOffset` picks out — which is how a
-   * block that has not activated yet stands still instead of marching on the
-   * spot, without a second baked range.
+   * the shader's clock is `mod(time * speed * fps + offsetFrames, frames)`, so
+   * at speed 0 the instance holds the one pose `timeOffset` picks out — which
+   * is how a block that has not activated yet stands still instead of marching
+   * on the spot, without a second baked range.
    *
    * `scaleY` defaults to `scale` and is the only way to make an instance
    * non-uniform. It exists for squash and stretch on a unit popping in: the
@@ -155,11 +158,17 @@ export class VatCrowd implements Crowd {
     this.manager.time += dt;
   }
 
-  /** How long one loop of a range lasts, for callers timing a one-shot. */
+  /**
+   * How long one loop of a range lasts, for callers timing a one-shot.
+   *
+   * Intervals, not rows: the bake's last row is the clip's end pose, which for
+   * a looping range is its first pose again (`scripts/bake-vat.mjs`), so a
+   * range of `n + 1` rows is `n` frames long.
+   */
   durationOf(animationId: string): number {
     const range = this.ranges.get(animationId);
     if (range === undefined) throw new Error(`no baked range "${animationId}"`);
-    return (range.to - range.from + 1) / this.fps;
+    return (range.to - range.from) / this.fps;
   }
 
   dispose(): void {

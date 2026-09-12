@@ -19,6 +19,9 @@ import type { Scene } from '@babylonjs/core/scene';
 import type { Crowd } from './characters';
 import { loadCrowds } from './models';
 import {
+  ADVANCE_SMOOTHING,
+  ADVANCE_START_SPEED,
+  ADVANCE_STOP_SPEED,
   CASTING_SHARE,
   CAST2_CLIP_SPEED,
   CAST_CLIP_SPEED,
@@ -46,9 +49,6 @@ import type { RunStatus, SquadState, WeaponId } from '@/sim';
 
 /** Sentinel in `spawnAge`: this unit finished its pop and needs no animation. */
 const SETTLED = 1e9;
-
-/** Metres of forward travel per second below which the squad counts as stopped. */
-const ADVANCE_EPSILON = 0.05;
 
 /** Fallback capsule colours, one per staff, when the model cannot be loaded. */
 const FALLBACK_COLORS: Record<WeaponId, typeof EMBER_COLOR> = {
@@ -87,6 +87,8 @@ export class SquadView {
   private previousCount = -1;
   private previousZ = Number.NaN;
   private advancing = false;
+  /** Low-passed forward speed in metres a second, `NaN` until primed. */
+  private advanceSpeed = Number.NaN;
   private cheering = false;
   /** Seconds left of the hop the squad takes through a gate row, or 0. */
   private bounce = 0;
@@ -129,6 +131,7 @@ export class SquadView {
   reset(): void {
     this.previousCount = -1;
     this.previousZ = Number.NaN;
+    this.advanceSpeed = Number.NaN;
     this.corpseCount = 0;
     this.cheering = false;
     this.advancing = false;
@@ -244,8 +247,13 @@ export class SquadView {
   private animationFor(index: number, inArena: boolean): string {
     if (this.cheering) return 'cheer';
     const casting = this.castFor(index);
+    // The arena is tested before the run, because it is a hard stop the sim
+    // announces by position: the smoothed speed takes a third of a second to
+    // run down (`trackMotion`) and the squad must not jog on the spot in front
+    // of the boss while it does.
+    if (inArena) return casting;
     if (this.advancing) return index % CASTING_SHARE === 0 ? casting : 'run';
-    return inArena ? casting : 'idle';
+    return 'idle';
   }
 
   /**
@@ -259,11 +267,30 @@ export class SquadView {
     return index % 2 === 0 ? 'cast' : 'cast2';
   }
 
+  /**
+   * Is the squad running? Answered from a low-passed speed with hysteresis,
+   * never from one frame's z delta: the sim moves the squad in fixed 1/60 s
+   * steps, so a frame can legitimately see it standing still (`theme.ts`,
+   * `ADVANCE_SMOOTHING`).
+   *
+   * The first sample after a reset primes the filter instead of easing into it,
+   * so a level that starts with the squad already moving starts with it already
+   * running.
+   */
   private trackMotion(z: number, dt: number): void {
     const previous = this.previousZ;
     this.previousZ = z;
     if (Number.isNaN(previous) || dt <= 0) return;
-    this.advancing = (z - previous) / dt > ADVANCE_EPSILON;
+
+    const measured = (z - previous) / dt;
+    if (Number.isNaN(this.advanceSpeed)) {
+      this.advanceSpeed = measured;
+    } else {
+      // Frame-rate independent: the same smoothing in seconds at 60 or 120 Hz,
+      // and at turbo, where one frame is a second of sim time and this is 1.
+      this.advanceSpeed += (measured - this.advanceSpeed) * (1 - Math.exp(-dt / ADVANCE_SMOOTHING));
+    }
+    this.advancing = this.advanceSpeed > (this.advancing ? ADVANCE_STOP_SPEED : ADVANCE_START_SPEED);
   }
 
   private diffCount(count: number, x: number, z: number, crowd: number): void {

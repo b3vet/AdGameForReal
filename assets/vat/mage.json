@@ -3,38 +3,38 @@
   "source": "models/mage.glb",
   "boneCount": 41,
   "width": 168,
-  "height": 197,
+  "height": 202,
   "fps": 30,
   "format": "half-float-rgba",
   "ranges": {
     "idle": {
       "animation": "Idle",
       "from": 0,
-      "to": 31,
+      "to": 32,
       "loop": true
     },
     "run": {
       "animation": "Running_A",
-      "from": 32,
-      "to": 55,
+      "from": 33,
+      "to": 57,
       "loop": true
     },
     "cast": {
       "animation": "Spellcast_Shoot",
-      "from": 56,
-      "to": 83,
+      "from": 58,
+      "to": 86,
       "loop": true
     },
     "cast2": {
       "animation": "Spellcast_Raise",
-      "from": 84,
-      "to": 146,
+      "from": 87,
+      "to": 150,
       "loop": true
     },
     "cheer": {
       "animation": "Cheer",
-      "from": 147,
-      "to": 196,
+      "from": 151,
+      "to": 201,
       "loop": true
     }
   }
