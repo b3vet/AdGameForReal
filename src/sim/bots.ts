@@ -49,6 +49,16 @@ function laneOpen(lane: Lane, range: WallLimits): boolean {
   return center >= range.lo - 1e-9 && center <= range.hi + 1e-9;
 }
 
+/** The same question for the whole road. An index loop, not `some`: a callback
+ *  is a closure, and a bot is asked for a lane on every step (CLAUDE.md). */
+function anyLaneOpen(range: WallLimits): boolean {
+  for (let i = 0; i < LANES.length; i++) {
+    const lane = LANES[i];
+    if (lane !== undefined && laneOpen(lane, range)) return true;
+  }
+  return false;
+}
+
 /** Lowest row index that still has an unpassed gate, or -1 once they are gone. */
 function nextGateRow(state: RunState): number {
   let best = -1;
@@ -168,10 +178,10 @@ function pickLane(state: RunState, rowIndex: number, sign: number, range: WallLi
   let bestLane: Lane = 0;
   let bestScore = -Infinity;
   let bestDistance = Infinity;
-  const walled = LANES.some((lane) => laneOpen(lane, range));
+  const narrowed = anyLaneOpen(range);
 
   for (const lane of LANES) {
-    if (walled && !laneOpen(lane, range)) continue;
+    if (narrowed && !laneOpen(lane, range)) continue;
     const gate = gateAt(state, rowIndex, lane);
     const score = sign * laneScore(gate, state);
     const distance = Math.abs(laneCenter(lane, balance.road.laneWidth) - state.squad.x);
@@ -281,6 +291,9 @@ function blockedByEnemy(state: RunState): boolean {
 /** The half of the road on one side of a fence, so each can be scored. */
 const half: WallLimits = { lo: 0, hi: 0, wall: -1 };
 
+/** The two of them, as a constant: a literal here would allocate every step. */
+const SIDES: readonly number[] = [-1, 1];
+
 /**
  * Narrows `range` to the half of the road the squad should arrive on, given a
  * fence at `line` between here and the gate row.
@@ -306,7 +319,7 @@ function chooseSide(
   let best = 0;
   let bestScore = -Infinity;
 
-  for (const side of [-1, 1]) {
+  for (const side of SIDES) {
     half.lo = side < 0 ? range.lo : Math.max(range.lo, line + margin);
     half.hi = side < 0 ? Math.min(range.hi, line - margin) : range.hi;
     half.wall = range.wall;

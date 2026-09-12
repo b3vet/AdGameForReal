@@ -178,3 +178,47 @@
   wall; a mixed-row block count overlapping its gate value on `staff-l10`;
   the selected staff is not readable on the backdrop (a badge on the
   Workbench card would show it); `App.ts` 523 and `types.ts` 547 lines.
+
+## 2026-09-14 — Phase D: review and hardening (verified and committed)
+
+- Fixed (high): a stream's remaining count had no gate clearance and
+  printed through a gate panel when the river's head was level with the
+  row; a new analytic label clearance projects labels and panel boxes to
+  screen and drops any number inside a panel (block labels keep their
+  tuned margin, stream counts use the box only).
+- Fixed (medium): `runRewards` paid survivors for a run still in progress,
+  which would have made "take the fat gate, then quit" the best coin rate
+  the moment a quit path existed; the debug toggle was unreachable from
+  the rooms and the picker; the coin purse never animated.
+- Fixed (low): a wall-bump latch that could swallow a later bump; two
+  per-step allocations in the bot path; a wake-lock request that could throw
+  out of a visibility handler.
+- Deferred with reasons: the wall clamp bounds the squad center only, so a
+  large crowd visibly straddles a fence (tapering by half-width moves every
+  band and golden hash); a v2 save from a future build is re-stamped to v2
+  (a v3 takes a new key); the native haptics tap is never stopped on
+  dispose; the picker opens on page one after a first clear of level 10;
+  the backdrop renders behind the room panels every frame; `GameAudio.ts`
+  at 484 lines.
+- Staff badge on the Workbench card shows the selected staff in its color.
+  `App.ts` and `types.ts` split under 450 lines. Debug panel re-flowed to
+  fit 390 px with every readout.
+- Verified: typecheck, lint, 288 tests, build, smoke (draw peaks 35 / 34 /
+  37 / 37, 0 compiles during play), hosted 9.86 MB, artifact 13.20 MB.
+
+## Milestone 4 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Walls from level 4, bots aware, 20 levels, bands hold, walls readable | Done; committed walls cost budget, so most levels carry one wall, levels 11 to 14 two, level 5 none |
+| 2. Coins, yard, workbench, sanctum, bestiary from a versioned save; affordance test | Done |
+| 3. The wisp fights beside the squad with a visible tier | Done |
+| 4. Capacitor files, scripts, `docs/DEVICE.md`; product owner runs the app from Xcode | Files and guide done; the device run is the product owner's step |
+| 5. Walking glitch gone; capture reports frames over 20 ms | Done; the phone re-measurement is pending |
+| 6. Checks, offline builds under budget, docs and ledger | Done |
+
+Carried forward: a wall could take one lane of the guarded row instead of
+half the road so the wall budget can rise; the boss-HP step from level 10
+to 11 is a row-mix matter; the wall clamp versus crowd half-width; the
+picker page after a level-10 first clear; the backdrop frame cap behind
+room panels; app icon and splash art for the device build.

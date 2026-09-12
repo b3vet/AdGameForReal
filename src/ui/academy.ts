@@ -16,8 +16,10 @@
  * other reference to "the first screen" still resolves.
  */
 
+import { roomUnlockLevel } from '@/core/player';
 import type { RoomId } from '@/core/player';
 import { academy, fill } from '@/data/academy-types';
+import type { WeaponId } from '@/sim';
 
 import { replay } from './widgets';
 
@@ -31,6 +33,12 @@ export interface AcademyView {
   selectedLevel: number;
   /** Rooms that just became available; each plays its reveal once. */
   reveal: readonly RoomId[];
+  /**
+   * The staff the next run starts with. The backdrop crowd is seen from behind,
+   * so the only thing on the home screen that can say which staff is in hand is
+   * the Workbench card (Milestone 4 Phase C, carried to D).
+   */
+  selectedStaff: WeaponId;
 }
 
 export interface AcademyElements {
@@ -58,6 +66,8 @@ export class Academy {
   /** One card per room, in `academy.json` order, built once. */
   private readonly cards = new Map<RoomId, HTMLButtonElement>();
   private readonly cardHints = new Map<RoomId, HTMLElement>();
+  /** The Workbench card's staff badge; see `AcademyView.selectedStaff`. */
+  private staffBadge: HTMLElement | null = null;
 
   private readonly chips: HTMLButtonElement[] = [];
   private readonly pageButtons: HTMLButtonElement[] = [];
@@ -77,6 +87,7 @@ export class Academy {
   /** Paints the home: coins, which cards are open, and any reveal owed. */
   showHome(view: AcademyView): void {
     this.setCoins(view.coins);
+    this.paintStaffBadge(view);
     for (const room of academy.rooms) {
       const id = roomId(room.id);
       const card = id === null ? undefined : this.cards.get(id);
@@ -104,16 +115,34 @@ export class Academy {
     this.paintChips();
   }
 
+  /**
+   * The purse. It bumps whenever the number actually moves — a reward on the
+   * way back from a run, a purchase in a room — but never on the first paint of
+   * the session, where there is no change to announce.
+   */
   setCoins(coins: number): void {
     const value = Math.max(0, Math.round(coins));
     if (value === this.shownCoins) return;
+    const first = this.shownCoins < 0;
     this.shownCoins = value;
     this.elements.coinValue.textContent = String(value);
+    if (!first) replay(this.elements.coinValue, 'coins__value--bump');
   }
 
-  /** The coin chip bumps when a purchase or a reward changes the purse. */
-  bumpCoins(): void {
-    replay(this.elements.coinValue, 'coins__value--bump');
+  /**
+   * The Workbench card's badge. Hidden while the room is shut: a staff the
+   * player cannot change yet is not information, and ember is the only one
+   * there is until level 5.
+   */
+  private paintStaffBadge(view: AcademyView): void {
+    const badge = this.staffBadge;
+    if (badge === null) return;
+    const open = view.unlockedLevel >= roomUnlockLevel('workbench');
+    badge.hidden = !open;
+    if (!open) return;
+    const copy = academy.workbench.staffs.find((staff) => staff.id === view.selectedStaff);
+    badge.textContent = copy?.name ?? view.selectedStaff;
+    badge.dataset['staff'] = view.selectedStaff;
   }
 
   private buildCards(): void {
@@ -136,6 +165,16 @@ export class Academy {
       hint.textContent = room.blurb;
 
       card.append(title, hint);
+      if (id === 'workbench') {
+        // Named by the same copy the Workbench itself uses, and coloured by the
+        // same three tokens as the HUD's in-run badge, so the staff reads the
+        // same on both screens.
+        const badge = document.createElement('span');
+        badge.className = 'card__badge';
+        badge.id = 'academy-staff';
+        card.append(badge);
+        this.staffBadge = badge;
+      }
       this.bind(card, () => {
         this.callbacks.onOpenRoom(id);
       });

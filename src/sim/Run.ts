@@ -275,8 +275,12 @@ export class Run {
    * holds a finger against a fence, and a sound per step is a buzz.
    */
   private noteWall(wall: number, pushed: boolean, z: number): void {
+    // Both ways out arm the edge again. A push with no wall behind it is the
+    // crowd's own taper biting — the clamp narrows as the squad grows — and
+    // leaving the latch set there would swallow the *next* bump against the
+    // fence the squad was last held by.
     if (!pushed || wall < 0) {
-      if (!pushed) this.blockedWall = -1;
+      this.blockedWall = -1;
       return;
     }
     if (this.blockedWall === wall) return;

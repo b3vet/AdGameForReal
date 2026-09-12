@@ -81,14 +81,20 @@ function keepScreenAwake(): void {
 
   const acquire = (): void => {
     if (sentinel !== null && !sentinel.released) return;
-    void wakeLock
-      .request('screen')
-      .then((held) => {
-        sentinel = held;
-      })
-      .catch(() => {
-        // Denied (low battery, or the user's setting). Nothing to do.
-      });
+    try {
+      void wakeLock
+        .request('screen')
+        .then((held) => {
+          sentinel = held;
+        })
+        .catch(() => {
+          // Denied (low battery, or the user's setting). Nothing to do.
+        });
+    } catch {
+      // Some WebViews throw synchronously rather than rejecting — from a
+      // `visibilitychange` handler that would be an uncaught error on every
+      // return to the foreground, for a lock that is only ever polish.
+    }
   };
 
   document.addEventListener('visibilitychange', () => {

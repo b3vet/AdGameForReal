@@ -81,15 +81,24 @@ export function familiarPrice(tier: FamiliarTier): number {
 export const maxFamiliarTier: FamiliarTier = 3;
 
 /**
- * Coins a finished run pays: one per survivor, plus a flat share of the level
+ * Coins a *finished* run pays: one per survivor, plus a flat share of the level
  * index on a clear, and again — larger — the first time that level is cleared.
  * A lost run leaves no survivors, so it pays nothing.
+ *
+ * A run that is still going pays nothing either, and that is deliberate rather
+ * than defensive. `survivors` tracks the live squad while a run is under way,
+ * so paying on it would make "walk into a fat gate, then leave" worth more than
+ * finishing the level. Nothing in the app can leave a run today — the HUD has
+ * no way out — but the rule belongs here, with the arithmetic, rather than in
+ * whichever screen grows one first.
  */
 export function runRewards(
   state: { status: string; survivors: number },
   level: number,
   firstClear: boolean,
 ): { coins: number } {
+  if (state.status === 'running') return { coins: 0 };
+
   const rewards = progression.rewards;
   const cleared = state.status === 'won';
   const index = Math.max(1, Math.floor(level));

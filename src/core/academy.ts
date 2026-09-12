@@ -205,6 +205,7 @@ export class AcademyController {
       levelCount: this.deps.levelCount,
       selectedLevel,
       reveal,
+      selectedStaff: this.state.selectedStaff,
     };
   }
 

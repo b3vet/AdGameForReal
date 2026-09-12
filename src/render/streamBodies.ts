@@ -21,6 +21,8 @@
 
 import type { Crowd } from './characters';
 import { usesRagdoll } from './deathStyle';
+import { gateCoversLabel } from './labelClearance';
+import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
 import {
   GRUNT_SCALE,
@@ -34,7 +36,7 @@ import {
 } from './theme';
 import { balance } from '@/data';
 import { laneCenter } from '@/sim';
-import type { EnemyState, RunState, StreamState } from '@/sim';
+import type { EnemyState, GateState, RunState, StreamState } from '@/sim';
 
 /** Bodies face the squad, which is behind them down the road. */
 const FACING = Math.PI;
@@ -156,8 +158,21 @@ export class StreamBodies {
    * river and walks toward the player with it. A stream that has not started or
    * has been cleared prints nothing: the count is a threat readout, and a zero
    * hanging over an empty lane is noise.
+   *
+   * And a head standing on a gate panel prints nothing either. The count rides
+   * `STREAM_LABEL_HEIGHT` over the body rather than on it, which is exactly the
+   * band a panel occupies, so the river's number lands on the panel's own value
+   * for the second or so the head takes to walk through the row (Milestone 4
+   * Phase C caught it on `staff-l10.png`). The panel's box and nothing wider —
+   * a block's extra margin would cost the river its readout either side of
+   * every row; see `./labelClearance.ts`.
    */
-  writeLabels(streams: readonly StreamState[], squadZ: number): void {
+  writeLabels(
+    streams: readonly StreamState[],
+    squadZ: number,
+    gates: readonly GateState[],
+    view: LabelView,
+  ): void {
     for (let i = 0; i < streams.length && i < this.labelIds.length; i++) {
       const stream = streams[i];
       const label = this.labelIds[i];
@@ -167,10 +182,13 @@ export class StreamBodies {
       const ahead = stream.headZ - squadZ;
       if (ahead >= LABEL_RANGE || ahead <= -LABEL_BEHIND) continue;
 
+      const x = laneCenter(stream.lane);
+      if (gateCoversLabel(gates, x, stream.headZ, STREAM_LABEL_HEIGHT, view)) continue;
+
       this.labels.set(
         label,
         countText(stream.remaining),
-        laneCenter(stream.lane),
+        x,
         STREAM_LABEL_HEIGHT,
         stream.headZ,
         STREAM_LABEL_COLOR,

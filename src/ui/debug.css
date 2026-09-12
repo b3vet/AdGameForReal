@@ -18,11 +18,15 @@
   gap: 0.3rem;
   /* The overlay root already insets by the safe area, so this clears the notch. */
   margin: 0.5rem;
-  /* Wide enough for the longest line the panel composes — about forty monospace
-     characters at 10px, which is the cost row (`sim / render / phys`).
+  /* Wide enough for the longest line the panel composes: about fifty monospace
+     characters at 10px, which on a 390 px phone is the Chrome-only audio-plus-
+     heap row and, without it, the ladder's (`rung / p95 / >20ms`).
      `white-space: pre` does not wrap, so a narrower box does not reflow, it
      clips: the numbers this panel exists to report were running off the right
-     edge on a 390 px phone. */
+     edge on a 390 px phone. 88vw of 390 leaves 343 px, and the text's own
+     0.6rem of padding either side leaves 324 — fifty-four characters at the
+     0.6em advance of a 10px monospace face. Every line is composed to fit
+     inside that; see `compose` in `./debug.ts`. */
   max-width: min(88vw, 22rem);
   /* The block is a readout, not a control: only the button opts back in, so a
      drag that starts over the panel still reaches the canvas and steers. */

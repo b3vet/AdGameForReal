@@ -5,12 +5,13 @@
  * `RunSession` at a time, the degrade ladder and the `window.__arcane` debug
  * handle the smoke test drives. Everything visual is delegated to `src/ui` and
  * `src/render`; everything about the game is delegated to `@/sim` through
- * `./session`; everything that happens inside one frame is `./frame`; and
- * everything about the meta layer — the player, the Academy's menus and the
- * purse — is `./academy.ts` (decision D33).
+ * `./session`; everything that happens inside one frame is `./frame`; the
+ * Academy's screens and the road behind them are `./menus.ts`; what a tap asks
+ * for is `./controls.ts`; and everything about the meta layer — the player, the
+ * purse and what a run pays — is `./academy.ts` (decision D33).
  *
  * The `title` phase covers all of the Academy: which of its screens is up is
- * the controller's business, not the state machine's.
+ * the menu stage's business, not the state machine's.
  */
 
 import { GameAudio } from '@/audio';
@@ -20,16 +21,18 @@ import type { PhysicsQuality } from '@/physics';
 import { Renderer } from '@/render/Renderer';
 import { runRenderDevScene } from '@/render/dev-scene';
 import { weaponOf } from '@/sim';
-import type { WeaponId } from '@/sim';
 import { fontsReady, Overlay } from '@/ui';
 
 import { AcademyController } from './academy';
-import { FrameDriver, NO_EVENTS } from './frame';
+import { overlayCallbacks } from './controls';
+import type { AppCommands } from './controls';
+import { FrameDriver } from './frame';
 import type { FrameHost } from './frame';
 import type { ArcaneDebugHandle } from './handle';
 import { attachInput } from './input';
 import type { DetachInput } from './input';
 import { Juice } from './juice';
+import { MenuStage } from './menus';
 import type { RoomId } from './player';
 import { QualityLadder } from './quality';
 import type { QualityRung } from './quality';
@@ -44,13 +47,15 @@ export type AppPhase = 'title' | 'playing' | 'result';
 
 export type { ArcaneDebugHandle };
 
-export class App implements FrameHost {
+export class App implements FrameHost, AppCommands {
   readonly renderer: Renderer;
   readonly audio: GameAudio;
   readonly juice: Juice;
   readonly overlay: Overlay;
-  /** The meta layer: the player, the menus and the purse (`./academy.ts`). */
+  /** The meta layer: the player, the purse and what a run pays (`./academy.ts`). */
   readonly academy: AcademyController;
+  /** The Academy's screens and the backdrop behind them (`./menus.ts`). */
+  private readonly menus: MenuStage;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly options: QueryOptions;
@@ -65,10 +70,6 @@ export class App implements FrameHost {
 
   private currentPhase: AppPhase = 'title';
   private session: RunSession | null = null;
-  /** A never-ticked session whose level and state back the Academy screens. */
-  private preview: RunSession | null = null;
-  /** Which level the standing preview was built for; 0 when there is none. */
-  private previewLevel = 0;
   private detachInput: DetachInput | null = null;
   private muted: boolean;
 
@@ -94,72 +95,23 @@ export class App implements FrameHost {
         this.applyQuality(rung, index);
       },
     });
-    this.overlay = new Overlay(overlayRoot, {
-      onPlay: () => {
-        this.startRun();
-      },
-      onRetry: () => {
-        this.startRun();
-      },
-      onNext: () => {
-        this.startLevel(this.options.level + 1);
-      },
-      onSelectLevel: (level: number) => {
-        this.selectLevel(level);
-      },
-      onOpenRoom: (room: RoomId) => {
-        this.openRoom(room);
-      },
-      onCloseRoom: () => {
-        this.showHome();
-      },
-      onLevels: () => {
-        this.showHome();
-      },
-      onTap: () => {
-        // Every button is a user gesture, which is the only moment a browser
-        // lets an audio context start. Play is the one the plan names; the
-        // others cost nothing once it is already running.
-        this.audio.unlock();
-        this.audio.playTap();
-      },
-      onToggleMute: () => {
-        this.setMuted(!this.muted);
-      },
-      onToggleDebug: () => {
-        // The panel is a toggle rather than a query parameter because the
-        // hosted playtest wrapper may not pass one through; the save is what
-        // makes the choice survive the reload that wrapper does on its own.
-        const debug = !this.overlay.debugEnabled;
-        this.overlay.setDebugEnabled(debug);
-        setDebug(debug);
-      },
-      onCountTick: () => {
-        this.audio.playTick();
-      },
-      onCoinTick: () => {
-        this.audio.playCoinTick();
-      },
-      onBuyUpgrade: (id: string) => {
-        this.academy.buyUpgrade(id);
-      },
-      onBuyStaff: (id: WeaponId) => {
-        this.academy.buyStaff(id);
-      },
-      onSelectStaff: (id: WeaponId) => {
-        this.academy.selectStaff(id);
-      },
-      onBuyFamiliar: () => {
-        this.academy.buyFamiliar();
-      },
-    });
+    this.overlay = new Overlay(overlayRoot, overlayCallbacks(this));
     this.academy = new AcademyController({
       overlay: this.overlay,
       audio: this.audio,
       levelCount,
       onPlayerChanged: () => {
         // The backdrop was built with the old player in it.
-        this.previewLevel = 0;
+        this.menus.invalidate();
+      },
+    });
+    this.menus = new MenuStage({
+      renderer: this.renderer,
+      academy: this.academy,
+      options: this.options,
+      physics: () => this.physicsLayer,
+      markDirty: () => {
+        this.driver.markPreviewDirty();
       },
     });
   }
@@ -267,7 +219,7 @@ export class App implements FrameHost {
   }
 
   previewSession(): RunSession | null {
-    return this.preview;
+    return this.menus.session;
   }
 
   physics(): PhysicsLayer | null {
@@ -293,80 +245,43 @@ export class App implements FrameHost {
 
   // --- Screens -------------------------------------------------------------
 
-  /** The Academy home, over a fresh backdrop of the selected level. */
-  private showHome(): void {
+  /**
+   * The Academy home, over a fresh backdrop of the selected level. Which screen
+   * comes next is `./menus.ts`; the state machine's part is that `title` has no
+   * run in it.
+   */
+  showHome(): void {
     this.currentPhase = 'title';
     this.session = null;
     this.juice.reset();
-    this.loadPreview();
-    this.academy.showHome(this.options.level);
-  }
-
-  /** The level picker, behind the home's Play card. */
-  private showLevels(): void {
-    this.currentPhase = 'title';
-    this.academy.showLevels(this.options.level);
+    this.menus.showHome();
   }
 
   /** A card was tapped: `play` is the picker, the rest are rooms. */
-  private openRoom(room: RoomId): void {
+  openRoom(room: RoomId): void {
     if (this.currentPhase !== 'title') return;
-    if (room === 'play') this.showLevels();
-    else this.academy.openRoom(room);
+    this.menus.openRoom(room);
   }
 
-  private selectLevel(level: number): void {
+  selectLevel(level: number): void {
     if (this.currentPhase !== 'title') return;
-    this.options.level = clampLevel(level, levelCount);
-    // The backdrop is the level the player is about to walk, so it changes
-    // with the chip rather than only when Play is tapped.
-    this.loadPreview();
-    this.showLevels();
+    this.menus.selectLevel(level);
   }
 
-  /**
-   * Re-paints whatever menu is up after a debug injection. The home is the
-   * app's to re-show rather than the controller's, because its backdrop is a
-   * generated level.
-   */
+  /** Ascend: the level after the one just cleared. */
+  nextLevel(): void {
+    this.startLevel(this.options.level + 1);
+  }
+
+  /** Re-paints whatever menu is up after a debug injection. */
   private repaintMenu(): void {
-    if (this.currentPhase !== 'title') return;
-    if (this.academy.menu === 'home') this.showHome();
-    else this.academy.repaint(this.options.level);
+    if (this.currentPhase === 'title') this.menus.repaint();
   }
 
-  /**
-   * Builds the level shown behind the Academy and hands it to the renderer.
-   *
-   * Skipped when the standing preview is already the right one: the Academy's
-   * screens come and go with every Back tap, and a rebuild is a generated
-   * level plus a renderer and physics reload for a backdrop that has not
-   * changed. A purchase clears it (`AcademyController` calls back), because
-   * upgrades change how many apprentices are standing there.
-   */
-  private loadPreview(): void {
-    // Before the early return and before the frame is marked dirty: this is
-    // what puts the chosen staff and the owned wisp on the backdrop and starts
-    // the camera's drift (`src/render/preview.ts`). A standing preview that is
-    // re-shown still needs it, because `startRun` cleared it.
-    this.renderer.setPreviewPlayer(this.academy.player);
-    if (this.preview !== null && this.previewLevel === this.options.level) return;
-
-    const preview = new RunSession(this.options.level, this.options, this.academy.player);
-    this.preview = preview;
-    this.previewLevel = this.options.level;
-    this.renderer.loadLevel(preview.level);
-    this.physicsLayer?.loadLevel(preview.level);
-    this.renderer.update(preview.state, NO_EVENTS, 0);
-    this.driver.markPreviewDirty();
-  }
-
-  private startRun(): void {
-    // The backdrop is over: the camera stops drifting and the wisp goes back to
-    // being the run's own, not the Academy's stand-in.
-    this.renderer.setPreviewPlayer(null);
-    // The next Academy screen draws a fresh preview whatever happens here.
-    this.driver.markPreviewDirty();
+  /** Play, or Again: the selected level, from the top. */
+  startRun(): void {
+    // The backdrop is over; see `MenuStage.end` for what that costs it.
+    this.menus.end();
     // Cheap when the boot pass already did the work, which is the normal case;
     // this is the guarantee that nothing compiles inside the run's frames even
     // if a layer arrived late (`src/render/warmup.ts`).
@@ -378,8 +293,6 @@ export class App implements FrameHost {
     // upgrades and the run starts with the staff they chose (D35).
     const session = new RunSession(this.options.level, this.options, this.academy.player);
     this.session = session;
-    this.preview = null;
-    this.previewLevel = 0;
     this.juice.reset();
     this.audio.beginRun();
 
@@ -393,13 +306,9 @@ export class App implements FrameHost {
   }
 
   /**
-   * The run is over: pay it, remember what was met, and show the sheet.
-   *
-   * The first-clear flag is read before the level is marked, and the level is
-   * only marked once the coins for it have been counted — so the bonus is paid
-   * exactly once however the run ended. `RunSession.advanceEnding` has already
-   * written the unlock by the time this runs, which is why the save is re-read
-   * rather than assumed.
+   * The run is over: pay it, remember what was met, and show the sheet. What
+   * "pay it" means — and why the bonus can only be paid once — is
+   * `AcademyController.payRun`.
    */
   private showResult(session: RunSession): void {
     this.currentPhase = 'result';
@@ -445,7 +354,7 @@ export class App implements FrameHost {
     this.physicsLayer = physics;
     // Whatever is on screen was loaded before this finished, so the road
     // collider is built now rather than at the next `loadLevel`.
-    const level = this.session?.level ?? this.preview?.level ?? null;
+    const level = this.session?.level ?? this.menus.session?.level ?? null;
     if (level !== null) physics.loadLevel(level);
     // The layer arrived after the ladder settled; hand it the current rung.
     this.ladder.applyCurrent();
@@ -493,6 +402,23 @@ export class App implements FrameHost {
       },
     };
     globalThis.__arcane = handle;
+  }
+
+  /** The mute control on the Academy or the HUD. */
+  toggleMute(): void {
+    this.setMuted(!this.muted);
+  }
+
+  /**
+   * The triple-tap gesture, or `?debug`. The panel is a toggle rather than only
+   * a query parameter because the hosted playtest wrapper may not pass one
+   * through; the save is what makes the choice survive the reload that wrapper
+   * does on its own.
+   */
+  toggleDebug(): void {
+    const debug = !this.overlay.debugEnabled;
+    this.overlay.setDebugEnabled(debug);
+    setDebug(debug);
   }
 
   private setMuted(muted: boolean): void {

@@ -62,6 +62,13 @@ describe('rewards', () => {
     // A lost run leaves no survivors, so it pays nothing at all.
     expect(runRewards({ status: 'lost', survivors: 0 }, 9, true).coins).toBe(0);
   });
+
+  it('pays nothing for a run that is still going', () => {
+    // `survivors` is the live squad while a run is under way, so a screen that
+    // let the player walk out of a level would otherwise turn "take the fat
+    // gate, then leave" into the best rate in the game.
+    expect(runRewards({ status: 'running', survivors: 300 }, 5, true).coins).toBe(0);
+  });
 });
 
 describe('upgrade effects', () => {

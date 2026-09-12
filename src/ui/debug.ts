@@ -259,13 +259,18 @@ export class DebugPanel {
         `  spark ${String(stats.sparks)}  burn ${String(stats.burning)}`,
       `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
         `  p95 ${stats.qualityP95.toFixed(1)}ms` +
-        `  >${String(SPIKE_MS)}ms ${String(this.spikeCount)}/${String(SPIKE_WINDOW_SECONDS)}s` +
+        `  >${String(SPIKE_MS)}ms ${String(this.spikeCount)}/${String(SPIKE_WINDOW_SECONDS)}s`,
+      `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
+        `  bodies ${String(stats.physicsBodies)}  physq ${String(stats.physicsQuality)}`,
+      // The heap rides with the audio line rather than with the ladder's: the
+      // ladder line is already the longest the panel composes, and the two
+      // together ran off the right edge of a 390 px phone, which is exactly the
+      // clipping `debug.css` warns about. Chrome only, so on the phone this
+      // line is the short one it has always been.
+      `audio ${stats.audio} ${String(stats.audioClips)} clips` +
         (stats.heapMb > 0
           ? `  heap ${stats.heapMb.toFixed(0)}MB gc ${String(stats.heapDrops)}`
           : ''),
-      `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
-        `  bodies ${String(stats.physicsBodies)}  physq ${String(stats.physicsQuality)}`,
-      `audio ${stats.audio} ${String(stats.audioClips)} clips`,
     ];
 
     if (state === null) {

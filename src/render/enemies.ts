@@ -22,13 +22,14 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
-import { commitCrowd, gateCrowdsLabel, writeCluster } from './enemyBlocks';
+import { commitCrowd, writeCluster } from './enemyBlocks';
+import { createLabelView, gateCrowdsLabel, setLabelView } from './labelClearance';
+import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
 import { loadCrowd } from './models';
 import { RingPool } from './rings';
 import { StreamBodies } from './streamBodies';
 import {
-  CAMERA,
   ENEMY_COLOR,
   ENEMY_DRAW_RANGE,
   ENEMY_LABEL_COLOR,
@@ -84,6 +85,8 @@ export class EnemyView {
   /** The last state drawn, for `positionOf` to find a stream body in. Read
    *  only; the renderer never mutates sim state. */
   private lastState: RunState | null = null;
+  /** The camera pose the label-clearance rule reads. Written once a frame. */
+  private readonly view: LabelView = createLabelView();
 
   constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
@@ -221,10 +224,9 @@ export class EnemyView {
     this.lastState = state;
     const squadZ = state.squad.z;
     // Where the camera sits this frame, which is what turns metres of road into
-    // pixels for `gateCrowdsLabel`. Hoisted out of the loop: one rig serves
-    // every block on screen.
-    const pullback = Math.min(CAMERA.pullbackMax, state.squad.count * CAMERA.pullbackPerUnit);
-    const eye = squadZ - CAMERA.behind - pullback;
+    // pixels for `gateCrowdsLabel`. Hoisted out of the loop and written into one
+    // re-used object: one rig serves every block and every stream on screen.
+    const view = setLabelView(this.view, squadZ, state.squad.count);
 
     const grunts = this.grunts;
     const brutes = this.brutes;
@@ -242,7 +244,7 @@ export class EnemyView {
       if (slot === undefined || slot.dying >= 0) continue;
       slot.seen = this.frame;
       this.trackAlive(slot, enemy, state, dt);
-      this.paintLabel(slot, enemy, state.gates, squadZ, eye);
+      this.paintLabel(slot, enemy, state.gates, squadZ, view);
 
       const ahead = enemy.z - squadZ;
       if (ahead > ENEMY_DRAW_RANGE || ahead < -LABEL_BEHIND * 2) continue;
@@ -281,7 +283,7 @@ export class EnemyView {
     if (grunts !== null) {
       gruntCount += this.streams.write(grunts, gruntCount, state, this.physicsQuality);
     }
-    this.streams.writeLabels(state.streams, squadZ);
+    this.streams.writeLabels(state.streams, squadZ, state.gates, view);
 
     this.rings.end();
     commitCrowd(grunts, gruntCount, dt);
@@ -353,11 +355,13 @@ export class EnemyView {
     enemy: EnemyState,
     gates: readonly GateState[],
     squadZ: number,
-    eye: number,
+    view: LabelView,
   ): void {
     const ahead = enemy.z - squadZ;
     const readable =
-      ahead < LABEL_RANGE && ahead > -LABEL_BEHIND && !gateCrowdsLabel(gates, enemy, eye);
+      ahead < LABEL_RANGE &&
+      ahead > -LABEL_BEHIND &&
+      !gateCrowdsLabel(gates, enemy.x, enemy.z, LABEL_HEIGHT, view);
     if (!readable) return;
 
     const hp = Math.max(0, Math.round(enemy.hp));

@@ -100,6 +100,8 @@
 }
 
 .card {
+  /* The Workbench's staff badge is placed against the card's own box. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -156,6 +158,42 @@
 
 .card--play .card__hint {
   color: rgba(255, 250, 242, 0.85);
+}
+
+/*
+ * Which staff the next run starts with, on the Workbench card (Milestone 4
+ * Phase D). The backdrop crowd is seen from behind and carries its staff in
+ * front of it, so nothing else on the home screen can say. Same three colours
+ * as the HUD's in-run badge (`./hud.css`), so one glance learns both.
+ *
+ * Bottom right, not top right: "Workbench" in Cinzel is 109 px of a 124 px card
+ * and the badge is 49, so the two share the title's line. The blurb under it is
+ * 68 px of Nunito and leaves the corner free, which is where this sits.
+ */
+.card__badge {
+  position: absolute;
+  bottom: 0.55rem;
+  right: 0.6rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.5rem;
+  background: var(--chip-strong);
+  box-shadow: inset 0 0 0 1px currentcolor;
+  font-family: var(--font-display);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  color: var(--staff-color, var(--accent-bright));
+}
+
+.card__badge[data-staff='ember'] {
+  --staff-color: #ffb066;
+}
+.card__badge[data-staff='storm'] {
+  --staff-color: #c0adff;
+}
+.card__badge[data-staff='frost'] {
+  --staff-color: #8ee9ff;
 }
 
 .card[data-locked='true'] {

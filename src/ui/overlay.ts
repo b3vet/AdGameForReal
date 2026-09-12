@@ -179,8 +179,15 @@ export class Overlay {
     // The hosted playtest wrapper may not pass `?debug` through, so the panel
     // needs a way in from inside the game. Hit-tested rather than bound to the
     // elements, so a drag that starts on the chip still steers (`./taps.ts`).
+    // The room heading is a target too: only one of the three is ever on screen
+    // (a hidden element measures zero and is skipped), and without it the
+    // gesture is unreachable from the four Academy rooms.
     watchTripleTap(
-      [requireElement(root, '#title-wordmark'), requireElement(root, '#hud-level')],
+      [
+        requireElement(root, '#title-wordmark'),
+        requireElement(root, '#hud-level'),
+        requireElement(root, '#room-title'),
+      ],
       () => {
         callbacks.onToggleDebug();
       },

@@ -4,49 +4,20 @@
  * and the app read against.
  */
 
-/** The three staffs (docs/06-milestone-2-plan.md, "Weapons"). */
-export type WeaponId = 'ember' | 'storm' | 'frost';
-
-/** Ember: every block within `radius` of the impact takes damage, falling off
- *  linearly to `1 - falloff` at the rim. */
-export interface WeaponSplash {
-  radius: number;
-  falloff: number;
-}
-
-/** Storm: after a hit, up to `count` further blocks within `range` of the last
- *  one are struck for `damageMul` of the shot's damage. No block twice. */
-export interface WeaponChain {
-  count: number;
-  range: number;
-  damageMul: number;
-}
-
-/** Frost: the block walks at `factor` of its speed for `seconds`, and a kill
- *  while slowed shatters instead of collapsing. */
-export interface WeaponSlow {
-  factor: number;
-  seconds: number;
-  shatterOnKill: boolean;
-}
-
 /**
- * One staff. The record key in `weapons.json` is the id, so the def itself
- * carries no `id` field: a string in JSON widens to `string` and would not
- * satisfy `WeaponId` without a cast.
+ * The staffs are `./weapon-types.ts` and the meta layer is
+ * `./progression-types.ts`; both were split out in Milestone 4 Phase D for the
+ * file-size rule and are re-exported here, so every importer still reads one
+ * module.
  */
-export interface WeaponDef {
-  /** Multiplier on `balance.squad.damage`. */
-  damage: number;
-  /** Multiplier on the squad's effective fire rate. */
-  fireRateMul: number;
-  projectileSpeed: number;
-  splash?: WeaponSplash;
-  chain?: WeaponChain;
-  slow?: WeaponSlow;
-}
-
-export type WeaponData = Record<WeaponId, WeaponDef>;
+export type {
+  WeaponChain,
+  WeaponData,
+  WeaponDef,
+  WeaponId,
+  WeaponSlow,
+  WeaponSplash,
+} from './weapon-types';
 
 export interface EnemyBalance {
   /** HP one visual unit of this block is worth; `units = ceil(hp / hpPerUnit)`. */
@@ -446,102 +417,19 @@ export interface LevelGenConfig {
 /* Progression (Milestone 4, D33 and D35)                              */
 /* ------------------------------------------------------------------ */
 
-/** The five training-yard upgrades. Levels run 0 to `Progression.upgrades.maxLevel`. */
-export type UpgradeId = 'damage' | 'fireRate' | 'startCount' | 'gateBonus' | 'bossDamage';
-
-/** A staff is bought at tier 1 and evolved once (D33: one evolution each). */
-export type StaffTier = 1 | 2;
-
-/** 0 is "no wisp at all"; the Sanctum sells tiers 1 to 3. */
-export type FamiliarTier = 0 | 1 | 2 | 3;
-
 /**
- * Everything the meta layer remembers. The app owns it and saves it; the sim
- * only reads it, and reads it exactly once per run (D35): every upgrade is a
- * multiplier resolved at construction, so a purchase mid-run is impossible by
- * construction and the balance bands stay defined for a player with nothing
- * bought.
+ * The meta layer's schema is `./progression-types.ts` — it is the player rather
+ * than the campaign, and this file was past the size rule. Re-exported here so
+ * every importer still reads one module.
  */
-export interface PlayerState {
-  coins: number;
-  upgrades: Record<UpgradeId, number>;
-  staffs: Record<WeaponId, { unlocked: boolean; tier: StaffTier }>;
-  /**
-   * The staff a run starts with. Added to the contract's shape because
-   * `staffs` is a record and a record has no order: the Workbench has to be
-   * able to say *which* unlocked staff is in hand. Weapon gates still swap it
-   * mid-run.
-   */
-  selectedStaff: WeaponId;
-  familiar: { unlocked: boolean; tier: FamiliarTier };
-  /** Enemy and boss ids seen, for the bestiary. The sim never reads it. */
-  bestiary: string[];
-  unlockedLevel: number;
-}
-
-/** Ember's evolution: a burn that ticks for a share of the hit that lit it. */
-export interface BurnDef {
-  /** Share of the hit's damage the whole burn is worth. */
-  share: number;
-  seconds: number;
-  tickSeconds: number;
-}
-
-/** Frost's evolution: a shatter that sprays its neighbours. */
-export interface ShatterDef {
-  radius: number;
-  /** Share of the killing hit each neighbour takes. */
-  share: number;
-}
-
-/** One staff's tier-2 behaviour. Exactly one field is set per staff. */
-export interface EvolutionDef {
-  burn?: BurnDef;
-  /** Storm: further targets on top of `WeaponChain.count`. */
-  extraChains?: number;
-  shatter?: ShatterDef;
-}
-
-/**
- * The wisp (D33). Rate and damage are indexed by tier, so index 0 is the
- * "no wisp" slot and never read.
- */
-export interface WispDef {
-  /** Price of tier 1, i.e. of unlocking it at all. */
-  unlock: number;
-  /** Price of reaching each tier; index 0 is unused. */
-  tierPrices: number[];
-  /** Hover offset from the squad centre: `x + offsetX * side`, `z + offsetZ`. */
-  offsetX: number;
-  offsetZ: number;
-  /** How far ahead it will look for a target. */
-  range: number;
-  /** Spark travel speed; the hit lands `distance / sparkSpeed` seconds later. */
-  sparkSpeed: number;
-  /** Sparks in flight at once. Pooled, so this is also the allocation. */
-  maxSparks: number;
-  fireRate: number[];
-  damage: number[];
-}
-
-/** `src/data/progression.json`: every number the meta layer costs and pays. */
-export interface Progression {
-  upgrades: {
-    /** `baseCost * costGrowth ^ level` coins to buy the next level. */
-    baseCost: number;
-    costGrowth: number;
-    maxLevel: number;
-    /** What one level of each upgrade is worth (a share, except `startCount`). */
-    effects: Record<UpgradeId, number>;
-  };
-  staffs: Record<WeaponId, { unlock: number; evolve: number }>;
-  evolutions: Record<WeaponId, EvolutionDef>;
-  wisp: WispDef;
-  rewards: {
-    perSurvivor: number;
-    /** Coins per level index on any clear... */
-    perClear: number;
-    /** ...and again, larger, the first time that level is cleared. */
-    firstClear: number;
-  };
-}
+export type {
+  BurnDef,
+  EvolutionDef,
+  FamiliarTier,
+  PlayerState,
+  Progression,
+  ShatterDef,
+  StaffTier,
+  UpgradeId,
+  WispDef,
+} from './progression-types';

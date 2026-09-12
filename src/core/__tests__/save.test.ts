@@ -221,6 +221,38 @@ describe('save v2 round trip', () => {
   });
 });
 
+describe('a save written by a newer build', () => {
+  it('keeps every field this build knows and drops the rest', () => {
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: 7,
+        unlockedLevel: 9,
+        muted: true,
+        debug: true,
+        firstClears: [1, 2],
+        revealedRooms: ['yard'],
+        prestige: { tier: 3 },
+        player: { coins: 120, selectedStaff: 'ember', trinkets: ['ring'] },
+      }),
+    );
+
+    const save = loadSave();
+    expect(save.unlockedLevel).toBe(9);
+    expect(save.muted).toBe(true);
+    expect(save.firstClears).toEqual([1, 2]);
+    expect(save.player.coins).toBe(120);
+    // Read field by field against the defaults, so anything a v3 adds is simply
+    // not here — and the version is re-stamped, so writing this save back
+    // rewrites it as a v2. A future build that must not lose its own fields
+    // takes a new key, exactly as v2 did.
+    expect(save.version).toBe(SAVE_VERSION);
+    expect(Object.keys(save).sort()).toEqual(
+      ['debug', 'firstClears', 'muted', 'player', 'revealedRooms', 'unlockedLevel', 'version'],
+    );
+  });
+});
+
 describe('mergePlayer', () => {
   it('applies a patch over the current player and validates it', () => {
     const base = defaultPlayer();

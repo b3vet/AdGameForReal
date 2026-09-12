@@ -1,24 +1,22 @@
 /**
  * Drawing one enemy *block*: the loose cluster of skeletons that stands in for
- * `units` enemies, and the rule that decides when its HP number would print on
- * top of a gate's.
+ * `units` enemies.
  *
  * Split out of `./enemies.ts`, which is about binding blocks to slots and
  * driving the streams; this is the geometry of a single block and nothing else.
+ * The rule that decides when a block's HP number gives way to a gate panel
+ * moved to `./labelClearance.ts` in Milestone 4 Phase D, because a stream's
+ * count needs exactly the same rule.
  */
 
 import type { Crowd } from './characters';
 import {
-  BLOCK_LABEL_CLEARANCE_BEHIND,
-  BLOCK_LABEL_CLEARANCE_FRONT,
-  BLOCK_LABEL_LANE_CLEARANCE,
   BRUTE_SCALE,
   ENEMY_CLUSTER_DEPTH,
   ENEMY_MAX_INSTANCES,
   GRUNT_SCALE,
 } from './theme';
-import { laneCenter } from '@/sim';
-import type { EnemyKind, EnemyState, GateState } from '@/sim';
+import type { EnemyKind } from '@/sim';
 
 /** Skeletons face the squad, which is behind them down the road. */
 const FACING = Math.PI;
@@ -93,33 +91,4 @@ export function writeCluster(
 function hash(value: number): number {
   const x = Math.sin(value * 12.9898) * 43758.5453;
   return x - Math.floor(x);
-}
-
-/**
- * True when an unpassed gate stands close enough to this block, in its own lane,
- * for the two to print on the same patch of screen. The gate's number wins,
- * because that is the choice the player is about to make.
- *
- * The window is measured from the camera (`eye`), not from the squad: at 18 m
- * row spacing a block guarding the next row stands several metres beyond the
- * row in front of it, and those metres are a readable gap at the nearest row
- * and a stack of digits two rows out. So a block loses its number while the row
- * in front of it is still a decision, and gets it back once that row is behind
- * the squad — which is also when its HP is what the player is reading.
- */
-export function gateCrowdsLabel(
-  gates: readonly GateState[],
-  enemy: EnemyState,
-  eye: number,
-): boolean {
-  for (let i = 0; i < gates.length; i++) {
-    const gate = gates[i];
-    if (gate === undefined || gate.passed) continue;
-    if (Math.abs(laneCenter(gate.lane) - enemy.x) > BLOCK_LABEL_LANE_CLEARANCE) continue;
-
-    const gap = enemy.z - gate.z;
-    const share = gap >= 0 ? BLOCK_LABEL_CLEARANCE_BEHIND : BLOCK_LABEL_CLEARANCE_FRONT;
-    if (Math.abs(gap) < (gate.z - eye) * share) return true;
-  }
-  return false;
 }
