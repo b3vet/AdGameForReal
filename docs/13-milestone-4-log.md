@@ -55,3 +55,35 @@
   130 KB. Smoke passes with 0 compiles during play; no stress regression.
 - Note for the record: the iPhone 17 Pro Max runs the page at 120 Hz, which
   also explains the capture maxima above 100 fps.
+
+## 2026-09-13 — Phase B1: walls, 20 levels, progression, wisp (verified and committed)
+
+- Upgrades split by where they act: `generateLevel` applies starting units
+  and the add-gate bonus (they shape the level), `Run` applies damage, fire
+  rate and boss damage (they shape the squad); a player with no upgrades
+  resolves to frozen multipliers of exactly 1. Golden run hashes for
+  levels 1 to 3 from before the milestone still reproduce byte for byte;
+  levels 4 to 20 change by design (walls, the 20-level retune).
+- `selectedStaff` added to `PlayerState`. Burn ignites only the struck body
+  (splash already pays the neighbors). Frost shatter reads the player's
+  tier and cannot cascade. `familiar`, `walls` and `bossId` are optional
+  on the state so fixtures outside the sim still compile.
+- Walls start at row 5 (`walls.fromRow`): a wall guarding the opening rows
+  turned a level-7 seed from a clear into a wipe. A new row rule keeps two
+  horde rows from following each other (about 1200 bodies in two lanes cost
+  the greedy bot levels 16 and 17).
+- 20-level curve: survivors 0.70 to 0.80 on 1 to 3, 0.55 to 0.70 on 4 to 5,
+  0.35 to 0.65 from 6; leaks under cap and non-zero from 6; boss 19 to 28 s;
+  peaks within band. Greedy 100 of 100 wins at 0.58 survivor share; random
+  loses 18.8 of 20 and clears level 1 on every seed; worst loses every
+  level from 2. Perf 0.30 ms per tick at 300 bodies plus 300 units.
+- Affordance: a greedy shopper clearing 1..N once each clears N+3 for N in
+  {3, 6, 9, 12, 15}; all five upgrades max out by level 12 to 13, ember
+  evolves at 13, wisp tier 3 at 17.
+- Events: `enemyBurning` on ignite only, `familiarShot`, `wallBlocked`
+  edge-triggered once per wall. Numbers in `progression.json`, `walls` and
+  `bots.wallCommitDistance` in balance, `wallRows` and levels 11 to 20 in
+  levels.json. Sim tests 176 → 219.
+- Open: a peak and boss-HP step between levels 10 and 11; walls only nudge
+  because the 2 m gate clearance allows a last-second swerve; `events.ts`
+  at 412 lines; `dpsTrim` unchanged.

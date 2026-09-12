@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { level, row, runOf, staffRow, testBalance } from './fixtures';
+import { emptyPlayer, maxUpgradeLevel, upgradeIds } from '../player';
 import type { RowDef } from '../level';
 import { Run } from '../Run';
 import type { StreamDef } from '../types';
@@ -113,6 +114,29 @@ describe('hot loop', () => {
 
       expect(`${staff}: ${(measure(run) < TICK_BUDGET_MS).toString()}`).toBe(`${staff}: true`);
     }
+  });
+
+  it('holds the same load with every upgrade bought, an evolved staff and a wisp', () => {
+    // The worst case the meta layer can build: three hundred bodies, three
+    // hundred units, a burn ticking on everything the squad touches and a
+    // familiar picking its own targets out of the same lane lists.
+    const player = emptyPlayer();
+    for (const id of upgradeIds) player.upgrades[id] = maxUpgradeLevel;
+    player.staffs.ember = { unlocked: true, tier: 2 };
+    player.familiar = { unlocked: true, tier: 3 };
+
+    const tuning = saturatedTuning();
+    const run = new Run(
+      level({ startCount: UNITS, rows: saturatedStreams(), arenaZ: 40_000 }),
+      tuning,
+      player,
+    );
+    for (let i = 0; i < 600; i++) run.tick(1 / 60);
+    expect(run.state.familiar).not.toBeNull();
+    expect(run.state.enemies.filter((e) => e.alive).length).toBeGreaterThanOrEqual(
+      tuning.enemies.maxLive - 5,
+    );
+    expect(measure(run)).toBeLessThan(TICK_BUDGET_MS);
   });
 
   it('runs a road of gates and blocks with 300 units well inside the budget', () => {

@@ -1,0 +1,40 @@
+{
+  "upgrades": {
+    "baseCost": 50,
+    "costGrowth": 1.35,
+    "maxLevel": 10,
+    "effects": {
+      "damage": 0.08,
+      "fireRate": 0.06,
+      "startCount": 1,
+      "gateBonus": 0.05,
+      "bossDamage": 0.1
+    }
+  },
+  "staffs": {
+    "ember": { "unlock": 0, "evolve": 1200 },
+    "storm": { "unlock": 450, "evolve": 1500 },
+    "frost": { "unlock": 500, "evolve": 1600 }
+  },
+  "evolutions": {
+    "ember": { "burn": { "share": 0.3, "seconds": 2, "tickSeconds": 0.25 } },
+    "storm": { "extraChains": 1 },
+    "frost": { "shatter": { "radius": 1, "share": 0.5 } }
+  },
+  "wisp": {
+    "unlock": 1500,
+    "tierPrices": [0, 1500, 3000, 5000],
+    "offsetX": 1.2,
+    "offsetZ": -0.5,
+    "range": 30,
+    "sparkSpeed": 26,
+    "maxSparks": 32,
+    "fireRate": [0, 1.5, 2.0, 2.6],
+    "damage": [0, 12, 22, 36]
+  },
+  "rewards": {
+    "perSurvivor": 1,
+    "perClear": 25,
+    "firstClear": 100
+  }
+}

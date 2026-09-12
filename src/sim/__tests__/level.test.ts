@@ -76,12 +76,22 @@ describe('generateLevel', () => {
     });
   });
 
-  it('carries the plan\'s eight to twelve gate rows', () => {
+  it('carries the plan\'s eight gate rows at the start, fourteen by the end', () => {
+    // Milestone 3's eight-to-twelve over ten levels, continued to twenty (D32's
+    // "the Milestone 3 curve stretched"): the late levels buy their difficulty
+    // from pressure, hordes and walls, and pay for it with more gate rows.
     everyLevel((level, index) => {
       expect(gateRowsOf(level)).toHaveLength(levelConfig(index).gateRows);
     });
     expect(levelConfig(1).gateRows).toBe(8);
-    expect(levelConfig(levelCount).gateRows).toBe(12);
+    expect(levelConfig(10).gateRows).toBe(12);
+    expect(levelConfig(levelCount).gateRows).toBe(14);
+    let previous = 0;
+    for (let index = 1; index <= levelCount; index++) {
+      const rows = levelConfig(index).gateRows;
+      expect(rows).toBeGreaterThanOrEqual(previous);
+      previous = rows;
+    }
   });
 
   it('keeps every stream and every block clear of a gate row', () => {
@@ -300,9 +310,10 @@ describe('generateLevel', () => {
   });
 
   it('keeps curses inside the level\'s own range once the squad is big enough', () => {
-    // Level 1 curses read 2 to 6, level 10's read 15 to 60.
+    // Level 1 curses read 2 to 6, level 10's read 15 to 60, level 20's 25 to 100.
     expect(levelConfig(1).gateValues.sub).toEqual({ min: 2, max: 6 });
-    expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 15, max: 60 });
+    expect(levelConfig(10).gateValues.sub).toEqual({ min: 15, max: 60 });
+    expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 25, max: 100 });
     everyLevel((level, index) => {
       const range = levelConfig(index).gateValues.sub;
       for (const gate of gatesOf(level)) {

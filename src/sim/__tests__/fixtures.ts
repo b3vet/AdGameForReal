@@ -4,10 +4,11 @@
  */
 
 import type { LevelDef, RowDef, RowEnemyDef } from '../level';
+import { emptyPlayer } from '../player';
 import { Run } from '../Run';
-import type { GateDef, SimEvent, WeaponId } from '../types';
+import type { GateDef, SimEvent, WallDef, WeaponId } from '../types';
 import { balance } from '@/data';
-import type { Balance } from '@/data/types';
+import type { Balance, FamiliarTier, PlayerState, StaffTier, UpgradeId } from '@/data/types';
 
 /** A private copy of the tuning data, so a test can bend physics safely. */
 export function testBalance(): Balance {
@@ -35,9 +36,16 @@ export function level(overrides: Partial<LevelDef> = {}): LevelDef {
     startCount: 10,
     rows: [],
     arenaZ: 1000,
+    bossId: 'demon',
+    walls: [],
     boss: { hp: 1_000_000, units: 100_000 },
     ...overrides,
   };
+}
+
+/** A wall on one boundary, for the clamp tests. */
+export function wall(boundary: -1 | 1, zStart: number, zEnd: number): WallDef {
+  return { boundary, zStart, zEnd };
 }
 
 /**
@@ -73,4 +81,26 @@ export function withWeaponGates<T>(body: () => T): T {
   } finally {
     balance.gen.weaponGatesEnabled = before;
   }
+}
+
+/** A player with one upgrade bought to `level` and nothing else. */
+export function withUpgrade(id: UpgradeId, level: number): PlayerState {
+  const player = emptyPlayer();
+  player.upgrades[id] = level;
+  return player;
+}
+
+/** A player holding `id` at `tier`, with it selected. */
+export function withStaff(id: WeaponId, tier: StaffTier): PlayerState {
+  const player = emptyPlayer();
+  player.staffs[id] = { unlocked: true, tier };
+  player.selectedStaff = id;
+  return player;
+}
+
+/** A player who owns the wisp at `tier`. */
+export function withFamiliar(tier: FamiliarTier): PlayerState {
+  const player = emptyPlayer();
+  player.familiar = { unlocked: tier > 0, tier };
+  return player;
 }

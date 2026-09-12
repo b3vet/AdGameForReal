@@ -56,6 +56,19 @@
     "rowSpacing": 18,
     "bossOffset": 22
   },
+  "walls": {
+    "approach": 2,
+    "margin": 0.05,
+    "gateClearance": 2,
+    "minLength": 6,
+    "length": {
+      "min": 10,
+      "max": 20
+    },
+    "fromLevel": 4,
+    "fromRow": 5,
+    "bothFromLevel": 8
+  },
   "gates": {
     "caps": {
       "add": 400,
@@ -117,7 +130,8 @@
     "weaponWorth": 0.8,
     "weaponSlowWorth": 0.2,
     "streamLookahead": 44,
-    "weaponLayoutMax": 24
+    "weaponLayoutMax": 24,
+    "wallCommitDistance": 6
   },
   "input": {
     "sensitivity": 6

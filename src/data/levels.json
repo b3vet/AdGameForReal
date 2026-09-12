@@ -7,6 +7,7 @@
     "mixedRows": 2,
     "hordeRows": 0,
     "bruteRows": 2,
+    "wallRows": 0,
     "startCount": 5,
     "peakTarget": 105,
     "hpScale": 0.25,
@@ -43,6 +44,7 @@
     "mixedRows": 3,
     "hordeRows": 1,
     "bruteRows": 2,
+    "wallRows": 0,
     "startCount": 5,
     "peakTarget": 130,
     "hpScale": 0.3,
@@ -79,6 +81,7 @@
     "mixedRows": 3,
     "hordeRows": 1,
     "bruteRows": 2,
+    "wallRows": 0,
     "startCount": 6,
     "peakTarget": 160,
     "hpScale": 0.35,
@@ -115,6 +118,7 @@
     "mixedRows": 3,
     "hordeRows": 2,
     "bruteRows": 2,
+    "wallRows": 1,
     "startCount": 6,
     "peakTarget": 195,
     "hpScale": 0.4,
@@ -151,6 +155,7 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
+    "wallRows": 1,
     "startCount": 7,
     "peakTarget": 225,
     "hpScale": 0.5,
@@ -187,6 +192,7 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
+    "wallRows": 2,
     "startCount": 8,
     "peakTarget": 260,
     "hpScale": 0.55,
@@ -223,6 +229,7 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
+    "wallRows": 2,
     "startCount": 9,
     "peakTarget": 295,
     "hpScale": 0.6,
@@ -259,6 +266,7 @@
     "mixedRows": 4,
     "hordeRows": 3,
     "bruteRows": 2,
+    "wallRows": 3,
     "startCount": 10,
     "peakTarget": 325,
     "hpScale": 0.62,
@@ -295,6 +303,7 @@
     "mixedRows": 5,
     "hordeRows": 3,
     "bruteRows": 2,
+    "wallRows": 3,
     "startCount": 11,
     "peakTarget": 360,
     "hpScale": 0.68,
@@ -331,6 +340,7 @@
     "mixedRows": 5,
     "hordeRows": 3,
     "bruteRows": 2,
+    "wallRows": 3,
     "startCount": 12,
     "peakTarget": 400,
     "hpScale": 0.75,
@@ -352,6 +362,376 @@
       "sub": {
         "min": 15,
         "max": 60
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 11,
+    "seed": 2507,
+    "rows": 19,
+    "gateRows": 13,
+    "mixedRows": 6,
+    "hordeRows": 4,
+    "bruteRows": 2,
+    "wallRows": 4,
+    "startCount": 13,
+    "peakTarget": 410,
+    "hpScale": 0.76,
+    "streamPressure": 0.9,
+    "streamDensity": 1.3,
+    "boss": {
+      "hp": 17400,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 16,
+        "max": 64
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 12,
+    "seed": 2644,
+    "rows": 19,
+    "gateRows": 13,
+    "mixedRows": 6,
+    "hordeRows": 4,
+    "bruteRows": 2,
+    "wallRows": 4,
+    "startCount": 14,
+    "peakTarget": 420,
+    "hpScale": 0.78,
+    "streamPressure": 0.9,
+    "streamDensity": 1.31,
+    "boss": {
+      "hp": 17600,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 17,
+        "max": 68
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 13,
+    "seed": 2781,
+    "rows": 19,
+    "gateRows": 13,
+    "mixedRows": 6,
+    "hordeRows": 4,
+    "bruteRows": 2,
+    "wallRows": 5,
+    "startCount": 15,
+    "peakTarget": 430,
+    "hpScale": 0.8,
+    "streamPressure": 0.91,
+    "streamDensity": 1.32,
+    "boss": {
+      "hp": 17800,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 18,
+        "max": 72
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 14,
+    "seed": 2918,
+    "rows": 19,
+    "gateRows": 13,
+    "mixedRows": 6,
+    "hordeRows": 4,
+    "bruteRows": 2,
+    "wallRows": 5,
+    "startCount": 16,
+    "peakTarget": 440,
+    "hpScale": 0.82,
+    "streamPressure": 0.91,
+    "streamDensity": 1.33,
+    "boss": {
+      "hp": 18000,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 19,
+        "max": 76
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 15,
+    "seed": 3055,
+    "rows": 19,
+    "gateRows": 13,
+    "mixedRows": 7,
+    "hordeRows": 4,
+    "bruteRows": 2,
+    "wallRows": 5,
+    "startCount": 17,
+    "peakTarget": 450,
+    "hpScale": 0.84,
+    "streamPressure": 0.92,
+    "streamDensity": 1.34,
+    "boss": {
+      "hp": 18200,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 20,
+        "max": 80
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 16,
+    "seed": 3192,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 7,
+    "hordeRows": 3,
+    "bruteRows": 2,
+    "wallRows": 6,
+    "startCount": 18,
+    "peakTarget": 460,
+    "hpScale": 0.86,
+    "streamPressure": 0.92,
+    "streamDensity": 1.35,
+    "boss": {
+      "hp": 16200,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 21,
+        "max": 84
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 17,
+    "seed": 3329,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 7,
+    "hordeRows": 3,
+    "bruteRows": 2,
+    "wallRows": 6,
+    "startCount": 19,
+    "peakTarget": 470,
+    "hpScale": 0.88,
+    "streamPressure": 0.93,
+    "streamDensity": 1.36,
+    "boss": {
+      "hp": 16400,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 22,
+        "max": 88
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 18,
+    "seed": 3466,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 3,
+    "bruteRows": 2,
+    "wallRows": 6,
+    "startCount": 20,
+    "peakTarget": 480,
+    "hpScale": 0.9,
+    "streamPressure": 0.93,
+    "streamDensity": 1.37,
+    "boss": {
+      "hp": 16900,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 23,
+        "max": 92
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 19,
+    "seed": 3603,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 3,
+    "bruteRows": 2,
+    "wallRows": 7,
+    "startCount": 21,
+    "peakTarget": 490,
+    "hpScale": 0.92,
+    "streamPressure": 0.94,
+    "streamDensity": 1.38,
+    "boss": {
+      "hp": 17000,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 24,
+        "max": 96
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 20,
+    "seed": 3740,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 3,
+    "bruteRows": 2,
+    "wallRows": 7,
+    "startCount": 22,
+    "peakTarget": 500,
+    "hpScale": 0.94,
+    "streamPressure": 0.94,
+    "streamDensity": 1.4,
+    "boss": {
+      "hp": 17100,
+      "bite": 1.0
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 25,
+        "max": 100
       },
       "fireRate": {
         "min": 0.03,

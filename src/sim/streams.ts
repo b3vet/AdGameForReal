@@ -213,6 +213,12 @@ export class Streams {
     body.slowUntil = 0;
     body.streamId = stream.id;
     body.diedAt = 0;
+    // A recycled body is a new person: it cannot inherit the fire the last one
+    // died in. Guarded so a body that never burned keeps the smaller shape.
+    if (body.burning === true) {
+      body.burning = false;
+      body.burnUntil = 0;
+    }
 
     state.enemies.push(body);
     this.targets.insert(body, this.balance);

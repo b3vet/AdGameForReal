@@ -6,9 +6,11 @@
  * JSON-serializable so a run can be snapshotted for debugging and replay.
  */
 
-import type { WeaponId } from '@/data/types';
+import type { WallDef } from './walls';
+import type { FamiliarTier, WeaponId } from '@/data/types';
 
 export type { WeaponId };
+export type { WallDef, WallBoundary } from './walls';
 
 /** Lane index. Lane centers are at `x = lane * laneWidth` (laneWidth = 2). */
 export type Lane = -1 | 0 | 1;
@@ -80,6 +82,17 @@ export interface EnemyState {
    * for render to play its death before it is compacted away.
    */
   diedAt?: number;
+  /**
+   * Ember's evolution (D33). Sim time the burn stops, what one tick costs, and
+   * when the next tick is due. A second hit refreshes the clock and takes the
+   * bigger tick rather than adding a second burn, so a river cannot be set on
+   * fire twice over. Optional like `slowUntil`: hand-made states predate it.
+   */
+  burnUntil?: number;
+  burnPerTick?: number;
+  burnNextAt?: number;
+  /** In the burn list right now, so a refresh does not file it twice. */
+  burning?: boolean;
 }
 
 /**
@@ -143,6 +156,21 @@ export interface SquadState {
   weaponId?: WeaponId;
 }
 
+/**
+ * The wisp (D33), when the player owns one. It hovers beside the squad at a
+ * fixed offset and fires on its own clock; `side` is which shoulder it sits on,
+ * flipped only when the squad hugs the edge of the road so it never floats over
+ * the grass.
+ */
+export interface FamiliarState {
+  x: number;
+  z: number;
+  tier: FamiliarTier;
+  /** Seconds until the next spark. */
+  cooldown: number;
+  side: -1 | 1;
+}
+
 export type RunStatus = 'running' | 'won' | 'lost';
 
 /** `leak` is new in Milestone 3: one stream enemy walked into the squad. */
@@ -163,6 +191,20 @@ export interface RunState {
   survivors: number;
   /** Where the squad stops advancing to fight the boss. */
   arenaZ: number;
+  /**
+   * Null unless the player owns a wisp (D33).
+   *
+   * Optional as well as nullable, like `SquadState.weaponId`: render and the
+   * stress scene build `RunState` objects by hand and predate the wisp. `Run`
+   * always writes it.
+   */
+  familiar?: FamiliarState | null;
+  /**
+   * The level's walls (D32), copied here so anything that only ever sees a
+   * `RunState` — the bots, the debug panel — can read them without the level.
+   * Optional for the same reason as `familiar`; `Run` always writes it.
+   */
+  walls?: readonly WallDef[];
 }
 
 /** Returned by `Run.tick`, consumed by render and UI, then discarded. */
@@ -206,6 +248,16 @@ export type SimEvent =
       streamId?: number;
     }
   | { type: 'enemySlowed'; enemyId: number; seconds: number }
+  /**
+   * A body was set alight by an evolved ember staff. Emitted when the burn
+   * *starts*, not on every tick: a tick is four a second on every burning body
+   * and a river is hundreds of them, so the ticks are ordinary `enemyHit`s and
+   * this is the one render needs to attach a flame for `seconds`.
+   */
+  | { type: 'enemyBurning'; enemyId: number; x: number; z: number; seconds: number }
+  | { type: 'familiarShot'; x: number; z: number; targetId: number }
+  /** The wall clamp pushed the squad this step; `boundary` is which side. */
+  | { type: 'wallBlocked'; boundary: -1 | 1; x: number; z: number }
   | { type: 'splash'; x: number; z: number; radius: number }
   | { type: 'chain'; from: number; to: number }
   | { type: 'weaponChanged'; from: WeaponId; to: WeaponId }

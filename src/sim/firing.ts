@@ -11,17 +11,20 @@
  * pressure model in `pressure.ts` predict anything at all.
  */
 
+import type { Burn } from './burn';
 import { killEnemy, unitsOf } from './contact';
-import { enemyHalfWidth } from './enemies';
 import type { EventBuffer } from './events';
 import { formationOffsets } from './formation';
 import { applyGateGrowth } from './gates';
 import { laneCenter, laneOf } from './lanes';
+import { WeaponEffects } from './effects';
+import { evolutionOf, NO_MODS } from './player';
+import type { PlayerMods } from './player';
 import type { Streams } from './streams';
 import type { TargetList, Target } from './targeting';
-import type { EnemyState, Lane, ProjectileState, RunState } from './types';
-import { blockGap, weaponDef, weaponOf } from './weapons';
-import type { Balance, WeaponSlow } from '@/data/types';
+import { weaponDef, weaponIds, weaponOf } from './weapons';
+import type { EnemyState, Lane, ProjectileState, RunState, WeaponId } from './types';
+import type { Balance, ShatterDef, WeaponSlow } from '@/data/types';
 
 export class Firing {
   private readonly balance: Balance;
@@ -41,16 +44,20 @@ export class Firing {
   private fireCursor = 0;
   private readonly laneBatch = [0, 0, 0];
 
-  /** Ids already struck by the chain being resolved. Re-used, never re-allocated. */
-  private readonly chained: number[] = [];
-
-  /** Scratch for the lane scans, so no closure has to capture a local. */
-  private scanBest: EnemyState | null = null;
-  private scanGap = 0;
-  private scanSplashed = false;
+  /** Splash, chain and shatter: everything that happens around the body hit. */
+  private readonly effects: WeaponEffects;
 
   /** The squad's whole output this step, in shots per second. */
   private shotRate = 0;
+
+  /** The player's multipliers and staff tiers, resolved once (D35). */
+  private readonly mods: PlayerMods;
+
+  /** Ember's evolution, when the player has bought it; else null. */
+  private readonly burn: Burn | null;
+
+  /** Extra chain links per staff, from the tier its owner has it at. */
+  private readonly extraChains: Record<WeaponId, number>;
 
   constructor(
     balance: Balance,
@@ -58,12 +65,38 @@ export class Firing {
     targets: TargetList,
     streams: Streams,
     onBossKilled: () => void,
+    mods: PlayerMods = NO_MODS,
+    burn: Burn | null = null,
   ) {
     this.balance = balance;
     this.events = events;
     this.targets = targets;
     this.streams = streams;
     this.onBossKilled = onBossKilled;
+    this.mods = mods;
+    this.burn = burn;
+
+    let shatter: ShatterDef | null = null;
+    const chains: Record<WeaponId, number> = { ember: 0, storm: 0, frost: 0 };
+    for (const id of weaponIds) {
+      const evolution = evolutionOf(id, mods.tiers[id]);
+      if (evolution === undefined) continue;
+      chains[id] = evolution.extraChains ?? 0;
+      if (evolution.shatter !== undefined) shatter = evolution.shatter;
+    }
+    this.extraChains = chains;
+    // Frost's evolution is resolved from the *player* rather than the staff in
+    // hand: a body only shatters because frost froze it, and which staff the
+    // squad happens to be carrying when it dies is beside the point.
+    this.effects = new WeaponEffects(
+      balance,
+      events,
+      targets,
+      (hitState, enemy, amount, slow) => {
+        this.damage(hitState, enemy, amount, null, slow);
+      },
+      shatter,
+    );
 
     const max = Math.max(1, Math.floor(balance.projectiles.max));
     this.spawnZ = new Float64Array(max);
@@ -241,85 +274,37 @@ export class Firing {
 
     const splash = weapon.splash;
     if (splash !== undefined) {
-      this.applySplash(state, enemy, x, enemy.z, damage, splash.radius, splash.falloff, weapon.slow);
+      this.effects.splash(state, enemy, x, enemy.z, damage, splash.radius, splash.falloff, weapon.slow);
       if (state.status !== 'running') return;
     }
 
     const chain = weapon.chain;
     if (chain !== undefined) {
-      this.applyChain(state, enemy, damage * chain.damageMul, chain.count, chain.range, weapon.slow);
-    }
-  }
-
-  /**
-   * Everything within `radius` of the impact takes a share of the shot, falling
-   * off linearly with distance. Measured to the edge of each body, not its
-   * centre, so a wide block in the next lane is genuinely "next to" the blast —
-   * and read out of the lane lists rather than by walking the whole road, which
-   * is what keeps a splash cheap with three hundred bodies out there.
-   */
-  private applySplash(
-    state: RunState,
-    source: EnemyState,
-    x: number,
-    z: number,
-    damage: number,
-    radius: number,
-    falloff: number,
-    slow: WeaponSlow | undefined,
-  ): void {
-    this.scanSplashed = false;
-    this.targets.forEachNear(z, radius + this.balance.enemies.footprintMax, (enemy) => {
-      if (enemy === source) return true;
-      const half = enemyHalfWidth(enemy, this.balance);
-      const gap = blockGap(enemy.x, half, x, 0, enemy.z - z);
-      if (gap > radius) return true;
-      const share = 1 - falloff * (gap / radius);
-      if (share <= 0) return true;
-      this.scanSplashed = true;
-      this.damage(state, enemy, damage * share, null, slow);
-      return state.status === 'running';
-    });
-    if (this.scanSplashed) this.events.splash(x, z, radius);
-  }
-
-  /** Up to `count` further bodies, each within `range` of the last one hit. */
-  private applyChain(
-    state: RunState,
-    source: EnemyState,
-    damage: number,
-    count: number,
-    range: number,
-    slow: WeaponSlow | undefined,
-  ): void {
-    this.chained.length = 0;
-    this.chained.push(source.id);
-
-    let from = source;
-    for (let link = 0; link < count; link++) {
-      const next = this.nearestUnchained(from, range);
-      if (next === null) return;
-      this.chained.push(next.id);
-      this.events.chain(from.id, next.id);
-      this.damage(state, next, damage, null, slow);
+      // Storm's evolution is one more target, so it is the same arc with a
+      // longer budget rather than a second mechanic.
+      const count = chain.count + this.extraChains[weaponId];
+      this.effects.chain(state, enemy, damage * chain.damageMul, count, chain.range, weapon.slow);
       if (state.status !== 'running') return;
-      from = next;
+    }
+
+    // Ember's evolution. Only the body the shot actually struck is set alight:
+    // the splash already spends the shot on its neighbours, and lighting a
+    // whole blast radius would make the burn a second splash rather than a
+    // burn. `enemy.alive` is false if the shot killed it, and a corpse does
+    // not burn.
+    if (this.burn !== null && enemy.alive && this.hasBurn(weaponId)) {
+      this.burn.ignite(enemy, damage, state.time);
     }
   }
 
-  private nearestUnchained(from: EnemyState, range: number): EnemyState | null {
-    this.scanBest = null;
-    this.scanGap = range;
-    this.targets.forEachNear(from.z, range, (enemy) => {
-      if (enemy === from || this.chained.includes(enemy.id)) return true;
-      const gap = Math.hypot(enemy.x - from.x, enemy.z - from.z);
-      if (gap <= this.scanGap) {
-        this.scanGap = gap;
-        this.scanBest = enemy;
-      }
-      return true;
-    });
-    return this.scanBest;
+  /** Damage from something that is not a shot: a burn tick, the wisp's spark. */
+  hit(state: RunState, enemy: EnemyState, amount: number): void {
+    if (amount <= 0) return;
+    this.damage(state, enemy, amount, null, undefined);
+  }
+
+  private hasBurn(id: WeaponId): boolean {
+    return evolutionOf(id, this.mods.tiers[id])?.burn !== undefined;
   }
 
   /**
@@ -352,10 +337,15 @@ export class Firing {
       if (!wasSlowed) this.events.enemySlowed(enemy.id, slow.seconds);
     }
 
-    enemy.hp -= amount;
+    // The boss-damage upgrade (D35) is the one multiplier that is about who is
+    // being hit rather than who is hitting, so it lands here and covers shots,
+    // splash, chains, burns and the wisp alike.
+    const dealt = enemy.kind === 'boss' ? amount * this.mods.bossDamage : amount;
+
+    enemy.hp -= dealt;
     if (enemy.hp > 0) {
       enemy.units = unitsOf(enemy, this.balance);
-      this.events.enemyHit(enemy.id, amount, enemy.hp, enemy.x, enemy.z);
+      this.events.enemyHit(enemy.id, dealt, enemy.hp, enemy.x, enemy.z);
       return;
     }
 
@@ -363,11 +353,15 @@ export class Firing {
     killEnemy(enemy, state.time);
     if (target !== null) target.live = false;
     if (streamId !== undefined) this.streams.noteKilled(enemy);
-    this.events.enemyHit(enemy.id, amount, 0, enemy.x, enemy.z);
+    this.events.enemyHit(enemy.id, dealt, 0, enemy.x, enemy.z);
     this.events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z, streamId);
     // A frozen body does not fall over, it comes apart.
     const shatters = slow?.shatterOnKill === true || (wasSlowed && enemy.slowFactor !== undefined);
-    if (shatters) this.events.enemyShattered(enemy.id, enemy.x, enemy.z, streamId);
+    if (shatters) {
+      this.events.enemyShattered(enemy.id, enemy.x, enemy.z, streamId);
+      this.effects.shatter(state, enemy, dealt);
+      if (state.status !== 'running') return;
+    }
     if (enemy.kind === 'boss') {
       this.events.bossKilled();
       this.onBossKilled();

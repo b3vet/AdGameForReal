@@ -1,28 +1,50 @@
 /**
  * Level generation: the shape of a level. The curve every number is sized
- * against lives in `curve.ts`, the gates themselves in `gateGen.ts`, one row's
- * contents in `rows.ts`, and stream sizing in `pressure.ts`.
+ * against lives in `curve.ts`, the kind of every row in `rowKinds.ts`, the
+ * gates themselves in `gateGen.ts`, one row's contents in `rows.ts`, stream
+ * sizing in `pressure.ts` and the fences in `walls.ts`.
  *
- * Milestone 3's shape (D31): rows every 18 m, eight of them carrying gates on
- * level 1 rising to twelve on level 10, and every other row a threat — a
- * stream, a horde of two, or a brute block. Sixty to seventy-five seconds of
- * road before the arena.
+ * Milestone 3's shape (D31), stretched to twenty levels by Milestone 4 (D32):
+ * rows every 18 m, eight of them carrying gates on level 1 rising to fourteen
+ * by level 20, and every other row a threat — a stream, a horde of two, or a
+ * brute block. Sixty to seventy-five seconds of road before the arena, and from
+ * level 4 a lane wall in front of some of the gate rows.
  */
 
 import { addValueAt, squadCurve } from './curve';
+import { gateCap } from './gates';
 import { emptyLane, growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
 import type { RowBudget } from './gateGen';
+import { playerMods } from './player';
+import type { PlayerMods } from './player';
+import {
+  countGateRows,
+  dealRowKinds,
+  BRUTE_ROW,
+  GATE_ROW,
+  HORDE_ROW,
+  MIXED_ROW,
+  STREAM_ROW,
+} from './rowKinds';
 import { bruteRow, gateRow, hordeRow, mixedRow, streamRow } from './rows';
 import type { RowDef, RowEnemyDef, RowPermits } from './rows';
 import { mulberry32 } from './rng';
 import type { GateDef, StreamDef } from './types';
+import { generateWalls } from './walls';
+import type { WallDef } from './walls';
 import { balance } from '@/data';
-import type { LevelGenConfig } from '@/data/types';
+import type { LevelGenConfig, PlayerState } from '@/data/types';
 
 export { FIRE_RATE_GATE_WORTH } from './gates';
 export { addValueAt, squadCurve } from './curve';
 export { laneCenter, laneOf } from './lanes';
-export type { LevelGenConfig, RowDef, RowEnemyDef, StreamDef };
+export type { LevelGenConfig, RowDef, RowEnemyDef, StreamDef, WallDef };
+
+/**
+ * Which boss stands in the arena. One entry for now (D33's bestiary wants the
+ * id on the level rather than looked up from the level index).
+ */
+export type BossId = 'demon';
 
 export interface LevelDef {
   index: number;
@@ -38,6 +60,17 @@ export interface LevelDef {
    * render fixtures predate it and take the full Milestone 2 numbers.
    */
   boss: { hp: number; units: number; bite?: number };
+  /**
+   * Always `demon` today; the bestiary records whatever stands here (D33).
+   * Optional for the same reason as `boss.bite`: the render fixtures and the
+   * stress scene build a `LevelDef` by hand. `generateLevel` always writes it.
+   */
+  bossId?: BossId;
+  /**
+   * Lane walls (D32). Empty below `balance.walls.fromLevel`; optional for the
+   * same reason as `bossId`, and `generateLevel` always writes it.
+   */
+  walls?: WallDef[];
 }
 
 export const BOSS_Z_OFFSET = balance.level.bossOffset;
@@ -46,13 +79,6 @@ export const BOSS_Z_OFFSET = balance.level.bossOffset;
 const WEAPON_STREAM_SALT = 0x57_af_f0_0d;
 
 type Rng = () => number;
-
-/** Row kinds, as `dealRowKinds` deals them. */
-const GATE_ROW = 0;
-const MIXED_ROW = 1;
-const STREAM_ROW = 2;
-const HORDE_ROW = 3;
-const BRUTE_ROW = 4;
 
 function budgetFor(config: LevelGenConfig, rowIndex: number): RowBudget {
   const estimate = squadCurve(config, rowIndex);
@@ -63,73 +89,6 @@ function budgetFor(config: LevelGenConfig, rowIndex: number): RowBudget {
     // cannot hold two distinct curses if the ceiling is one.
     curseCeiling: Math.max(2, Math.floor(estimate * balance.gen.curseShare)),
   };
-}
-
-/**
- * The kind of every row, dealt rather than rolled.
- *
- * `levels.json` names the counts outright now — how many gate rows, how many of
- * those also guard a block, how many threat rows pour two streams and how many
- * stand a brute — because those counts *are* the level's shape and a per-row
- * roll made them a coin flip (Milestone 2 found the same thing for gates). Only
- * the order is random, and only within the rules below.
- *
- * Two rules on the order. The first row is always a plain gate row: the player
- * needs units before anything is allowed to take units away, and on level 1 the
- * plan goes further and forbids a stream before the first gate row. And no two
- * threat rows in a row past `gen.maxEnemyRun`, so a level never walks the
- * player through a dead zone they cannot grow out of.
- */
-function dealRowKinds(rng: Rng, config: LevelGenConfig, rowCount: number): number[] {
-  const gateRows = Math.min(rowCount, Math.max(1, Math.round(config.gateRows)));
-  const mixed = Math.min(gateRows - 1, Math.max(0, Math.round(config.mixedRows)));
-  const threats = rowCount - gateRows;
-  const hordes = Math.min(threats, Math.max(0, Math.round(config.hordeRows)));
-  const brutes = Math.min(threats - hordes, Math.max(0, Math.round(config.bruteRows)));
-
-  const tail: number[] = [];
-  for (let i = 0; i < gateRows - 1 - mixed; i++) tail.push(GATE_ROW);
-  for (let i = 0; i < mixed; i++) tail.push(MIXED_ROW);
-  for (let i = 0; i < hordes; i++) tail.push(HORDE_ROW);
-  for (let i = 0; i < brutes; i++) tail.push(BRUTE_ROW);
-  for (let i = 0; i < threats - hordes - brutes; i++) tail.push(STREAM_ROW);
-  shuffle(rng, tail);
-
-  // A long run of threat rows is a dead zone: the squad cannot grow while the
-  // curve behind the next row's numbers keeps rising, so the level walks the
-  // player into a wall they were never given the units for. Broken by swapping
-  // rather than rewriting, so the mix the level was dealt survives.
-  const maxRun = Math.max(1, balance.gen.maxEnemyRun);
-  let run = 0;
-  for (let i = 0; i < tail.length; i++) {
-    if ((tail[i] ?? GATE_ROW) <= MIXED_ROW) {
-      run = 0;
-      continue;
-    }
-    run++;
-    if (run <= maxRun) continue;
-    let j = i + 1;
-    while (j < tail.length && (tail[j] ?? GATE_ROW) > MIXED_ROW) j++;
-    if (j < tail.length) {
-      const threat = tail[i] ?? STREAM_ROW;
-      tail[i] = tail[j] ?? GATE_ROW;
-      tail[j] = threat;
-    } else {
-      tail[i] = MIXED_ROW;
-    }
-    run = 0;
-  }
-
-  return [GATE_ROW, ...tail];
-}
-
-/** Rows from `from` onward that will carry gates. Never zero, so it divides. */
-function countGateRows(kinds: readonly number[], from: number): number {
-  let count = 0;
-  for (let i = from; i < kinds.length; i++) {
-    if ((kinds[i] ?? GATE_ROW) <= MIXED_ROW) count++;
-  }
-  return Math.max(1, count);
 }
 
 /**
@@ -244,10 +203,43 @@ function buildRow(
 }
 
 /**
- * Deterministic: the same `index`, `config` and `seed` always produce the same
- * level. `seed` defaults to the config's own seed so callers can omit it.
+ * The gate-bonus upgrade (D35), applied after the level is laid out.
+ *
+ * Only `add` gates and only their printed value, so the level itself — its
+ * rows, its curses, its streams and every random draw behind them — is the one
+ * the campaign was tuned as, whatever the player has bought. A player with the
+ * upgrade at zero multiplies by exactly one and this returns without touching a
+ * thing, which is what keeps a no-upgrade run byte-identical.
  */
-export function generateLevel(index: number, config: LevelGenConfig, seed?: number): LevelDef {
+function applyGateBonus(rows: readonly RowDef[], bonus: number): void {
+  if (bonus === 1) return;
+  for (const row of rows) {
+    for (let slot = 0; slot < row.gates.length; slot++) {
+      const gate = row.gates[slot];
+      if (gate === null || gate === undefined || gate.kind !== 'add') continue;
+      gate.value = Math.max(1, Math.round(gate.value * bonus));
+      gate.cap = gateCap('add', gate.value, balance);
+    }
+  }
+}
+
+/**
+ * Deterministic: the same `index`, `config`, `seed` and `player` always produce
+ * the same level. `seed` defaults to the config's own seed so callers can omit
+ * it, and `player` is optional because the balance bands are defined for a
+ * player who has bought nothing (D35).
+ *
+ * Two of the five upgrades are the level's business rather than the squad's:
+ * the units the player starts with and what an `add` gate prints. The other
+ * three are multipliers on the squad and belong to `Run`.
+ */
+export function generateLevel(
+  index: number,
+  config: LevelGenConfig,
+  seed?: number,
+  player?: PlayerState,
+): LevelDef {
+  const mods: PlayerMods = playerMods(player);
   const resolvedSeed = seed ?? config.seed;
   const rng = mulberry32(resolvedSeed);
   const rowCount = Math.max(1, Math.floor(config.rows));
@@ -290,6 +282,7 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
   }
 
   placeWeaponGates(rows, index, resolvedSeed);
+  applyGateBonus(rows, mods.gateBonus);
 
   // From the grid, not from the last row: a nudged final threat row must not
   // move the arena, because the level's length is the sixty-to-seventy-five
@@ -300,9 +293,11 @@ export function generateLevel(index: number, config: LevelGenConfig, seed?: numb
     index,
     seed: resolvedSeed,
     runSpeed: balance.squad.runSpeed,
-    startCount: config.startCount,
+    startCount: config.startCount + mods.startCount,
     rows,
     arenaZ,
+    bossId: 'demon',
+    walls: generateWalls(rows, index, resolvedSeed, arenaZ, config.wallRows),
     boss: {
       hp: config.boss.hp,
       units: Math.max(1, Math.ceil(config.boss.hp / balance.enemies.boss.hpPerUnit)),

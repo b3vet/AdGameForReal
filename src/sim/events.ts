@@ -7,33 +7,10 @@
  * longer must be copied, since the next `tick` overwrites these objects.
  */
 
+import { Pool } from './pool';
 import type { EnemyKind, GateKind, Lane, RunStatus, SimEvent, UnitLossReason, WeaponId } from './types';
 
 type EventOf<T extends SimEvent['type']> = Extract<SimEvent, { type: T }>;
-
-/** Grow-once free list: `take` allocates only until the high-water mark is hit. */
-class Pool<T> {
-  private readonly items: T[] = [];
-  private used = 0;
-
-  constructor(private readonly make: () => T) {}
-
-  reset(): void {
-    this.used = 0;
-  }
-
-  take(): T {
-    const existing = this.items[this.used];
-    if (existing !== undefined) {
-      this.used++;
-      return existing;
-    }
-    const created = this.make();
-    this.items.push(created);
-    this.used++;
-    return created;
-  }
-}
 
 export class EventBuffer {
   /** The array handed to callers. Same instance every tick. */
@@ -70,6 +47,28 @@ export class EventBuffer {
   private readonly shatters = new Pool<EventOf<'enemyShattered'>>(() => ({
     type: 'enemyShattered',
     enemyId: 0,
+    x: 0,
+    z: 0,
+  }));
+
+  private readonly burns = new Pool<EventOf<'enemyBurning'>>(() => ({
+    type: 'enemyBurning',
+    enemyId: 0,
+    x: 0,
+    z: 0,
+    seconds: 0,
+  }));
+
+  private readonly familiarShots = new Pool<EventOf<'familiarShot'>>(() => ({
+    type: 'familiarShot',
+    x: 0,
+    z: 0,
+    targetId: 0,
+  }));
+
+  private readonly wallBlocks = new Pool<EventOf<'wallBlocked'>>(() => ({
+    type: 'wallBlocked',
+    boundary: 1,
     x: 0,
     z: 0,
   }));
@@ -186,6 +185,9 @@ export class EventBuffer {
     this.chains.reset();
     this.slows.reset();
     this.shatters.reset();
+    this.burns.reset();
+    this.familiarShots.reset();
+    this.wallBlocks.reset();
     this.weaponSwaps.reset();
     this.enrages.reset();
     this.gateHits.reset();
@@ -250,6 +252,31 @@ export class EventBuffer {
     // gives below.
     if (streamId === undefined) delete e.streamId;
     else e.streamId = streamId;
+    this.list.push(e);
+  }
+
+  enemyBurning(enemyId: number, x: number, z: number, seconds: number): void {
+    const e = this.burns.take();
+    e.enemyId = enemyId;
+    e.x = x;
+    e.z = z;
+    e.seconds = seconds;
+    this.list.push(e);
+  }
+
+  familiarShot(x: number, z: number, targetId: number): void {
+    const e = this.familiarShots.take();
+    e.x = x;
+    e.z = z;
+    e.targetId = targetId;
+    this.list.push(e);
+  }
+
+  wallBlocked(boundary: -1 | 1, x: number, z: number): void {
+    const e = this.wallBlocks.take();
+    e.boundary = boundary;
+    e.x = x;
+    e.z = z;
     this.list.push(e);
   }
 

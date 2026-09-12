@@ -138,6 +138,32 @@ export interface Balance {
     /** The boss stands at `arenaZ + bossOffset`. */
     bossOffset: number;
   };
+  /** Lane walls (D32): the fence the squad cannot cross. See `src/sim/walls.ts`. */
+  walls: {
+    /** Metres before a wall proper where its clamp already applies, so a
+     *  straddling squad is pushed to the side its centre is on. */
+    approach: number;
+    /** How far off the boundary line the squad's centre is held. A point exactly
+     *  on the line reads as the side lane (`laneOf`), so zero would let a
+     *  clamped squad take the gate it was walled away from. */
+    margin: number;
+    /** No wall may come within this of a gate row's `z`, either side. */
+    gateClearance: number;
+    /** A stretch shorter than this is not placed at all. */
+    minLength: number;
+    /** How long a stretch runs, before the clearance rules trim it. */
+    length: { min: number; max: number };
+    /** First level that may carry walls (D32: from level 4). */
+    fromLevel: number;
+    /**
+     * First row a wall may guard. The opening rows are where the squad is
+     * smallest and a stream it cannot reach costs a share of everything it has,
+     * so the road only starts taking choices away once there is a squad.
+     */
+    fromRow: number;
+    /** From this level a stretch over a horde row may wall both boundaries. */
+    bothFromLevel: number;
+  };
   /** Enemy streams (D29): the river of single bodies that walks down a lane. */
   streams: {
     /**
@@ -308,6 +334,14 @@ export interface Balance {
     streamLookahead: number;
     /** Most bodies a staff valuation reads, so a stream cannot swamp it. */
     weaponLayoutMax: number;
+    /**
+     * How close to a wall's approach zone a bot commits to the side it wants
+     * (D32). Inside the fence there is no changing sides, so the lane has to be
+     * chosen before it, and far enough out that the crowd can cross the road in
+     * time — six metres of road is a little over a second, and the squad moves
+     * sideways faster than it runs.
+     */
+    wallCommitDistance: number;
   };
   input: {
     /** Road meters travelled for one full screen width of drag. */
@@ -372,6 +406,11 @@ export interface LevelGenConfig {
   /** Threat rows that stand a brute block instead of a stream. */
   bruteRows: number;
   /**
+   * Gate rows this level guards with a lane wall (D32). Zero below
+   * `balance.walls.fromLevel`; most of them from level 11.
+   */
+  wallRows: number;
+  /**
    * The pressure a stream on this level is built to: `count * hp` over
    * `expected squad dps * window` (docs/09-milestone-3-plan.md, "Stream
    * pressure"). 0.45 to 0.6 on levels 1 to 3, 0.65 to 0.8 on 4 and 5, 0.85 to
@@ -385,4 +424,108 @@ export interface LevelGenConfig {
    * squad at any size.
    */
   streamDensity: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Progression (Milestone 4, D33 and D35)                              */
+/* ------------------------------------------------------------------ */
+
+/** The five training-yard upgrades. Levels run 0 to `Progression.upgrades.maxLevel`. */
+export type UpgradeId = 'damage' | 'fireRate' | 'startCount' | 'gateBonus' | 'bossDamage';
+
+/** A staff is bought at tier 1 and evolved once (D33: one evolution each). */
+export type StaffTier = 1 | 2;
+
+/** 0 is "no wisp at all"; the Sanctum sells tiers 1 to 3. */
+export type FamiliarTier = 0 | 1 | 2 | 3;
+
+/**
+ * Everything the meta layer remembers. The app owns it and saves it; the sim
+ * only reads it, and reads it exactly once per run (D35): every upgrade is a
+ * multiplier resolved at construction, so a purchase mid-run is impossible by
+ * construction and the balance bands stay defined for a player with nothing
+ * bought.
+ */
+export interface PlayerState {
+  coins: number;
+  upgrades: Record<UpgradeId, number>;
+  staffs: Record<WeaponId, { unlocked: boolean; tier: StaffTier }>;
+  /**
+   * The staff a run starts with. Added to the contract's shape because
+   * `staffs` is a record and a record has no order: the Workbench has to be
+   * able to say *which* unlocked staff is in hand. Weapon gates still swap it
+   * mid-run.
+   */
+  selectedStaff: WeaponId;
+  familiar: { unlocked: boolean; tier: FamiliarTier };
+  /** Enemy and boss ids seen, for the bestiary. The sim never reads it. */
+  bestiary: string[];
+  unlockedLevel: number;
+}
+
+/** Ember's evolution: a burn that ticks for a share of the hit that lit it. */
+export interface BurnDef {
+  /** Share of the hit's damage the whole burn is worth. */
+  share: number;
+  seconds: number;
+  tickSeconds: number;
+}
+
+/** Frost's evolution: a shatter that sprays its neighbours. */
+export interface ShatterDef {
+  radius: number;
+  /** Share of the killing hit each neighbour takes. */
+  share: number;
+}
+
+/** One staff's tier-2 behaviour. Exactly one field is set per staff. */
+export interface EvolutionDef {
+  burn?: BurnDef;
+  /** Storm: further targets on top of `WeaponChain.count`. */
+  extraChains?: number;
+  shatter?: ShatterDef;
+}
+
+/**
+ * The wisp (D33). Rate and damage are indexed by tier, so index 0 is the
+ * "no wisp" slot and never read.
+ */
+export interface WispDef {
+  /** Price of tier 1, i.e. of unlocking it at all. */
+  unlock: number;
+  /** Price of reaching each tier; index 0 is unused. */
+  tierPrices: number[];
+  /** Hover offset from the squad centre: `x + offsetX * side`, `z + offsetZ`. */
+  offsetX: number;
+  offsetZ: number;
+  /** How far ahead it will look for a target. */
+  range: number;
+  /** Spark travel speed; the hit lands `distance / sparkSpeed` seconds later. */
+  sparkSpeed: number;
+  /** Sparks in flight at once. Pooled, so this is also the allocation. */
+  maxSparks: number;
+  fireRate: number[];
+  damage: number[];
+}
+
+/** `src/data/progression.json`: every number the meta layer costs and pays. */
+export interface Progression {
+  upgrades: {
+    /** `baseCost * costGrowth ^ level` coins to buy the next level. */
+    baseCost: number;
+    costGrowth: number;
+    maxLevel: number;
+    /** What one level of each upgrade is worth (a share, except `startCount`). */
+    effects: Record<UpgradeId, number>;
+  };
+  staffs: Record<WeaponId, { unlock: number; evolve: number }>;
+  evolutions: Record<WeaponId, EvolutionDef>;
+  wisp: WispDef;
+  rewards: {
+    perSurvivor: number;
+    /** Coins per level index on any clear... */
+    perClear: number;
+    /** ...and again, larger, the first time that level is cleared. */
+    firstClear: number;
+  };
 }

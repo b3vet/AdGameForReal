@@ -17,6 +17,8 @@ import { laneCenter, laneOf } from './lanes';
 import { FIRE_RATE_GATE_WORTH } from './level';
 import { mulberry32 } from './rng';
 import type { EnemyState, GateState, Lane, RunState, WeaponId } from './types';
+import { clampToWalls, wallAhead, wallLimits, wallX } from './walls';
+import type { WallLimits } from './walls';
 import { blockGap, expectedDps, weaponOf } from './weapons';
 import { balance } from '@/data';
 
@@ -30,6 +32,22 @@ const LANES: readonly Lane[] = [-1, 0, 1];
  * allocate in hot loops (CLAUDE.md).
  */
 const layout: EnemyState[] = [];
+
+/**
+ * The x range the squad may steer to right now, walls included (D32). Re-used
+ * rather than re-made: a bot is asked for a lane every step.
+ */
+const limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
+
+function reachable(state: RunState): WallLimits {
+  return wallLimits(state.walls ?? [], state.squad.z, state.squad.x, balance.road.clampX, limits);
+}
+
+/** True when a lane can still be reached from where the squad stands. */
+function laneOpen(lane: Lane, range: WallLimits): boolean {
+  const center = laneCenter(lane, balance.road.laneWidth);
+  return center >= range.lo - 1e-9 && center <= range.hi + 1e-9;
+}
 
 /** Lowest row index that still has an unpassed gate, or -1 once they are gone. */
 function nextGateRow(state: RunState): number {
@@ -129,13 +147,22 @@ function laneScore(gate: GateState | null, state: RunState): number {
 /**
  * Picks a lane on `rowIndex`. `sign` is +1 for the best gate, -1 for the worst.
  * Ties go to the lane nearest the squad, so a bot does not swerve for nothing.
+ *
+ * `range` is what the walls leave open (D32). Inside a wall the far lanes are
+ * simply not candidates, which is how a bot "chooses the side": greedy takes
+ * the best lane it can still reach, the worst bot the worst one. The range is
+ * ignored when it would rule every lane out, which cannot happen with the
+ * shipped geometry but would otherwise turn a tuning slip into a bot that
+ * refuses to steer.
  */
-function pickLane(state: RunState, rowIndex: number, sign: number): Lane {
+function pickLane(state: RunState, rowIndex: number, sign: number, range: WallLimits): Lane {
   let bestLane: Lane = 0;
   let bestScore = -Infinity;
   let bestDistance = Infinity;
+  const walled = LANES.some((lane) => laneOpen(lane, range));
 
   for (const lane of LANES) {
+    if (walled && !laneOpen(lane, range)) continue;
     let gate: GateState | null = null;
     for (const candidate of state.gates) {
       if (candidate.rowIndex === rowIndex && candidate.lane === lane && !candidate.passed) {
@@ -259,19 +286,41 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
   const sign = kind === 'greedy' ? 1 : -1;
   return function decide(state: RunState): number {
     const row = nextGateRow(state);
-    const committed = row >= 0 && distanceToRow(state, row) <= balance.bots.gateCommitDistance;
+    const distance = row >= 0 ? distanceToRow(state, row) : Infinity;
+    const range = reachable(state);
+
+    // A wall between here and the row settles which half of the road the squad
+    // arrives on, so the *side* has to be chosen before the fence rather than at
+    // `gateCommitDistance` (D32): the stretch is up to twenty metres long and
+    // there is no crossing it once inside. Only the side, though — having
+    // crossed, the bot goes back to covering the river on the half it is on,
+    // which is what keeps a walled level a difficulty change rather than a bot
+    // that stops shooting streams.
+    const wall =
+      row < 0 ? null : wallAhead(state.walls ?? [], state.squad.z, state.squad.z + distance);
+    if (
+      wall !== null &&
+      wall.zStart - balance.walls.approach - state.squad.z <= balance.bots.wallCommitDistance
+    ) {
+      const want = laneCenter(pickLane(state, row, sign, range), balance.road.laneWidth);
+      const line = wallX(wall.boundary, balance.road.laneWidth);
+      if (state.squad.x < line !== want < line) return want;
+    }
+
+    const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;
 
     if (kind === 'greedy' && !committed) {
-      // Between rows the squad's job is the river, not the next panel.
+      // Between rows the squad's job is the river, not the next panel — but
+      // only as far as the wall it is already inside allows.
       const stand = bestStreamStand(state);
-      if (stand !== null) return stand;
+      if (stand !== null) return clampToWalls(stand, range);
       // Nothing streaming: greedy would rather stand and shoot a block than
       // dodge it, and only swerves once the row is close.
-      if (blockedByEnemy(state)) return state.squad.x;
+      if (blockedByEnemy(state)) return clampToWalls(state.squad.x, range);
     }
 
     // No gates left: hold station and shoot whatever is in front.
-    if (row < 0) return state.squad.x;
-    return laneCenter(pickLane(state, row, sign), balance.road.laneWidth);
+    if (row < 0) return clampToWalls(state.squad.x, range);
+    return clampToWalls(laneCenter(pickLane(state, row, sign, range), balance.road.laneWidth), range);
   };
 }

@@ -12,12 +12,17 @@
 
 import { BossController } from './boss';
 import { advanceEnemies } from './contact';
+import type { Burn } from './burn';
 import { EventBuffer } from './events';
-import { Firing } from './firing';
+import type { Familiar } from './familiar';
+import type { Firing } from './firing';
 import { halfWidth } from './formation';
 import { clampCount, countAfterGate } from './gates';
 import { laneOf } from './lanes';
 import type { LevelDef } from './level';
+import { buildLoadout } from './loadout';
+import { playerMods } from './player';
+import type { PlayerMods } from './player';
 import { buildWorld } from './spawn';
 import { Streams } from './streams';
 import { TargetList } from './targeting';
@@ -31,8 +36,10 @@ import type {
   UnitLossReason,
   WeaponId,
 } from './types';
-import { startWeapon, weaponDef, weaponOf } from './weapons';
-import type { Balance } from '@/data/types';
+import { clampToWalls, wallLimits, wallX } from './walls';
+import type { WallDef, WallLimits } from './walls';
+import { weaponDef, weaponOf } from './weapons';
+import type { Balance, PlayerState } from '@/data/types';
 
 /** The sim always steps at 1/60 s regardless of frame rate, so runs are reproducible. */
 const FIXED_DT = 1 / 60;
@@ -47,12 +54,24 @@ export class Run {
   private readonly events = new EventBuffer();
   private readonly targets = new TargetList();
   private readonly firing: Firing;
+  private readonly burn: Burn | null;
   private readonly streams: Streams;
   private readonly boss = new BossController();
 
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
   private accumulator = 0;
   private nextRow = 0;
+
+  /** The player's upgrades, resolved once (D35). `NO_MODS` when there is none. */
+  private readonly mods: PlayerMods;
+  private readonly walls: readonly WallDef[];
+  private readonly familiar: Familiar | null;
+
+  /** Re-used by the wall clamp every step: the sim must not allocate per frame. */
+  private readonly limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
+
+  /** Wall currently pushing the squad, so `wallBlocked` fires on the edge only. */
+  private blockedWall = -1;
 
   /** Bound once, not per frame: `contact.ts` calls back into the loss check. */
   private readonly hitSquad = (amount: number, reason: UnitLossReason): void => {
@@ -64,19 +83,31 @@ export class Run {
     this.streams.noteLeaked(enemy);
   };
 
-  constructor(level: LevelDef, balance: Balance) {
+  /**
+   * `player` is optional and a player with nothing bought resolves to the
+   * identity: every multiplier is 1, no wisp, ember at tier 1 (D35). The
+   * campaign's balance bands are defined at exactly that point, and everything
+   * bought above it is the squad getting stronger against the same road.
+   *
+   * The level's own two upgrades — starting units and what an `add` gate prints
+   * — were applied by `generateLevel`, so they are not applied again here.
+   */
+  constructor(level: LevelDef, balance: Balance, player?: PlayerState) {
     this.level = level;
     this.balance = balance;
+    this.mods = playerMods(player);
+    this.walls = level.walls ?? [];
 
+    const staff = this.mods.staff;
     const squad: SquadState = {
       count: level.startCount,
       x: 0,
       targetX: 0,
       z: 0,
-      fireRate: balance.squad.fireRate,
-      damage: balance.squad.damage * weaponDef(startWeapon).damage,
+      fireRate: balance.squad.fireRate * this.mods.fireRate,
+      damage: balance.squad.damage * weaponDef(staff).damage * this.mods.damage,
       fireRateBonus: 0,
-      weaponId: startWeapon,
+      weaponId: staff,
     };
 
     const world = buildWorld(level, balance);
@@ -95,6 +126,8 @@ export class Run {
       peakCount: level.startCount,
       survivors: level.startCount,
       arenaZ: level.arenaZ,
+      familiar: null,
+      walls: this.walls,
     };
 
     this.streams = new Streams(balance, this.events, this.targets, level.seed, world.nextId);
@@ -104,9 +137,15 @@ export class Run {
     this.streams.countStanding(world.enemies);
     this.targets.build(this.runState, balance);
 
-    this.firing = new Firing(balance, this.events, this.targets, this.streams, () => {
+    const loadout = buildLoadout(balance, this.events, this.targets, this.streams, this.mods, () => {
       this.finish('won');
     });
+    this.firing = loadout.firing;
+    this.burn = loadout.burn;
+    this.familiar = loadout.familiar;
+    if (this.familiar !== null) {
+      this.runState.familiar = this.familiar.create(squad, this.mods.familiarTier);
+    }
   }
 
   /** The live state object. Render reads it; nothing outside the sim writes it. */
@@ -169,13 +208,24 @@ export class Run {
     state.time += dt;
 
     // Re-clamped every step, not only when the player steers: the limit moves
-    // as the crowd grows and shrinks (see `clampLimit`).
-    const limit = this.clampLimit();
-    squad.targetX = Math.min(Math.max(squad.targetX, -limit), limit);
+    // as the crowd grows and shrinks (see `clampLimit`), and a wall narrows it
+    // further for as long as the squad is inside one (D32).
+    const limits = wallLimits(
+      this.walls,
+      squad.z,
+      squad.x,
+      this.clampLimit(),
+      this.limits,
+      this.balance.road.laneWidth,
+    );
+    const wanted = squad.targetX;
+    squad.targetX = clampToWalls(wanted, limits);
+    this.noteWall(limits.wall, wanted !== squad.targetX, squad.z);
+
     const dx = squad.targetX - squad.x;
     const maxMove = this.balance.squad.lateralSpeed * dt;
     squad.x += Math.abs(dx) <= maxMove ? dx : Math.sign(dx) * maxMove;
-    squad.x = Math.min(Math.max(squad.x, -limit), limit);
+    squad.x = clampToWalls(squad.x, limits);
 
     // The squad stops at the arena to fight the boss.
     if (squad.z < state.arenaZ) {
@@ -196,6 +246,17 @@ export class Run {
     if (state.status !== 'running') return;
     this.firing.fire(state, dt);
     if (state.status !== 'running') return;
+    // After the squad's own fire and before anything walks: a burn tick and a
+    // spark are hits like any other, and a body they kill must not also get a
+    // step of walking this frame.
+    if (this.burn !== null) {
+      this.burn.update(state);
+      if (state.status !== 'running') return;
+    }
+    if (this.familiar !== null) {
+      this.familiar.update(state, dt);
+      if (state.status !== 'running') return;
+    }
     advanceEnemies(state, this.balance, this.events, dt, this.hitSquad, this.onLeak);
     if (state.status !== 'running') return;
     // After everything has moved: heads, counts, the `streamCleared` edge and
@@ -207,6 +268,24 @@ export class Run {
     if (squad.count > state.peakCount) state.peakCount = squad.count;
     state.survivors = squad.count;
     if (squad.count <= 0) this.finish('lost');
+  }
+
+  /**
+   * `wallBlocked` on the edge only: the clamp bites on every step the player
+   * holds a finger against a fence, and a sound per step is a buzz.
+   */
+  private noteWall(wall: number, pushed: boolean, z: number): void {
+    if (!pushed || wall < 0) {
+      if (!pushed) this.blockedWall = -1;
+      return;
+    }
+    if (this.blockedWall === wall) return;
+    this.blockedWall = wall;
+    const def = this.walls[wall];
+    if (def === undefined) return;
+    // The event carries the fence's own x, not the squad's: that is where the
+    // push is seen and where a sound should come from.
+    this.events.wallBlocked(def.boundary, wallX(def.boundary, this.balance.road.laneWidth), z);
   }
 
   /** Exactly one gate applies per row: the one whose lane holds the squad now. */
@@ -266,7 +345,7 @@ export class Run {
     const current = weaponOf(squad);
     if (next === current) return;
     squad.weaponId = next;
-    squad.damage = this.balance.squad.damage * weaponDef(next).damage;
+    squad.damage = this.balance.squad.damage * weaponDef(next).damage * this.mods.damage;
     this.events.weaponChanged(current, next);
   }
 
