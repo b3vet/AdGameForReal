@@ -14,33 +14,39 @@
     <canvas id="game-canvas" touch-action="none"></canvas>
 
     <div id="overlay-root">
-      <!-- Title. scripts/smoke.mjs clicks #play-button; keep that id stable. -->
-      <section id="title-screen" class="screen screen--title">
+      <!--
+        The Academy home, which replaced the title screen in Milestone 4
+        (decision D33). It keeps the id `#title-screen` and the wordmark's
+        `#title-wordmark`: the first is what every screen switch and the smoke
+        test already know this screen by, and the second is a triple-tap target
+        for the debug panel (src/ui/taps.ts).
+
+        The room cards are built by src/ui/academy.ts from src/data/academy.json
+        so the copy, the order and the unlock levels stay out of the markup.
+      -->
+      <section id="title-screen" class="screen screen--academy">
         <div class="screen__inner">
+          <div class="academy__bar">
+            <div id="academy-coins" class="coins">
+              <span class="coins__icon" aria-hidden="true"></span>
+              <span id="academy-coin-value" class="coins__value">0</span>
+            </div>
+          </div>
+
           <div class="screen__top">
-            <!-- Triple-tapping the wordmark toggles the debug panel; the
-                 gesture is hit-tested by src/ui/taps.ts, so this stays inert. -->
             <h1 id="title-wordmark" class="screen__title">Arcane&nbsp;Rush</h1>
           </div>
 
-          <!-- One frosted panel behind the caption, the picker and Play: they
-               sit on the lit road now that the title no longer dims the scene,
-               and light-on-light was unreadable. Inert like the rest of the
-               overlay, so a drag that starts on it still steers. -->
+          <!-- One frosted panel over the lit road, as on the old title: the
+               dressed scene behind it is the shop window, and light-on-light
+               was unreadable. Inert like the rest of the overlay; only the
+               cards take pointer events. -->
           <div class="screen__panel">
-            <div class="screen__middle">
-              <p class="picker__caption">Level</p>
-              <!-- Filled by src/ui/overlay.ts from the save's unlocked level. -->
-              <div id="level-picker" class="picker"></div>
-            </div>
-
-            <div class="screen__actions">
-              <button id="play-button" class="button" type="button">Play</button>
-            </div>
+            <div id="academy-cards" class="cards"></div>
           </div>
         </div>
 
-        <!-- Mute lives on the title and in the HUD corner; both drive the save. -->
+        <!-- Mute lives here and in the HUD corner; both drive the save. -->
         <button
           id="mute-title"
           class="mute mute--title"
@@ -55,6 +61,61 @@
             <path class="mute__slash" d="M4 3.5 21 20.5" />
           </svg>
         </button>
+      </section>
+
+      <!-- Level picker, behind the Academy's Play card. Two pages of ten; the
+           page tabs hide themselves while there is only one page.
+           scripts/smoke-run.mjs clicks #play-button — keep that id stable. -->
+      <section id="levels-screen" class="screen screen--levels" hidden>
+        <div class="screen__inner">
+          <div class="screen__top">
+            <h2 class="screen__title screen__title--panel">Levels</h2>
+          </div>
+
+          <div class="screen__panel">
+            <div class="screen__middle">
+              <p id="picker-caption" class="picker__caption">Level</p>
+              <!-- Filled by src/ui/academy.ts from the save's unlocked level. -->
+              <div id="level-picker" class="picker"></div>
+              <div id="picker-pages" class="pager"></div>
+            </div>
+
+            <div class="screen__actions">
+              <button id="play-button" class="button" type="button">Play</button>
+              <button id="levels-back" class="button button--ghost" type="button">Back</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The four rooms share one screen: the heading, the coin chip and the
+           Back button are the same furniture, and only the body swaps. Each
+           room's body is built once, on the first visit, by src/ui/rooms.ts. -->
+      <section id="room-screen" class="screen screen--room" hidden>
+        <div class="screen__inner">
+          <div class="room__bar">
+            <div id="room-coins" class="coins">
+              <span class="coins__icon" aria-hidden="true"></span>
+              <span id="room-coin-value" class="coins__value">0</span>
+            </div>
+          </div>
+
+          <div class="screen__top">
+            <h2 id="room-title" class="screen__title screen__title--panel">Yard</h2>
+            <p id="room-subtitle" class="room__subtitle"></p>
+          </div>
+
+          <div class="screen__panel room__panel">
+            <div id="yard-rows" class="rows" hidden></div>
+            <div id="workbench-cards" class="rows" hidden></div>
+            <div id="sanctum-card" class="rows" hidden></div>
+            <div id="bestiary-cards" class="beasts" hidden></div>
+          </div>
+
+          <div class="screen__actions">
+            <button id="room-back" class="button button--ghost" type="button">Back</button>
+          </div>
+        </div>
       </section>
 
       <!-- HUD: count, staff badge, boss bar, level chip, mute — and nothing
@@ -102,16 +163,24 @@
         </div>
       </section>
 
-      <!-- Result: survivors, peak count, Ascend / Again / Levels. -->
+      <!-- Result: coins earned, survivors, peak count, Ascend / Again / Levels. -->
       <section id="result-screen" class="screen screen--result" hidden>
         <div class="screen__inner">
           <div class="screen__top">
             <p id="result-kicker" class="result__kicker">Horde slain</p>
             <h2 id="result-title" class="screen__title screen__title--result">Level 1</h2>
+            <p id="result-first-clear" class="result__badge" hidden>First clear</p>
           </div>
 
           <div class="screen__middle">
             <dl class="stats">
+              <div class="stats__row stats__row--coins">
+                <dt class="stats__key">Coins</dt>
+                <dd class="stats__value">
+                  <span class="coins__icon coins__icon--inline" aria-hidden="true"></span>
+                  <span id="result-coins">0</span>
+                </dd>
+              </div>
               <div class="stats__row">
                 <dt class="stats__key">Survivors</dt>
                 <dd id="result-survivors" class="stats__value">0</dd>
@@ -121,12 +190,13 @@
                 <dd id="result-peak" class="stats__value">0</dd>
               </div>
             </dl>
+            <p class="result__total">Purse <span id="result-total">0</span></p>
           </div>
 
           <div class="screen__actions">
             <button id="next-button" class="button" type="button" hidden>Ascend</button>
             <button id="retry-button" class="button button--ghost" type="button">Again</button>
-            <button id="levels-button" class="button button--ghost" type="button">Levels</button>
+            <button id="levels-button" class="button button--ghost" type="button">Academy</button>
           </div>
         </div>
       </section>

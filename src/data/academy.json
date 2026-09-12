@@ -1,0 +1,67 @@
+{
+  "home": {
+    "lockedHint": "Reach level {level}",
+    "levelsCaption": "Level"
+  },
+  "rooms": [
+    { "id": "play", "title": "Play", "blurb": "Take the road", "unlockLevel": 1 },
+    { "id": "yard", "title": "Yard", "blurb": "Drill the squad", "unlockLevel": 1 },
+    { "id": "workbench", "title": "Workbench", "blurb": "Forge a staff", "unlockLevel": 5 },
+    { "id": "sanctum", "title": "Sanctum", "blurb": "Bind a wisp", "unlockLevel": 8 },
+    { "id": "bestiary", "title": "Bestiary", "blurb": "Name the horde", "unlockLevel": 3 }
+  ],
+  "yard": {
+    "heading": "Training Yard",
+    "levelLabel": "Level {level} of {max}",
+    "upgrades": [
+      { "id": "damage", "name": "Fire Drills", "effect": "+{value} damage per level", "unit": "percent" },
+      { "id": "fireRate", "name": "Quick Hands", "effect": "+{value} fire rate per level", "unit": "percent" },
+      { "id": "startCount", "name": "Recruits", "effect": "+{value} apprentice at the start per level", "unit": "count" },
+      { "id": "gateBonus", "name": "Sigil Craft", "effect": "+{value} from add gates per level", "unit": "percent" },
+      { "id": "bossDamage", "name": "Giant Slaying", "effect": "+{value} boss damage per level", "unit": "percent" }
+    ]
+  },
+  "workbench": {
+    "heading": "Workbench",
+    "evolvedTag": "Evolved",
+    "staffs": [
+      { "id": "ember", "name": "Ember", "blurb": "A splash of flame on every hit.", "tier2": "Evolved: burns for 30% of the hit over 2 s." },
+      { "id": "storm", "name": "Storm", "blurb": "A bolt that leaps between blocks.", "tier2": "Evolved: the bolt chains one more target." },
+      { "id": "frost", "name": "Frost", "blurb": "Slows what it hits, shatters what it kills.", "tier2": "Evolved: the shatter hits neighbours within 1 m for 50%." }
+    ]
+  },
+  "sanctum": {
+    "heading": "Sanctum",
+    "name": "Wisp",
+    "blurb": "A spark that hovers beside the squad and hunts the nearest thing on the road.",
+    "tierLabel": "Tier {tier} of {max}",
+    "tiers": [
+      "Bound: a homing spark on its own clock.",
+      "Tier 2: sparks come faster and land harder.",
+      "Tier 3: a spark a second, and it hurts."
+    ]
+  },
+  "bestiary": {
+    "heading": "Bestiary",
+    "seenLabel": "{seen} of {total} seen",
+    "unknown": "Not yet met.",
+    "entries": [
+      { "id": "grunt", "name": "Grunt", "blurb": "One skeleton of the river. Hundreds follow it." },
+      { "id": "brute", "name": "Brute", "blurb": "A block that walks. Break it before it arrives." },
+      { "id": "demon", "name": "Demon", "blurb": "The horned thing at the road's end. It stomps." }
+    ]
+  },
+  "buttons": {
+    "buy": "Buy",
+    "max": "Max",
+    "unlock": "Unlock",
+    "evolve": "Evolve",
+    "select": "Select",
+    "selected": "In hand",
+    "bind": "Bind",
+    "empower": "Empower"
+  },
+  "result": {
+    "firstClear": "First clear"
+  }
+}

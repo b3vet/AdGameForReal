@@ -3,5 +3,5 @@
 // evaluates. `fontsReady` is what the renderer's digit atlas waits on.
 export { fontsReady } from './fonts';
 export { Overlay } from './overlay';
-export type { OverlayCallbacks, ResultView, TitleView } from './overlay';
+export type { AcademyView, OverlayCallbacks, ResultView, RoomBump } from './overlay';
 export type { DebugStats } from './debug';

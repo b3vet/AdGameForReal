@@ -61,6 +61,21 @@ const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 180_000);
 const RESULT_SETTLE_MS = 20_000;
 
 /**
+ * The result sheet rolls its numbers and then its coins (`src/ui/result.ts`),
+ * about 1.3 s of wall clock in all. The peak is waited on properly below; this
+ * is the tail the coin roll adds, so `result-coins.png` is a picture of the
+ * total and not of a counter halfway up.
+ */
+const COINS_SETTLE_MS = 1200;
+
+/**
+ * How long the Academy's own screens are given to paint before they are
+ * photographed. They are HTML over a scene that is already drawn, so this is a
+ * layout pass and a one-shot animation, not a frame budget.
+ */
+const MENU_SETTLE_MS = 700;
+
+/**
  * Draw-call ceiling for a live run, physics and all (plan, "Performance": 40 at
  * 500 units for the render layer alone). Debris is what pushes past that — a
  * ragdoll is a skinned mesh and therefore a call of its own — and the caps in
@@ -209,12 +224,37 @@ export async function driveRun(page, url, run, failures, outDir) {
     );
   }
 
-  // The title screen is part of the definition of done, so it gets a frame of
+  // A run may bring a save with it: coins, upgrades, a staff and a wisp
+  // written straight into the player through the debug handle, so the Academy
+  // can be photographed with something in it rather than empty
+  // (`ArcaneDebugHandle.setPlayer`). Before the first shot, because the home
+  // screen it re-paints is the first thing photographed.
+  if (run.save !== undefined) {
+    await page.evaluate((patch) => {
+      globalThis.__arcane?.setPlayer(patch);
+    }, run.save);
+    await sleep(MENU_SETTLE_MS);
+  }
+
+  // The Academy home is part of the definition of done, so it gets a frame of
   // its own before anything is clicked.
   await sleep(300);
   if (run.titleShot !== undefined) written.push(await shot(run.titleShot));
 
+  // Rooms: open one, photograph it, come back. The home is up again after each.
+  for (const menu of run.menuShots ?? []) {
+    await page.click(menu.open);
+    await sleep(MENU_SETTLE_MS);
+    written.push(await shot(menu.name));
+    await page.click(menu.back ?? '#room-back');
+    await sleep(300);
+  }
+
   await armShotPlan(page, run.shots, BOSS_SHOT_HP_SHARE, STAFF_SHOT_RANGE);
+  // Play is a card on the home now (D33); it opens the level picker, and the
+  // picker is where the run starts.
+  await page.click('#academy-play');
+  await sleep(300);
   await page.click('#play-button');
   const startedAt = Date.now();
 
@@ -254,6 +294,8 @@ export async function driveRun(page, url, run, failures, outDir) {
       { timeout: RESULT_SETTLE_MS },
     )
     .catch(() => {});
+  // ...and the coins roll after them.
+  await sleep(COINS_SETTLE_MS);
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   const draws = await page.evaluate(
     () => globalThis.__arcane?.draws() ?? { current: 0, peak: 0 },
@@ -288,6 +330,14 @@ export async function driveRun(page, url, run, failures, outDir) {
       `ladder rung ${quality.rung}, physics quality ${quality.physics}`,
   );
   if (phase !== 'result') failures.push(`${run.label}: run ended but the result screen never showed`);
+  // The purse is the meta layer's whole point: a run that paid nothing at all
+  // means `runRewards` or the save never ran (D33).
+  const purse = await page.evaluate(() => globalThis.__arcane?.player().coins ?? -1);
+  console.log(`[smoke]   coins after the run: ${purse}`);
+  if (purse < 0) failures.push(`${run.label}: the debug handle has no player`);
+  if (status === 'won' && purse <= 0) {
+    failures.push(`${run.label}: a cleared level paid no coins`);
+  }
   if (draws.peak > DRAW_CALL_LIMIT) {
     failures.push(
       `${run.label}: peak ${draws.peak} draw calls is over the ${DRAW_CALL_LIMIT} budget`,

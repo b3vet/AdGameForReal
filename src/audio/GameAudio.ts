@@ -198,6 +198,36 @@ export class GameAudio {
   }
 
   /**
+   * The Academy's own voices (plan, "Academy"). None of them is a sim event —
+   * a purchase happens on a menu with no run behind it — so each gets an entry
+   * point of its own rather than a place in the event map.
+   */
+  playPurchase(): void {
+    if (this.throttled('purchase', audioMix.minIntervalMs.purchase)) return;
+    this.playCue(audioMix.ui.purchase);
+  }
+
+  /** A staff or the wisp changing hands: heavier than a plain purchase. */
+  playUnlock(): void {
+    this.playCue(audioMix.ui.unlock);
+  }
+
+  /** A room opening for the first time. Once per room, ever. */
+  playRoomReveal(): void {
+    this.playCue(audioMix.ui.roomReveal);
+  }
+
+  /** One step of the result screen's coin count-up. */
+  playCoinTick(): void {
+    const cue = audioMix.ui.coinTick;
+    this.play(
+      cue.sound,
+      cue.playbackRate + (this.random() - 0.5) * audioMix.shot.pitchSpread * 2,
+      cue.volume,
+    );
+  }
+
+  /**
    * One tick's events. Called for every tick, including the intermediate ones
    * `?turbo` runs between frames, so throttling here is what keeps a
    * fast-forwarded run from sounding like static.
@@ -233,6 +263,20 @@ export class GameAudio {
         case 'enemyLeaked':
           if (!this.throttled('leak', audioMix.minIntervalMs.leak)) {
             this.play(audioMix.leak.sound, audioMix.leak.playbackRate);
+          }
+          break;
+        case 'familiarShot':
+          // The wisp fires on its own clock beside the squad, so the ceiling is
+          // an interval rather than a window: it is one voice, not a volley.
+          if (!this.throttled('familiarShot', audioMix.minIntervalMs.familiarShot)) {
+            this.playCue(audioMix.familiarShot);
+          }
+          break;
+        case 'wallBlocked':
+          // Emitted on every step the clamp holds the squad, which is sixty a
+          // second while a finger leans on a wall: one knock, then silence.
+          if (!this.throttled('wallBump', audioMix.minIntervalMs.wallBump)) {
+            this.playCue(audioMix.wallBump);
           }
           break;
         case 'streamCleared':
@@ -373,6 +417,11 @@ export class GameAudio {
     this.play('sfx_gate_tick');
   }
 
+  /** A reused clip at its own pitch and level (`audio-types.ts`, `Cue`). */
+  private playCue(cue: { sound: string; playbackRate: number; volume: number }): void {
+    this.play(cue.sound, cue.playbackRate, cue.volume);
+  }
+
   private throttled(key: string, minIntervalMs: number): boolean {
     const at = now();
     const last = this.lastPlayed.get(key);
@@ -381,12 +430,18 @@ export class GameAudio {
     return false;
   }
 
-  private play(id: string, playbackRate = 1): void {
+  /**
+   * `volumeScale` is always written, never left from the last caller: the
+   * clips are shared instances, so a cue that plays a clip quietly would
+   * otherwise leave every later play of that clip quiet too.
+   */
+  private play(id: string, playbackRate = 1, volumeScale = 1): void {
     if (this.mutedFlag || !this.unlocked) return;
     const sound = this.sounds.get(id);
     if (sound === undefined) return;
     try {
       sound.playbackRate = playbackRate;
+      sound.volume = (audioMix.volume[id] ?? 0.5) * volumeScale;
       sound.play();
     } catch (error: unknown) {
       console.warn(`[arcane-rush] sound "${id}" failed to play`, error);

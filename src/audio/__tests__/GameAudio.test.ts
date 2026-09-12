@@ -22,12 +22,18 @@ const engine = {
 };
 
 /** Every clip the engine was asked to build, by asset id, with its play spy. */
-const sounds = new Map<string, { play: ReturnType<typeof vi.fn>; playbackRate: number }>();
+const sounds = new Map<
+  string,
+  { play: ReturnType<typeof vi.fn>; playbackRate: number; volume: number }
+>();
 
 vi.mock('@babylonjs/core/AudioV2', () => ({
   CreateAudioEngineAsync: vi.fn(() => Promise.resolve(engine)),
   CreateSoundAsync: vi.fn((id: string) => {
-    const sound = { playbackRate: 1, play: vi.fn(), dispose: vi.fn() };
+    // `volume` as well as `playbackRate`: Milestone 4's cues set both on the
+    // shared clip, so a mock without it would not catch a cue that leaves a
+    // clip quiet for everything after it (`GameAudio.play`).
+    const sound = { playbackRate: 1, volume: 1, play: vi.fn(), dispose: vi.fn() };
     sounds.set(id, sound);
     return Promise.resolve(sound);
   }),
@@ -43,6 +49,11 @@ vi.mock('@/render/characters', () => ({
       'sfx_units_lost',
       'sfx_gate_pass_good',
       'sfx_shatter',
+      // Milestone 4 reuses these three as the wisp's spark, the Academy's
+      // purchase chime and its coin tick (D33).
+      'sfx_shot_storm',
+      'sfx_units_gained',
+      'sfx_gate_tick',
     ].map((id) => ({ kind: 'audio', id, url: `audio/${id}.wav` })),
   resolveAssetUrl: (id: string) => `/assets/${id}.wav`,
   assetBytes: () => Promise.resolve(new ArrayBuffer(0)),
@@ -216,6 +227,41 @@ describe('GameAudio', () => {
     audio.onEvents(activations, state);
 
     for (const [, sound] of sounds) expect(sound.play).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The wisp fires on its own clock and a finger can lean on a wall for a whole
+   * row, so both of Milestone 4's new sim events are intervals, not volleys.
+   */
+  it('says the wisp and the wall once, however many events arrive', async () => {
+    const audio = await playing();
+    const spam: SimEvent[] = [];
+    for (let i = 0; i < 10; i++) {
+      spam.push({ type: 'familiarShot', x: 0, z: 0, targetId: i });
+      spam.push({ type: 'wallBlocked', boundary: 1, x: 1, z: 0 });
+    }
+
+    audio.onEvents(spam, state);
+
+    expect(plays('sfx_shot_storm')).toBe(1);
+    // High and quiet for the spark, low for the knock on stone.
+    expect(sounds.get('sfx_shot_storm')?.playbackRate).toBeGreaterThan(1.5);
+    expect(plays('sfx_enemy_hit')).toBe(1);
+    expect(sounds.get('sfx_enemy_hit')?.playbackRate).toBeLessThan(0.6);
+  });
+
+  it('gives the Academy its own voices from clips it already had', async () => {
+    const audio = await playing();
+
+    audio.playPurchase();
+    audio.playUnlock();
+    audio.playCoinTick();
+
+    expect(plays('sfx_units_gained')).toBe(1);
+    expect(plays('sfx_gate_pass_good')).toBe(1);
+    // The gate tick, taken up: coins are brighter than gates.
+    expect(plays('sfx_gate_tick')).toBe(1);
+    expect(sounds.get('sfx_gate_tick')?.playbackRate).toBeGreaterThan(1.2);
   });
 
   it('mutes by dropping the engine to silence, unlocked or not', async () => {

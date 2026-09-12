@@ -5,7 +5,12 @@
  * `RunSession` at a time, the degrade ladder and the `window.__arcane` debug
  * handle the smoke test drives. Everything visual is delegated to `src/ui` and
  * `src/render`; everything about the game is delegated to `@/sim` through
- * `./session`; everything that happens inside one frame is `./frame`.
+ * `./session`; everything that happens inside one frame is `./frame`; and
+ * everything about the meta layer — the player, the Academy's menus and the
+ * purse — is `./academy.ts` (decision D33).
+ *
+ * The `title` phase covers all of the Academy: which of its screens is up is
+ * the controller's business, not the state machine's.
  */
 
 import { GameAudio } from '@/audio';
@@ -15,14 +20,17 @@ import type { PhysicsQuality } from '@/physics';
 import { Renderer } from '@/render/Renderer';
 import { runRenderDevScene } from '@/render/dev-scene';
 import { weaponOf } from '@/sim';
-import type { Run, RunState } from '@/sim';
+import type { WeaponId } from '@/sim';
 import { fontsReady, Overlay } from '@/ui';
 
+import { AcademyController } from './academy';
 import { FrameDriver, NO_EVENTS } from './frame';
 import type { FrameHost } from './frame';
+import type { ArcaneDebugHandle } from './handle';
 import { attachInput } from './input';
 import type { DetachInput } from './input';
 import { Juice } from './juice';
+import type { RoomId } from './player';
 import { QualityLadder } from './quality';
 import type { QualityRung } from './quality';
 import { clampLevel, parseQuery } from './query';
@@ -34,41 +42,15 @@ import type { StressHandle } from './stress';
 
 export type AppPhase = 'title' | 'playing' | 'result';
 
-/** The handle `scripts/smoke.mjs` and manual debugging use. Keep it stable. */
-export interface ArcaneDebugHandle {
-  ready: boolean;
-  app: App;
-  run: () => Run | null;
-  state: () => Readonly<RunState> | null;
-  /** Null until `init` finishes, and when `?physics=0` skipped it. */
-  physics: () => PhysicsLayer | null;
-  /** Which rung of the degrade ladder the app is on; 0 is everything on. */
-  quality: () => number;
-  /** Draw calls: the last frame's, and the worst since the run started. */
-  draws: () => { current: number; peak: number };
-  /**
-   * Shader programs compiled so far and what the warm-up pass did. The smoke
-   * asserts `programs` does not move across a whole level of play.
-   */
-  shaders: () => {
-    programs: number;
-    warmed: number;
-    skipped: number;
-    failed: number;
-    warming: boolean;
-  };
-}
-
-declare global {
-  // `var` is required here: this is a global augmentation, not a declaration.
-  var __arcane: ArcaneDebugHandle | undefined;
-}
+export type { ArcaneDebugHandle };
 
 export class App implements FrameHost {
   readonly renderer: Renderer;
   readonly audio: GameAudio;
   readonly juice: Juice;
   readonly overlay: Overlay;
+  /** The meta layer: the player, the menus and the purse (`./academy.ts`). */
+  readonly academy: AcademyController;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly options: QueryOptions;
@@ -83,8 +65,10 @@ export class App implements FrameHost {
 
   private currentPhase: AppPhase = 'title';
   private session: RunSession | null = null;
-  /** A never-ticked session whose level and state back the title screen. */
+  /** A never-ticked session whose level and state back the Academy screens. */
   private preview: RunSession | null = null;
+  /** Which level the standing preview was built for; 0 when there is none. */
+  private previewLevel = 0;
   private detachInput: DetachInput | null = null;
   private muted: boolean;
 
@@ -123,8 +107,14 @@ export class App implements FrameHost {
       onSelectLevel: (level: number) => {
         this.selectLevel(level);
       },
+      onOpenRoom: (room: RoomId) => {
+        this.openRoom(room);
+      },
+      onCloseRoom: () => {
+        this.showHome();
+      },
       onLevels: () => {
-        this.showTitle();
+        this.showHome();
       },
       onTap: () => {
         // Every button is a user gesture, which is the only moment a browser
@@ -146,6 +136,30 @@ export class App implements FrameHost {
       },
       onCountTick: () => {
         this.audio.playTick();
+      },
+      onCoinTick: () => {
+        this.audio.playCoinTick();
+      },
+      onBuyUpgrade: (id: string) => {
+        this.academy.buyUpgrade(id);
+      },
+      onBuyStaff: (id: WeaponId) => {
+        this.academy.buyStaff(id);
+      },
+      onSelectStaff: (id: WeaponId) => {
+        this.academy.selectStaff(id);
+      },
+      onBuyFamiliar: () => {
+        this.academy.buyFamiliar();
+      },
+    });
+    this.academy = new AcademyController({
+      overlay: this.overlay,
+      audio: this.audio,
+      levelCount,
+      onPlayerChanged: () => {
+        // The backdrop was built with the old player in it.
+        this.previewLevel = 0;
       },
     });
   }
@@ -186,7 +200,7 @@ export class App implements FrameHost {
       return;
     }
 
-    this.showTitle();
+    this.showHome();
     this.publishHandle();
 
     // Neither is awaited: two megabytes of Havok and twenty audio clips must
@@ -279,29 +293,63 @@ export class App implements FrameHost {
 
   // --- Screens -------------------------------------------------------------
 
-  private showTitle(): void {
+  /** The Academy home, over a fresh backdrop of the selected level. */
+  private showHome(): void {
     this.currentPhase = 'title';
     this.session = null;
     this.juice.reset();
-
     this.loadPreview();
-    this.overlay.showTitle({
-      levelCount,
-      unlockedLevel: Math.min(levelCount, loadSave().unlockedLevel),
-      selectedLevel: this.options.level,
-    });
+    this.academy.showHome(this.options.level);
+  }
+
+  /** The level picker, behind the home's Play card. */
+  private showLevels(): void {
+    this.currentPhase = 'title';
+    this.academy.showLevels(this.options.level);
+  }
+
+  /** A card was tapped: `play` is the picker, the rest are rooms. */
+  private openRoom(room: RoomId): void {
+    if (this.currentPhase !== 'title') return;
+    if (room === 'play') this.showLevels();
+    else this.academy.openRoom(room);
   }
 
   private selectLevel(level: number): void {
     if (this.currentPhase !== 'title') return;
     this.options.level = clampLevel(level, levelCount);
-    this.showTitle();
+    // The backdrop is the level the player is about to walk, so it changes
+    // with the chip rather than only when Play is tapped.
+    this.loadPreview();
+    this.showLevels();
   }
 
-  /** Builds the level shown behind the title screen and hands it to the renderer. */
+  /**
+   * Re-paints whatever menu is up after a debug injection. The home is the
+   * app's to re-show rather than the controller's, because its backdrop is a
+   * generated level.
+   */
+  private repaintMenu(): void {
+    if (this.currentPhase !== 'title') return;
+    if (this.academy.menu === 'home') this.showHome();
+    else this.academy.repaint(this.options.level);
+  }
+
+  /**
+   * Builds the level shown behind the Academy and hands it to the renderer.
+   *
+   * Skipped when the standing preview is already the right one: the Academy's
+   * screens come and go with every Back tap, and a rebuild is a generated
+   * level plus a renderer and physics reload for a backdrop that has not
+   * changed. A purchase clears it (`AcademyController` calls back), because
+   * upgrades change how many apprentices are standing there.
+   */
   private loadPreview(): void {
-    const preview = new RunSession(this.options.level, this.options);
+    if (this.preview !== null && this.previewLevel === this.options.level) return;
+
+    const preview = new RunSession(this.options.level, this.options, this.academy.player);
     this.preview = preview;
+    this.previewLevel = this.options.level;
     this.renderer.loadLevel(preview.level);
     this.physicsLayer?.loadLevel(preview.level);
     this.renderer.update(preview.state, NO_EVENTS, 0);
@@ -309,7 +357,7 @@ export class App implements FrameHost {
   }
 
   private startRun(): void {
-    // The next title screen draws a fresh preview whatever happens here.
+    // The next Academy screen draws a fresh preview whatever happens here.
     this.driver.markPreviewDirty();
     // Cheap when the boot pass already did the work, which is the normal case;
     // this is the guarantee that nothing compiles inside the run's frames even
@@ -318,9 +366,12 @@ export class App implements FrameHost {
     // A level is a fresh measurement: the ladder starts again at rung 0 and
     // ignores the first seconds of load noise (`src/core/quality.ts`).
     this.ladder.beginLevel();
-    const session = new RunSession(this.options.level, this.options);
+    // The player is read once, here: the level is generated with their
+    // upgrades and the run starts with the staff they chose (D35).
+    const session = new RunSession(this.options.level, this.options, this.academy.player);
     this.session = session;
     this.preview = null;
+    this.previewLevel = 0;
     this.juice.reset();
     this.audio.beginRun();
 
@@ -333,15 +384,31 @@ export class App implements FrameHost {
     this.driver.start();
   }
 
+  /**
+   * The run is over: pay it, remember what was met, and show the sheet.
+   *
+   * The first-clear flag is read before the level is marked, and the level is
+   * only marked once the coins for it have been counted — so the bonus is paid
+   * exactly once however the run ended. `RunSession.advanceEnding` has already
+   * written the unlock by the time this runs, which is why the save is re-read
+   * rather than assumed.
+   */
   private showResult(session: RunSession): void {
     this.currentPhase = 'result';
     this.juice.endDefeatCrawl();
+
+    const level = this.options.level;
+    const payout = this.academy.payRun(session, level);
+
     this.overlay.showResult({
-      levelIndex: this.options.level,
+      levelIndex: level,
       won: session.won,
       survivors: session.state.survivors,
       peakCount: session.state.peakCount,
-      canAdvance: this.options.level < levelCount,
+      coins: payout.coins,
+      totalCoins: payout.totalCoins,
+      firstClear: payout.firstClear,
+      canAdvance: level < levelCount,
     });
   }
 
@@ -411,6 +478,11 @@ export class App implements FrameHost {
       quality: () => this.ladder.rung,
       draws: () => ({ current: this.renderer.drawCalls, peak: this.driver.peakDrawCalls }),
       shaders: () => this.renderer.shaderStats,
+      player: () => this.academy.player,
+      setPlayer: (patch: unknown) => {
+        this.academy.setPlayer(patch);
+        this.repaintMenu();
+      },
     };
     globalThis.__arcane = handle;
   }

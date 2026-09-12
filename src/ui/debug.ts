@@ -18,7 +18,13 @@
 
 import type { GateKind, RunState, SimEvent } from '@/sim';
 
-import { CAPTURE_SECONDS, CaptureRecorder } from './capture';
+import {
+  CAPTURE_SECONDS,
+  CaptureRecorder,
+  SPIKE_MS,
+  SPIKE_WINDOW_SECONDS,
+  SpikeWindow,
+} from './capture';
 import './debug.css';
 
 /** How many event lines the panel keeps. */
@@ -107,6 +113,8 @@ export class DebugPanel {
   private readonly elements: DebugElements;
   private readonly log: LogEntry[] = [];
   private readonly capture = new CaptureRecorder();
+  /** Frames over 20 ms in the last ten seconds — Milestone 4's hitch hunt. */
+  private readonly spikes = new SpikeWindow();
 
   private enabled = false;
   private fps = 0;
@@ -115,6 +123,7 @@ export class DebugPanel {
   private physicsMs = 0;
   private sinceRefresh = REFRESH_INTERVAL;
   private shownLabel = '';
+  private spikeCount = 0;
 
   constructor(elements: DebugElements, signal: AbortSignal) {
     this.elements = elements;
@@ -136,6 +145,9 @@ export class DebugPanel {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     this.elements.root.hidden = !enabled;
+    // The window is wall-clock, and a hidden panel is fed no frames at all, so
+    // a count carried across a gap would describe a time nobody was watching.
+    if (enabled) this.spikes.reset();
     // A hidden panel stops being fed frames, so a capture left running would
     // hang half-recorded until the panel came back.
     if (!enabled && this.capture.active) this.stopCapture();
@@ -154,6 +166,7 @@ export class DebugPanel {
     // a phone's hot spot shows up as a rising average, not as one bad frame.
     // The capture is the opposite — it keeps every raw sample.
     if (dt > 0) {
+      this.spikeCount = this.spikes.add(now());
       this.fps += (1 / dt - this.fps) * AVERAGE_WEIGHT;
       this.simMs += (stats.simMs - this.simMs) * AVERAGE_WEIGHT;
       this.renderMs += (stats.renderMs - this.renderMs) * AVERAGE_WEIGHT;
@@ -233,6 +246,7 @@ export class DebugPanel {
         (stats.labelsDropped > 0 ? ` DROP ${String(stats.labelsDropped)}` : ''),
       `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
         `  p95 ${stats.qualityP95.toFixed(1)}ms` +
+        `  >${String(SPIKE_MS)}ms ${String(this.spikeCount)}/${String(SPIKE_WINDOW_SECONDS)}s` +
         (stats.heapMb > 0
           ? `  heap ${stats.heapMb.toFixed(0)}MB gc ${String(stats.heapDrops)}`
           : ''),
@@ -344,6 +358,12 @@ function describe(event: SimEvent): string {
       return `shatter #${String(event.enemyId)}`;
     case 'enemySlowed':
       return `slow #${String(event.enemyId)} ${event.seconds.toFixed(1)}s`;
+    case 'enemyBurning':
+      return `burn #${String(event.enemyId)} ${event.seconds.toFixed(1)}s`;
+    case 'familiarShot':
+      return `wisp >#${String(event.targetId)}`;
+    case 'wallBlocked':
+      return `wall ${event.boundary > 0 ? 'right' : 'left'}`;
     case 'splash':
       return `splash r${event.radius.toFixed(1)}`;
     case 'chain':
@@ -364,6 +384,11 @@ function describe(event: SimEvent): string {
       return 'boss killed';
     case 'runEnded':
       return `runEnded ${event.status} surv ${String(event.survivors)}`;
+    default:
+      // An event the sim added and the panel has not been taught yet. Printing
+      // its name is more use than the `undefined` an exhaustive switch would
+      // leave in the log.
+      return (event as { type: string }).type;
   }
 }
 

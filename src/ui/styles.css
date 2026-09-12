@@ -161,8 +161,8 @@ body {
 }
 
 /*
- * The title is a shop window: the dressed road and the idle mages behind it are
- * the first thing a player sees, so it does not dim the scene at all. Milestone
+ * The Academy is a shop window: the dressed road and the idle mages behind it
+ * are the first thing a player sees, so it does not dim the scene at all. Milestone
  * 2's dark violet wash down from the top is gone with the dusk it was drawn
  * for — over D28's daylight sky it read as a bruise — and what is left is a
  * breath of warm light off the road. The controls carry their own panel
@@ -171,7 +171,7 @@ body {
  * The result screen is the opposite: the run is over and the numbers are the
  * point, so it lays a near-opaque sheet of paper over the whole thing.
  */
-.screen--title {
+.screen--academy {
   background: radial-gradient(
     150% 50% at 50% 100%,
     rgba(255, 247, 233, 0.35),
@@ -263,7 +263,7 @@ body {
  * to cut it out of the pale blue, and a tight drop shadow under the stroke so
  * it does not lie flat on the dome.
  */
-.screen--title .screen__title {
+.screen--academy .screen__title {
   color: var(--ink-bright);
   -webkit-text-stroke: 0.16rem var(--outline);
   paint-order: stroke fill;

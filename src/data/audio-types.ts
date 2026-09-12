@@ -12,6 +12,20 @@
  * -1 dBFS — so a clip at 1.0 is as loud as the hardware goes.
  */
 
+/**
+ * One reused clip, pitched (and levelled) into a new voice. Milestone 4 adds
+ * five of these — the Academy's purchase, unlock and reveal, the coin tick, the
+ * wall bump and the wisp's spark — and not one new asset: a clip at a different
+ * speed is a different sound, and the build budget is 12 MB.
+ */
+export interface Cue {
+  /** Asset id from `assets.json`. */
+  sound: string;
+  playbackRate: number;
+  /** Scales the clip's own `volume`; 1 leaves it as it is. */
+  volume: number;
+}
+
 export interface AudioMix {
   /** Per-clip playback volume, by asset id. */
   volume: Readonly<Record<string, number>>;
@@ -39,6 +53,12 @@ export interface AudioMix {
     leak: number;
     /** A stream ran out. Two lanes of a horde clear together; this is the flam. */
     streamClear: number;
+    /** The squad pressed against a wall (D32); one knock, not a scrape. */
+    wallBump: number;
+    /** The wisp's spark. It fires on its own clock, so this is the ceiling. */
+    familiarShot: number;
+    /** Two taps on a Buy button in the same breath are one purchase sound. */
+    purchase: number;
   };
   /**
    * Shots are the one event that can arrive hundreds of times in a frame, so
@@ -89,4 +109,27 @@ export interface AudioMix {
    * gate because a gate is a panel the squad is standing in.
    */
   streamClear: { sound: string; playbackRate: number };
+  /**
+   * The squad walking into a lane wall: the light hit clip dropped almost an
+   * octave, which is a knock on stone rather than a blow landing.
+   */
+  wallBump: Cue;
+  /**
+   * The wisp's spark: Storm's bolt taken up high and quiet, so a familiar
+   * firing twice a second sits under the squad's own volley instead of over it.
+   */
+  familiarShot: Cue;
+  /**
+   * The Academy's four voices, all reused clips (plan, "Academy"): a purchase
+   * is the units-gained chime brightened, an unlock is the gate's good-news
+   * latch slowed into something heavier, a room reveal is the win fanfare
+   * pitched up, and a coin tick is the gate tick — the same click the result
+   * numbers roll on, higher, so coins read as coins.
+   */
+  ui: {
+    purchase: Cue;
+    unlock: Cue;
+    roomReveal: Cue;
+    coinTick: Cue;
+  };
 }

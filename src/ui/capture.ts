@@ -18,6 +18,72 @@ import type { DebugStats } from './debug';
 export const CAPTURE_SECONDS = 10;
 
 /**
+ * A frame longer than this is a hitch (Milestone 4, "Polish"). Sixty frames a
+ * second is 16.7 ms, so 20 ms is the first frame the eye can see stumble; the
+ * product owner's capture is meant to report under three of them.
+ */
+export const SPIKE_MS = 20;
+
+/** How far back the panel's live spike count looks. */
+export const SPIKE_WINDOW_SECONDS = 10;
+
+/**
+ * Spike timestamps kept for the live count. A window with more spikes than
+ * this is already a broken frame rate, so the ring forgets its oldest rather
+ * than growing — the number it reports stops being exact long after it has
+ * stopped being useful.
+ */
+const SPIKE_CAPACITY = 512;
+
+/**
+ * How many of the last `SPIKE_WINDOW_SECONDS` of frames took longer than
+ * `SPIKE_MS`, as a rolling count.
+ *
+ * The capture answers the same question for its own ten seconds; this one is
+ * for the panel, which is up the whole time the product owner is playing. One
+ * `Float64Array` allocated once, a head and a length: recording a frame is two
+ * stores and no allocation, which matters because the thing being measured is
+ * allocation-driven hitching.
+ */
+export class SpikeWindow {
+  private readonly times = new Float64Array(SPIKE_CAPACITY);
+  private start = 0;
+  private length = 0;
+  private last = 0;
+
+  reset(): void {
+    this.start = 0;
+    this.length = 0;
+    this.last = 0;
+  }
+
+  /** Records one drawn frame and returns the spikes now inside the window. */
+  add(nowMs: number): number {
+    if (this.last > 0 && nowMs - this.last > SPIKE_MS) this.push(nowMs);
+    this.last = nowMs;
+    this.trim(nowMs);
+    return this.length;
+  }
+
+  private push(at: number): void {
+    const index = (this.start + this.length) % SPIKE_CAPACITY;
+    this.times[index] = at;
+    if (this.length < SPIKE_CAPACITY) this.length++;
+    // Full: the newest sample took the oldest one's slot, so the window starts
+    // one later.
+    else this.start = (this.start + 1) % SPIKE_CAPACITY;
+  }
+
+  private trim(nowMs: number): void {
+    const floor = nowMs - SPIKE_WINDOW_SECONDS * 1000;
+    while (this.length > 0 && (this.times[this.start] ?? 0) < floor) {
+      this.start = (this.start + 1) % SPIKE_CAPACITY;
+      this.length--;
+    }
+  }
+}
+
+/**
  * Sample slots: ten seconds at 240 fps, which no phone will reach. A capture
  * that somehow overruns it stops sampling rather than growing the buffer.
  */
@@ -47,6 +113,8 @@ export class CaptureRecorder {
   private squadMin = 0;
   private squadMax = 0;
   private sawRun = false;
+  /** Frames over `SPIKE_MS` in this capture; the milestone's hitch counter. */
+  private over20 = 0;
 
   get active(): boolean {
     return this.recording;
@@ -72,6 +140,7 @@ export class CaptureRecorder {
     this.squadMin = 0;
     this.squadMax = 0;
     this.sawRun = false;
+    this.over20 = 0;
   }
 
   cancel(): void {
@@ -111,7 +180,12 @@ export class CaptureRecorder {
       // frame reports itself as 20 fps. The worst frame is the whole point of
       // a capture, so this one number is measured, not inherited.
       const since = nowMs - this.lastSampleAt;
-      if (this.lastSampleAt > 0 && since > 0) buffers.fps[this.fpsSamples++] = 1000 / since;
+      if (this.lastSampleAt > 0 && since > 0) {
+        buffers.fps[this.fpsSamples++] = 1000 / since;
+        // The same wall-clock gap the frame rate is computed from: a hitch is
+        // a frame that took too long, not a frame the loop clamped.
+        if (since > SPIKE_MS) this.over20++;
+      }
       this.lastSampleAt = nowMs;
     }
 
@@ -158,7 +232,7 @@ export class CaptureRecorder {
 
     return [
       header,
-      `fps ${triple(fps, 0)}`,
+      `fps ${triple(fps, 0)}  over20 ${String(this.over20)}`,
       `sim ${triple(sim, 2)} ms`,
       `rnd ${triple(render, 2)} ms`,
       `phy ${triple(physics, 2)} ms`,

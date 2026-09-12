@@ -21,6 +21,9 @@
 import './styles.css';
 // The screens' own controls, after the layout and the tokens they use.
 import './screens.css';
+// The Academy's purse and cards, then the rooms behind them (D33).
+import './academy.css';
+import './rooms.css';
 
 /** CSS `font` shorthands, one per face `styles.css` declares. */
 const DISPLAY_FACES = ['700 40px Cinzel', '900 40px Cinzel'] as const;

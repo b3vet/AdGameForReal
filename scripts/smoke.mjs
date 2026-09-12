@@ -85,6 +85,30 @@ const RUNS = [
     endShot: 'end-random.png',
   },
   {
+    // The Academy with something in it (D33): a save injected through the
+    // debug handle before the home is photographed, so the purse, the bought
+    // upgrades and the chosen staff are all on screen — and the result sheet
+    // at the end is the one with coins on it.
+    label: 'academy level 6',
+    query: `?bot=greedy&level=6&seed=3&turbo=${TURBO}&screenshot=1`,
+    save: {
+      coins: 2400,
+      upgrades: { damage: 3, fireRate: 2, startCount: 0, gateBonus: 0, bossDamage: 0 },
+      staffs: {
+        ember: { unlocked: true, tier: 1 },
+        storm: { unlocked: true, tier: 1 },
+        frost: { unlocked: false, tier: 1 },
+      },
+      selectedStaff: 'storm',
+      familiar: { unlocked: true, tier: 1 },
+      unlockedLevel: 7,
+    },
+    titleShot: 'academy.png',
+    menuShots: [{ open: '#academy-yard', name: 'yard.png', back: '#room-back' }],
+    shots: [],
+    endShot: 'result-coins.png',
+  },
+  {
     label: 'greedy level 10',
     // Seed 2 is the one whose level 10 puts a staff gate on row 4 of twenty,
     // so the staff shot has something to photograph early in the run.

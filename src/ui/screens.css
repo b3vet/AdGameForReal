@@ -177,3 +177,65 @@
 .mute[aria-pressed='true'] .mute__slash {
   display: inline;
 }
+
+/* --- Result: coins and the first-clear badge (Milestone 4, D33) ----------- */
+
+.stats__row--coins {
+  background: rgba(245, 185, 60, 0.18);
+}
+
+.stats__row--coins .stats__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.result__badge {
+  margin: 0.5rem 0 0;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd873, #f0a92c);
+  color: #4a2c05;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.result__badge--pop {
+  animation: badge-pop 700ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.result__total {
+  margin: 0.6rem 0 0;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.result__total span {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result__badge--pop {
+    animation-duration: 1ms;
+  }
+}

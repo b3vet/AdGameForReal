@@ -259,6 +259,10 @@ export class FrameDriver {
       this.physicsEvents.absorb(events);
       host.audio.onEvents(events, session.state);
       host.juice.scan(events);
+      // What the player has met, for the Bestiary (D33). Cheap by
+      // construction: it stops looking things up once it has seen both block
+      // kinds (`src/core/session.ts`).
+      session.absorb(events);
       if (i === chunks - 1) break;
 
       host.renderer.absorbEvents(events);

@@ -45,7 +45,10 @@
     "stomp": 150,
     "uiTap": 60,
     "leak": 167,
-    "streamClear": 200
+    "streamClear": 200,
+    "wallBump": 220,
+    "familiarShot": 110,
+    "purchase": 70
   },
   "shot": {
     "windowMs": 100,
@@ -74,5 +77,37 @@
   "streamClear": {
     "sound": "sfx_gate_pass_good",
     "playbackRate": 1.55
+  },
+  "wallBump": {
+    "sound": "sfx_enemy_hit",
+    "playbackRate": 0.48,
+    "volume": 0.7
+  },
+  "familiarShot": {
+    "sound": "sfx_shot_storm",
+    "playbackRate": 1.85,
+    "volume": 0.5
+  },
+  "ui": {
+    "purchase": {
+      "sound": "sfx_units_gained",
+      "playbackRate": 1.22,
+      "volume": 0.9
+    },
+    "unlock": {
+      "sound": "sfx_gate_pass_good",
+      "playbackRate": 0.92,
+      "volume": 1
+    },
+    "roomReveal": {
+      "sound": "sfx_win_fanfare",
+      "playbackRate": 1.18,
+      "volume": 0.7
+    },
+    "coinTick": {
+      "sound": "sfx_gate_tick",
+      "playbackRate": 1.5,
+      "volume": 0.9
+    }
   }
 }

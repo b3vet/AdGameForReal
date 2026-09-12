@@ -87,3 +87,35 @@
 - Open: a peak and boss-HP step between levels 10 and 11; walls only nudge
   because the 2 m gate clearance allows a last-second swerve; `events.ts`
   at 412 lines; `dpsTrim` unchanged.
+
+## 2026-09-13 — Phase B3: Academy, coins, save v2 (verified and committed)
+
+- Save v2 holds `unlockedLevel`, `muted`, `debug`, `firstClears`,
+  `revealedRooms` and the `PlayerState`; v1 migrates once with defaults;
+  corrupt or absent storage yields a fresh save; every field is repaired on
+  read (clamped levels, tiers on unowned staffs walked back, selected staff
+  reset to ember when unowned). 24 tests.
+- The home screen is the Academy over the dressed road: coin pill, cards
+  for Play, Yard, Workbench, Sanctum and Bestiary, locked cards showing
+  their level, a one-shot reveal persisted per room. Play opens a two-page
+  level picker. Rooms share one overlay screen. Result adds coins with a
+  count-up, the total, and a first-clear badge; the Academy is always
+  offered so a won run can shop. Copy and unlock levels in
+  `src/data/academy.json`.
+- The player flows `AcademyController → RunSession → generateLevel/Run`;
+  rewards paid on `runEnded`; the bestiary is a Set fed by activation
+  events with no allocation.
+- Sounds for purchase, unlock, reveal, coin tick, wall bump and wisp shot
+  from reused clips with pitch and volume in `audio.json`.
+- Smoke gains a fourth run with an injected save (coins, two upgrades,
+  storm, wisp) and shots of the home, the yard and the coin result; a
+  cleared level that pays no coins now fails the smoke. About 5.5 minutes.
+- Incident: a git stash from another agent briefly reverted this agent's
+  tracked files mid-flight; it restored them from a backup and the tech
+  lead verified the tree (no stash entries, typecheck, lint and 284 tests
+  clean). Agents are reminded not to run git commands that touch the tree.
+- Tech lead frame review: the wordmark sits mid-screen over the gate
+  preview on the home screen and should move up (Phase C).
+- Open: `src/core/player.ts` deep-imports `@/sim/player` until the sim
+  index re-exports the meta layer; the first Yard reveal is silent because
+  audio is locked before the first gesture.

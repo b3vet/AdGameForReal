@@ -3,8 +3,16 @@
  * owns nothing else — the `App` state machine decides *when* each screen shows,
  * the overlay only knows *how*.
  *
- * Element ids are a contract with `scripts/smoke.mjs`, which clicks
- * `#play-button` — do not rename it without updating the smoke test.
+ * Five screens: the Academy home (`#title-screen`), the level picker
+ * (`#levels-screen`), the rooms (`#room-screen`), the HUD and the result sheet.
+ * Three of them are delegated — `./academy.ts` owns the home and the picker,
+ * `./rooms.ts` the four rooms, `./result.ts` the result numbers — so this file
+ * stays what it has always been: which screen is up, and one place where every
+ * listener is added and removed.
+ *
+ * Element ids are a contract with `scripts/smoke-run.mjs`, which clicks
+ * `#academy-play` and then `#play-button` — do not rename either without
+ * updating the smoke test.
  *
  * Every listener this class adds goes through one `AbortController`, so
  * `dispose` takes them all off in one call and a re-created app never ends up
@@ -16,12 +24,19 @@ import './styles.css';
 // at boot (see `./fonts`), which the overlay itself only benefits from.
 import './fonts';
 
+import type { PlayerState, RoomId } from '@/core/player';
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
+import { Academy } from './academy';
+import type { AcademyView } from './academy';
 import { Confetti } from './confetti';
 import { DebugPanel } from './debug';
 import type { DebugStats } from './debug';
 import { Hud } from './hud';
+import { ResultPanel } from './result';
+import type { ResultView } from './result';
+import { Rooms } from './rooms';
+import type { RoomBump } from './rooms';
 import { watchTripleTap } from './taps';
 
 export interface OverlayCallbacks {
@@ -30,7 +45,11 @@ export interface OverlayCallbacks {
   onNext: () => void;
   /** A level picker chip was tapped. The app decides whether to accept it. */
   onSelectLevel: (level: number) => void;
-  /** "Levels" on the result screen: back to the title and its level picker. */
+  /** An Academy card: `play` opens the picker, the rest open a room. */
+  onOpenRoom: (room: RoomId) => void;
+  /** Back, from the picker or from a room. */
+  onCloseRoom: () => void;
+  /** "Academy" on the result screen: back to the home and its cards. */
   onLevels: () => void;
   /** Any button at all, for the tap sound. Fires before the button's own call. */
   onTap: () => void;
@@ -43,68 +62,99 @@ export interface OverlayCallbacks {
   onToggleDebug: () => void;
   /** One step of the result screen's count-up, for its tick sound. */
   onCountTick: () => void;
+  /** One step of the coin count-up; a brighter tick. */
+  onCoinTick: () => void;
+  /** A Buy button. The app owns the purse and decides whether it happens. */
+  onBuyUpgrade: (id: string) => void;
+  onBuyStaff: (id: WeaponId) => void;
+  onSelectStaff: (id: WeaponId) => void;
+  onBuyFamiliar: () => void;
 }
 
-export interface TitleView {
-  levelCount: number;
-  unlockedLevel: number;
-  selectedLevel: number;
-}
-
-export interface ResultView {
-  levelIndex: number;
-  won: boolean;
-  survivors: number;
-  peakCount: number;
-  /** False on the last level, where there is nothing left to unlock. */
-  canAdvance: boolean;
-}
-
-/** How long the result numbers take to roll up, and the gap between ticks. */
-const COUNT_UP_SECONDS = 0.7;
-const COUNT_TICK_MS = 55;
+export type { AcademyView, ResultView, RoomBump };
 
 export class Overlay {
-  private readonly title: HTMLElement;
+  private readonly academyScreen: HTMLElement;
+  private readonly levelsScreen: HTMLElement;
+  private readonly roomScreen: HTMLElement;
   private readonly hudRoot: HTMLElement;
   private readonly result: HTMLElement;
-  private readonly picker: HTMLElement;
-  private readonly resultTitle: HTMLElement;
-  private readonly resultKicker: HTMLElement;
-  private readonly resultSurvivors: HTMLElement;
-  private readonly resultPeak: HTMLElement;
-  private readonly nextButton: HTMLButtonElement;
-  private readonly retryButton: HTMLButtonElement;
-  private readonly levelsButton: HTMLButtonElement;
   private readonly muteButtons: HTMLButtonElement[];
 
+  private readonly academy: Academy;
+  private readonly rooms: Rooms;
+  private readonly resultPanel: ResultPanel;
   private readonly hud: Hud;
   private readonly debugPanel: DebugPanel;
   private readonly confetti: Confetti;
 
-  private readonly levelChips: HTMLButtonElement[] = [];
   private readonly callbacks: OverlayCallbacks;
   private readonly listeners = new AbortController();
 
-  private countUpRaf: number | null = null;
-
   constructor(root: ParentNode, callbacks: OverlayCallbacks) {
     this.callbacks = callbacks;
-    this.title = requireElement(root, '#title-screen');
+    this.academyScreen = requireElement(root, '#title-screen');
+    this.levelsScreen = requireElement(root, '#levels-screen');
+    this.roomScreen = requireElement(root, '#room-screen');
     this.hudRoot = requireElement(root, '#hud');
     this.result = requireElement(root, '#result-screen');
-    this.picker = requireElement(root, '#level-picker');
-    this.resultTitle = requireElement(root, '#result-title');
-    this.resultKicker = requireElement(root, '#result-kicker');
-    this.resultSurvivors = requireElement(root, '#result-survivors');
-    this.resultPeak = requireElement(root, '#result-peak');
-    this.nextButton = requireElement<HTMLButtonElement>(root, '#next-button');
-    this.retryButton = requireElement<HTMLButtonElement>(root, '#retry-button');
-    this.levelsButton = requireElement<HTMLButtonElement>(root, '#levels-button');
     this.muteButtons = [
       requireElement<HTMLButtonElement>(root, '#mute-title'),
       requireElement<HTMLButtonElement>(root, '#mute-hud'),
     ];
+
+    const bind = (button: HTMLButtonElement, action: () => void): void => {
+      this.onTap(button, action);
+    };
+
+    this.academy = new Academy(
+      {
+        cards: requireElement(root, '#academy-cards'),
+        coinValue: requireElement(root, '#academy-coin-value'),
+        picker: requireElement(root, '#level-picker'),
+        caption: requireElement(root, '#picker-caption'),
+        pager: requireElement(root, '#picker-pages'),
+      },
+      {
+        onOpenRoom: callbacks.onOpenRoom,
+        onSelectLevel: callbacks.onSelectLevel,
+      },
+      bind,
+    );
+
+    this.rooms = new Rooms(
+      {
+        title: requireElement(root, '#room-title'),
+        subtitle: requireElement(root, '#room-subtitle'),
+        coinValue: requireElement(root, '#room-coin-value'),
+        yard: requireElement(root, '#yard-rows'),
+        workbench: requireElement(root, '#workbench-cards'),
+        sanctum: requireElement(root, '#sanctum-card'),
+        bestiary: requireElement(root, '#bestiary-cards'),
+      },
+      {
+        onBuyUpgrade: callbacks.onBuyUpgrade,
+        onBuyStaff: callbacks.onBuyStaff,
+        onSelectStaff: callbacks.onSelectStaff,
+        onBuyFamiliar: callbacks.onBuyFamiliar,
+      },
+      bind,
+    );
+
+    this.resultPanel = new ResultPanel(
+      {
+        kicker: requireElement(root, '#result-kicker'),
+        title: requireElement(root, '#result-title'),
+        badge: requireElement(root, '#result-first-clear'),
+        survivors: requireElement(root, '#result-survivors'),
+        peak: requireElement(root, '#result-peak'),
+        coins: requireElement(root, '#result-coins'),
+        total: requireElement(root, '#result-total'),
+        next: requireElement<HTMLButtonElement>(root, '#next-button'),
+        levels: requireElement<HTMLButtonElement>(root, '#levels-button'),
+      },
+      { onCountTick: callbacks.onCountTick, onCoinTick: callbacks.onCoinTick },
+    );
 
     this.hud = new Hud({
       levelLabel: requireElement(root, '#hud-level'),
@@ -138,77 +188,49 @@ export class Overlay {
     );
 
     this.onTap(requireElement<HTMLButtonElement>(root, '#play-button'), callbacks.onPlay);
-    this.onTap(this.retryButton, callbacks.onRetry);
-    this.onTap(this.nextButton, callbacks.onNext);
-    this.onTap(this.levelsButton, callbacks.onLevels);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#retry-button'), callbacks.onRetry);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#next-button'), callbacks.onNext);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#levels-button'), callbacks.onLevels);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#levels-back'), callbacks.onCloseRoom);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#room-back'), callbacks.onCloseRoom);
     for (const button of this.muteButtons) this.onTap(button, callbacks.onToggleMute);
   }
 
-  showTitle(view: TitleView): void {
-    this.buildPicker(view.levelCount);
-    for (const chip of this.levelChips) {
-      const level = Number(chip.dataset['level']);
-      const unlocked = level <= view.unlockedLevel;
-      chip.disabled = !unlocked;
-      chip.setAttribute('aria-pressed', level === view.selectedLevel ? 'true' : 'false');
-    }
+  /** The Academy home: the purse, the five cards, and any reveal owed. */
+  showAcademy(view: AcademyView): void {
+    this.academy.showHome(view);
+    this.showOnly(this.academyScreen);
+  }
 
-    this.stopCountUp();
-    this.confetti.stop();
-    this.title.hidden = false;
-    this.hudRoot.hidden = true;
-    this.result.hidden = true;
+  /** The level picker behind the Play card. */
+  showLevels(view: AcademyView): void {
+    this.academy.showLevels(view);
+    this.showOnly(this.levelsScreen);
+  }
+
+  /** One of the four rooms, painted from the player's state. */
+  showRoom(room: RoomId, player: PlayerState, bump: RoomBump | null = null): void {
+    this.rooms.show(room, player, bump);
+    this.academy.setCoins(player.coins);
+    this.showOnly(this.roomScreen);
   }
 
   showPlaying(levelIndex: number, staff: WeaponId): void {
-    this.stopCountUp();
-    this.confetti.stop();
     this.hud.begin(levelIndex, staff);
-    this.title.hidden = true;
-    this.hudRoot.hidden = false;
-    this.result.hidden = true;
+    this.showOnly(this.hudRoot);
   }
 
-  /**
-   * Copy is in the epic register (docs/06-milestone-2-plan.md) and cut to the
-   * shortest phrase that still says it (plan, "UI text, font"): a win is a
-   * slaughter, a loss is being overwhelmed, and the next level is an ascent.
-   */
   showResult(view: ResultView): void {
-    const survivors = Math.max(0, Math.round(view.survivors));
-    const peak = Math.max(0, Math.round(view.peakCount));
-
-    this.resultKicker.textContent = view.won ? 'Horde slain' : 'Overwhelmed';
-    this.resultTitle.textContent = `Level ${String(view.levelIndex)}`;
-    this.nextButton.hidden = !(view.won && view.canAdvance);
-    // "Levels" is the way out when there is no next level to ascend to; on a
-    // won level with one waiting it would only compete with "Ascend".
-    this.levelsButton.hidden = view.won && view.canAdvance;
-
-    this.title.hidden = true;
-    // The HUD would collide with the result panel's own numbers, and its job is
-    // done: the final count is on this screen as "Survivors".
-    this.hudRoot.hidden = true;
-    this.result.hidden = false;
-
-    if (view.won) {
-      this.confetti.burst();
-      this.countUp(survivors, peak);
-    } else {
-      this.stopCountUp();
-      this.confetti.stop();
-      this.resultSurvivors.textContent = String(survivors);
-      this.resultPeak.textContent = String(peak);
-    }
+    // The switch first, the numbers second: `showOnly` stops whatever the last
+    // screen was animating, and that includes this screen's own count-up.
+    this.showOnly(this.result);
+    this.resultPanel.show(view);
+    if (view.won) this.confetti.burst();
   }
 
   /** `?scene=render-test` and `?scene=stress` show the raw scene, no overlay. */
   hideAll(): void {
-    this.stopCountUp();
-    this.confetti.stop();
-    this.title.hidden = true;
-    this.hudRoot.hidden = true;
-    this.result.hidden = true;
+    this.showOnly(null);
   }
 
   updateHud(state: Readonly<RunState>, events: readonly SimEvent[]): void {
@@ -243,9 +265,28 @@ export class Overlay {
   }
 
   dispose(): void {
-    this.stopCountUp();
+    this.resultPanel.stop();
     this.confetti.dispose();
     this.listeners.abort();
+  }
+
+  /**
+   * Exactly one screen is up at a time, and every switch stops whatever the
+   * last one was animating: a count-up left running behind the Academy would
+   * still be asking for tick sounds a minute later.
+   */
+  private showOnly(screen: HTMLElement | null): void {
+    this.resultPanel.stop();
+    if (screen !== this.result) this.confetti.stop();
+    for (const candidate of [
+      this.academyScreen,
+      this.levelsScreen,
+      this.roomScreen,
+      this.hudRoot,
+      this.result,
+    ]) {
+      candidate.hidden = candidate !== screen;
+    }
   }
 
   /** Wires a button: tap sound first, then what the button is for. */
@@ -258,78 +299,6 @@ export class Overlay {
       },
       { signal: this.listeners.signal },
     );
-  }
-
-  /**
-   * Rolls both result numbers up from zero. Ticks are throttled to the ear
-   * rather than to the frame: a 400-unit peak counting up at 60 fps would be a
-   * buzz, not a count.
-   */
-  private countUp(survivors: number, peak: number): void {
-    this.stopCountUp();
-    const start = typeof performance === 'undefined' ? 0 : performance.now();
-    let lastTick = start;
-    let shownSurvivors = -1;
-    let shownPeak = -1;
-
-    const step = (time: number): void => {
-      const t = Math.min(1, (time - start) / (COUNT_UP_SECONDS * 1000));
-      // Ease out: fast at the start, so the last few numbers are readable.
-      const eased = 1 - Math.pow(1 - t, 3);
-      const nextSurvivors = Math.round(survivors * eased);
-      const nextPeak = Math.round(peak * eased);
-
-      if (nextSurvivors !== shownSurvivors) {
-        shownSurvivors = nextSurvivors;
-        this.resultSurvivors.textContent = String(nextSurvivors);
-      }
-      if (nextPeak !== shownPeak) {
-        shownPeak = nextPeak;
-        this.resultPeak.textContent = String(nextPeak);
-        if (time - lastTick >= COUNT_TICK_MS) {
-          lastTick = time;
-          this.callbacks.onCountTick();
-        }
-      }
-
-      if (t >= 1) {
-        this.countUpRaf = null;
-        return;
-      }
-      this.countUpRaf = requestAnimationFrame(step);
-    };
-
-    this.resultSurvivors.textContent = '0';
-    this.resultPeak.textContent = '0';
-    this.countUpRaf = requestAnimationFrame(step);
-  }
-
-  private stopCountUp(): void {
-    if (this.countUpRaf === null) return;
-    cancelAnimationFrame(this.countUpRaf);
-    this.countUpRaf = null;
-  }
-
-  /** Chips are created once; later `showTitle` calls only re-flag them. */
-  private buildPicker(levelCount: number): void {
-    if (this.levelChips.length === levelCount) return;
-
-    this.picker.textContent = '';
-    this.levelChips.length = 0;
-
-    for (let level = 1; level <= levelCount; level++) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'picker__level';
-      chip.textContent = String(level);
-      chip.dataset['level'] = String(level);
-      chip.setAttribute('aria-label', `Level ${String(level)}`);
-      this.onTap(chip, () => {
-        this.callbacks.onSelectLevel(level);
-      });
-      this.picker.append(chip);
-      this.levelChips.push(chip);
-    }
   }
 }
 

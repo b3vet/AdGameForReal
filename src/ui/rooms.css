@@ -1,0 +1,236 @@
+/*
+ * The four Academy rooms behind the home's cards, and the level picker's screen
+ * (decision D33): the frosted list, its rows, the buy buttons and the bestiary.
+ *
+ * Split out of `./academy.css` when that file grew past the size rule; the
+ * tokens, the coin chip and the cards are still there, and this file only
+ * dresses what is inside a room. Loaded straight after it (`./fonts.ts`).
+ *
+ * The panel takes pointer events, unlike the rest of the overlay: a room can be
+ * taller than a short screen and has to scroll, and nothing is being steered
+ * while a menu is up.
+ */
+
+/* --- Rooms ---------------------------------------------------------------- */
+
+.screen--levels,
+.screen--room {
+  background: radial-gradient(
+    150% 50% at 50% 100%,
+    rgba(255, 247, 233, 0.4),
+    rgba(255, 247, 233, 0) 66%
+  );
+}
+
+/* Panel headings are ink on the plate, like the result sheet's. */
+.screen__title--panel {
+  font-size: clamp(1.5rem, 7vw, 2.1rem);
+  color: var(--ink-bright);
+  -webkit-text-stroke: 0.13rem var(--outline);
+  paint-order: stroke fill;
+  text-shadow: 0 0.14rem 0.05rem rgba(46, 30, 74, 0.35);
+}
+
+/* A chip rather than bare text: it sits on whatever the road happens to be
+   showing, and a drop shadow was not enough over a lit gate panel. */
+.room__subtitle {
+  margin: 0.4rem 0 0;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--chip-strong);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-bright);
+}
+
+/* Empty on the Yard and the Workbench: an empty chip is a floating smudge. */
+.room__subtitle:empty {
+  display: none;
+}
+
+.room__panel {
+  /* A room is a list, and a short screen has to be able to reach the end of
+     it; the overlay is click-through, so this is the one place that opts in. */
+  max-height: 62vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto;
+}
+
+.rows,
+.beasts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 1rem;
+  background: rgba(123, 76, 255, 0.09);
+  text-align: left;
+}
+
+.row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.row__name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.row__level {
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+.row__effect {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--ink-soft);
+}
+
+/* The evolution's promise: greyed while it is unbought, violet once it is. */
+.row__effect--tier2 {
+  color: rgba(43, 33, 64, 0.38);
+}
+
+.row__effect--tier2[data-active='true'] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.row__actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.row__actions > .button {
+  flex: 1 1 0;
+}
+
+.row[data-locked='true'] .row__name {
+  color: var(--ink-soft);
+}
+
+/* A purchase lands on the row it changed. */
+.row--bump {
+  animation: row-bump 420ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@keyframes row-bump {
+  0% {
+    transform: scale(1);
+    background: rgba(123, 76, 255, 0.09);
+  }
+  30% {
+    transform: scale(1.03);
+    background: rgba(123, 76, 255, 0.24);
+  }
+  100% {
+    transform: scale(1);
+    background: rgba(123, 76, 255, 0.09);
+  }
+}
+
+/* Buy, Unlock, Evolve, Select: the shared button at room scale. */
+.button--row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: 1.1rem;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  align-self: flex-start;
+}
+
+.button__price {
+  font-variant-numeric: tabular-nums;
+}
+
+.button:disabled {
+  color: rgba(43, 33, 64, 0.38);
+  background: rgba(228, 222, 238, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.12);
+  cursor: default;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+/* --- Bestiary ------------------------------------------------------------- */
+
+.beast {
+  padding: 0.7rem 0.8rem;
+  border-radius: 1rem;
+  background: rgba(123, 76, 255, 0.09);
+  text-align: left;
+}
+
+.beast__name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.beast__blurb {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--ink-soft);
+}
+
+.beast[data-seen='false'] {
+  background: rgba(228, 222, 238, 0.75);
+}
+
+.beast[data-seen='false'] .beast__name,
+.beast[data-seen='false'] .beast__blurb {
+  color: rgba(43, 33, 64, 0.4);
+  font-style: italic;
+}
+
+/* Landscape: the scroll box is shortened so Back cannot be pushed off-screen. */
+@media (orientation: landscape) {
+  .screen--room .screen__panel,
+  .screen--levels .screen__panel {
+    padding: 0.7rem 0.8rem 0.8rem;
+  }
+
+  .room__panel {
+    max-height: 46vh;
+  }
+
+  .room__subtitle {
+    margin-top: 0.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row--bump {
+    animation-duration: 1ms;
+  }
+}
