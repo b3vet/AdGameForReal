@@ -60,6 +60,10 @@ const RIGS = [
       { id: 'idle', animation: 'Idle', loop: true },
       { id: 'run', animation: 'Running_A', loop: true },
       { id: 'cast', animation: 'Spellcast_Shoot', loop: true },
+      // The second cast (Milestone 3): a crowd where every firing unit throws
+      // the same shape at the same tempo reads as one animated dummy repeated,
+      // so `SquadView` alternates the two by formation index.
+      { id: 'cast2', animation: 'Spellcast_Raise', loop: true },
       { id: 'cheer', animation: 'Cheer', loop: true },
     ],
   },
@@ -68,6 +72,10 @@ const RIGS = [
     model: 'models/skeleton_minion.glb',
     ranges: [
       { id: 'walk', animation: 'Walking_D_Skeletons', loop: true },
+      // A stream is hundreds of bodies down one lane; mixing a run into the
+      // walk (and jittering playback speed per body) is what makes it a river
+      // rather than a conveyor belt.
+      { id: 'walk2', animation: 'Running_C', loop: true },
       { id: 'death', animation: 'Death_C_Skeletons', loop: false },
     ],
   },
@@ -76,10 +84,18 @@ const RIGS = [
     model: 'models/skeleton_warrior.glb',
     ranges: [
       { id: 'walk', animation: 'Walking_C', loop: true },
+      { id: 'walk2', animation: 'Running_C', loop: true },
       { id: 'death', animation: 'Death_A', loop: false },
     ],
   },
 ];
+
+/**
+ * Ceiling on one rig's baked texture, in kilobytes (Milestone 3 plan: keep each
+ * VAT under about 300 KB). A range costs `width * frames * 8` bytes, so a clip
+ * added without looking is how a 180 KB texture becomes a megabyte.
+ */
+const MAX_VAT_KB = 300;
 
 /** Babylon's glTF loader lands animations on a 60 fps timeline. */
 const SOURCE_FPS = 60;
@@ -212,6 +228,11 @@ async function main() {
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
     total += bytes.length;
+    if (bytes.length > MAX_VAT_KB * 1024) {
+      throw new Error(
+        `${spec.rig}: ${(bytes.length / 1024).toFixed(0)} KB is over the ${MAX_VAT_KB} KB budget`,
+      );
+    }
     const names = Object.entries(manifest.ranges)
       .map(([id, r]) => `${id} ${String(r.from)}-${String(r.to)}`)
       .join(', ');

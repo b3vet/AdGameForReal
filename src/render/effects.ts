@@ -1,67 +1,88 @@
 /**
- * Spell effects: muzzle flashes, per-weapon impacts, the ember splash ring and
- * the storm chain.
+ * Spell effects: muzzle flashes, per-weapon impacts, the ember splash ring, the
+ * storm chain arc and the puff a leaked enemy leaves behind.
  *
- * Everything here is a pooled thin instance of a small emissive mesh rather
- * than a particle system. A `ParticleSystem` is a draw call each and the plan
- * gives the whole frame forty (docs/06-milestone-2-plan.md, "Performance"), so
- * particles are saved for the two moments that happen once — the boss's death
- * and the level clear — and the effects that fire hundreds of times a run are
- * built from geometry that batches.
+ * The bursts and flashes are flipbook sprites written into the shared
+ * `SpriteLayer` (`./sprites.ts`), so they cost no draw call of their own — they
+ * land in the same batch as the projectiles. The ring and the arc stay
+ * geometry, because a ring that has to be exactly `radius` metres across on the
+ * ground is a torus, not a billboard; both are restyled brighter for the
+ * daylight palette, where an additive shape on a light road has to work harder
+ * than it did on a near-black one.
  *
- * Nothing fades by alpha: a thin instance has no per-instance colour, so an
- * effect dies by shrinking to nothing instead. Additive blending on a dark
- * scene makes that read as burning out rather than falling away.
+ * Everything is pooled and capped at `POOL.impacts` live effects (the plan's
+ * 24), and nothing here allocates per frame.
  */
 
 import { Constants } from '@babylonjs/core/Engines/constants';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { Matrix } from '@babylonjs/core/Maths/math.vector';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
-import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
-import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
-import {
-  commitInstances,
-  createMatrixBuffer,
-  writeInstance,
-  writeRotatedInstance,
-} from './instanceBuffer';
+import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
 import { RingPool } from './rings';
+import type { SpriteLayer } from './sprites';
+import { bookCell, type SpriteBook } from './spriteSheets';
 import {
   CHAIN_DURATION,
+  CHAIN_Y,
   EMBER_COLOR,
   FROST_COLOR,
   IMPACT_DURATION,
   IMPACT_GLOW_BOOST,
+  IMPACT_SIZE,
+  IMPACT_Y,
   MUZZLE_DURATION,
+  MUZZLE_SIZE,
+  MUZZLE_Y,
   POOL,
   SPLASH_DURATION,
   STORM_COLOR,
 } from './theme';
-import { startWeapon, weaponIds } from '@/sim';
+import { startWeapon } from '@/sim';
 import type { WeaponId } from '@/sim';
-
-const IMPACT_Y = 0.7;
-const MUZZLE_Y = 0.72;
-const CHAIN_Y = 0.8;
 
 /**
  * The boss's death: one ring and a circle of bursts around the body. Three
- * metres, not five: the ring is additive and bloomed, and the Phase B2 frames
- * had it filling the arena over the body it was celebrating.
+ * metres, not five: the ring is additive, and the Phase B2 frames had it
+ * filling the arena over the body it was celebrating.
  */
 const BOSS_DEATH_RING = 3;
 const BOSS_DEATH_BURSTS = 8;
 const BOSS_DEATH_SPREAD = 1.4;
 
+/** Which impact flipbook each staff throws. */
+const IMPACT_BOOKS: Record<WeaponId, SpriteBook> = {
+  ember: 'emberImpact',
+  storm: 'stormImpact',
+  frost: 'frostImpact',
+};
+
+/**
+ * The puff a leaked stream body leaves. Pale and short: it is an apology for a
+ * body that vanished, not an event — the unit the leak cost is the event, and
+ * the HUD counts that.
+ */
+const PUFF_DURATION = 0.28;
+const PUFF_SIZE = 0.85;
+const PUFF_COLOR = new Color3(0.85, 0.8, 0.72);
+
 interface Burst {
   x: number;
+  y: number;
   z: number;
-  yaw: number;
+  roll: number;
   age: number;
+  /** Which sheet book this one plays, so a staff swap cannot recolour it. */
+  book: SpriteBook;
+  red: number;
+  green: number;
+  blue: number;
+  /** Seconds the flipbook runs for, and how big it grows. */
+  life: number;
+  size: number;
 }
 
 interface Splash {
@@ -79,23 +100,12 @@ interface Chain {
   age: number;
 }
 
-interface ImpactSet {
-  mesh: Mesh;
-  matrices: Float32Array;
-  /** How big the burst grows, in metres. */
-  size: number;
-}
-
 export class EffectsView {
-  private readonly impacts = new Map<WeaponId, ImpactSet>();
+  private readonly sprites: SpriteLayer;
+
+  /** One pool for impacts, flashes and puffs: they differ only in their fields. */
   private readonly bursts: Burst[] = [];
   private burstCount = 0;
-
-  private readonly muzzleMesh: Mesh;
-  private readonly muzzleMaterial: StandardMaterial;
-  private readonly muzzleMatrices: Float32Array;
-  private readonly muzzles: Burst[] = [];
-  private muzzleCount = 0;
 
   private readonly chainMesh: Mesh;
   private readonly chainMatrices: Float32Array;
@@ -108,22 +118,28 @@ export class EffectsView {
 
   private active: WeaponId = startWeapon;
 
-  constructor(scene: Scene) {
-    for (const id of weaponIds) {
-      const set = buildImpact(scene, id);
-      set.mesh.setEnabled(false);
-      this.impacts.set(id, set);
+  constructor(scene: Scene, sprites: SpriteLayer) {
+    this.sprites = sprites;
+    // Impacts, muzzles and puffs share one ring; the plan's cap is on effects
+    // alive at once, and a flash is an effect.
+    for (let i = 0; i < POOL.impacts * 2; i++) {
+      this.bursts.push({
+        x: 0,
+        y: 0,
+        z: 0,
+        roll: 0,
+        age: 0,
+        book: 'emberImpact',
+        red: 1,
+        green: 1,
+        blue: 1,
+        life: IMPACT_DURATION,
+        size: IMPACT_SIZE,
+      });
     }
-    for (let i = 0; i < POOL.impacts; i++) this.bursts.push({ x: 0, z: 0, yaw: 0, age: 0 });
-
-    this.muzzleMaterial = unlit(scene, 'muzzleMat', tintOf(this.active));
-    this.muzzleMesh = CreateSphere('muzzle', { diameter: 0.2, segments: 4 }, scene);
-    this.muzzleMesh.material = this.muzzleMaterial;
-    this.muzzleMatrices = createMatrixBuffer(this.muzzleMesh, POOL.impacts);
-    for (let i = 0; i < POOL.impacts; i++) this.muzzles.push({ x: 0, z: 0, yaw: 0, age: 0 });
 
     // A unit-length bar along +z, stretched between the two blocks it links.
-    this.chainMesh = CreateBox('chain', { width: 0.09, height: 0.09, depth: 1 }, scene);
+    this.chainMesh = CreateBox('chain', { width: 0.12, height: 0.12, depth: 1 }, scene);
     this.chainMesh.material = unlit(scene, 'chainMat', STORM_COLOR);
     this.chainMatrices = createMatrixBuffer(this.chainMesh, POOL.chains);
     for (let i = 0; i < POOL.chains; i++) {
@@ -131,8 +147,8 @@ export class EffectsView {
     }
 
     this.splashRings = new RingPool(scene, 'splash', EMBER_COLOR, POOL.splashes, {
-      thickness: 0.12,
-      alpha: 0.9,
+      thickness: 0.13,
+      alpha: 0.8,
       additive: true,
       y: 0.5,
     });
@@ -141,42 +157,57 @@ export class EffectsView {
     }
   }
 
-  /** The staff decides which impact mesh is drawn and what colour a shot is. */
+  /** The staff decides which impact book is played and what colour a shot is. */
   setWeapon(weaponId: WeaponId): void {
-    if (weaponId === this.active) return;
-    this.impacts.get(this.active)?.mesh.setEnabled(false);
     this.active = weaponId;
-    tintOf(weaponId).scaleToRef(IMPACT_GLOW_BOOST, this.muzzleMaterial.emissiveColor);
   }
 
-  /** Every spell effect blooms; nothing else in the scene does. */
+  /** Only the two mesh effects are left for a glow pass to bloom, if one is
+   *  ever turned back on; the sprites carry their own brightness. */
   glowMeshes(): Mesh[] {
-    const meshes: Mesh[] = [this.muzzleMesh, this.chainMesh, this.splashRings.mesh];
-    for (const set of this.impacts.values()) meshes.push(set.mesh);
-    return meshes;
+    return [this.chainMesh, this.splashRings.mesh];
   }
 
+  /**
+   * The flash at a staff's tip. A sparkle rather than a small impact: a muzzle
+   * happens twice a second per unit, so at three hundred units there are a
+   * dozen live at any moment *inside the crowd* — an impact burst at that rate
+   * buries the squad under its own fire.
+   */
   onMuzzle(x: number, z: number): void {
-    if (this.muzzleCount >= POOL.impacts) return;
-    const flash = this.muzzles[this.muzzleCount];
-    if (flash === undefined) return;
-    flash.x = x;
-    flash.z = z;
-    flash.yaw = 0;
-    flash.age = 0;
-    this.muzzleCount++;
+    const tint = tintOf(this.active);
+    this.push('sparkle', x, MUZZLE_Y, z, MUZZLE_SIZE, MUZZLE_DURATION, tint.r, tint.g, tint.b);
   }
 
   onImpact(weaponId: WeaponId, x: number, z: number): void {
     this.setWeapon(weaponId);
-    if (this.burstCount >= POOL.impacts) return;
-    const burst = this.bursts[this.burstCount];
-    if (burst === undefined) return;
-    burst.x = x;
-    burst.z = z;
-    burst.yaw = (this.burstCount % 8) * 0.79;
-    burst.age = 0;
-    this.burstCount++;
+    const tint = tintOf(weaponId);
+    this.push(
+      IMPACT_BOOKS[weaponId],
+      x,
+      IMPACT_Y,
+      z,
+      IMPACT_SIZE,
+      IMPACT_DURATION,
+      tint.r * IMPACT_GLOW_BOOST,
+      tint.g * IMPACT_GLOW_BOOST,
+      tint.b * IMPACT_GLOW_BOOST,
+    );
+  }
+
+  /** A stream body walked into the squad: it is gone, and this is where. */
+  onPuff(x: number, z: number): void {
+    this.push(
+      'sparkle',
+      x,
+      IMPACT_Y,
+      z,
+      PUFF_SIZE,
+      PUFF_DURATION,
+      PUFF_COLOR.r,
+      PUFF_COLOR.g,
+      PUFF_COLOR.b,
+    );
   }
 
   onSplash(x: number, z: number, radius: number): void {
@@ -206,8 +237,7 @@ export class EffectsView {
 
   /**
    * The one moment the scene is allowed to shout: a ring and a circle of bursts
-   * around the body. Still pooled geometry rather than a particle system — a
-   * boss dies once a level and the draw-call budget is for every frame.
+   * around the body.
    */
   onBossDeath(weaponId: WeaponId, x: number, z: number): void {
     this.onSplash(x, z, BOSS_DEATH_RING);
@@ -223,75 +253,85 @@ export class EffectsView {
 
   reset(): void {
     this.burstCount = 0;
-    this.muzzleCount = 0;
     this.chainCount = 0;
     this.splashCount = 0;
-    for (const set of this.impacts.values()) commitInstances(set.mesh, 0);
-    commitInstances(this.muzzleMesh, 0);
     commitInstances(this.chainMesh, 0);
     this.splashRings.reset();
   }
 
   update(dt: number): void {
     this.updateBursts(dt);
-    this.updateMuzzles(dt);
     this.updateChains(dt);
     this.updateSplashes(dt);
   }
 
   dispose(): void {
-    for (const set of this.impacts.values()) {
-      set.mesh.material?.dispose();
-      set.mesh.dispose();
-    }
-    this.impacts.clear();
-    this.muzzleMesh.material?.dispose();
-    this.muzzleMesh.dispose();
     this.chainMesh.material?.dispose();
     this.chainMesh.dispose();
     this.splashRings.dispose();
+    this.bursts.length = 0;
+  }
+
+  private push(
+    book: SpriteBook,
+    x: number,
+    y: number,
+    z: number,
+    size: number,
+    life: number,
+    red: number,
+    green: number,
+    blue: number,
+  ): void {
+    if (this.burstCount >= this.bursts.length) return;
+    const burst = this.bursts[this.burstCount];
+    if (burst === undefined) return;
+    burst.x = x;
+    burst.y = y;
+    burst.z = z;
+    // A different angle per slot, so eight impacts on one block are eight
+    // shapes rather than the same stamp eight times.
+    burst.roll = (this.burstCount % 8) * 0.79;
+    burst.age = 0;
+    burst.book = book;
+    burst.red = red;
+    burst.green = green;
+    burst.blue = blue;
+    burst.life = life;
+    burst.size = size;
+    this.burstCount++;
   }
 
   private updateBursts(dt: number): void {
-    const set = this.impacts.get(this.active);
-    if (set === undefined) return;
-
     let write = 0;
     for (let i = 0; i < this.burstCount; i++) {
       const burst = this.bursts[i];
       if (burst === undefined) continue;
       burst.age += dt;
-      if (burst.age >= IMPACT_DURATION) continue;
+      if (burst.age >= burst.life) continue;
 
-      // Out fast, then out of existence: `p` is the eased life, and the size
-      // curve peaks at a third of it before collapsing.
-      const p = burst.age / IMPACT_DURATION;
-      const size = set.size * Math.sin(Math.min(1, p) * Math.PI) ** 0.6;
-      writeRotatedInstance(set.matrices, write, size, size, size, burst.yaw, burst.x, IMPACT_Y, burst.z);
+      const phase = burst.age / burst.life;
+      // The flipbook carries the shape of the burst; the quad grows a little on
+      // top of it so the frames do not read as a slideshow in one place.
+      const size = burst.size * (0.7 + phase * 0.55);
+      this.sprites.add(
+        bookCell(burst.book, phase),
+        burst.x,
+        burst.y,
+        burst.z,
+        size,
+        burst.red,
+        burst.green,
+        burst.blue,
+        1,
+        burst.roll,
+      );
 
       const kept = this.bursts[write];
       if (kept !== undefined && write !== i) copyBurst(burst, kept);
       write++;
     }
     this.burstCount = write;
-    commitInstances(set.mesh, write);
-  }
-
-  private updateMuzzles(dt: number): void {
-    let write = 0;
-    for (let i = 0; i < this.muzzleCount; i++) {
-      const flash = this.muzzles[i];
-      if (flash === undefined) continue;
-      flash.age += dt;
-      if (flash.age >= MUZZLE_DURATION) continue;
-      const size = 1 - flash.age / MUZZLE_DURATION;
-      writeInstance(this.muzzleMatrices, write, size, size, size, flash.x, MUZZLE_Y, flash.z);
-      const kept = this.muzzles[write];
-      if (kept !== undefined && write !== i) copyBurst(flash, kept);
-      write++;
-    }
-    this.muzzleCount = write;
-    commitInstances(this.muzzleMesh, write);
   }
 
   private updateChains(dt: number): void {
@@ -353,49 +393,16 @@ export class EffectsView {
 
 function copyBurst(from: Burst, to: Burst): void {
   to.x = from.x;
+  to.y = from.y;
   to.z = from.z;
-  to.yaw = from.yaw;
+  to.roll = from.roll;
   to.age = from.age;
-}
-
-/**
- * One mesh per staff, built once: a round ember burst, a storm crackle of
- * crossed spikes, and a cluster of frost crystals.
- */
-function buildImpact(scene: Scene, id: WeaponId): ImpactSet {
-  const color = tintOf(id);
-  let mesh: Mesh;
-  let size: number;
-
-  if (id === 'ember') {
-    mesh = CreateSphere(`impact-${id}`, { diameter: 1, segments: 6 }, scene);
-    size = 0.55;
-  } else if (id === 'storm') {
-    mesh = spikes(scene, `impact-${id}`, 3, 0.07, 1);
-    size = 0.75;
-  } else {
-    mesh = spikes(scene, `impact-${id}`, 4, 0.16, 0.7);
-    size = 0.6;
-  }
-
-  mesh.material = unlit(scene, `impactMat-${id}`, color);
-  return { mesh, matrices: createMatrixBuffer(mesh, POOL.impacts), size };
-}
-
-/** `count` thin bars crossed through the origin: a spark burst, or a crystal. */
-function spikes(scene: Scene, name: string, count: number, width: number, length: number): Mesh {
-  const parts: Mesh[] = [];
-  for (let i = 0; i < count; i++) {
-    const bar = CreateBox(`${name}-${String(i)}`, { width, height: width, depth: length }, scene);
-    const yaw = (i / count) * Math.PI;
-    const pitch = ((i % 2) - 0.5) * 0.9;
-    bar.bakeTransformIntoVertices(Matrix.RotationYawPitchRoll(yaw, pitch, 0));
-    parts.push(bar);
-  }
-  const merged = Mesh.MergeMeshes(parts, true, true);
-  if (merged === null) throw new Error(`${name}: merge failed`);
-  merged.name = name;
-  return merged;
+  to.book = from.book;
+  to.red = from.red;
+  to.green = from.green;
+  to.blue = from.blue;
+  to.life = from.life;
+  to.size = from.size;
 }
 
 function tintOf(id: WeaponId): Color3 {
@@ -406,7 +413,6 @@ function unlit(scene: Scene, name: string, color: Color3): StandardMaterial {
   const material = new StandardMaterial(name, scene);
   // Scaled above 1 because the glow pass no longer blooms these (plan,
   // performance step 4); additive blending turns the excess into a white core.
-  // Cloned by `scale`: the muzzle recolours its own copy when the staff changes.
   material.emissiveColor = color.scale(IMPACT_GLOW_BOOST);
   material.diffuseColor = Color3.Black();
   material.specularColor = Color3.Black();

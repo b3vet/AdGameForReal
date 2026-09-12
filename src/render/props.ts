@@ -1,6 +1,15 @@
 /**
- * Roadside dressing: dead trees, gravestones, fence runs and lanterns down both
- * edges of the road, from the KayKit Halloween Bits pack.
+ * Roadside dressing down both edges of the road, from the KayKit Halloween Bits
+ * pack.
+ *
+ * Milestone 2 dressed a night graveyard: dead trees, gravestones and lanterns.
+ * Under D28's daylight the same set reads as a cemetery at noon — the wrong
+ * tone entirely — so the mix is re-weighted around the pack's orange pines,
+ * with the fence runs that make a country lane and a quarter as many
+ * gravestones. The dead trees are gone: seen from Milestone 3's lower camera
+ * they are bare trunks at eye level, and in daylight a brown trunk beside the
+ * road reads as a fallen log in the frame rather than as a silhouette against
+ * the sky. Dropping the kind also gives a draw call back.
  *
  * Every prop type is one mesh drawn as thin instances, so the whole biome costs
  * one draw call per type however many of them there are. The layout is seeded
@@ -20,7 +29,8 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { modelAsset } from './characters';
 import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
-import { liftEmissive, loadStaticMesh, meshExtent } from './models';
+import { liftEmissive, loadStaticMesh, meshExtent, tintMaterial } from './models';
+import { applyToonRamp } from './toonRamp';
 import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH } from './theme';
 import { mulberry32 } from '@/sim';
 
@@ -37,13 +47,21 @@ interface PropKind {
   yaw?: number;
   /** Multiplies the manifest scale, before the per-instance jitter. */
   size?: number;
+  /** Albedo multiplier, for the daylight re-tint; see `tintMaterial`. */
+  tint?: readonly [number, number, number];
 }
 
+/** Warmer and a shade lighter: the pack is painted for a night scene. */
+const WARM: readonly [number, number, number] = [1.16, 1.06, 0.9];
+/** For the greys — stone and iron — which go to soot under daylight. */
+const PALE: readonly [number, number, number] = [1.28, 1.22, 1.12];
+
 const KINDS: readonly PropKind[] = [
-  { id: 'prop_tree_dead_large', weight: 3, near: 2.4, far: 9, size: 1.15 },
-  { id: 'prop_tree_dead_medium', weight: 3, near: 1.6, far: 7 },
-  { id: 'prop_gravestone', weight: 2.5, near: 0.9, far: 4 },
-  { id: 'prop_post_lantern', weight: 1, near: 0.7, far: 1.4 },
+  { id: 'prop_tree_pine_orange_large', weight: 3.2, near: 2.2, far: 9, size: 1.2, tint: WARM },
+  { id: 'prop_tree_pine_orange_medium', weight: 3, near: 1.4, far: 7, tint: WARM },
+  { id: 'prop_fence', weight: 1.8, near: 0.5, far: 1.1, tint: PALE },
+  { id: 'prop_gravestone', weight: 0.6, near: 0.9, far: 4, tint: PALE },
+  { id: 'prop_post_lantern', weight: 0.8, near: 0.7, far: 1.4, tint: PALE },
 ];
 
 /** Metres between one roadside prop and the next, per side. */
@@ -52,8 +70,12 @@ const GAP_MAX = 10;
 /** Props of one kind per level. Long levels simply stop dressing past this. */
 const PER_KIND = 56;
 const LANTERN_CAP = 24;
-/** See `liftEmissive`: scenery carries less of its own light than a character. */
-const PROP_LIFT = 0.16;
+/**
+ * See `liftEmissive`. Almost nothing now: Milestone 2 needed scenery to carry
+ * its own light because the biome was a near-black dusk, and under daylight the
+ * same lift flattens every trunk to a flat orange card.
+ */
+const PROP_LIFT = 0.05;
 /** Where a lantern's flame sits, as a share of the post's own height. */
 const LANTERN_FLAME_Y = 0.88;
 const LANTERN_FLAME_SIZE = 0.34;
@@ -102,6 +124,9 @@ export class PropsView {
       // Enough for a dead tree to read as a shape against the sky rather than
       // a hole in it; less than a character, because props are scenery.
       liftEmissive(mesh.material, PROP_LIFT);
+      const tint = kind.tint;
+      if (tint !== undefined) tintMaterial(mesh.material, tint[0], tint[1], tint[2]);
+      applyToonRamp(mesh.material);
       const manifestScale = modelAsset(kind.id).scale ?? 1;
       this.slots.push({
         kind,

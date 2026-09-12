@@ -87,6 +87,11 @@ export class VatCrowd implements Crowd {
    * instance holds the single frame `timeOffset` picks out — which is how a
    * block that has not activated yet stands still instead of marching on the
    * spot, without a second baked range.
+   *
+   * `scaleY` defaults to `scale` and is the only way to make an instance
+   * non-uniform. It exists for squash and stretch on a unit popping in: the
+   * baked shader has no place to put a per-instance deformation, so the
+   * deformation has to be in the instance matrix.
    */
   setInstance(
     index: number,
@@ -98,12 +103,13 @@ export class VatCrowd implements Crowd {
     animationId: string,
     timeOffset: number,
     speed = 1,
+    scaleY = scale,
   ): void {
     const range = this.ranges.get(animationId);
     if (range === undefined) throw new Error(`no baked range "${animationId}"`);
 
     const size = this.baseScale * scale;
-    scratchScale.set(size, size, size);
+    scratchScale.set(size, this.baseScale * scaleY, size);
     Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, scratchRotation);
     scratchTranslation.set(x, y, z);
     Matrix.ComposeToRef(scratchScale, scratchRotation, scratchTranslation, scratchMatrix);

@@ -20,6 +20,7 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { labelPixels, type NumberLabels } from './labels';
 import { liftEmissive, loadAnimatedModel, type AnimatedModel } from './models';
+import { applyToonRampToAll } from './toonRamp';
 import { RingPool } from './rings';
 import {
   BOSS_COLOR,
@@ -37,6 +38,7 @@ import {
   BOSS_MODEL_HEIGHT,
   BOSS_SINK_DELAY,
   BOSS_SINK_DURATION,
+  BOSS_TAUNT_SPEED,
   BOSS_WIDTH,
   LABEL_RANGE,
   POOL,
@@ -52,9 +54,10 @@ import type { EnemyState } from '@/sim';
 const RING_START_RADIUS = 0.8;
 /** Which way the model faces before it is turned to look down the road. */
 const FACING = Math.PI;
-/** The demon is the darkest thing in the pack; it needs the same lift the
- *  crowds get, a little weaker so the enrage pulse still reads on top of it. */
-const BOSS_LIFT = 0.2;
+/** The demon is the darkest thing in the pack, so it keeps a little more lift
+ *  than the crowds — but only a little: the enrage pulse has to read on top of
+ *  it, and under daylight the ambient already carries the body. */
+const BOSS_LIFT = 0.08;
 /**
  * The stand-in box's calm emissive, built once. `paintEnrage` runs on every
  * frame of the boss fight, and `Color3.scale` allocates.
@@ -83,6 +86,11 @@ export class BossView {
 
   /** Seconds left of a one-shot clip that owns the boss until it ends. */
   private oneShot = 0;
+  /**
+   * Playback rate of the one-shot in flight, so the taunt can run at half
+   * speed without every later clip inheriting it. 1 for everything else.
+   */
+  private oneShotSpeed = 1;
   private hitCooldown = 0;
   /** Seconds since `bossKilled`, or -1 while alive. */
   private dying = -1;
@@ -130,6 +138,7 @@ export class BossView {
     if (model === null) return;
     this.model = model;
     for (const material of model.materials) liftEmissive(material, BOSS_LIFT);
+    applyToonRampToAll(model.materials);
     // The manifest's own scale is a starting point; the plan wants three metres.
     this.scale = BOSS_HEIGHT / (model.height > 0 ? model.height : BOSS_MODEL_HEIGHT);
     model.pivot.scaling.setAll(this.scale);
@@ -151,6 +160,7 @@ export class BossView {
   reset(): void {
     this.dying = -1;
     this.oneShot = 0;
+    this.oneShotSpeed = 1;
     this.hitCooldown = 0;
     this.current = '';
     this.shownHp = Number.NaN;
@@ -161,6 +171,16 @@ export class BossView {
     for (const ring of this.ringState) ring.age = -1;
     this.rings.reset();
     this.stopAll();
+  }
+
+  /**
+   * The squad reached the arena. The demon takes a beat before it walks: a
+   * `Punch` at half speed, which reads as a slow raised arm rather than a
+   * strike (`BOSS_TAUNT_SPEED`), because the model ships no taunt clip.
+   */
+  onActivated(): void {
+    if (this.dying >= 0) return;
+    this.playOneShot('attack', BOSS_TAUNT_SPEED);
   }
 
   onStomp(x: number, z: number): void {
@@ -183,7 +203,12 @@ export class BossView {
     this.playOneShot('attack');
   }
 
-  /** Hit reactions are throttled: the squad lands dozens of shots a second. */
+  /**
+   * Hit reactions are throttled: the squad lands dozens of shots a second.
+   * `BOSS_HIT_THROTTLE` is shorter in Milestone 3 than in Milestone 2 — the
+   * product owner asked for more animation, and a boss that stands still
+   * through a barrage is the most visible place there was none.
+   */
   onHit(): void {
     if (this.dying >= 0 || this.hitCooldown > 0 || this.oneShot > 0) return;
     this.hitCooldown = BOSS_HIT_THROTTLE;
@@ -226,12 +251,14 @@ export class BossView {
 
     const enraged = boss.enraged === true;
     this.paintEnrage(enraged, dt);
-    if (this.oneShot <= 0) this.play(boss.active ? 'walk' : 'idle', true);
+    const wasOneShot = this.oneShot > 0;
+    if (!wasOneShot) this.play(boss.active ? 'walk' : 'idle', true);
     // Counted down *after* the decision, so a one-shot started by this frame's
     // events is drawn at least once: on a slow frame `dt` is longer than a
     // punch, and a punch cut before the frame renders never happened at all.
     this.oneShot = Math.max(0, this.oneShot - dt);
-    this.setSpeed(timeScale * (enraged ? BOSS_ENRAGE_SPEED : 1));
+    if (this.oneShot <= 0) this.oneShotSpeed = 1;
+    this.setSpeed(timeScale * (enraged ? BOSS_ENRAGE_SPEED : 1) * (wasOneShot ? this.oneShotSpeed : 1));
 
     if (ahead >= LABEL_RANGE) return;
     // The boss loses hp every frame, but only whole numbers are printable:
@@ -322,8 +349,14 @@ export class BossView {
     this.current = id;
   }
 
-  /** A clip that owns the boss until it has played out, then hands back. */
-  private playOneShot(id: string): void {
+  /**
+   * A clip that owns the boss until it has played out, then hands back.
+   *
+   * `speed` is the *clip's* own rate, on top of whatever the app's time scale
+   * is doing, and the hold is divided by it: a taunt at half speed takes twice
+   * as long, and a one-shot handed back early is a clip cut off mid-swing.
+   */
+  private playOneShot(id: string, speed = 1): void {
     if (this.dying >= 0) return;
     const group = this.model?.groups.get(id);
     if (group === undefined) return;
@@ -331,7 +364,8 @@ export class BossView {
     this.stopAll();
     group.play(false);
     this.current = id;
-    this.oneShot = groupSeconds(group);
+    this.oneShotSpeed = speed;
+    this.oneShot = groupSeconds(group) / Math.max(0.05, speed);
   }
 
   private setSpeed(speed: number): void {

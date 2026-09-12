@@ -3,9 +3,11 @@
  *
  * Same fixture the app's `?scene=render-test` mode runs, minus the app: no
  * state machine, no overlay, no sim. The fixture drives every visual the
- * renderer owns — staff swaps, splash, chain, frost slow and shatter, block
- * deaths, boss walk, stomp, enrage and death, the win cheer — so the whole
- * render layer can be reviewed in one twenty-second loop.
+ * renderer owns — staff swaps, the three magic sprites and their impacts,
+ * splash, chain, frost slow and shatter, block deaths, the streams of bodies
+ * dying and leaking under their floating counts, boss taunt, walk, stomp,
+ * enrage and death, the win cheer — so the whole render layer can be reviewed
+ * in one twenty-second loop.
  *
  *   /dev/render-test.html            the fixture's own count arc, 5 to 120
  *   /dev/render-test.html?count=500  a full crowd parked on the road, which is
@@ -23,8 +25,10 @@ interface RenderTestHandle {
   ready: boolean;
   /** The fake run being drawn, so a screenshot script can assert on it. */
   state: () => Readonly<RunState>;
-  /** Draw calls in the last frame; the budget is 40 at 500 units. */
+  /** Draw calls in the last frame; the budget is 45 at level 10. */
   drawCalls: () => number;
+  /** Live streams, their remaining counts, and the bodies on the road. */
+  streams: () => { remaining: number[]; bodies: number };
   /**
    * Every animation clip in the scene, with a `*` on the ones playing. The
    * crowds are baked textures with no clips of their own, so this is the boss's
@@ -73,9 +77,12 @@ async function main(): Promise<void> {
     window.setInterval(() => {
       const state = scene.scenario.state;
       const boss = state.boss;
+      const bodies = state.enemies.reduce((n, e) => (e.streamId === undefined ? n : n + 1), 0);
+      const live = state.streams.filter((s) => s.started && !s.done).length;
       hud.textContent =
         `draws ${String(renderer.drawCalls)}  units ${String(Math.round(state.squad.count))}` +
         `  staff ${state.squad.weaponId ?? 'ember'}  z ${state.squad.z.toFixed(0)}` +
+        `  streams ${String(live)} (${String(bodies)} bodies)` +
         `  ${boss === null ? 'no boss' : `boss ${String(Math.round(boss.hp))}${boss.enraged === true ? ' enraged' : ''}`}`;
     }, 250);
   }
@@ -84,6 +91,13 @@ async function main(): Promise<void> {
     ready: true,
     state: () => scene.scenario.state,
     drawCalls: () => renderer.drawCalls,
+    streams: () => {
+      const state = scene.scenario.state;
+      return {
+        remaining: state.streams.filter((s) => s.started && !s.done).map((s) => s.remaining),
+        bodies: state.enemies.filter((e) => e.streamId !== undefined).length,
+      };
+    },
     clips: () =>
       renderer.scene.animationGroups.map((group) => `${group.name}${group.isPlaying ? '*' : ''}`),
   };

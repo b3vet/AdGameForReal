@@ -3,7 +3,7 @@
   "source": "models/skeleton_warrior.glb",
   "boneCount": 41,
   "width": 168,
-  "height": 73,
+  "height": 97,
   "fps": 30,
   "format": "half-float-rgba",
   "ranges": {
@@ -13,10 +13,16 @@
       "to": 47,
       "loop": true
     },
+    "walk2": {
+      "animation": "Running_C",
+      "from": 48,
+      "to": 71,
+      "loop": true
+    },
     "death": {
       "animation": "Death_A",
-      "from": 48,
-      "to": 72,
+      "from": 72,
+      "to": 96,
       "loop": false
     }
   }

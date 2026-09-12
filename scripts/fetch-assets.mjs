@@ -51,9 +51,14 @@ const QUATERNIUS_LICENSE = '16GqsDGESyEOfRbc4dS7EqAwkIUSIW4_y';
  * ranges the game plays. Names are KayKit's / Quaternius's own.
  */
 export const KEPT_ANIMATIONS = {
-  mage: ['Idle', 'Running_A', 'Spellcast_Shoot', 'Cheer'],
-  skeleton_minion: ['Walking_D_Skeletons', 'Death_C_Skeletons'],
-  skeleton_warrior: ['Walking_C', 'Death_A'],
+  // `Spellcast_Raise` and `Running_C` are Milestone 3's animation variety
+  // (docs/09-milestone-3-plan.md, "more animation"): the squad alternates two
+  // cast clips so a firing crowd is not one silhouette repeated, and the
+  // skeleton streams mix a walk with a run so a river of bodies has a gait
+  // spread through it. Each one costs about 30 rows of its rig's baked texture.
+  mage: ['Idle', 'Running_A', 'Spellcast_Shoot', 'Spellcast_Raise', 'Cheer'],
+  skeleton_minion: ['Walking_D_Skeletons', 'Running_C', 'Death_C_Skeletons'],
+  skeleton_warrior: ['Walking_C', 'Running_C', 'Death_A'],
   boss_demon: ['Idle', 'Walk', 'Punch', 'HitReact', 'Death'],
 };
 

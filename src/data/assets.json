@@ -11,7 +11,8 @@
         "idle": "Idle",
         "run": "Running_A",
         "cast": "Spellcast_Shoot",
-        "cheer": "Cheer"
+        "cheer": "Cheer",
+        "cast2": "Spellcast_Raise"
       },
       "body": [
         "Mage_Body",
@@ -36,15 +37,28 @@
       },
       "tints": {
         "Mage_Hat": [
-          1.75,
-          1.5,
-          2.1
+          7.0,
+          6.0,
+          8.5
+        ],
+        "Mage_Head": [
+          3.2,
+          2.9,
+          2.9
         ],
         "Mage_Cape": [
-          1.35,
-          1.2,
-          1.6
+          2.6,
+          2.2,
+          3.0
+        ],
+        "Mage_Body": [
+          1.5,
+          1.45,
+          1.65
         ]
+      },
+      "partScales": {
+        "Mage_Hat": 0.6
       }
     },
     {
@@ -55,7 +69,8 @@
       "scale": 0.35,
       "animations": {
         "walk": "Walking_D_Skeletons",
-        "death": "Death_C_Skeletons"
+        "death": "Death_C_Skeletons",
+        "walk2": "Running_C"
       },
       "body": [
         "Skeleton_Minion_Body",
@@ -69,6 +84,13 @@
       ],
       "variants": {
         "default": []
+      },
+      "tints": {
+        "Skeleton_Minion_Cloak": [
+          1.45,
+          1.2,
+          1.0
+        ]
       }
     },
     {
@@ -79,7 +101,8 @@
       "scale": 0.35,
       "animations": {
         "walk": "Walking_C",
-        "death": "Death_A"
+        "death": "Death_A",
+        "walk2": "Running_C"
       },
       "body": [
         "Skeleton_Warrior_Body",
@@ -94,6 +117,13 @@
       ],
       "variants": {
         "default": []
+      },
+      "tints": {
+        "Skeleton_Warrior_Cloak": [
+          1.35,
+          1.15,
+          1.0
+        ]
       }
     },
     {

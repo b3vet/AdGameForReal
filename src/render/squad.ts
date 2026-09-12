@@ -20,19 +20,28 @@ import type { Crowd } from './characters';
 import { loadCrowds } from './models';
 import {
   CASTING_SHARE,
-  MAGE_LIFT,
+  CAST2_CLIP_SPEED,
+  CAST_CLIP_SPEED,
   CROWD_SCALE_FROM,
   CROWD_SCALE_MIN,
-  CROWD_SCALE_TO,
   DEATH_DURATION,
   EMBER_COLOR,
   FROST_COLOR,
+  GATE_BOUNCE_DURATION,
+  GATE_BOUNCE_HEIGHT,
+  IDLE_CLIP_SPEED,
+  IDLE_SWAY_LIFT,
+  IDLE_SWAY_RATE,
+  IDLE_SWAY_YAW,
+  MAGE_LIFT,
   MAGE_SCALE,
   POOL,
   POP_DURATION,
+  POP_STRETCH,
+  RUN_CLIP_SPEED,
   STORM_COLOR,
 } from './theme';
-import { formationOffsets, startWeapon, weaponIds, weaponOf } from '@/sim';
+import { formationOffsets, startWeapon, unitSpacing, weaponIds, weaponOf } from '@/sim';
 import type { RunStatus, SquadState, WeaponId } from '@/sim';
 
 /** Sentinel in `spawnAge`: this unit finished its pop and needs no animation. */
@@ -79,6 +88,10 @@ export class SquadView {
   private previousZ = Number.NaN;
   private advancing = false;
   private cheering = false;
+  /** Seconds left of the hop the squad takes through a gate row, or 0. */
+  private bounce = 0;
+  /** The idle sway's own clock, in seconds of sim time. */
+  private swayPhase = 0;
 
   constructor(scene: Scene) {
     this.scene = scene;
@@ -119,6 +132,8 @@ export class SquadView {
     this.corpseCount = 0;
     this.cheering = false;
     this.advancing = false;
+    this.bounce = 0;
+    this.swayPhase = 0;
     for (const crowd of this.crowds.values()) {
       crowd.setCount(0);
       crowd.commit();
@@ -140,6 +155,15 @@ export class SquadView {
     this.cheering = status === 'won';
   }
 
+  /**
+   * The squad crossed a gate row: everyone hops. Restarted rather than
+   * accumulated, so passing two rows in one turbo frame is one hop and not a
+   * crowd bouncing at double height.
+   */
+  onGatePassed(): void {
+    this.bounce = GATE_BOUNCE_DURATION;
+  }
+
   update(squad: SquadState, arenaZ: number, dt: number): void {
     this.setWeapon(weaponOf(squad));
     const crowd = this.crowds.get(this.active);
@@ -150,31 +174,53 @@ export class SquadView {
     this.diffCount(count, squad.x, squad.z, crowdScaleNow);
     this.trackMotion(squad.z, dt);
 
+    this.swayPhase += dt;
+    this.bounce = Math.max(0, this.bounce - dt);
+
     const inArena = squad.z >= arenaZ - 0.5;
     const offsets = formationOffsets(count);
+    // One hop for the whole crowd, so a row crossing reads as a beat rather
+    // than as five hundred units each doing their own thing.
+    const hop =
+      this.bounce <= 0
+        ? 0
+        : Math.sin((1 - this.bounce / GATE_BOUNCE_DURATION) * Math.PI) * GATE_BOUNCE_HEIGHT;
+    // The idle crowd sways; a running one is already in motion.
+    const swaying = !this.advancing && !this.cheering && !inArena;
 
     for (let i = 0; i < count; i++) {
       const offset = offsets[i];
       if (offset === undefined) continue;
 
       let scale = crowdScaleNow;
+      // Squash and stretch: a unit pops in thin and tall, then settles. The
+      // overshoot alone reads as a unit that grew; the stretch is what reads as
+      // a unit that landed.
+      let stretch = 1;
       const age = this.spawnAge[i] ?? SETTLED;
       if (age < POP_DURATION) {
+        const p = age / POP_DURATION;
         scale = crowdScaleNow * popScale(age);
+        stretch = 1 + POP_STRETCH * Math.sin(Math.min(1, p) * Math.PI) * (1 - p * 0.5);
         this.spawnAge[i] = age + dt;
       } else if (age !== SETTLED) {
         this.spawnAge[i] = SETTLED;
       }
 
+      const sway = swaying ? Math.sin(this.swayPhase * IDLE_SWAY_RATE * 6.283 + i * 0.7) : 0;
+      const animation = this.animationFor(i, inArena);
       crowd.setInstance(
         i,
         squad.x + offset.x,
-        0,
+        hop + sway * IDLE_SWAY_LIFT,
         squad.z + offset.z,
-        yawOf(i),
+        yawOf(i) + sway * IDLE_SWAY_YAW,
         scale * MAGE_SCALE,
-        this.animationFor(i, inArena),
+        animation,
         timeOffsetOf(i),
+        clipSpeed(animation),
+        // Uniform except while a unit is popping, which is the whole point.
+        scale * MAGE_SCALE * stretch,
       );
     }
 
@@ -197,8 +243,20 @@ export class SquadView {
    */
   private animationFor(index: number, inArena: boolean): string {
     if (this.cheering) return 'cheer';
-    if (this.advancing) return index % CASTING_SHARE === 0 ? 'cast' : 'run';
-    return inArena ? 'cast' : 'idle';
+    const casting = this.castFor(index);
+    if (this.advancing) return index % CASTING_SHARE === 0 ? casting : 'run';
+    return inArena ? casting : 'idle';
+  }
+
+  /**
+   * Which of the two cast clips this unit throws. Milestone 2 had one, and a
+   * crowd where every firing unit made the same shape at the same moment read
+   * as one animated dummy repeated (docs/10-milestone-3-log.md, "more
+   * animation"). Split by the formation index so a unit keeps its own spell for
+   * the whole run rather than flickering between them.
+   */
+  private castFor(index: number): string {
+    return index % 2 === 0 ? 'cast' : 'cast2';
   }
 
   private trackMotion(z: number, dt: number): void {
@@ -270,6 +328,7 @@ export class SquadView {
         corpse.scale * MAGE_SCALE * fade,
         'idle',
         timeOffsetOf(corpse.index),
+        IDLE_CLIP_SPEED,
       );
 
       const kept = this.corpses[write];
@@ -287,6 +346,14 @@ export class SquadView {
   }
 }
 
+/** Casual timing: every clip runs faster than the artist's tempo (D28). */
+function clipSpeed(animation: string): number {
+  if (animation === 'run') return RUN_CLIP_SPEED;
+  if (animation === 'cast') return CAST_CLIP_SPEED;
+  if (animation === 'cast2') return CAST2_CLIP_SPEED;
+  return IDLE_CLIP_SPEED;
+}
+
 /** A little turn per unit, so five hundred mages are not one rigid block. */
 function yawOf(index: number): number {
   return ((index % 7) - 3) * 0.05;
@@ -298,14 +365,22 @@ function timeOffsetOf(index: number): number {
 }
 
 /**
- * Full size for a small squad, easing to `CROWD_SCALE_MIN` at the count cap.
+ * How big a unit is drawn, as a share of `MAGE_HEIGHT`: the room the formation
+ * actually gives it, measured against the room it has at `CROWD_SCALE_FROM`.
+ *
+ * Reading the sim's own `unitSpacing` rather than easing between two guessed
+ * counts is the point (see `CROWD_SCALE_FROM` in `theme.ts`): the spacing is
+ * what decides whether two mages overlap, it is not linear in the count, and
+ * tying the two together means a change to the formation cannot silently make
+ * the crowd a slab again.
+ *
  * Exported for the stress scene, which has to draw the crowd at the size the
  * game draws it or it is measuring a scene the game never renders.
  */
 export function crowdScale(count: number): number {
   if (count <= CROWD_SCALE_FROM) return 1;
-  const t = Math.min(1, (count - CROWD_SCALE_FROM) / (CROWD_SCALE_TO - CROWD_SCALE_FROM));
-  return 1 + (CROWD_SCALE_MIN - 1) * t;
+  const room = unitSpacing(count) / unitSpacing(CROWD_SCALE_FROM);
+  return Math.max(CROWD_SCALE_MIN, Math.min(1, room));
 }
 
 /** Ease-out-back: overshoots past 1 then settles, which reads as a pop. */

@@ -12,6 +12,7 @@
 
 import { DevCombat } from './dev-combat';
 import { buildDevLevel, emptyDevState } from './dev-fixture';
+import { DevStreams } from './dev-streams';
 import { balance } from '@/data';
 import { BOSS_Z_OFFSET, gateCap, laneCenter, weaponDef, weaponIds } from '@/sim';
 import type { GateState, LevelDef, RunState, SimEvent } from '@/sim';
@@ -75,6 +76,7 @@ export class DevScenario {
 
   private readonly events: SimEvent[] = [];
   private readonly combat: DevCombat;
+  private readonly streams: DevStreams;
 
   private rowsPassed = 0;
   private stompTimer = 0;
@@ -90,6 +92,7 @@ export class DevScenario {
     this.combat = new DevCombat(this.state, this.events, () => {
       this.endRunOnBossKill();
     });
+    this.streams = new DevStreams(this.state, this.events);
     this.populate();
   }
 
@@ -131,6 +134,7 @@ export class DevScenario {
     if (state.squad.count < this.floorCount) state.squad.count = this.floorCount;
     this.moveSquad(dt);
     this.combat.step(dt);
+    this.streams.step(dt);
     this.moveEnemies(dt);
     this.crossRows();
     this.moveBoss(dt);
@@ -224,6 +228,7 @@ export class DevScenario {
     }
 
     this.combat.reset();
+    this.streams.reset();
 
     const bossHp = Math.min(DEV_BOSS_MAX_HP, Math.max(DEV_BOSS_MIN_HP, level.boss.hp));
     state.boss = {
@@ -268,6 +273,9 @@ export class DevScenario {
     for (let i = this.state.enemies.length - 1; i >= 0; i--) {
       const enemy = this.state.enemies[i];
       if (enemy === undefined) continue;
+      // Stream bodies walk, leak and are swept by `DevStreams`; this loop is
+      // the blocks' own.
+      if (enemy.streamId !== undefined) continue;
 
       if (!enemy.active) {
         if (enemy.z - squad.z > balance.enemies.activationDistance) continue;

@@ -172,3 +172,41 @@ Tech lead reading:
 - Checks: typecheck, lint, 199 tests, build, smoke (draw peaks 37 / 36 /
   40; stress 26 calls at 7.3 ms), hosted build 9.38 MB.
 - Published as the smoothness-check build for the product owner.
+
+## 2026-09-12 — Phase B2: bright look, magical projectiles, streams on screen (verified and committed)
+
+- Daylight palette: light blue sky to a warm pale horizon, fog pushed out
+  (start 46, end 130), light stone road, green field, brighter rune strips,
+  hemispheric 0.7 plus a warm key 0.6, emissive lifts cut. Roadside is now
+  orange pines and fences with fewer gravestones and no dead trees (a bare
+  trunk at the new camera reads as a fallen log).
+- Toon ramp: a material plugin injected before fog that bands its own N·L
+  into three levels with smoothstep edges (banding the color would collapse
+  the KayKit flat atlas), applied to every PBR material before the warm-up
+  compile pass. Smoke: 21 shader programs, 0 compiled during play.
+- Camera: fov 0.82, height 5.6, behind 11, look-ahead 8, look height 1;
+  elevation 27°, horizon at a fifth from the top, rows at 18 and 36 m
+  readable. Units 0.78 m; the hat is scaled in the merge at 0.6 (0.8 still
+  owned the silhouette; a VAT is bone matrices so the bake cannot scale a
+  part). Formation spacing could not be raised without breaking the road
+  clamp invariant and the balance tests, so the drawn unit size follows the
+  sim's own spacing curve instead (0.78 m at 8 units down to 0.47 at 100+).
+  Decision left for Phase C: widening the crowd needs the road clamp or the
+  road itself to move, plus a pressure re-calibration.
+- Projectiles: one procedural 1024² sprite sheet (fireball, zigzag bolt,
+  ice crystal, three impacts, sparkles); projectiles, tails, sparkles,
+  impacts, muzzles and the leak puff share one draw call.
+- Streams: a body view with no per-body state (liveness and death age come
+  from the sim), grunt pool 372, gait variety and speed jitter, deaths as
+  the VAT one-shot stretched to the sim's corpse window, one in ten
+  reserved for physics ragdolls (`usesRagdoll(id)` in `deathStyle.ts`),
+  leak puff, and a floating remaining count per stream.
+- More animation: mage cast2 and idle sway, skeleton walk2, boss taunt on
+  activation and more frequent hit reactions. VAT re-bake: mage 259 KB,
+  minion 175 KB, warrior 127 KB; the bake fails above 300 KB.
+- Draw-call peaks 35 / 34 / 38; stress 26 at 6.8 ms.
+- Tech lead frame review: hats are still near-black so a large squad reads
+  as a dark mass; the title picker sits on bright content without a panel.
+  Both go to Phase C with the physics ragdoll rule, audio for leaks and
+  stream clears, the stress scene's stream bodies, and the ASSETS.md rows
+  for the re-baked files.

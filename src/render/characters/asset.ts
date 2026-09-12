@@ -127,7 +127,7 @@ export async function loadCharacterAssets(
       return found;
     });
 
-    const merged = mergeCharacter(sources, skeleton, model.tints);
+    const merged = mergeCharacter(sources, skeleton, model.tints, model.partScales);
     const mesh = new Mesh(`${model.id}:${variant}`, scene);
     merged.applyToMesh(mesh, false);
     material ??= pickMaterial(sources);
@@ -191,6 +191,11 @@ function array(data: Float32Array | number[] | null | undefined): Float32Array |
   return data instanceof Float32Array ? data : Float32Array.from(data);
 }
 
+/** Uniform scale about the origin of the part's own local space. */
+function scaleAbout(positions: Float32Array, scale: number): void {
+  for (let i = 0; i < positions.length; i++) positions[i] = (positions[i] ?? 0) * scale;
+}
+
 /** The glTF right-handed to Babylon left-handed flip, as a plain x negation. */
 function unmirror(data: Float32Array): void {
   for (let i = 0; i < data.length; i += 3) data[i] = -(data[i] ?? 0);
@@ -209,6 +214,7 @@ function mergeCharacter(
   sources: readonly Mesh[],
   skeleton: Skeleton,
   tints?: Record<string, readonly number[]>,
+  partScales?: Record<string, number>,
 ): VertexData {
   const parts: VertexData[] = [];
   const boneIndex = new Map(skeleton.bones.map((bone, index) => [bone.name, index]));
@@ -221,6 +227,12 @@ function mergeCharacter(
     const data = VertexData.ExtractFromMesh(source, false, true);
     const positions = array(data.positions);
     if (positions === null || data.indices === null || data.indices === undefined) continue;
+
+    // Before the re-skin, so the shrink happens in the part's *own* local
+    // space, about its node origin — which for the hat is where it sits on the
+    // head, so a 0.8 hat keeps its grip and loses only brim.
+    const partScale = partScales?.[source.name];
+    if (partScale !== undefined && partScale !== 1) scaleAbout(positions, partScale);
 
     if (array(data.matricesIndices) === null || array(data.matricesWeights) === null) {
       reskinToParentBone(data, source, boneIndex, bindInverse);

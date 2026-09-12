@@ -28,8 +28,10 @@ import { ProjectileView } from './projectiles';
 import { PropsView } from './props';
 import { RoadView } from './road';
 import { createEngine, createGlow, createScene } from './scene';
+import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
-import { SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { POOL, SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { applyToonRampToScene } from './toonRamp';
 import { warmUpScene } from './warmup';
 import { startWeapon, weaponOf } from '@/sim';
 import type { LevelDef, RunState, SimEvent, WeaponId } from '@/sim';
@@ -75,6 +77,8 @@ export class Renderer {
   private road: RoadView | null = null;
   private props: PropsView | null = null;
   private squad: SquadView | null = null;
+  /** Every spell quad in the scene, in one batch; see `./sprites.ts`. */
+  private sprites: SpriteLayer | null = null;
   private projectiles: ProjectileView | null = null;
   private effects: EffectsView | null = null;
   private gates: GateView | null = null;
@@ -140,8 +144,10 @@ export class Renderer {
     this.road = new RoadView(scene);
     this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
-    this.projectiles = new ProjectileView(scene);
-    this.effects = new EffectsView(scene);
+    const sprites = new SpriteLayer(scene, POOL.sprites);
+    this.sprites = sprites;
+    this.projectiles = new ProjectileView(sprites);
+    this.effects = new EffectsView(scene, sprites);
     this.gates = new GateView(scene, labels);
     this.enemies = new EnemyView(scene, labels);
     this.boss = new BossView(scene, labels);
@@ -253,6 +259,11 @@ export class Renderer {
     if (scene === null || this.disposed) return;
     this.warmInFlight = true;
     try {
+      // Before the compile, never after: a plugin added to a material marks its
+      // defines dirty, and a material ramped after the pass would compile its
+      // new variant inside the first frame that drew it — exactly the stall
+      // this pass exists to remove.
+      applyToonRampToScene(scene);
       const result = await warmUpScene(scene);
       this.warmedMaterials = result.compiled;
       this.warmSkipped = result.skipped;
@@ -326,6 +337,7 @@ export class Renderer {
     this.road?.setExtent(ROAD_START_Z, endZ, level.arenaZ);
     this.props?.build(level.index, ROAD_START_Z, endZ);
     this.squad?.reset();
+    this.sprites?.reset();
     this.projectiles?.reset();
     this.effects?.reset();
     this.gates?.reset();
@@ -359,11 +371,16 @@ export class Renderer {
     this.applyEvents(events);
 
     this.squad?.update(state.squad, state.arenaZ, dt);
-    this.projectiles?.update(state.projectiles, weaponOf(state.squad));
+    // The sprite batch is opened before anything writes into it and closed
+    // after everything has: projectiles, their trails, impacts and flashes all
+    // land in the same buffer and the same draw call.
+    this.sprites?.begin();
+    this.projectiles?.update(state.projectiles, weaponOf(state.squad), dt);
     this.gates?.update(state, dt);
     this.enemies?.update(state, dt);
     this.boss?.update(state.boss, state.squad.z, dt, this.timeScale(dt));
     this.effects?.update(dt);
+    this.sprites?.end();
 
     this.rig?.update(state.squad, dt);
     // After the rig, because the sky dome rides on the camera: a dome that
@@ -402,6 +419,7 @@ export class Renderer {
     this.squad?.dispose();
     this.projectiles?.dispose();
     this.effects?.dispose();
+    this.sprites?.dispose();
     this.gates?.dispose();
     this.enemies?.dispose();
     this.boss?.dispose();
@@ -413,6 +431,7 @@ export class Renderer {
     this.squad = null;
     this.projectiles = null;
     this.effects = null;
+    this.sprites = null;
     this.gates = null;
     this.enemies = null;
     this.boss = null;
@@ -467,6 +486,9 @@ export class Renderer {
           break;
         case 'gatePassed':
           this.gates?.onPassed(event.gateId);
+          // The whole squad hops through the row: a beat of feedback on the
+          // choice, and the most visible place the crowd had no animation.
+          this.squad?.onGatePassed();
           break;
         case 'enemyHit':
           if (event.enemyId === this.bossId) this.boss?.onHit();
@@ -480,6 +502,12 @@ export class Renderer {
           // that this block did not fall over, it broke.
           effects?.onImpact('frost', event.x, event.z);
           break;
+        case 'enemyLeaked':
+          // The body is hidden rather than animated — it did not die, it got
+          // through — and a pale puff says where it reached.
+          enemies?.onLeaked(event.enemyId);
+          effects?.onPuff(event.x, event.z);
+          break;
         case 'enemyKilled':
           if (event.kind === 'boss') {
             this.boss?.onKilled();
@@ -490,6 +518,7 @@ export class Renderer {
           break;
         case 'bossActivated':
           this.bossId = event.enemyId;
+          this.boss?.onActivated();
           break;
         case 'bossStomp':
           this.boss?.onStomp(event.x, event.z);
@@ -546,6 +575,8 @@ export class Renderer {
   /** The meshes a glow pass would bloom, if one is ever asked for. */
   private collectGlowTargets(): void {
     const meshes: Mesh[] = [];
+    // The projectiles are sprites now and carry their own brightness, so they
+    // are not on the list: an additive quad gains nothing from a blur.
     pushAll(meshes, this.projectiles?.glowMeshes());
     pushAll(meshes, this.effects?.glowMeshes());
     pushAll(meshes, this.enemies?.glowMeshes());

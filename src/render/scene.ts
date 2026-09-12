@@ -1,11 +1,13 @@
 /**
  * Scene plumbing: the engine, the lights and the glow pass.
  *
- * Pulled out of `Renderer` so that file is about what happens every frame. The
- * dusk lighting is one warm key from behind the player's shoulder and a cool
- * sky fill (docs/06-milestone-2-plan.md, "Palette and tone"): the crowd's backs
- * and the enemies' faces are both lit by the key, and nothing in shadow goes
- * fully black.
+ * Pulled out of `Renderer` so that file is about what happens every frame.
+ *
+ * Daylight (D28): a high hemispheric ambient carrying the sky's own blue from
+ * above and a warm bounce from the ground, plus one soft warm key over the
+ * player's shoulder. The ambient does most of the work — nothing in the scene
+ * is ever in shadow, which is what "bright and casual" means — and the key is
+ * only there to give the toon ramp (`./toonRamp.ts`) a direction to band.
  */
 
 import { Engine } from '@babylonjs/core/Engines/engine';
@@ -51,6 +53,14 @@ export interface EngineOptions {
 const MSAA_PIXEL_RATIO_LIMIT = 1.5;
 
 /**
+ * The daylight pair (D28). High ambient, soft key: their sum is a little over
+ * one, so an albedo of 1 renders at roughly 1 and the KayKit atlas keeps the
+ * colours the artist painted instead of clipping.
+ */
+const AMBIENT_INTENSITY = 0.7;
+const KEY_INTENSITY = 0.6;
+
+/**
  * SwiftShader in headless Chromium can refuse a WebGL2 context. Try the normal
  * WebGL2 engine first, then fall back to WebGL1 rather than letting the whole
  * app fail to boot.
@@ -86,15 +96,21 @@ export function createScene(engine: Engine): Scene {
   scene.fogStart = FOG_START;
   scene.fogEnd = FOG_END;
 
-  const sky = new HemisphericLight('sky', new Vector3(0.1, 1, -0.2), scene);
-  sky.intensity = 0.7;
-  sky.diffuse = new Color3(0.5, 0.58, 0.9);
-  sky.groundColor = new Color3(0.12, 0.1, 0.16);
+  const sky = new HemisphericLight('sky', new Vector3(0.08, 1, -0.25), scene);
+  sky.intensity = AMBIENT_INTENSITY;
+  // Warm white from the sky half, a lit grass-and-stone bounce from the ground
+  // half: a hemispheric light's `groundColor` is what fills the undersides, and
+  // leaving it dark is what made the Milestone 2 crowd a row of black discs.
+  sky.diffuse = new Color3(1, 0.98, 0.93);
+  sky.groundColor = new Color3(0.62, 0.62, 0.52);
+  sky.specular = Color3.Black();
 
-  const key = new DirectionalLight('key', new Vector3(-0.35, -0.85, 0.4), scene);
-  key.intensity = 1.7;
-  key.diffuse = new Color3(1, 0.8, 0.58);
-  key.specular = new Color3(0.4, 0.3, 0.22);
+  const key = new DirectionalLight('key', new Vector3(-0.35, -0.8, 0.45), scene);
+  key.intensity = KEY_INTENSITY;
+  key.diffuse = new Color3(1, 0.95, 0.82);
+  // No specular at all: a flat casual look has no highlights in it, and the
+  // KayKit atlas has no gloss map for one to sit on.
+  key.specular = Color3.Black();
 
   // Nothing in the scene is picked. Steering is read from raw pointer events in
   // `src/core/input.ts`, and every mesh here is `isPickable = false` anyway, so

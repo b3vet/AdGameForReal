@@ -15,7 +15,7 @@ export {
   FIRE_RATE_GATE_WORTH,
 } from './level';
 export type { LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
-export { formationOffsets, halfWidth } from './formation';
+export { formationOffsets, halfWidth, unitSpacing } from './formation';
 export { enemyBalance, enemyFootprint, enemyHalfWidth } from './enemies';
 export { effectiveSpeed, overlapShare } from './contact';
 export { stompKills } from './boss';

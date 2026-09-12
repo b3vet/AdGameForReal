@@ -1,7 +1,7 @@
 /**
- * The place the run happens in: a cobbled road with glowing rune strips down
- * the lane boundaries, dead ground either side, the arena band at the far end,
- * and a dusk sky dome behind all of it.
+ * The place the run happens in: a pale stone road with glowing rune strips down
+ * the lane boundaries, grass either side, the arena band at the far end, and a
+ * daylight sky dome behind all of it (D28).
  *
  * One pooled set of static meshes, re-stretched per level and then frozen: the
  * road never moves, so paying for a world-matrix recompute every frame on the
@@ -47,6 +47,8 @@ const SKY_RADIUS = 190;
 /** Rune pulse: cycles per second, and how far the emissive swings. */
 const RUNE_PULSE_RATE = 0.6;
 const RUNE_PULSE_DEPTH = 0.35;
+/** How hot the rune strips run. See `glow`, and the pulse in `update`. */
+const RUNE_EMISSIVE = 0.95;
 
 export class RoadView {
   private readonly surface: Mesh;
@@ -64,13 +66,18 @@ export class RoadView {
   private phase = 0;
 
   constructor(scene: Scene) {
-    this.stone = createStoneTexture(scene);
+    // Light and warm rather than Milestone 2's dark grey: the road is the big
+    // bright surface the whole frame reads against now, and the tile only
+    // carries the pattern — `ROAD_COLOR` carries the colour.
+    this.stone = createStoneTexture(scene, { base: 0.88, variance: 0.1, cool: -0.05 });
 
     const roadMaterial = matte(scene, 'roadMat', ROAD_COLOR);
     roadMaterial.diffuseTexture = this.stone;
     const fieldMaterial = matte(scene, 'fieldMat', FIELD_COLOR);
-    this.runeMaterial = glow(scene, 'laneRuneMat', LANE_LINE_COLOR, 0.5);
-    const arenaMaterial = glow(scene, 'arenaMat', ARENA_COLOR, 0.4);
+    // Brighter than Milestone 2's: an emissive line has to out-shout a lit
+    // stone road now, not a near-black one.
+    this.runeMaterial = glow(scene, 'laneRuneMat', LANE_LINE_COLOR, RUNE_EMISSIVE);
+    const arenaMaterial = glow(scene, 'arenaMat', ARENA_COLOR, 0.8);
 
     // Unit-length strips: `setExtent` scales them along z, so one build serves
     // every level length.
@@ -179,7 +186,7 @@ export class RoadView {
   update(cameraX: number, cameraZ: number, dt: number): void {
     this.phase += dt * RUNE_PULSE_RATE;
     const pulse = 1 + Math.sin(this.phase * Math.PI * 2) * RUNE_PULSE_DEPTH;
-    LANE_LINE_COLOR.scaleToRef(0.5 * pulse, this.runeMaterial.emissiveColor);
+    LANE_LINE_COLOR.scaleToRef(RUNE_EMISSIVE * pulse, this.runeMaterial.emissiveColor);
     this.sky.position.set(cameraX, 0, cameraZ);
   }
 
@@ -197,15 +204,21 @@ export class RoadView {
 }
 
 /**
- * The sky: an inverted sphere carrying a painted gradient — near-black indigo
- * overhead, a dusk band at the horizon that the fog fades the road into.
+ * The sky: an inverted sphere carrying a painted gradient — light blue
+ * overhead, falling through a pale haze to a warm band at the horizon that the
+ * fog fades the road into (D28).
+ *
+ * The band below the horizon matters more than it looks: the dome is a full
+ * sphere and the ground plane only reaches so far, so on a lateral drag the
+ * player briefly sees under the road's edge. Keeping the bottom of the dome the
+ * horizon's own colour makes that a haze rather than a hole.
  */
 function buildSky(scene: Scene): Mesh {
   const gradient = createGradientTexture(scene, 'skyGradient', [
-    { at: 0, r: SKY_HORIZON.r * 0.5, g: SKY_HORIZON.g * 0.5, b: SKY_HORIZON.b * 0.6 },
+    { at: 0, r: SKY_HORIZON.r * 0.92, g: SKY_HORIZON.g * 0.9, b: SKY_HORIZON.b * 0.88 },
     { at: 0.47, r: SKY_HORIZON.r, g: SKY_HORIZON.g, b: SKY_HORIZON.b },
-    { at: 0.52, r: SKY_HAZE.r, g: SKY_HAZE.g, b: SKY_HAZE.b },
-    { at: 0.62, r: SKY_MID.r, g: SKY_MID.g, b: SKY_MID.b },
+    { at: 0.51, r: SKY_HAZE.r, g: SKY_HAZE.g, b: SKY_HAZE.b },
+    { at: 0.58, r: SKY_MID.r, g: SKY_MID.g, b: SKY_MID.b },
     { at: 1, r: SKY_ZENITH.r, g: SKY_ZENITH.g, b: SKY_ZENITH.b },
   ]);
 

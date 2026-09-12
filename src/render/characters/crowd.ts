@@ -34,6 +34,8 @@ export interface Crowd {
     animationId: string,
     timeOffset: number,
     speed?: number,
+    /** Height, when it differs from `scale`: squash and stretch. */
+    scaleY?: number,
   ): void;
   setCount(count: number): void;
   commit(): void;
@@ -93,11 +95,12 @@ export class StaticCrowd implements Crowd {
     _animationId: string,
     _timeOffset: number,
     _speed = 1,
+    scaleY = scale,
   ): void {
     // The capsule's origin is its centre, the crowd contract's is the feet.
-    scratchScale.set(scale, scale, scale);
+    scratchScale.set(scale, scaleY, scale);
     Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, scratchRotation);
-    scratchTranslation.set(x, y + (UNIT_HEIGHT / 2) * scale, z);
+    scratchTranslation.set(x, y + (UNIT_HEIGHT / 2) * scaleY, z);
     Matrix.ComposeToRef(scratchScale, scratchRotation, scratchTranslation, scratchMatrix);
     this.matrices.set(scratchMatrix.m, index * FLOATS_PER_MATRIX);
   }

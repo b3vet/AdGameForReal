@@ -3,7 +3,7 @@
   "source": "models/mage.glb",
   "boneCount": 41,
   "width": 168,
-  "height": 134,
+  "height": 197,
   "fps": 30,
   "format": "half-float-rgba",
   "ranges": {
@@ -25,10 +25,16 @@
       "to": 83,
       "loop": true
     },
+    "cast2": {
+      "animation": "Spellcast_Raise",
+      "from": 84,
+      "to": 146,
+      "loop": true
+    },
     "cheer": {
       "animation": "Cheer",
-      "from": 84,
-      "to": 133,
+      "from": 147,
+      "to": 196,
       "loop": true
     }
   }

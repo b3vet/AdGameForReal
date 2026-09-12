@@ -51,6 +51,17 @@ export interface ModelAsset extends AssetBase {
    * as a field of dark discs rather than as five hundred wizards.
    */
   tints?: Record<string, readonly number[]>;
+  /**
+   * Per-mesh uniform scale applied about that mesh's own node origin before it
+   * is merged into the character (Milestone 3, "squad reads as hats").
+   *
+   * A KayKit mage's pointed hat is wider than its shoulders, so from the
+   * camera's pitch a crowd of them is a field of brims with no faces in it. The
+   * scale lives here rather than in `scripts/bake-vat.mjs` because a VAT is bone
+   * matrices: the bake never sees mesh data, and shrinking the head bone would
+   * shrink the head with the hat. `asset.ts` applies it in the merge instead.
+   */
+  partScales?: Record<string, number>;
 }
 
 /** A baked vertex animation texture: raw half-float RGBA plus its dimensions. */

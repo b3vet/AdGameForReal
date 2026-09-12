@@ -84,6 +84,16 @@ export class DevCombat {
       return;
     }
 
+    // A stream body stays in the array as a corpse with `diedAt` on it, exactly
+    // as the sim leaves it, because that is what the renderer reads to play the
+    // death (`src/render/streamBodies.ts`). `DevStreams` sweeps it later.
+    if (enemy.streamId !== undefined) {
+      enemy.diedAt = this.state.time;
+      const stream = this.state.streams[enemy.streamId];
+      if (stream !== undefined) stream.killed++;
+      return;
+    }
+
     const index = this.state.enemies.indexOf(enemy);
     if (index >= 0) this.state.enemies.splice(index, 1);
   }
@@ -175,7 +185,12 @@ export class DevCombat {
   private tryHit(enemy: EnemyState, projectile: ProjectileState, previousZ: number): boolean {
     if (!enemy.alive) return false;
     if (enemy.z < previousZ || enemy.z > projectile.z) return false;
-    const half = enemy.kind === 'boss' ? BOSS_HALF_WIDTH : blockHalfWidth(enemy.units);
+    const half =
+      enemy.kind === 'boss'
+        ? BOSS_HALF_WIDTH
+        : enemy.streamId !== undefined
+          ? balance.streams.footprint + balance.streams.aimAssist
+          : blockHalfWidth(enemy.units);
     if (Math.abs(projectile.x - enemy.x) > half) return false;
 
     enemy.hp -= 1;

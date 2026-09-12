@@ -30,6 +30,7 @@ import {
   resolveAssetUrl,
 } from './characters';
 import type { Crowd } from './characters';
+import { applyToonRamp } from './toonRamp';
 
 export interface CrowdRequest {
   /** Manifest id, e.g. `mage` or `skeleton_minion`. */
@@ -49,13 +50,13 @@ export interface CrowdRequest {
 /**
  * How much of its own colour a character carries as emissive.
  *
- * The biome is a near-black dusk (decision: plan, "Palette and tone") and a
- * KayKit mage is navy with a black hat, so under scene light alone the crowd
- * is a silhouette with no colour in it at all. Feeding the albedo back in as a
- * weak emissive lifts the characters off the road without lighting the whole
- * scene, and keeps the hue the artist painted rather than washing it grey.
+ * Milestone 2 needed a third of the albedo here, because the biome was a
+ * near-black dusk and a KayKit mage under it was a silhouette. Under D28's
+ * daylight the 0.7 ambient does that work, and the lift is down to a tenth: it
+ * is now only there to keep a character's *own* colour from being flattened by
+ * the ramp on its shaded side. Push it back up and the robes clip to white.
  */
-const CHARACTER_LIFT = 0.26;
+const CHARACTER_LIFT = 0.1;
 
 /** A crowd of `capacity` animated characters, or capsules if the load failed. */
 export async function loadCrowd(scene: Scene, request: CrowdRequest): Promise<Crowd> {
@@ -66,10 +67,18 @@ export async function loadCrowd(scene: Scene, request: CrowdRequest): Promise<Cr
       request.variant === undefined ? {} : { variant: request.variant },
     );
     liftEmissive(asset.mesh.material, request.lift ?? CHARACTER_LIFT);
+    applyToonRamp(asset.mesh.material);
     return new VatCrowd(asset, request.capacity);
   } catch (error) {
     warnOnce(request.modelId, error);
-    return new StaticCrowd(scene, request.fallbackName, request.fallbackColor, request.capacity);
+    const fallback = new StaticCrowd(
+      scene,
+      request.fallbackName,
+      request.fallbackColor,
+      request.capacity,
+    );
+    applyToonRamp(fallback.mesh.material);
+    return fallback;
   }
 }
 
@@ -86,6 +95,7 @@ export async function loadCrowds(
     const assets = await loadCharacterAssets(scene, request.modelId, request.variants);
     return assets.map((asset) => {
       liftEmissive(asset.mesh.material, request.lift ?? CHARACTER_LIFT);
+      applyToonRamp(asset.mesh.material);
       return new VatCrowd(asset, request.capacity);
     });
   } catch (error) {
@@ -282,6 +292,20 @@ export function liftEmissive(material: unknown, amount: number): void {
   if (!(material instanceof PBRMaterial) || amount <= 0) return;
   if (material.albedoTexture !== null) material.emissiveTexture = material.albedoTexture;
   material.emissiveColor = new Color3(amount, amount, amount);
+}
+
+/**
+ * Warms or lightens a model's albedo. PBR multiplies `albedoColor` by
+ * `albedoTexture`, so this shifts the whole model without touching the atlas
+ * it shares with every other prop cut from the same pack.
+ *
+ * Milestone 3 uses it on the roadside: the Halloween Bits are painted for a
+ * night scene, and under daylight the same greys read as soot (D28, "props
+ * tinted warmer and lighter").
+ */
+export function tintMaterial(material: unknown, r: number, g: number, b: number): void {
+  if (!(material instanceof PBRMaterial)) return;
+  material.albedoColor.set(r, g, b);
 }
 
 const warned = new Set<string>();
