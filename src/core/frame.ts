@@ -96,6 +96,10 @@ export class FrameDriver {
     physicsMs: 0,
     drawCalls: 0,
     drawCallsPeak: 0,
+    streamBodies: 0,
+    labels: 0,
+    labelGlyphs: 0,
+    labelsDropped: 0,
     timeScale: 1,
     ragdolls: 0,
     shards: 0,
@@ -192,6 +196,13 @@ export class FrameDriver {
       // Real time, always: debris left over from the last run has to settle
       // rather than hang in the air behind the menu.
       host.physics()?.update(frameDt);
+      // No sim, and usually no render either (the title's frame is drawn once
+      // and then held), so the three cost readouts describe nothing. Zeroed
+      // rather than left holding the last run's numbers, which a capture taken
+      // on the title screen would otherwise report as if they were live.
+      this.stats.simMs = 0;
+      this.stats.renderMs = 0;
+      this.stats.physicsMs = 0;
       this.updateDebug(null, NO_EVENTS, frameDt);
       host.onFrameEnd(frameDt, realDt);
       return;
@@ -280,6 +291,11 @@ export class FrameDriver {
     const physics = host.physics();
     this.stats.drawCalls = host.renderer.drawCalls;
     this.stats.drawCallsPeak = this.peak;
+    this.stats.streamBodies = host.renderer.streamBodies;
+    const labels = host.renderer.labelStats;
+    this.stats.labels = labels.labels;
+    this.stats.labelGlyphs = labels.glyphs;
+    this.stats.labelsDropped = labels.dropped;
     this.stats.ragdolls = physics?.stats.ragdolls ?? 0;
     this.stats.shards = physics?.stats.shards ?? 0;
     this.stats.physicsBodies = physics?.stats.bodies ?? 0;

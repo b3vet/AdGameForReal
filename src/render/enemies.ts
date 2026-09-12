@@ -76,7 +76,7 @@ export class EnemyView {
 
   private grunts: Crowd | null = null;
   private brutes: Crowd | null = null;
-  private physicsQuality = 2;
+  private physicsQuality = 0;
   /** Per kind: the baked `death` range is shorter for a warrior than a minion. */
   private gruntDeath = 1;
   private bruteDeath = 1;
@@ -136,7 +136,11 @@ export class EnemyView {
     this.streams.setDeathSeconds(this.gruntDeath);
   }
 
-  /** 0 means no Havok, so this view owes the player a death animation. */
+  /**
+   * 0 means no Havok, so this view owes the player a death animation. It is
+   * also where the view starts: the layer is loaded in the background and only
+   * says what it can do once it is up (`Renderer.physicsQuality`).
+   */
   setPhysicsQuality(quality: number): void {
     this.physicsQuality = quality;
   }

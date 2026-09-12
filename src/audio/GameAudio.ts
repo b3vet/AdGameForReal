@@ -241,6 +241,12 @@ export class GameAudio {
           }
           break;
         case 'enemyShattered':
+          // A block bursting into ice is its own event. A stream body doing it
+          // is not: `enemyKilled` for the same body already played the stream
+          // kill a line above, so a second voice here is every frost kill in a
+          // river said twice. The physics layer draws the same line (it throws
+          // no shards for a stream body) and so does the renderer.
+          if (event.streamId !== undefined) break;
           if (!this.throttled('shatter', audioMix.minIntervalMs.shatter)) this.play('sfx_shatter');
           break;
         case 'gateHit':

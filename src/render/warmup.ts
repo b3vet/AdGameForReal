@@ -26,6 +26,7 @@
  * mesh stays disabled throughout.
  */
 
+import type { Engine } from '@babylonjs/core/Engines/engine';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import type { Scene } from '@babylonjs/core/scene';
@@ -133,4 +134,69 @@ function withTimeout(promise: Promise<void>): Promise<void> {
       },
     );
   });
+}
+
+/**
+ * What the pass has done and what the engine has compiled, for the debug panel
+ * and the smoke.
+ */
+export interface ShaderStats {
+  programs: number;
+  warmed: number;
+  skipped: number;
+  failed: number;
+  warming: boolean;
+}
+
+/**
+ * The pass's own bookkeeping, kept here rather than in `Renderer` so the
+ * renderer is about the frame. `run` may be called any number of times — at
+ * boot, when the physics pools arrive, at every level start — and the counters
+ * always describe the last pass.
+ */
+export class WarmUpTracker {
+  private compiled = 0;
+  private skipped = 0;
+  private failed = 0;
+  private inFlight = false;
+
+  async run(scene: Scene): Promise<void> {
+    this.inFlight = true;
+    try {
+      const result = await warmUpScene(scene);
+      this.compiled = result.compiled;
+      this.skipped = result.skipped;
+      this.failed = result.failed;
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  stats(engine: Engine | null): ShaderStats {
+    return {
+      programs: compiledProgramCount(engine),
+      warmed: this.compiled,
+      skipped: this.skipped,
+      failed: this.failed,
+      warming: this.inFlight,
+    };
+  }
+}
+
+/**
+ * How many distinct shader programs the engine has built.
+ *
+ * Babylon keeps them in a private cache keyed by define string and exposes no
+ * counter for it (`SceneInstrumentation` counts draw calls, `EngineInstrumentation`
+ * counts compilation *time*), so this reads that cache defensively and answers
+ * 0 rather than throwing if a future version moves it. `programs` going up
+ * during play is the signal that something compiled inside a frame, which is
+ * what this pass exists to prevent, and the smoke asserts it does not move
+ * across a whole level. It is a diagnostic, never read inside a frame.
+ */
+function compiledProgramCount(engine: Engine | null): number {
+  if (engine === null) return 0;
+  const cache = (engine as unknown as { _compiledEffects?: Record<string, unknown> })
+    ._compiledEffects;
+  return cache === undefined ? 0 : Object.keys(cache).length;
 }

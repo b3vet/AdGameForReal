@@ -114,6 +114,8 @@ export class NumberLabels {
   private glyphs = 0;
   /** Glyphs the budget refused last frame, for the boot-time warning. */
   private dropped = 0;
+  /** Labels actually drawn last frame, which is what the debug panel names. */
+  private drawn = 0;
 
   constructor(scene: Scene) {
     this.scene = scene;
@@ -235,6 +237,7 @@ export class NumberLabels {
   commit(): void {
     this.glyphs = 0;
     this.dropped = 0;
+    this.drawn = 0;
 
     const camera = this.scene.activeCamera;
     if (camera === null) {
@@ -288,6 +291,7 @@ export class NumberLabels {
 
       const size = (this.sizes[id] ?? 0) * perPixel * depth;
       if (size <= 0) continue;
+      this.drawn++;
 
       // Two passes over the string: one for the width, one to place the pen.
       // Cheaper than the array of glyphs the alternative would allocate.
@@ -356,9 +360,12 @@ export class NumberLabels {
     this.publish();
   }
 
-  /** Glyphs drawn last frame, and how many the budget refused. For debugging. */
-  get stats(): { glyphs: number; dropped: number } {
-    return { glyphs: this.glyphs, dropped: this.dropped };
+  /**
+   * Labels and glyphs drawn last frame, and how many glyphs the budget refused.
+   * Read by the debug panel and the boot-time warning; never inside a frame.
+   */
+  get stats(): { labels: number; glyphs: number; dropped: number } {
+    return { labels: this.drawn, glyphs: this.glyphs, dropped: this.dropped };
   }
 
   dispose(): void {

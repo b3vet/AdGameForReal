@@ -1,8 +1,9 @@
 /**
- * Debug panel: frame cost, squad count, live projectiles, enemies alive,
- * physics, audio, draw calls, time scale and the last few sim events, as a
- * monospace block in the bottom-left corner, plus a "Capture" button that
- * records ten seconds of those numbers into one pasteable summary.
+ * Debug panel: frame cost, squad count, live projectiles, enemies alive, the
+ * horde on screen and the numbers floating over it, physics, audio, draw calls,
+ * time scale and the last few sim events, as a monospace block in the
+ * bottom-left corner, plus a "Capture" button that records ten seconds of those
+ * numbers into one pasteable summary.
  *
  * Reached with `?debug` or, because the hosted playtest wrapper may swallow the
  * query string, by triple-tapping the wordmark or the level chip (`./taps.ts`).
@@ -56,6 +57,13 @@ export interface DebugStats {
   drawCalls: number;
   /** Worst draw-call count since the run started; the smoke's budget is on this. */
   drawCallsPeak: number;
+  /** Stream bodies the renderer wrote into the crowd last frame (D29). */
+  streamBodies: number;
+  /** World number labels drawn last frame, and the glyphs they cost. */
+  labels: number;
+  labelGlyphs: number;
+  /** Glyphs the atlas budget refused; anything but 0 means numbers went missing. */
+  labelsDropped: number;
   /** The app-level time scale: 1 normal, 0 during hit-stop. */
   timeScale: number;
   ragdolls: number;
@@ -203,8 +211,15 @@ export class DebugPanel {
   /**
    * The block the product owner reads off a phone in one glance
    * (docs/06-milestone-2-plan.md, definition of done 9): frame rate, where the
-   * frame went, what it cost to draw, which rung of the degrade ladder is in
-   * force at what resolution, what physics is alive, and whether sound is on.
+   * frame went, what it cost to draw, how much of the horde and how many world
+   * numbers are on screen, which rung of the degrade ladder is in force at what
+   * resolution, what physics is alive, and whether sound is on.
+   *
+   * `bodies` and `lbl` are the two ceilings Milestone 3 added that a level can
+   * quietly run into — `POOL.grunts` and the glyph budget — so they are printed
+   * next to the draw calls rather than left to be inferred from a missing
+   * skeleton or a missing number. `DROP` only appears when the atlas actually
+   * refused a glyph, which is the one case that is a bug rather than a reading.
    */
   private compose(state: Readonly<RunState> | null, phase: string, stats: DebugStats): string {
     const lines = [
@@ -213,6 +228,9 @@ export class DebugPanel {
         `  phys ${this.physicsMs.toFixed(2)}ms`,
       `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
         `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
+      `bodies ${String(stats.streamBodies)}  lbl ${String(stats.labels)}` +
+        `/${String(stats.labelGlyphs)}g` +
+        (stats.labelsDropped > 0 ? ` DROP ${String(stats.labelsDropped)}` : ''),
       `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
         `  p95 ${stats.qualityP95.toFixed(1)}ms` +
         (stats.heapMb > 0

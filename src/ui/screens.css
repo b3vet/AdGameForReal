@@ -1,0 +1,179 @@
+/*
+ * The furniture each screen carries: the title's level picker, the result
+ * sheet's numbers, and the mute control that sits on both the title and the
+ * HUD.
+ *
+ * Split out of `./styles.css` in Milestone 3 Phase D, which had grown past the
+ * file-size rule. The layout, the palette tokens and the shared button styles
+ * stay there; everything here is one screen's own controls. Loaded after it
+ * (`./fonts.ts`), so a rule here wins a tie — none of these selectors appears
+ * in both files.
+ */
+
+/* --- Title: level picker ------------------------------------------------- */
+
+/* Ink on the frosted plate, not bright ink over the road it used to float on. */
+.picker__caption {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ink-soft);
+}
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  width: min(100%, 22rem);
+}
+
+.picker__level {
+  appearance: none;
+  border: none;
+  border-radius: 1rem;
+  padding: 0.75rem 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  /* Opaque white with a violet ring: on the frosted plate a translucent chip
+     had no edge at all. */
+  background: #fffdf9;
+  box-shadow:
+    0 0.2rem 0 rgba(126, 108, 168, 0.4),
+    inset 0 0 0 1px rgba(123, 76, 255, 0.22);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.picker__level[aria-pressed='true'] {
+  color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 0.2rem 0 rgba(74, 40, 160, 0.85);
+}
+
+.picker__level:disabled {
+  color: rgba(43, 33, 64, 0.35);
+  background: rgba(238, 232, 244, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.1);
+  cursor: default;
+  pointer-events: none;
+}
+
+/* --- Result -------------------------------------------------------------- */
+
+.result__kicker {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  width: min(100%, 22rem);
+}
+
+.stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.75rem 1.1rem;
+  border-radius: 1rem;
+  background: rgba(123, 76, 255, 0.1);
+}
+
+.stats__key {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.stats__value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+
+/* --- Mute ---------------------------------------------------------------- */
+
+/*
+ * Two instances of the same control: one on the title, one in the HUD's top
+ * right. Both write `muted` to the save, so whichever the player finds first is
+ * the one that matters. Both sit over the road, so both are dark chips.
+ */
+.mute {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 2.7rem;
+  height: 2.7rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--chip-strong);
+  color: var(--ink-bright);
+  cursor: pointer;
+  touch-action: manipulation;
+  /* The overlay is click-through; its controls are not. */
+  pointer-events: auto;
+}
+
+.mute:active {
+  transform: translateY(1px);
+}
+
+.mute--title {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.9rem;
+}
+
+.mute__icon {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.mute__horn {
+  fill: currentColor;
+}
+
+.mute__wave,
+.mute__slash {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+}
+
+.mute__slash {
+  display: none;
+  stroke: var(--danger);
+}
+
+.mute[aria-pressed='true'] {
+  color: var(--ink-bright-dim);
+}
+
+.mute[aria-pressed='true'] .mute__wave {
+  display: none;
+}
+
+.mute[aria-pressed='true'] .mute__slash {
+  display: inline;
+}

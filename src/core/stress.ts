@@ -93,6 +93,15 @@ export interface StressHandle {
    * request until the tool gives up, so the smoke pauses before it shoots.
    */
   pause: () => void;
+  /**
+   * Throws away the render costs collected so far, so the next `stats()` reads
+   * a fresh window.
+   *
+   * The smoke samples three windows and fails only if two of them are over
+   * budget (`scripts/smoke-stress.mjs`): one busy machine hiccup lands in one
+   * window, and a cumulative median would carry it into the next two.
+   */
+  resetSamples: () => void;
   dispose: () => void;
 }
 
@@ -330,6 +339,9 @@ export async function runStressScene(
       seconds: elapsed,
     }),
     pause,
+    resetSamples: () => {
+      renderCosts.length = 0;
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;

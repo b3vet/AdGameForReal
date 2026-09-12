@@ -28,11 +28,13 @@ import { RoadView } from './road';
 import { createEngine, createScene } from './scene';
 import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
-import { POOL, SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { RendererEvents } from './rendererEvents';
+import { POOL } from './theme';
 import { applyToonRampToScene } from './toonRamp';
-import { warmUpScene } from './warmup';
-import { startWeapon, weaponOf } from '@/sim';
-import type { LevelDef, RunState, SimEvent, WeaponId } from '@/sim';
+import { WarmUpTracker } from './warmup';
+import type { ShaderStats } from './warmup';
+import { weaponOf } from '@/sim';
+import type { LevelDef, RunState, SimEvent } from '@/sim';
 
 export interface RendererOptions {
   /**
@@ -57,10 +59,6 @@ const DEFAULT_MAX_PIXEL_RATIO = 2;
 const ROAD_START_Z = -10;
 const ROAD_PAST_ARENA = 70;
 
-/** Scratch for the position lookups in `applyEvents`, which must not allocate. */
-const scratchFrom = { x: 0, z: 0 };
-const scratchTo = { x: 0, z: 0 };
-
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly preserveDrawingBuffer: boolean;
@@ -84,23 +82,21 @@ export class Renderer {
   private boss: BossView | null = null;
 
   /**
-   * Off by default (Milestone 3 plan, performance step 4). The layer is not
-   * even built until something asks for it, so a phone never pays for its
-   * render target.
+   * Who draws a death, mirrored from the physics layer by `setPhysicsQuality`.
+   *
+   * Zero until the app says otherwise, and that is the important part: the
+   * layer is loaded without being awaited (two megabytes of Havok must not hold
+   * the title screen), so for the first seconds of the session there is no
+   * physics at all. Starting at 2 meant the renderer spent those seconds
+   * skipping the deaths it believed Havok was about to throw — every tenth
+   * stream body blinked out, and every block died without an animation.
    */
-  private physicsQuality = 2;
-  /** The boss's enemy id, so `enemyHit` can be routed to its hit reaction. */
-  private bossId = -1;
-  /** A boss death arrives as two events; the burst belongs to whichever is first. */
-  private bossBurstDone = false;
-  /** The staff in hand, for effects fired by events that do not name one. */
-  private lastWeapon: WeaponId = startWeapon;
+  private physicsQuality = 0;
+  /** Built in `init`, once every view it writes to exists (`./rendererEvents.ts`). */
+  private events: RendererEvents | null = null;
 
-  /** Warm-up bookkeeping; see `warmUp` and `shaderStats`. */
-  private warmedMaterials = 0;
-  private warmSkipped = 0;
-  private warmFailures = 0;
-  private warmInFlight = false;
+  /** Warm-up bookkeeping; see `warmUp` and `./warmup.ts`. */
+  private readonly warmUpTracker = new WarmUpTracker();
 
   private disposed = false;
 
@@ -145,6 +141,17 @@ export class Renderer {
     this.gates = new GateView(scene, labels);
     this.enemies = new EnemyView(scene, labels);
     this.boss = new BossView(scene, labels);
+    this.events = new RendererEvents({
+      squad: this.squad,
+      projectiles: this.projectiles,
+      effects: this.effects,
+      gates: this.gates,
+      enemies: this.enemies,
+      boss: this.boss,
+      shake: (strength, seconds) => {
+        this.shake(strength, seconds);
+      },
+    });
 
     // A default stretch of road, so the very first frame — which the app draws
     // behind the title screen before any level exists — is not empty sky.
@@ -212,29 +219,22 @@ export class Renderer {
   }
 
   /**
-   * Shader programs the engine has compiled so far, and what the warm-up pass
-   * has done about them.
-   *
-   * `programs` is read off the engine's own cache of compiled effects, keyed by
-   * define string, so it counts *variants*: it going up during play is the
-   * signal that something compiled inside a frame, which is what
-   * `src/render/warmup.ts` exists to prevent. The smoke asserts it does not
-   * move across a whole level (`scripts/smoke.mjs`).
+   * Stream bodies written into the crowd last frame, and the world labels drawn
+   * over them. Both are what the horde costs the renderer and both have a
+   * ceiling a level can quietly run into — `POOL.grunts` and the glyph budget —
+   * so the debug panel prints them next to the draw calls.
    */
-  get shaderStats(): {
-    programs: number;
-    warmed: number;
-    skipped: number;
-    failed: number;
-    warming: boolean;
-  } {
-    return {
-      programs: compiledProgramCount(this.engine),
-      warmed: this.warmedMaterials,
-      skipped: this.warmSkipped,
-      failed: this.warmFailures,
-      warming: this.warmInFlight,
-    };
+  get streamBodies(): number {
+    return this.enemies?.streamBodies ?? 0;
+  }
+
+  get labelStats(): { labels: number; glyphs: number; dropped: number } {
+    return this.labels?.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
+  }
+
+  /** Shader programs compiled so far, and what the warm-up pass did (`./warmup.ts`). */
+  get shaderStats(): ShaderStats {
+    return this.warmUpTracker.stats(this.engine);
   }
 
   /**
@@ -248,20 +248,12 @@ export class Renderer {
   async warmUp(): Promise<void> {
     const scene = this.sceneRef;
     if (scene === null || this.disposed) return;
-    this.warmInFlight = true;
-    try {
-      // Before the compile, never after: a plugin added to a material marks its
-      // defines dirty, and a material ramped after the pass would compile its
-      // new variant inside the first frame that drew it — exactly the stall
-      // this pass exists to remove.
-      applyToonRampToScene(scene);
-      const result = await warmUpScene(scene);
-      this.warmedMaterials = result.compiled;
-      this.warmSkipped = result.skipped;
-      this.warmFailures = result.failed;
-    } finally {
-      this.warmInFlight = false;
-    }
+    // Before the compile, never after: a plugin added to a material marks its
+    // defines dirty, and a material ramped after the pass would compile its
+    // new variant inside the first frame that drew it — exactly the stall this
+    // pass exists to remove.
+    applyToonRampToScene(scene);
+    await this.warmUpTracker.run(scene);
   }
 
   /**
@@ -320,13 +312,7 @@ export class Renderer {
     this.gates?.reset();
     this.enemies?.reset();
     this.boss?.reset();
-    this.bossId = -1;
-    this.bossBurstDone = false;
-    // Every run starts on `startWeapon`, and the views only learn about a staff
-    // from a `weaponChanged` event — which the new run has not emitted. Without
-    // this the first frames of the level after a frost run draw frost bolts and
-    // cyan muzzle flashes for a squad holding ember.
-    this.setWeapon(startWeapon);
+    this.events?.reset();
     this.rig?.reset();
   }
 
@@ -343,9 +329,8 @@ export class Renderer {
     const scene = this.sceneRef;
     if (scene === null) return;
 
-    this.bossId = state.boss?.id ?? this.bossId;
-    this.lastWeapon = weaponOf(state.squad);
-    this.applyEvents(events);
+    this.events?.observe(state.boss?.id, weaponOf(state.squad));
+    this.events?.apply(events);
 
     this.squad?.update(state.squad, state.arenaZ, dt);
     // The sprite batch is opened before anything writes into it and closed
@@ -381,7 +366,7 @@ export class Renderer {
    */
   absorbEvents(events: readonly SimEvent[]): void {
     if (this.disposed) return;
-    this.applyEvents(events);
+    this.events?.apply(events);
   }
 
   resize(): void {
@@ -411,6 +396,7 @@ export class Renderer {
     this.gates = null;
     this.enemies = null;
     this.boss = null;
+    this.events = null;
     this.props = null;
     this.road = null;
     this.labels = null;
@@ -423,117 +409,6 @@ export class Renderer {
     this.sceneRef = null;
     this.engine?.dispose();
     this.engine = null;
-  }
-
-  private applyEvents(events: readonly SimEvent[]): void {
-    const effects = this.effects;
-    const enemies = this.enemies;
-
-    for (const event of events) {
-      switch (event.type) {
-        case 'projectileFired':
-          effects?.onMuzzle(event.x, event.z);
-          break;
-        case 'projectileHit':
-          effects?.onImpact(event.weaponId, event.x, event.z);
-          break;
-        case 'splash':
-          effects?.onSplash(event.x, event.z, event.radius);
-          break;
-        case 'chain':
-          // The event carries block ids, not positions: the view that draws
-          // them is the one that knows where they are. A block that has already
-          // been taken away — killed by the same volley, or shattered — has no
-          // position any more, and the arc to it is simply not drawn.
-          if (
-            enemies !== null &&
-            enemies.positionOf(event.from, scratchFrom) &&
-            enemies.positionOf(event.to, scratchTo)
-          ) {
-            effects?.onChain(scratchFrom.x, scratchFrom.z, scratchTo.x, scratchTo.z);
-          }
-          break;
-        case 'weaponChanged':
-          this.setWeapon(event.to);
-          break;
-        case 'gateHit':
-          this.gates?.onHit(event.gateId);
-          break;
-        case 'gatePassed':
-          this.gates?.onPassed(event.gateId);
-          // The whole squad hops through the row: a beat of feedback on the
-          // choice, and the most visible place the crowd had no animation.
-          this.squad?.onGatePassed();
-          break;
-        case 'enemyHit':
-          if (event.enemyId === this.bossId) this.boss?.onHit();
-          break;
-        case 'enemySlowed':
-          enemies?.onSlowed(event.enemyId, event.seconds);
-          break;
-        case 'enemyShattered':
-          enemies?.onShattered(event.enemyId);
-          // The shards are the physics layer's; the frost flash is the tell
-          // that this block did not fall over, it broke.
-          effects?.onImpact('frost', event.x, event.z);
-          break;
-        case 'enemyLeaked':
-          // The body is hidden rather than animated — it did not die, it got
-          // through — and a pale puff says where it reached.
-          enemies?.onLeaked(event.enemyId);
-          effects?.onPuff(event.x, event.z);
-          break;
-        case 'enemyKilled':
-          if (event.kind === 'boss') {
-            this.boss?.onKilled();
-            this.bossDeathBurst(event.x, event.z);
-          } else {
-            enemies?.onKilled(event.enemyId);
-          }
-          break;
-        case 'bossActivated':
-          this.bossId = event.enemyId;
-          this.boss?.onActivated();
-          break;
-        case 'bossStomp':
-          this.boss?.onStomp(event.x, event.z);
-          this.shake(SHAKE_STOMP.strength, SHAKE_STOMP.seconds);
-          break;
-        case 'bossKilled':
-          this.boss?.onKilled();
-          // `bossKilled` carries no position, unlike the `enemyKilled` that
-          // usually precedes it; the view knows where it last drew the body.
-          this.boss?.positionOf(scratchTo);
-          this.bossDeathBurst(scratchTo.x, scratchTo.z);
-          this.shake(SHAKE_BOSS_KILL.strength, SHAKE_BOSS_KILL.seconds);
-          break;
-        case 'runEnded':
-          this.squad?.onRunEnded(event.status);
-          break;
-        default:
-          // Everything else (activated, gained, lost) is already visible through
-          // `RunState`; the UI layer owns the rest.
-          break;
-      }
-    }
-  }
-
-  /** Points every view that has a per-staff look at the same staff. */
-  private setWeapon(weaponId: WeaponId): void {
-    this.lastWeapon = weaponId;
-    this.squad?.setWeapon(weaponId);
-    this.projectiles?.setWeapon(weaponId);
-    this.effects?.setWeapon(weaponId);
-  }
-
-  /**
-   * A boss death reaches us as `enemyKilled` and then `bossKilled`; the burst
-   * belongs to whichever arrives first, and the latch is what keeps it to one.
-   */
-  private bossDeathBurst(x: number, z: number): void {
-    if (this.bossBurstDone) return;
-    this.bossBurstDone = true;
-    this.effects?.onBossDeath(this.lastWeapon, x, z);
   }
 
   /**
@@ -570,18 +445,3 @@ export class Renderer {
   }
 }
 
-/**
- * How many distinct shader programs the engine has built.
- *
- * Babylon keeps them in a private cache keyed by define string and exposes no
- * counter for it (`SceneInstrumentation` counts draw calls, `EngineInstrumentation`
- * counts compilation *time*), so this reads that cache defensively and answers
- * 0 rather than throwing if a future version moves it. It is a diagnostic —
- * the debug panel and the smoke — and never read inside a frame.
- */
-function compiledProgramCount(engine: Engine | null): number {
-  if (engine === null) return 0;
-  const cache = (engine as unknown as { _compiledEffects?: Record<string, unknown> })
-    ._compiledEffects;
-  return cache === undefined ? 0 : Object.keys(cache).length;
-}

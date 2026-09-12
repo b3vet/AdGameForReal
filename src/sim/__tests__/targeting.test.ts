@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { level, play, row, runOf, staffRow, testBalance } from './fixtures';
 import type { RowDef } from '../level';
 import { Run } from '../Run';
+import { TargetList } from '../targeting';
 import type { EnemyState, SimEvent, StreamDef } from '../types';
 import { balance } from '@/data';
 
@@ -202,6 +203,45 @@ describe('targeting', () => {
     const gate = run.state.gates[0];
     expect(gate?.hits).toBeGreaterThan(50);
     expect(gate?.value).toBeGreaterThan(3);
+  });
+
+  /**
+   * The lane a target is filed under has to come from the run's own tuning.
+   * `add` used to reach for the shipped `balance.road.laneWidth` instead, so a
+   * run with a different road filed everything against a two-metre lane: on a
+   * six-metre road a body standing dead centre landed in all three lane lists,
+   * and `sweepLane` — which has no band test of its own, because a batched
+   * volley comes from a crowd spread across the lane — mowed it down from a
+   * lane it was nowhere near.
+   */
+  it('files a target under the run\'s own lane width, not the shipped one', () => {
+    const tuning = testBalance();
+    tuning.road.laneWidth = 6;
+    tuning.road.halfWidth = 9;
+    tuning.road.clampX = 7;
+
+    const targets = new TargetList();
+    const body: EnemyState = {
+      id: 1,
+      kind: 'grunt',
+      x: 0,
+      z: 20,
+      hp: 5,
+      maxHp: 5,
+      units: 1,
+      speed: 3,
+      active: true,
+      alive: true,
+      slowUntil: 0,
+      streamId: 0,
+    };
+    targets.insert(body, tuning);
+
+    // Even with the aim assist on it, the body is 1.34 m wide to a shot and the
+    // lane is six metres: it stands in the middle lane and nowhere else.
+    expect(targets.sweepLane(0, 0, 50)).not.toBeNull();
+    expect(targets.sweepLane(1, 0, 50)).toBeNull();
+    expect(targets.sweepLane(-1, 0, 50)).toBeNull();
   });
 
   it('drops targets that fall behind the squad instead of scanning them forever', () => {

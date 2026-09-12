@@ -239,3 +239,47 @@ Tech lead reading:
   13.11 MB; both verified offline at physics quality 2 with Cinzel loaded.
 - Published to the product owner as the full Milestone 3 build for the
   look check and the frame-rate re-measurement.
+
+## 2026-09-12 — Phase D: review and hardening (verified and committed)
+
+- Fixed (medium): the renderer's mirrored physics quality started at 2
+  while Havok was still loading, so early deaths it expected physics to
+  handle vanished without animation; it now starts at 0 and the app raises
+  it when the layer is up. The landscape layout query excluded short
+  landscape phones, leaving Play below the fold; re-measured on seven
+  viewports.
+- Fixed (low): frost shatter on stream bodies played the shatter sound and
+  drew a second impact per body; lane lists filed targets with the default
+  lane width instead of the run's; a dead bot helper removed; title-screen
+  frames reported the previous run's timings.
+- Deferred with reasons: the thin-instance user buffers upload full size
+  each frame (about 68 KB) because Babylon's partial update path would
+  break after a context restore; aim assist puts many center-lane bodies
+  in all three lane lists; the grunt pool of 372 can truncate a horde plus
+  three block rows (now visible in `?debug`); a pooled event object drops to
+  dictionary mode on block kills.
+- Checked clean: stream bookkeeping is recomputed each settle, ids are
+  never reused, compaction is safe, hitscan carry-over cannot double-kill,
+  pressure sizing chews a weak squad rather than stalling, determinism
+  intact, no per-frame allocations in the new paths, the inline plugin
+  covers every asset kind.
+- Stress tripwire samples three 8 s windows and fails only when two exceed
+  12 ms. Splits: theme, Renderer, smoke and styles into palette, pools,
+  rendererEvents, smoke-run, smoke-stress and screens. `?debug` gains live
+  stream bodies and label glyph counts.
+- Tests 206 → 211. Draw peaks 35 / 34 / 38; stress 26 calls at 4.8 to 9.4
+  ms; hosted 9.77 MB, artifact 13.11 MB.
+
+## Milestone 3 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Checks and balance bands | Done: 211 tests, greedy clean on the contract seeds, random clears level 1, bands per level as logged in B1 |
+| 2. 60 fps at level 8 on the iPhone 17 Pro Max, feels smooth | Pending the product owner's re-measurement on this build |
+| 3. Frames: daylight, mages read, magical projectiles, streams dying as they come, boss number above head, Cinzel, minimal HUD | Done |
+| 4. Offline builds under budget with fonts embedded, no GUI texture | Done: hosted 9.77 MB, artifact 13.11 MB |
+| 5. Docs and ledger D28 to D31 | Done |
+
+Carried forward: the deferred items above; the crowd-width question
+(formation spacing versus the road clamp) from Phase B2; the Phase B1
+`dpsTrim` fudge to re-measure if fire splitting changes.

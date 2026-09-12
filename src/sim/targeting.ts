@@ -85,10 +85,11 @@ export class TargetList {
     for (const lane of this.lanes) lane.count = 0;
     this.free.length = 0;
 
-    const half = balance.road.laneWidth / 2;
+    const laneWidth = balance.road.laneWidth;
+    const half = laneWidth / 2;
     for (const gate of state.gates) {
       if (!isShootable(gate.kind)) continue;
-      this.add(laneCenter(gate.lane, balance.road.laneWidth), half, gate.z, gate, null);
+      this.add(laneCenter(gate.lane, laneWidth), half, gate.z, gate, null, laneWidth);
     }
     for (const enemy of state.enemies) this.insert(enemy, balance);
     const boss = state.boss;
@@ -98,7 +99,14 @@ export class TargetList {
   /** Registers one body the moment it appears. Streams call this on every spawn. */
   insert(enemy: EnemyState, balance: Balance): void {
     if (!enemy.alive) return;
-    this.add(enemy.x, shootableHalf(enemy, balance), enemy.z, null, enemy);
+    this.add(
+      enemy.x,
+      shootableHalf(enemy, balance),
+      enemy.z,
+      null,
+      enemy,
+      balance.road.laneWidth,
+    );
   }
 
   /**
@@ -203,21 +211,19 @@ export class TargetList {
     }
   }
 
-  /** Live entries in one lane. The bots read it to find the busiest lane. */
-  liveIn(lane: Lane): number {
-    const list = this.lanes[lane + 1];
-    if (list === undefined) return 0;
-    let live = 0;
-    for (let i = 0; i < list.count; i++) if (list.items[i]?.live === true) live++;
-    return live;
-  }
-
   private add(
     cx: number,
     halfW: number,
     z: number,
     gate: GateState | null,
     enemy: EnemyState | null,
+    // Passed rather than defaulted. Which lane lists a target is filed under is
+    // lane geometry, so it has to come from the run's own tuning and not from
+    // the shipped `balance`: `sweepLane` has no band test of its own — a
+    // batched volley comes from a crowd spread right across the lane — so a
+    // target filed in the wrong list is a target a volley mows down from a lane
+    // it is nowhere near.
+    laneWidth: number,
   ): void {
     const target = this.free.pop() ?? { cx, halfW, z, gate, enemy, live: true, refs: 0, stamp: 0 };
     target.cx = cx;
@@ -228,8 +234,8 @@ export class TargetList {
     target.live = true;
     target.refs = 0;
 
-    const low = laneOf(cx - halfW + EDGE) + 1;
-    const high = laneOf(cx + halfW - EDGE) + 1;
+    const low = laneOf(cx - halfW + EDGE, laneWidth) + 1;
+    const high = laneOf(cx + halfW - EDGE, laneWidth) + 1;
     for (let slot = low; slot <= high; slot++) {
       const lane = this.lanes[slot];
       if (lane === undefined) continue;

@@ -104,6 +104,27 @@ describe('streams', () => {
     expect(stream0?.remaining).toBeGreaterThan(0);
   });
 
+  it('clears a stream that spent most of its life held at the live ceiling', () => {
+    // The regression this guards: a ceiling that *cancelled* the debt rather
+    // than deferring it would leave `remaining` above zero for ever, and the
+    // level would carry a stream that never cleared and a count that never
+    // reached the player's screen as 0.
+    const tuning = testBalance();
+    tuning.enemies.maxLive = 10;
+    const run = streamRun([stream({ count: 90, durationSeconds: 4, hpPerEnemy: 1 })], 120, tuning);
+
+    const events = play(run, 40, 0);
+
+    const state = run.state.streams[0];
+    expect(state?.spawned).toBe(90);
+    expect(state?.remaining).toBe(0);
+    expect(state?.done).toBe(true);
+    expect(events.filter((e) => e.type === 'streamCleared')).toHaveLength(1);
+    // Everything the stream sent is accounted for: shot, leaked, or walked past.
+    expect((state?.killed ?? 0) + (state?.leaked ?? 0)).toBeLessThanOrEqual(90);
+    expect(state?.killed).toBeGreaterThan(0);
+  });
+
   it('kills each body on its own and clears the stream when the last one goes', () => {
     const run = streamRun([stream({ count: 25, durationSeconds: 4, hpPerEnemy: 1 })], 60);
     const events = play(run, 14, 0);

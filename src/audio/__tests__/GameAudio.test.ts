@@ -42,6 +42,7 @@ vi.mock('@/render/characters', () => ({
       'sfx_block_kill',
       'sfx_units_lost',
       'sfx_gate_pass_good',
+      'sfx_shatter',
     ].map((id) => ({ kind: 'audio', id, url: `audio/${id}.wav` })),
   resolveAssetUrl: (id: string) => `/assets/${id}.wav`,
   assetBytes: () => Promise.resolve(new ArrayBuffer(0)),
@@ -177,6 +178,34 @@ describe('GameAudio', () => {
     // Two lanes of a horde clear together; the throttle makes that one chime.
     expect(plays('sfx_gate_pass_good')).toBe(1);
     expect(sounds.get('sfx_gate_pass_good')?.playbackRate).toBeGreaterThan(1);
+  });
+
+  /**
+   * A frost staff shatters what it kills, so a frozen stream emits
+   * `enemyKilled` *and* `enemyShattered` for every body — twenty a second. The
+   * kill is already saying it in the stream voice; the ice crack belongs to a
+   * whole block coming apart, which is the line the physics layer draws too (it
+   * throws no shards for a stream body).
+   */
+  it('does not crack ice for every body of a frozen stream', async () => {
+    const audio = await playing();
+    const frozen: SimEvent[] = [];
+    for (let i = 0; i < 12; i++) {
+      frozen.push({ type: 'enemyKilled', enemyId: i, kind: 'grunt', x: 0, z: 0, streamId: 1 });
+      frozen.push({ type: 'enemyShattered', enemyId: i, x: 0, z: 0, streamId: 1 });
+    }
+
+    audio.onEvents(frozen, state);
+
+    expect(plays('sfx_shatter')).toBe(0);
+    expect(plays('sfx_enemy_hit')).toBe(8);
+  });
+
+  it('still cracks ice when a block shatters', async () => {
+    const audio = await playing();
+    audio.onEvents([{ type: 'enemyShattered', enemyId: 1, x: 0, z: 0 }], state);
+
+    expect(plays('sfx_shatter')).toBe(1);
   });
 
   it('is silent when a stream body walks into range', async () => {
