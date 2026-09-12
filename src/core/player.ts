@@ -11,22 +11,15 @@
  *
  * The Sanctum's unlock level is the one number that lives on this side: it is
  * the Academy's own card data (`src/data/academy.json`), not sim tuning.
- *
- * UNTIL B1 FINISHES: one seam to the sim is still open — `src/sim/index.ts`
- * does not re-export the meta layer yet, so the prices come from a deep import
- * (marked below). It is a one-line fix when the sim phase lands it, and
- * nothing outside this file changes.
  */
 
 import { academy } from '@/data/academy-types';
 import { levelConfig } from '@/data';
-import { Run, generateLevel, weaponIds } from '@/sim';
-// Deep import, deliberately: the meta layer is not on `@/sim`'s public surface
-// yet (the sim phase owns `src/sim/index.ts`). Switch the path to `@/sim` when
-// it is — the names are already the sim's.
 import {
+  Run,
   emptyPlayer,
   familiarPrice,
+  generateLevel,
   maxFamiliarTier,
   maxUpgradeLevel,
   nextUpgradeCost,
@@ -34,7 +27,8 @@ import {
   runRewards,
   staffPrices,
   upgradeIds,
-} from '@/sim/player';
+  weaponIds,
+} from '@/sim';
 import type { Balance } from '@/data';
 import type { FamiliarTier, PlayerState, StaffTier, UpgradeId } from '@/data/types';
 import type { LevelDef, WeaponId } from '@/sim';

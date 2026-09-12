@@ -144,3 +144,37 @@
   play; hosted 9.86 MB, artifact 13.20 MB.
 - Open: `Renderer.ts` at 523 lines and `theme.ts` at 513 (Phase C splits);
   `setPreviewPlayer` must be called before the preview is marked dirty.
+
+## 2026-09-14 — Phase C: integration and tuning (verified and committed)
+
+- Home: the wordmark sits in the top band under the coin pill;
+  `setPreviewPlayer` was never called, now wired before the preview is
+  marked dirty and cleared at run start, so the backdrop shows the wisp and
+  drifts; the meta layer is imported from the sim index; the first room
+  reveal plays on the next unlocked gesture instead of being lost; the
+  debug panel shows walls, wisp, sparks and burning.
+- Walls commit: the fence ends 0.5 m short of the guarded row and the clamp
+  holds across that gap to the row (0.5 m of road bought 0.8 m of lane at
+  the squad's lateral speed). Bots narrow to the chosen half and score each
+  half as best gate plus stream bodies covered. Greedy stays 100 of 100 on
+  seeds 1 to 5, but committed walls cost budget: one wall on most levels,
+  two on 11 to 14, none on 5.
+- Curve: peak targets and boss HP monotone with decaying steps; a bite
+  taper from level 10 replaced a boss-HP drop at 15 → 16. Boss fights 19
+  to 20 s on levels 9 to 12. The boss-HP step from 10 to 11 remains large
+  because level 11 hands the player a third more squad (a row-mix matter).
+- Device: splash and background match the light sky; the status bar uses
+  dark glyphs; the guide notes the app id lives in two places.
+- Splits: Renderer, theme and events under 420 lines with `views`,
+  `cameraLook`, `crowdLook` and `eventPools` extracted. Dead `BOSS_SCALE`
+  removed.
+- Verified: typecheck, lint, 286 tests, build, smoke twice (about 3 m 40 s,
+  0 compiles during play, draw peak 36), hosted 9.86 MB, artifact 13.20 MB,
+  offline hosted probe with three requests and no console errors, an
+  Academy probe that buys upgrades through the real buttons and sees the
+  multiplier in the sim.
+- Carried to Phase D or later: a wall could take one lane of the guarded row
+  instead of half the road so the wall budget can rise; level 5 has no
+  wall; a mixed-row block count overlapping its gate value on `staff-l10`;
+  the selected staff is not readable on the backdrop (a badge on the
+  Workbench card would show it); `App.ts` 523 and `types.ts` 547 lines.

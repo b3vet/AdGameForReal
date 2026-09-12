@@ -70,6 +70,17 @@ export interface DebugStats {
   labelGlyphs: number;
   /** Glyphs the atlas budget refused; anything but 0 means numbers went missing. */
   labelsDropped: number;
+  /**
+   * What Milestone 4 put on the road (`Renderer.featureStats`): fence pieces
+   * drawn, whether the wisp is out, its sparks in flight, and bodies burning.
+   * Each has a pool a level can quietly run into, and all four are invisible in
+   * a frame that is simply missing them — a wall that never draws and a wisp
+   * that was never bound look the same.
+   */
+  walls: number;
+  wisp: boolean;
+  sparks: number;
+  burning: number;
   /** The app-level time scale: 1 normal, 0 during hit-stop. */
   timeScale: number;
   ragdolls: number;
@@ -244,6 +255,8 @@ export class DebugPanel {
       `bodies ${String(stats.streamBodies)}  lbl ${String(stats.labels)}` +
         `/${String(stats.labelGlyphs)}g` +
         (stats.labelsDropped > 0 ? ` DROP ${String(stats.labelsDropped)}` : ''),
+      `wall ${String(stats.walls)}  wisp ${stats.wisp ? 'on' : 'off'}` +
+        `  spark ${String(stats.sparks)}  burn ${String(stats.burning)}`,
       `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
         `  p95 ${stats.qualityP95.toFixed(1)}ms` +
         `  >${String(SPIKE_MS)}ms ${String(this.spikeCount)}/${String(SPIKE_WINDOW_SECONDS)}s` +

@@ -78,8 +78,18 @@
   padding-right: 3.4rem;
 }
 
+/*
+ * The wordmark sits in the top band, directly under the coin purse: the column
+ * is `justify-content: space-between` and with three children the middle one
+ * was centred — right over the gate preview, where Milestone 4's frame review
+ * found it (13, Phase B3). `margin-bottom: auto` pulls it up against the purse
+ * and leaves the whole run of road between it and the card panel clear, which
+ * is the shop window the Academy is for. The stroke and shadow are unchanged
+ * (`./styles.css`, `.screen--academy .screen__title`).
+ */
 .screen--academy .screen__top {
   margin-top: 1.5vh;
+  margin-bottom: auto;
 }
 
 .cards {

@@ -23,13 +23,15 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * launch splash, the frame before Babylon's first render, and the strip behind
  * a rotation.
  *
- * Given by the milestone plan. Note that the page itself paints `#bfe4f5`
- * (`src/ui/styles.css`: "a daylight sky, not a black flash") since the art
- * direction went bright in D28, so launch currently goes deep purple -> sky ->
- * scene. If that reads as a flash on the phone, this one constant is the fix:
- * set it to `#bfe4f5` and re-run `npm run cap:sync`.
+ * The page's own background, character for character (`src/ui/styles.css`, the
+ * `html, body` rule: "a daylight sky, not a black flash"). The milestone plan
+ * gave the old dark indigo of Milestone 2, and against D28's daylight art that
+ * made launch go deep purple -> sky -> scene — two colour changes before the
+ * game appears. With this one they are the same colour and the only thing that
+ * ever fades in is the scene. Keep the two in step: if `styles.css` changes,
+ * change this and re-run `npm run cap:sync`.
  */
-const APP_BACKGROUND = '#0b0818';
+const APP_BACKGROUND = '#bfe4f5';
 
 /** Matches the splash fade in `src/device/shell.ts`; short, because the web
  * build is already drawing by the time it starts. */
@@ -111,10 +113,11 @@ const config: CapacitorConfig = {
     StatusBar: {
       /**
        * `src/device/shell.ts` hides the status bar at boot, so this style is
-       * only ever seen in the instant before that call lands: light glyphs,
-       * which is what `APP_BACKGROUND` wants behind them.
+       * only ever seen in the instant before that call lands. `LIGHT` is the
+       * plugin's name for *dark glyphs on a light background*, which is what
+       * `APP_BACKGROUND` now needs — it was `DARK` while the shell was indigo.
        */
-      style: 'DARK',
+      style: 'LIGHT',
     },
   },
 };

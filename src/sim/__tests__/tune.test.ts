@@ -19,6 +19,7 @@ const ON = process.env.TUNE === '1';
 describe.skipIf(!ON)('tuning readout', () => {
   it('prints the campaign', () => {
     const lines: string[] = [];
+    const losses: string[] = [];
     lines.push(
       'L  rows gate  peak  target  surv  boss  leak%  lost  streams  press  count  hp  win',
     );
@@ -41,6 +42,15 @@ describe.skipIf(!ON)('tuning readout', () => {
         survivors += result.survivors;
         boss += result.bossSeconds;
         if (result.status === 'won') wins++;
+        else {
+          // Which seed broke, and how far it got: a level that dies on the road
+          // and one that dies to the boss want opposite tuning.
+          losses.push(
+            `L${String(level)} s${String(seed)} peak ${String(result.peakCount)}` +
+              ` boss ${result.bossSeconds.toFixed(1)}s left ${result.bossHpLeft.toFixed(0)}` +
+              ` count@boss ${String(result.countAtBoss)} leaked ${String(result.leaked)}`,
+          );
+        }
         leakShare += result.leakShare * result.streamsSeen;
         leaked += result.leaked;
 
@@ -80,6 +90,7 @@ describe.skipIf(!ON)('tuning readout', () => {
         ].join(' '),
       );
     }
+    lines.push('- losses -', ...(losses.length > 0 ? losses : ['(none)']));
     writeFileSync(process.env.TUNE_OUT ?? '/tmp/tune.txt', `${lines.join('\n')}\n`);
     expect(lines.length).toBeGreaterThan(0);
   });

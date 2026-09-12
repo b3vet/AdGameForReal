@@ -12,10 +12,11 @@
  * off it rather than cut in half by it.
  *
  * The generator half lives here too, because where a wall may stand is the same
- * geometry: never over a gate row (the player has to be able to reach either
- * lane of the row it guards), never into the boss arena, and from
- * `walls.bothFromLevel` both boundaries at once where a horde pours down two
- * lanes.
+ * geometry: a stretch runs up to the gate row it guards and stops half a metre
+ * short of it (`walls.gateGap`) so the choice of side is settled before the
+ * panels, it never reaches another gate row or the boss arena, and from
+ * `walls.bothFromLevel` it may take both boundaries at once where a horde pours
+ * down two lanes.
  */
 
 import { shuffle } from './gateGen';
@@ -40,9 +41,25 @@ export function wallX(boundary: WallBoundary, laneWidth = balance.road.laneWidth
   return (boundary * laneWidth) / 2;
 }
 
-/** True while the squad at `z` is inside the wall, approach zone included. */
-export function wallHolds(wall: WallDef, z: number, approach = balance.walls.approach): boolean {
-  return z >= wall.zStart - approach && z <= wall.zEnd;
+/**
+ * True while the squad at `z` is inside the wall: the approach zone in front of
+ * it, the fence itself, and the half-metre past its far end.
+ *
+ * That last stretch is what makes a wall a decision (Milestone 4 Phase C). The
+ * fence stops `walls.gateGap` short of the gate row it guards so it does not
+ * stand inside the panels, and the clamp runs on to the row — because half a
+ * metre of road is 0.8 m of lane at `squad.lateralSpeed` over `squad.runSpeed`,
+ * and the squad is held only `walls.margin` off the boundary, so a released
+ * squad crossed it with room to spare and the side it had been held on meant
+ * nothing at all.
+ */
+export function wallHolds(
+  wall: WallDef,
+  z: number,
+  approach = balance.walls.approach,
+  release = balance.walls.gateGap,
+): boolean {
+  return z >= wall.zStart - approach && z <= wall.zEnd + release;
 }
 
 /** The x range a squad may stand in. Re-used by the caller: never allocated per step. */
@@ -76,9 +93,10 @@ export function wallLimits(
 
   const approach = balance.walls.approach;
   const margin = balance.walls.margin;
+  const release = balance.walls.gateGap;
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
-    if (wall === undefined || !wallHolds(wall, z, approach)) continue;
+    if (wall === undefined || !wallHolds(wall, z, approach, release)) continue;
     const line = wallX(wall.boundary, laneWidth);
     if (x < line) {
       if (line - margin < out.hi) {
@@ -148,10 +166,17 @@ function hordeInside(rows: readonly RowDef[], from: number, to: number): boolean
  * Walls for one level: a stretch running up to some gate rows, so the player
  * has to pick which half of the road they will arrive on.
  *
- * The stretch ends `walls.gateClearance` short of the row it guards and starts
- * no earlier than the same clearance past the gate row behind it, so a wall
- * never covers a gate row: every row is always approachable from both of its
- * sides, and only the last ten to twenty metres are committed.
+ * The stretch ends `walls.gateGap` short of the row it guards — half a metre,
+ * close enough that the fence visibly runs into the gate panels — and starts no
+ * earlier than `walls.gateClearance` past the gate row behind it, so a wall
+ * covers no other row: every row is approachable from both of its sides until
+ * the wall that guards it begins, and then the choice is made.
+ *
+ * The gap used to be the full clearance, and two metres is not a commitment:
+ * the squad steers at `squad.lateralSpeed` while the road runs past at
+ * `squad.runSpeed`, so it covers 1.6 m of lane for every metre of road and
+ * could cross the whole width in the clear stretch. Half a metre leaves it
+ * 0.8 m, less than the metre it would need to change lanes.
  */
 export function generateWalls(
   rows: readonly RowDef[],
@@ -178,7 +203,7 @@ export function generateWalls(
 
     const previous = gateRows.filter((row) => row.z < candidate.z).pop();
     const floor = previous === undefined ? 0 : previous.z + tuning.gateClearance;
-    const zEnd = Math.min(candidate.z - tuning.gateClearance, arenaZ - tuning.gateClearance);
+    const zEnd = Math.min(candidate.z - tuning.gateGap, arenaZ - tuning.gateClearance);
     const length = tuning.length.min + rng() * (tuning.length.max - tuning.length.min);
     const zStart = Math.max(zEnd - length, floor);
     if (zEnd - zStart < tuning.minLength) continue;

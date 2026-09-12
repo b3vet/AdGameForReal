@@ -345,6 +345,11 @@ export class App implements FrameHost {
    * upgrades change how many apprentices are standing there.
    */
   private loadPreview(): void {
+    // Before the early return and before the frame is marked dirty: this is
+    // what puts the chosen staff and the owned wisp on the backdrop and starts
+    // the camera's drift (`src/render/preview.ts`). A standing preview that is
+    // re-shown still needs it, because `startRun` cleared it.
+    this.renderer.setPreviewPlayer(this.academy.player);
     if (this.preview !== null && this.previewLevel === this.options.level) return;
 
     const preview = new RunSession(this.options.level, this.options, this.academy.player);
@@ -357,6 +362,9 @@ export class App implements FrameHost {
   }
 
   private startRun(): void {
+    // The backdrop is over: the camera stops drifting and the wisp goes back to
+    // being the run's own, not the Academy's stand-in.
+    this.renderer.setPreviewPlayer(null);
     // The next Academy screen draws a fresh preview whatever happens here.
     this.driver.markPreviewDirty();
     // Cheap when the boot pass already did the work, which is the normal case;

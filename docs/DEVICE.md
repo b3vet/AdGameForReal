@@ -69,8 +69,12 @@ In Xcode:
    (it is called "Your Name (Personal Team)").
 4. If Xcode complains that the bundle identifier is unavailable, change
    **Bundle Identifier** to something unique — e.g. `com.yourname.arcanerush`.
-   If you do, change `appId` in `capacitor.config.ts` to the same string and run
-   `npm run cap:sync` again, so the two never disagree.
+   **The app id lives in two places and both have to say the same thing**:
+   Xcode's *Bundle Identifier* field here, and `appId` in `capacitor.config.ts`
+   (the placeholder is `com.arcanerush.app`). Change both, then run
+   `npm run cap:sync` again. If they disagree, `cap sync` quietly writes the
+   config's id back over the project's and Xcode asks you to sign all over
+   again.
 5. **General > Deployment Info > iPhone Orientation**: leave **Portrait** ticked
    and untick the landscape boxes. The game is portrait only.
 6. Plug the phone in, unlock it, and tap **Trust** on the phone if asked.
@@ -130,9 +134,13 @@ Play three or four levels, then send us:
    Did the frame rate fall, and did the `quality` rung climb (which means the
    game noticed and stepped itself down)? Roughly how much battery did ten
    minutes cost?
-5. **Launch.** How long from tapping the icon to the title screen, and whether
-   the colour flashes on the way (dark purple, then sky blue, then the scene —
-   if that reads badly we change one line in `capacitor.config.ts`).
+5. **Launch.** How long from tapping the icon to the Academy, and whether the
+   colour flashes on the way. It should not: the launch splash, the native
+   background and the page all paint the same daylight sky, `#bfe4f5`
+   (`APP_BACKGROUND` in `capacitor.config.ts`, the `html, body` rule in
+   `src/ui/styles.css`), so the only thing that appears is the scene fading up
+   over it. A flash of any other colour — the old dark indigo especially —
+   means the two have drifted apart, and it is one constant either side.
 6. **The phone.** Model and iOS version, so the numbers mean something.
 
 ---
@@ -144,6 +152,7 @@ Play three or four levels, then send us:
 | White or black screen, no game | The web build was not copied. Run `npm run cap:sync` and Run again. |
 | The old version of the game | Same: `cap:sync` before every Run. |
 | The splash sits there | The game failed to boot; the splash gives up after 8 seconds by itself. Use the Web Inspector (below) to read the error. |
+| A dark flash before the game | `APP_BACKGROUND` in `capacitor.config.ts` and the `html, body` background in `src/ui/styles.css` have drifted apart. Both are `#bfe4f5`; make them agree and `npm run cap:sync`. |
 | "Untrusted Developer" | Section 2, step after Run. |
 | "The app could not be launched" after a week | Free-account expiry: press Run in Xcode again. |
 | Signing errors in red | Signing & Capabilities: team not set, or a bundle id someone else already used. Change the bundle id (section 2, step 4). |
@@ -194,7 +203,7 @@ For reference, nothing here needs doing:
 
 | File | What it does |
 |---|---|
-| `capacitor.config.ts` | App id, app name, the `dist/` folder to ship, the full-screen WebView settings, the splash and status bar settings. Every field is commented. |
+| `capacitor.config.ts` | App id (the one that must match Xcode's Bundle Identifier), app name, the `dist/` folder to ship, the full-screen WebView settings, and the splash, background and status bar settings — the shell colour is `#bfe4f5`, the same daylight sky `src/ui/styles.css` paints. Every field is commented. |
 | `src/device/platform.ts` | Answers "are we in the app, and is it iOS". Everything else asks it first, which is why the browser builds never call anything native. |
 | `src/device/shell.ts` | Hides the status bar, holds the splash until the game's first frame (and drops it after 8 s regardless), and keeps the screen awake during play. |
 | `src/device/haptics.ts` | Boss stomp, boss death, level won. Throttled, and inert in a browser. |

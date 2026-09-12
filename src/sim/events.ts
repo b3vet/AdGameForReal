@@ -7,214 +7,32 @@
  * longer must be copied, since the next `tick` overwrites these objects.
  */
 
-import { Pool } from './pool';
+import { createEventPools, resetEventPools } from './eventPools';
+import type { EventPools } from './eventPools';
 import type { EnemyKind, GateKind, Lane, RunStatus, SimEvent, UnitLossReason, WeaponId } from './types';
-
-type EventOf<T extends SimEvent['type']> = Extract<SimEvent, { type: T }>;
 
 export class EventBuffer {
   /** The array handed to callers. Same instance every tick. */
   readonly list: SimEvent[] = [];
 
-  private readonly fired = new Pool<EventOf<'projectileFired'>>(() => ({
-    type: 'projectileFired',
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly impacts = new Pool<EventOf<'projectileHit'>>(() => ({
-    type: 'projectileHit',
-    weaponId: 'ember',
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly splashes = new Pool<EventOf<'splash'>>(() => ({
-    type: 'splash',
-    x: 0,
-    z: 0,
-    radius: 0,
-  }));
-
-  private readonly chains = new Pool<EventOf<'chain'>>(() => ({ type: 'chain', from: 0, to: 0 }));
-
-  private readonly slows = new Pool<EventOf<'enemySlowed'>>(() => ({
-    type: 'enemySlowed',
-    enemyId: 0,
-    seconds: 0,
-  }));
-
-  private readonly shatters = new Pool<EventOf<'enemyShattered'>>(() => ({
-    type: 'enemyShattered',
-    enemyId: 0,
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly burns = new Pool<EventOf<'enemyBurning'>>(() => ({
-    type: 'enemyBurning',
-    enemyId: 0,
-    x: 0,
-    z: 0,
-    seconds: 0,
-  }));
-
-  private readonly familiarShots = new Pool<EventOf<'familiarShot'>>(() => ({
-    type: 'familiarShot',
-    x: 0,
-    z: 0,
-    targetId: 0,
-  }));
-
-  private readonly wallBlocks = new Pool<EventOf<'wallBlocked'>>(() => ({
-    type: 'wallBlocked',
-    boundary: 1,
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly weaponSwaps = new Pool<EventOf<'weaponChanged'>>(() => ({
-    type: 'weaponChanged',
-    from: 'ember',
-    to: 'ember',
-  }));
-
-  private readonly enrages = new Pool<EventOf<'bossEnraged'>>(() => ({
-    type: 'bossEnraged',
-    enemyId: 0,
-  }));
-
-  private readonly gateHits = new Pool<EventOf<'gateHit'>>(() => ({
-    type: 'gateHit',
-    gateId: 0,
-    kind: 'add',
-    value: 0,
-  }));
-
-  private readonly gatePasses = new Pool<EventOf<'gatePassed'>>(() => ({
-    type: 'gatePassed',
-    gateId: 0,
-    kind: 'add',
-    value: 0,
-    countBefore: 0,
-    countAfter: 0,
-  }));
-
-  private readonly activations = new Pool<EventOf<'enemyActivated'>>(() => ({
-    type: 'enemyActivated',
-    enemyId: 0,
-  }));
-
-  private readonly enemyHits = new Pool<EventOf<'enemyHit'>>(() => ({
-    type: 'enemyHit',
-    enemyId: 0,
-    damage: 0,
-    hp: 0,
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly kills = new Pool<EventOf<'enemyKilled'>>(() => ({
-    type: 'enemyKilled',
-    enemyId: 0,
-    kind: 'grunt',
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly leaks = new Pool<EventOf<'enemyLeaked'>>(() => ({
-    type: 'enemyLeaked',
-    enemyId: 0,
-    streamId: 0,
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly streamStarts = new Pool<EventOf<'streamStarted'>>(() => ({
-    type: 'streamStarted',
-    streamId: 0,
-    lane: 0,
-    count: 0,
-  }));
-
-  private readonly streamClears = new Pool<EventOf<'streamCleared'>>(() => ({
-    type: 'streamCleared',
-    streamId: 0,
-    lane: 0,
-    leaked: 0,
-  }));
-
-  private readonly gained = new Pool<EventOf<'unitsGained'>>(() => ({
-    type: 'unitsGained',
-    amount: 0,
-    reason: 'gate',
-  }));
-
-  private readonly lost = new Pool<EventOf<'unitsLost'>>(() => ({
-    type: 'unitsLost',
-    amount: 0,
-    reason: 'contact',
-  }));
-
-  private readonly bossActivations = new Pool<EventOf<'bossActivated'>>(() => ({
-    type: 'bossActivated',
-    enemyId: 0,
-  }));
-
-  private readonly stomps = new Pool<EventOf<'bossStomp'>>(() => ({
-    type: 'bossStomp',
-    x: 0,
-    z: 0,
-  }));
-
-  private readonly bossKills = new Pool<EventOf<'bossKilled'>>(() => ({ type: 'bossKilled' }));
-
-  private readonly ends = new Pool<EventOf<'runEnded'>>(() => ({
-    type: 'runEnded',
-    status: 'won',
-    survivors: 0,
-    peakCount: 0,
-  }));
+  /** One free list per event kind; the blanks they hand out are `./eventPools.ts`. */
+  private readonly pools: EventPools = createEventPools();
 
   /** Called once per `tick`, before any step runs. */
   reset(): void {
     this.list.length = 0;
-    this.fired.reset();
-    this.impacts.reset();
-    this.splashes.reset();
-    this.chains.reset();
-    this.slows.reset();
-    this.shatters.reset();
-    this.burns.reset();
-    this.familiarShots.reset();
-    this.wallBlocks.reset();
-    this.weaponSwaps.reset();
-    this.enrages.reset();
-    this.gateHits.reset();
-    this.gatePasses.reset();
-    this.activations.reset();
-    this.enemyHits.reset();
-    this.kills.reset();
-    this.leaks.reset();
-    this.streamStarts.reset();
-    this.streamClears.reset();
-    this.gained.reset();
-    this.lost.reset();
-    this.bossActivations.reset();
-    this.stomps.reset();
-    this.bossKills.reset();
-    this.ends.reset();
+    resetEventPools(this.pools);
   }
 
   projectileFired(x: number, z: number): void {
-    const e = this.fired.take();
+    const e = this.pools.fired.take();
     e.x = x;
     e.z = z;
     this.list.push(e);
   }
 
   projectileHit(weaponId: WeaponId, x: number, z: number): void {
-    const e = this.impacts.take();
+    const e = this.pools.impacts.take();
     e.weaponId = weaponId;
     e.x = x;
     e.z = z;
@@ -222,7 +40,7 @@ export class EventBuffer {
   }
 
   splash(x: number, z: number, radius: number): void {
-    const e = this.splashes.take();
+    const e = this.pools.splashes.take();
     e.x = x;
     e.z = z;
     e.radius = radius;
@@ -230,21 +48,21 @@ export class EventBuffer {
   }
 
   chain(from: number, to: number): void {
-    const e = this.chains.take();
+    const e = this.pools.chains.take();
     e.from = from;
     e.to = to;
     this.list.push(e);
   }
 
   enemySlowed(enemyId: number, seconds: number): void {
-    const e = this.slows.take();
+    const e = this.pools.slows.take();
     e.enemyId = enemyId;
     e.seconds = seconds;
     this.list.push(e);
   }
 
   enemyShattered(enemyId: number, x: number, z: number, streamId?: number): void {
-    const e = this.shatters.take();
+    const e = this.pools.shatters.take();
     e.enemyId = enemyId;
     e.x = x;
     e.z = z;
@@ -256,7 +74,7 @@ export class EventBuffer {
   }
 
   enemyBurning(enemyId: number, x: number, z: number, seconds: number): void {
-    const e = this.burns.take();
+    const e = this.pools.burns.take();
     e.enemyId = enemyId;
     e.x = x;
     e.z = z;
@@ -265,7 +83,7 @@ export class EventBuffer {
   }
 
   familiarShot(x: number, z: number, targetId: number): void {
-    const e = this.familiarShots.take();
+    const e = this.pools.familiarShots.take();
     e.x = x;
     e.z = z;
     e.targetId = targetId;
@@ -273,7 +91,7 @@ export class EventBuffer {
   }
 
   wallBlocked(boundary: -1 | 1, x: number, z: number): void {
-    const e = this.wallBlocks.take();
+    const e = this.pools.wallBlocks.take();
     e.boundary = boundary;
     e.x = x;
     e.z = z;
@@ -281,20 +99,20 @@ export class EventBuffer {
   }
 
   weaponChanged(from: WeaponId, to: WeaponId): void {
-    const e = this.weaponSwaps.take();
+    const e = this.pools.weaponSwaps.take();
     e.from = from;
     e.to = to;
     this.list.push(e);
   }
 
   bossEnraged(enemyId: number): void {
-    const e = this.enrages.take();
+    const e = this.pools.enrages.take();
     e.enemyId = enemyId;
     this.list.push(e);
   }
 
   gateHit(gateId: number, kind: GateKind, value: number): void {
-    const e = this.gateHits.take();
+    const e = this.pools.gateHits.take();
     e.gateId = gateId;
     e.kind = kind;
     e.value = value;
@@ -308,7 +126,7 @@ export class EventBuffer {
     countBefore: number,
     countAfter: number,
   ): void {
-    const e = this.gatePasses.take();
+    const e = this.pools.gatePasses.take();
     e.gateId = gateId;
     e.kind = kind;
     e.value = value;
@@ -318,13 +136,13 @@ export class EventBuffer {
   }
 
   enemyActivated(enemyId: number): void {
-    const e = this.activations.take();
+    const e = this.pools.activations.take();
     e.enemyId = enemyId;
     this.list.push(e);
   }
 
   enemyHit(enemyId: number, damage: number, hp: number, x: number, z: number): void {
-    const e = this.enemyHits.take();
+    const e = this.pools.enemyHits.take();
     e.enemyId = enemyId;
     e.damage = damage;
     e.hp = hp;
@@ -334,7 +152,7 @@ export class EventBuffer {
   }
 
   enemyKilled(enemyId: number, kind: EnemyKind, x: number, z: number, streamId?: number): void {
-    const e = this.kills.take();
+    const e = this.pools.kills.take();
     e.enemyId = enemyId;
     e.kind = kind;
     e.x = x;
@@ -348,7 +166,7 @@ export class EventBuffer {
   }
 
   enemyLeaked(enemyId: number, streamId: number, x: number, z: number): void {
-    const e = this.leaks.take();
+    const e = this.pools.leaks.take();
     e.enemyId = enemyId;
     e.streamId = streamId;
     e.x = x;
@@ -357,7 +175,7 @@ export class EventBuffer {
   }
 
   streamStarted(streamId: number, lane: Lane, count: number): void {
-    const e = this.streamStarts.take();
+    const e = this.pools.streamStarts.take();
     e.streamId = streamId;
     e.lane = lane;
     e.count = count;
@@ -365,7 +183,7 @@ export class EventBuffer {
   }
 
   streamCleared(streamId: number, lane: Lane, leaked: number): void {
-    const e = this.streamClears.take();
+    const e = this.pools.streamClears.take();
     e.streamId = streamId;
     e.lane = lane;
     e.leaked = leaked;
@@ -373,37 +191,37 @@ export class EventBuffer {
   }
 
   unitsGained(amount: number): void {
-    const e = this.gained.take();
+    const e = this.pools.gained.take();
     e.amount = amount;
     this.list.push(e);
   }
 
   unitsLost(amount: number, reason: UnitLossReason): void {
-    const e = this.lost.take();
+    const e = this.pools.lost.take();
     e.amount = amount;
     e.reason = reason;
     this.list.push(e);
   }
 
   bossActivated(enemyId: number): void {
-    const e = this.bossActivations.take();
+    const e = this.pools.bossActivations.take();
     e.enemyId = enemyId;
     this.list.push(e);
   }
 
   bossStomp(x: number, z: number): void {
-    const e = this.stomps.take();
+    const e = this.pools.stomps.take();
     e.x = x;
     e.z = z;
     this.list.push(e);
   }
 
   bossKilled(): void {
-    this.list.push(this.bossKills.take());
+    this.list.push(this.pools.bossKills.take());
   }
 
   runEnded(status: RunStatus, survivors: number, peakCount: number): void {
-    const e = this.ends.take();
+    const e = this.pools.ends.take();
     e.status = status;
     e.survivors = survivors;
     e.peakCount = peakCount;

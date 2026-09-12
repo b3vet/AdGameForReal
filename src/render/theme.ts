@@ -7,10 +7,13 @@
  * that reads them. Anything the sim also needs (lane width, projectile cap, max
  * squad count) is read from `@/data` here rather than duplicated.
  *
- * The two halves that grew their own files in Milestone 3 Phase D are
- * re-exported below rather than moved out of reach: `./palette.ts` is every
- * colour (D28's daylight set) and `./pools.ts` is every pool size. Every view
- * still imports all three from `./theme`.
+ * The parts that grew files of their own are re-exported below rather than
+ * moved out of reach, so every view still imports the whole look from
+ * `./theme`: `./palette.ts` is every colour (D28's daylight set), `./pools.ts`
+ * every pool size, `./wallLook.ts` and `./spellLook.ts` what Milestone 3 and 4
+ * added to the road, and Milestone 4 Phase C took the camera (`./cameraLook.ts`)
+ * and the crowds (`./crowdLook.ts`) out for the same reason — this file had
+ * grown past the file-size rule again.
  */
 
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -48,6 +51,8 @@ export {
   WISP_COLOR,
 } from './palette';
 export { POOL, WALL_POST_SPACING } from './pools';
+export * from './cameraLook';
+export * from './crowdLook';
 export * from './wallLook';
 export * from './spellLook';
 
@@ -139,114 +144,6 @@ export const BOSS_LABEL_SIZE = 32;
 export const BOSS_LABEL_MIN = 15;
 
 /**
- * Mage height in metres, and the skeletons' relative to it.
- *
- * Milestone 2 settled on 0.66 m because a full-size KayKit hat is wider than
- * the mage's shoulders and, from a 36-degree camera, a crowd of them was a
- * field of brims. Milestone 3 fixes the cause rather than the symptom (plan,
- * "Squad reads as hats"): the hat is scaled to 0.88 in the merge
- * (`assets.json` → `partScales`, which says why it cannot go lower), the camera
- * drops to about 26 degrees so the units are seen from nearer their own height,
- * and the formation spacing is wider. With all three, 0.78 m is faces, robes
- * and staffs rather than brims.
- */
-export const MAGE_HEIGHT = 0.78;
-export const GRUNT_HEIGHT = 0.72;
-/** The brute is the silhouette that says "this row is going to hurt". */
-export const BRUTE_HEIGHT = 0.92;
-/** What a KayKit character is tall at the manifest's own scale of 0.35. */
-const KAYKIT_UNIT_HEIGHT = 0.62;
-/** Multipliers on that scale, which is what `VatCrowd.setInstance` takes. */
-export const MAGE_SCALE = MAGE_HEIGHT / KAYKIT_UNIT_HEIGHT;
-/**
- * Self-lit share of the mage's own albedo, a little above what the enemies get
- * (`CHARACTER_LIFT` in `models.ts`).
- *
- * Much smaller than Milestone 2's 0.34: that number existed because the biome
- * was a near-black dusk and a navy mage under it was a silhouette. Under D28's
- * daylight the ambient does that work, and a third of the albedo added back on
- * top clips the robes to flat white.
- */
-export const MAGE_LIFT = 0.14;
-export const GRUNT_SCALE = GRUNT_HEIGHT / KAYKIT_UNIT_HEIGHT;
-export const BRUTE_SCALE = BRUTE_HEIGHT / KAYKIT_UNIT_HEIGHT;
-
-/**
- * Unit meshes shrink as the crowd tightens, so the mages never read as one
- * solid slab: the sim packs 500 units into the same 4 m of road as 100.
- *
- * Milestone 3 changes what the shrink follows. Milestone 2 eased from 1 to 0.72
- * between 50 and 500 units, which was a guess; the number that actually decides
- * whether two mages overlap is the sim's own `unitSpacing`, so the scale is
- * that spacing measured against what it is at `CROWD_SCALE_FROM` (see
- * `crowdScale` in `./squad.ts`). A unit is then a constant fraction of the gap
- * it has to stand in, at every squad size, which is the thing the eye reads.
- *
- * This is where the plan's "formation spacing raised" landed. The spacing
- * itself could not move: `halfWidth(80)` is 1.9962 against a hard 2.0 from the
- * sim's road clamp (`road.halfWidth - road.clampMin`, asserted in
- * `run.test.ts`), so there is no headroom at all — see the Phase B2 log entry.
- * The separation had to come from the drawn size instead, and this is it.
- *
- * The floor is the dense end: past about a hundred units the crowd is *meant*
- * to be shoulder to shoulder, and shrinking further only makes ants.
- */
-export const CROWD_SCALE_FROM = 8;
-export const CROWD_SCALE_MIN = 0.6;
-/** Scale bounce for a unit that just appeared. */
-export const POP_DURATION = 0.28;
-/**
- * How far a popping unit stretches on y before it settles. Squash-and-stretch:
- * the overshoot in `popScale` alone reads as a unit that grew, and stretching
- * the same unit tall while it is thin is what reads as a unit that *landed*.
- */
-export const POP_STRETCH = 0.45;
-/** Shrink-and-fade for a unit that just died. */
-export const DEATH_DURATION = 0.3;
-
-/**
- * Casual timing (D28): the baked clips are played faster than the artist's own
- * tempo. `VatCrowd.setInstance` takes this as its `speed`.
- */
-export const RUN_CLIP_SPEED = 1.3;
-export const CAST_CLIP_SPEED = 1.25;
-/** `cast2` is `Spellcast_Raise`, a 2.1 s windup; at 1.8 it matches the volley. */
-export const CAST2_CLIP_SPEED = 1.8;
-export const IDLE_CLIP_SPEED = 1;
-
-/**
- * How the squad decides it is running rather than standing still.
- *
- * The renderer has no "advancing" flag from the sim, only the squad's z, and z
- * moves in the sim's own fixed 1/60 s steps behind an accumulator. A frame that
- * happens to fall between two steps sees *no* movement at all, and a frame on a
- * 120 Hz display sees none every other frame — so a per-frame delta made the
- * whole crowd cut from `run` to `idle` and back, with the idle sway snapping on
- * top of it. That was the "glitchy walking" of the Milestone 3 playtest
- * (Milestone 4, task P): measured at 8.3 ms frames, 120 frames in 240 were
- * drawn standing still.
- *
- * So the view low-passes the speed it measures over `ADVANCE_SMOOTHING`
- * seconds — long enough to swallow a step the sim has not taken yet, short
- * enough that the squad stops looking like it is running about a fifth of a
- * second after it stops — and switches on hysteresis, so a squad hovering at
- * the threshold cannot flicker.
- */
-export const ADVANCE_SMOOTHING = 0.12;
-export const ADVANCE_START_SPEED = 0.5;
-export const ADVANCE_STOP_SPEED = 0.2;
-
-/**
- * Idle sway. A VAT cannot blend, and the mage rig has one idle clip, so the
- * variety is added on top of it: each unit rocks a few degrees of yaw and a
- * centimetre of height on its own phase, which is what turns a hundred
- * identical idle loops into a crowd shifting its weight.
- */
-export const IDLE_SWAY_RATE = 0.55;
-export const IDLE_SWAY_YAW = 0.11;
-export const IDLE_SWAY_LIFT = 0.012;
-
-/**
  * The hop the whole squad takes through a gate row. Short and low: it is a
  * beat of feedback on the choice the player just made, not a jump.
  */
@@ -294,9 +191,12 @@ export const BOSS_HEIGHT = 3;
 export const BOSS_COLOR = new Color3(0.58, 0.2, 0.88);
 export const BOSS_WIDTH = 2.4;
 export const BOSS_DEPTH = 1.8;
-/** The Quaternius demon is 2.91 m in its own units at the manifest's scale 1. */
+/**
+ * The Quaternius demon is 2.91 m in its own units at the manifest's scale 1.
+ * Only the fallback: `BossView` measures whatever model actually loaded and
+ * scales that to `BOSS_HEIGHT`, so this is what a build with no boss glb uses.
+ */
 export const BOSS_MODEL_HEIGHT = 2.91;
-export const BOSS_SCALE = BOSS_HEIGHT / BOSS_MODEL_HEIGHT;
 /** Clear of the horns: the number floats above the head now, not across the
  *  chest, so the model the fight is about is never behind it. */
 export const BOSS_LABEL_HEIGHT = BOSS_HEIGHT + 0.55;
@@ -401,113 +301,3 @@ export const IMPACT_DURATION = 0.26;
 export const SPLASH_DURATION = 0.34;
 export const CHAIN_DURATION = 0.12;
 export const MUZZLE_DURATION = 0.06;
-
-/** Camera shake the renderer calls on itself, per the juice checklist. */
-export const SHAKE_STOMP = { strength: 0.15, seconds: 0.3 } as const;
-export const SHAKE_BOSS_KILL = { strength: 0.35, seconds: 0.6 } as const;
-
-/**
- * Camera rig, per docs/09-milestone-3-plan.md ("Squad reads as hats").
- *
- * The elevation — `atan(height / behind)`, the angle the shot looks down on the
- * squad at — drops from Milestone 2's 36 degrees to about 27. That is the whole
- * point of the change: at 36 degrees a KayKit mage is seen from above and what
- * faces the camera is the top of its hat, whatever the hat is scaled to.
- *
- * The values are one set, not six knobs. Two angles follow from them and both
- * were measured against 390x844 frames:
- *
- *   elevation  atan(height / behind)                       = 27.0 deg
- *   pitch      atan((height - lookHeight) / (behind + lookAhead)) = 13.6 deg
- *
- * The pitch decides where the horizon sits (`tan(pitch) / tan(fov/2)` of the
- * way up from the middle: 0.56, so a fifth of the way down from the top) and
- * where the squad lands (0.55 below the middle, about four fifths down). The
- * field of view is narrower than Milestone 2's 0.9 because a flatter shot
- * compresses the road: at 0.82 the two gate rows at 18 m and 36 m are 57 px
- * apart at that size rather than 48, which is what keeps both numbers readable.
- * Change any of them together and re-shoot `npm run smoke`.
- */
-export const CAMERA = {
-  fov: 0.82,
-  height: 5.6,
-  behind: 11,
-  lookAhead: 8,
-  lookHeight: 1,
-  /** The camera tracks the squad's x only partly, so the road stays framed. */
-  lateralFollow: 0.35,
-  /**
-   * Extra distance as the squad grows, so the tail of the crowd stays on
-   * screen. The formation is an ellipse whose depth grows with `sqrt(count)`
-   * and saturates around 3.5 m, so this reaches its cap at about 70 units
-   * rather than climbing all the way to 500. A shade more than Milestone 2's,
-   * because the units themselves are bigger and the formation is wider.
-   */
-  pullbackPerUnit: 0.035,
-  pullbackMax: 2.4,
-  /**
-   * How far the eased pose may trail the ideal one, in meters. Steady-state lag
-   * while running is `runSpeed / smoothing`, about 0.8 m, so normal play never
-   * reaches this; a frame hitch or `?turbo` (several sim steps per frame) would,
-   * and without the clamp the whole frame reframes.
-   */
-  maxLag: 1.5,
-  /** Exponential smoothing rate, in 1/seconds. */
-  smoothing: 6,
-  /**
-   * Camera movement per frame, in meters, below which the pose counts as
-   * arrived. Well under a pixel at this distance, and it is what lets the title
-   * screen stop redrawing an identical frame.
-   */
-  settleEpsilon: 0.002,
-} as const;
-
-/**
- * The Academy backdrop's breath (docs/12-milestone-4-plan.md).
- *
- * The home screen is a still frame of a generated level — a preview run that is
- * never ticked — and a still frame of a crowd that is already swaying reads as
- * a paused game. So while a preview is up the camera drifts: half a metre
- * sideways and a fifth of a metre up, on two periods that do not divide into
- * each other so the loop never lands on itself, both slow enough that no single
- * glance sees it move.
- */
-export const PREVIEW_DRIFT_X = 0.55;
-export const PREVIEW_DRIFT_Y = 0.22;
-export const PREVIEW_DRIFT_PERIOD = 17;
-export const PREVIEW_DRIFT_PERIOD_Y = 11;
-
-/**
- * And where the backdrop stands, which is not where the game stands.
- *
- * The play framing puts the squad about four fifths of the way down the screen,
- * because in a run the road ahead is what is being decided about and the crowd
- * only has to be within reach of a thumb. The Academy's cards own the bottom
- * two fifths, so that framing parks the mages *behind the panel* and the
- * backdrop is an empty road — which is what `artifacts/smoke/academy.png` and
- * `title.png` show today.
- *
- * Where the crowd lands is set by one angle: how far below the horizon it sits,
- * `atan((height - unitMid) / behind)`, which at the play rig is 26 degrees out
- * of a 47-degree frame. No amount of re-aiming can lift it past that — aiming
- * nearer tips the horizon off the top of the screen long before the crowd
- * clears the cards. The angle itself has to shrink, and that means standing
- * further back and a little lower:
- *
- *   play      behind 11, height 5.6  ->  26.0 deg below the horizon
- *   backdrop  behind 20, height 4.6  ->  11.9 deg
- *
- * With the shot then aimed just in front of the crowd, the horizon sits about a
- * third of the way down, the squad two fifths, and the cards begin below both.
- * A mage is still forty pixels tall at that distance, and the first gate row is
- * inside the fog, so the backdrop is a place rather than a strip of road.
- * Measured against the 390x844 frame the rest of the camera was measured at; if
- * the Academy's panel moves, these move with it.
- */
-export const PREVIEW_BEHIND = 20;
-export const PREVIEW_HEIGHT = 4.6;
-export const PREVIEW_LOOK_AHEAD = 2.2;
-export const PREVIEW_LOOK_HEIGHT = 0.9;
-/** Seconds the framing takes to swing between the two, so neither one cuts. */
-export const PREVIEW_BLEND_RATE = 4;
-

@@ -155,6 +155,15 @@ function laneScore(gate: GateState | null, state: RunState): number {
  * shipped geometry but would otherwise turn a tuning slip into a bot that
  * refuses to steer.
  */
+function gateAt(state: RunState, rowIndex: number, lane: Lane): GateState | null {
+  for (const candidate of state.gates) {
+    if (candidate.rowIndex === rowIndex && candidate.lane === lane && !candidate.passed) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function pickLane(state: RunState, rowIndex: number, sign: number, range: WallLimits): Lane {
   let bestLane: Lane = 0;
   let bestScore = -Infinity;
@@ -163,13 +172,7 @@ function pickLane(state: RunState, rowIndex: number, sign: number, range: WallLi
 
   for (const lane of LANES) {
     if (walled && !laneOpen(lane, range)) continue;
-    let gate: GateState | null = null;
-    for (const candidate of state.gates) {
-      if (candidate.rowIndex === rowIndex && candidate.lane === lane && !candidate.passed) {
-        gate = candidate;
-        break;
-      }
-    }
+    const gate = gateAt(state, rowIndex, lane);
     const score = sign * laneScore(gate, state);
     const distance = Math.abs(laneCenter(lane, balance.road.laneWidth) - state.squad.x);
     if (score > bestScore || (score === bestScore && distance < bestDistance)) {
@@ -192,16 +195,26 @@ const laneBodies = [0, 0, 0];
 const STANDS: readonly number[] = [-2, -1, 0, 1, 2];
 
 /**
+ * The last `bestStreamStand`: where to stand, and how many live bodies standing
+ * there covers. Module-level and overwritten, like everything else here.
+ */
+const stand = { x: 0, bodies: 0 };
+
+/**
  * Where the squad should stand when there is no gate to go for: the spot its
  * own width covers the most live stream bodies from (plan, "Enemy streams
  * (sim)": greedy centres on the densest live stream lane).
  *
  * A stream left alone is one lost soldier per body, so coverage is the whole
- * game between rows. Returns `null` when nothing is streaming, and the bot
- * falls back to its gate logic.
+ * game between rows. Returns `false` when nothing is streaming, and the bot
+ * falls back to its gate logic; otherwise `stand` holds the answer and the
+ * bodies it covers, which is what the wall's side choice weighs a gate against.
+ *
+ * `range` bounds the candidates, so the same routine answers both "where should
+ * I stand" and "what would standing on that side of a fence be worth".
  */
-function bestStreamStand(state: RunState): number | null {
-  if (state.streams.length === 0) return null;
+function bestStreamStand(state: RunState, range: WallLimits): boolean {
+  if (state.streams.length === 0) return false;
   const squadZ = state.squad.z;
   const reach = balance.bots.streamLookahead;
   laneBodies[0] = 0;
@@ -217,31 +230,32 @@ function bestStreamStand(state: RunState): number | null {
     laneBodies[slot] = (laneBodies[slot] ?? 0) + 1;
     seen++;
   }
-  if (seen === 0) return null;
+  if (seen === 0) return false;
 
   // How far off its centre the crowd can still put a shot into a body: its own
   // half-width plus what the body is worth to a shot.
   const cover =
     halfWidth(state.squad.count) + balance.streams.footprint + balance.streams.aimAssist;
 
-  let best = state.squad.x;
-  let bestScore = -1;
+  stand.x = clampToWalls(state.squad.x, range);
+  stand.bodies = -1;
   let bestDistance = Infinity;
-  for (const stand of STANDS) {
+  for (const candidate of STANDS) {
+    const at = clampToWalls(candidate, range);
     let score = 0;
     for (const lane of LANES) {
-      if (Math.abs(laneCenter(lane, balance.road.laneWidth) - stand) <= cover) {
+      if (Math.abs(laneCenter(lane, balance.road.laneWidth) - at) <= cover) {
         score += laneBodies[lane + 1] ?? 0;
       }
     }
-    const distance = Math.abs(stand - state.squad.x);
-    if (score > bestScore || (score === bestScore && distance < bestDistance)) {
-      best = stand;
-      bestScore = score;
+    const distance = Math.abs(at - state.squad.x);
+    if (score > stand.bodies || (score === stand.bodies && distance < bestDistance)) {
+      stand.x = at;
+      stand.bodies = score;
       bestDistance = distance;
     }
   }
-  return best;
+  return true;
 }
 
 /**
@@ -262,6 +276,56 @@ function blockedByEnemy(state: RunState): boolean {
     if (Math.abs(enemy.x - squad.x) < half + squadHalf) return true;
   }
   return false;
+}
+
+/** The half of the road on one side of a fence, so each can be scored. */
+const half: WallLimits = { lo: 0, hi: 0, wall: -1 };
+
+/**
+ * Narrows `range` to the half of the road the squad should arrive on, given a
+ * fence at `line` between here and the gate row.
+ *
+ * Both halves are valued the same way and in the same unit — soldiers. A half
+ * is worth the best gate it can still reach plus the stream bodies standing in
+ * it lets the crowd shoot, because a body that walks past costs exactly one
+ * soldier (`Run.onLeak`). That second term is the whole point: the gate is a
+ * one-off and the river runs for the length of the stretch, so a bot that
+ * crossed for a fat `add` and then watched a horde walk down the half it had
+ * left behind lost far more than it gained. Levels 16 to 20, whose streams are
+ * the biggest in the campaign, went from three clears in five to five once the
+ * side was chosen on both terms rather than on the panel alone.
+ */
+function chooseSide(
+  state: RunState,
+  row: number,
+  sign: number,
+  range: WallLimits,
+  line: number,
+): void {
+  const margin = balance.walls.margin;
+  let best = 0;
+  let bestScore = -Infinity;
+
+  for (const side of [-1, 1]) {
+    half.lo = side < 0 ? range.lo : Math.max(range.lo, line + margin);
+    half.hi = side < 0 ? Math.min(range.hi, line - margin) : range.hi;
+    half.wall = range.wall;
+    // A fence the squad is already inside can leave one half unreachable.
+    if (half.lo > half.hi) continue;
+
+    const lane = pickLane(state, row, sign, half);
+    let score = sign * laneScore(gateAt(state, row, lane), state);
+    // The worst bot is asked for the worst half, so the river it gives up is
+    // added rather than subtracted for it: `sign` flips both terms together.
+    if (bestStreamStand(state, half)) score += sign * stand.bodies;
+    if (score > bestScore) {
+      bestScore = score;
+      best = side;
+    }
+  }
+
+  if (best < 0) range.hi = Math.min(range.hi, line - margin);
+  else if (best > 0) range.lo = Math.max(range.lo, line + margin);
 }
 
 /** Returns a policy: given the current state, the `targetX` the bot wants. */
@@ -291,20 +355,18 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
 
     // A wall between here and the row settles which half of the road the squad
     // arrives on, so the *side* has to be chosen before the fence rather than at
-    // `gateCommitDistance` (D32): the stretch is up to twenty metres long and
-    // there is no crossing it once inside. Only the side, though — having
-    // crossed, the bot goes back to covering the river on the half it is on,
-    // which is what keeps a walled level a difficulty change rather than a bot
-    // that stops shooting streams.
+    // `gateCommitDistance` (D32): the stretch is up to twenty metres long, it
+    // holds all the way to the row it guards, and there is no crossing it once
+    // inside. The choice narrows the range rather than becoming the answer —
+    // the bot still covers the river and still picks a lane, it just does both
+    // on the half it has decided to arrive on.
     const wall =
       row < 0 ? null : wallAhead(state.walls ?? [], state.squad.z, state.squad.z + distance);
     if (
       wall !== null &&
       wall.zStart - balance.walls.approach - state.squad.z <= balance.bots.wallCommitDistance
     ) {
-      const want = laneCenter(pickLane(state, row, sign, range), balance.road.laneWidth);
-      const line = wallX(wall.boundary, balance.road.laneWidth);
-      if (state.squad.x < line !== want < line) return want;
+      chooseSide(state, row, sign, range, wallX(wall.boundary, balance.road.laneWidth));
     }
 
     const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;
@@ -312,8 +374,7 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
     if (kind === 'greedy' && !committed) {
       // Between rows the squad's job is the river, not the next panel — but
       // only as far as the wall it is already inside allows.
-      const stand = bestStreamStand(state);
-      if (stand !== null) return clampToWalls(stand, range);
+      if (bestStreamStand(state, range)) return stand.x;
       // Nothing streaming: greedy would rather stand and shoot a block than
       // dodge it, and only swerves once the row is close.
       if (blockedByEnemy(state)) return clampToWalls(state.squad.x, range);

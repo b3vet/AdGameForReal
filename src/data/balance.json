@@ -60,6 +60,7 @@
     "approach": 2,
     "margin": 0.05,
     "gateClearance": 2,
+    "gateGap": 0.5,
     "minLength": 6,
     "length": {
       "min": 10,

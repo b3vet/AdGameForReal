@@ -15,28 +15,14 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { BossView } from './boss';
-import { BurnView } from './burn';
 import { CameraRig } from './camera';
-import { EffectsView } from './effects';
-import { EnemyView } from './enemies';
-import { GateView } from './gates';
 import { loadDisplayFont } from './glyphAtlas';
-import { NumberLabels } from './labels';
-import { ProjectileView } from './projectiles';
 import { PreviewBackdrop } from './preview';
-import { PropsView } from './props';
-import { RoadView } from './road';
 import { createEngine, createScene } from './scene';
-import { SpriteLayer } from './sprites';
-import { SquadView } from './squad';
-import { RendererEvents } from './rendererEvents';
-import { POOL } from './theme';
 import { applyToonRampToScene } from './toonRamp';
-import { WallView } from './walls';
+import { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
-import { WispView } from './wisp';
 import { weaponOf } from '@/sim';
 import type { LevelDef, PlayerState, RunState, SimEvent } from '@/sim';
 
@@ -70,10 +56,6 @@ const DEFAULT_MAX_PIXEL_RATIO = 2;
 const ROAD_START_Z = -30;
 const ROAD_PAST_ARENA = 70;
 
-/** A lookup that never finds anything, for a frame drawn before `init` wired
- *  the event router up. A spark with no target simply fizzles. */
-const noTarget = (): boolean => false;
-
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly preserveDrawingBuffer: boolean;
@@ -84,22 +66,8 @@ export class Renderer {
   private rig: CameraRig | null = null;
   private instrumentation: SceneInstrumentation | null = null;
 
-  private labels: NumberLabels | null = null;
-  private road: RoadView | null = null;
-  private props: PropsView | null = null;
-  private squad: SquadView | null = null;
-  /** Every spell quad in the scene, in one batch; see `./sprites.ts`. */
-  private sprites: SpriteLayer | null = null;
-  private projectiles: ProjectileView | null = null;
-  private effects: EffectsView | null = null;
-  private gates: GateView | null = null;
-  private enemies: EnemyView | null = null;
-  private boss: BossView | null = null;
-  /** Lane walls (D32) and the familiar (D33). */
-  private walls: WallView | null = null;
-  private wisp: WispView | null = null;
-  /** Ember's burn (D33, tier 2), read off the bodies themselves. */
-  private burn: BurnView | null = null;
+  /** Every view in the scene, built in `init` (`./views.ts`). */
+  private views: SceneViews | null = null;
 
   /**
    * Who draws a death, mirrored from the physics layer by `setPhysicsQuality`.
@@ -112,8 +80,6 @@ export class Renderer {
    * stream body blinked out, and every block died without an animation.
    */
   private physicsQuality = 0;
-  /** Built in `init`, once every view it writes to exists (`./rendererEvents.ts`). */
-  private events: RendererEvents | null = null;
 
   /** The Academy backdrop, when one is up; see `./preview.ts`. */
   private readonly preview = new PreviewBackdrop();
@@ -152,49 +118,17 @@ export class Renderer {
     // the font has to be asked for before the atlas is built. Fail-soft and
     // time-boxed: a missing Cinzel is a fallback serif, never a delayed boot.
     await loadDisplayFont();
-    const labels = new NumberLabels(scene);
-    this.labels = labels;
-    this.road = new RoadView(scene);
-    this.props = new PropsView(scene);
-    this.squad = new SquadView(scene);
-    const sprites = new SpriteLayer(scene, POOL.sprites);
-    this.sprites = sprites;
-    this.projectiles = new ProjectileView(sprites);
-    this.effects = new EffectsView(scene, sprites);
-    this.gates = new GateView(scene, labels);
-    this.enemies = new EnemyView(scene, labels);
-    this.boss = new BossView(scene, labels);
-    this.walls = new WallView(scene, sprites);
-    this.wisp = new WispView(sprites);
-    this.burn = new BurnView(sprites);
-    this.events = new RendererEvents({
-      squad: this.squad,
-      projectiles: this.projectiles,
-      effects: this.effects,
-      gates: this.gates,
-      enemies: this.enemies,
-      boss: this.boss,
-      walls: this.walls,
-      wisp: this.wisp,
-      shake: (strength, seconds) => {
-        this.shake(strength, seconds);
-      },
+    const views = new SceneViews(scene, (strength, seconds) => {
+      this.shake(strength, seconds);
     });
+    this.views = views;
 
     // A default stretch of road, so the very first frame — which the app draws
     // behind the title screen before any level exists — is not empty sky.
-    this.road.setExtent(ROAD_START_Z, 200, 168);
+    views.road.setExtent(ROAD_START_Z, 200, 168);
 
-    // Models are loaded in parallel and each loader is fail-soft: a missing
-    // `/assets/` costs the art, never the boot.
-    await Promise.all([
-      this.squad.load(),
-      this.enemies.load(),
-      this.boss.load(),
-      this.gates.load(),
-      this.props.load(),
-    ]);
-    this.props.build(1, ROAD_START_Z, 200);
+    await views.load();
+    views.props.build(1, ROAD_START_Z, 200);
 
     scene.blockMaterialDirtyMechanism = false;
 
@@ -202,15 +136,15 @@ export class Renderer {
     // blank frame that the smoke test would screenshot. The labels join in with
     // one invisible glyph, or their shader would compile on the frame the first
     // gate comes into range — a stall exactly where the player is deciding.
-    labels.warmUp();
+    views.labels.warmUp();
     await scene.whenReadyAsync();
-    labels.commit();
+    views.labels.commit();
 
     // After the first readiness pass, never before: a material frozen while its
     // effect is still compiling never draws. Neither view ever changes what its
     // materials are made of, so re-checking them every frame is pure cost.
-    this.props?.freeze();
-    this.road?.freeze();
+    views.props.freeze();
+    views.road.freeze();
 
     // Last: every pooled material compiled while the title screen is still
     // being put together, so the first bolt, the first gate and the first
@@ -271,11 +205,11 @@ export class Renderer {
    * so the debug panel prints them next to the draw calls.
    */
   get streamBodies(): number {
-    return this.enemies?.streamBodies ?? 0;
+    return this.views?.enemies.streamBodies ?? 0;
   }
 
   get labelStats(): { labels: number; glyphs: number; dropped: number } {
-    return this.labels?.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
+    return this.views?.labels.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
   }
 
   /**
@@ -284,11 +218,12 @@ export class Renderer {
    * into. The debug panel and the dev harness print them beside the draw calls.
    */
   get featureStats(): { walls: number; wisp: boolean; sparks: number; burning: number } {
+    const views = this.views;
     return {
-      walls: this.walls?.drawn ?? 0,
-      wisp: this.wisp?.drawn ?? false,
-      sparks: this.wisp?.sparksInFlight ?? 0,
-      burning: this.burn?.drawn ?? 0,
+      walls: views?.walls.drawn ?? 0,
+      wisp: views?.wisp.drawn ?? false,
+      sparks: views?.wisp.sparksInFlight ?? 0,
+      burning: views?.burn.drawn ?? 0,
     };
   }
 
@@ -345,7 +280,7 @@ export class Renderer {
    */
   setPhysicsQuality(quality: number): void {
     this.physicsQuality = Math.max(0, Math.min(2, Math.round(quality)));
-    this.enemies?.setPhysicsQuality(this.physicsQuality);
+    this.views?.enemies.setPhysicsQuality(this.physicsQuality);
   }
 
   /**
@@ -362,23 +297,7 @@ export class Renderer {
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
-    const endZ = level.arenaZ + ROAD_PAST_ARENA;
-    this.road?.setExtent(ROAD_START_Z, endZ, level.arenaZ);
-    this.props?.build(level.index, ROAD_START_Z, endZ);
-    // The fences are placed once here and only culled per frame afterwards
-    // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that
-    // predate D32, and an absent list is simply a level with no walls.
-    this.walls?.setWalls(level.walls);
-    this.squad?.reset();
-    this.sprites?.reset();
-    this.projectiles?.reset();
-    this.effects?.reset();
-    this.gates?.reset();
-    this.enemies?.reset();
-    this.boss?.reset();
-    this.wisp?.reset();
-    this.burn?.reset();
-    this.events?.reset();
+    this.views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA);
     this.rig?.reset();
   }
 
@@ -393,38 +312,39 @@ export class Renderer {
   update(state: RunState, events: readonly SimEvent[], dt: number): void {
     if (this.disposed) return;
     const scene = this.sceneRef;
-    if (scene === null) return;
+    const views = this.views;
+    if (scene === null || views === null) return;
 
-    this.events?.observe(state.boss?.id, weaponOf(state.squad));
-    this.events?.apply(events);
+    views.events.observe(state.boss?.id, weaponOf(state.squad));
+    views.events.apply(events);
 
-    this.squad?.update(state.squad, state.arenaZ, dt);
+    views.squad.update(state.squad, state.arenaZ, dt);
     // The sprite batch is opened before anything writes into it and closed
     // after everything has: projectiles, their trails, impacts and flashes all
     // land in the same buffer and the same draw call.
-    this.sprites?.begin();
-    this.projectiles?.update(state.projectiles, weaponOf(state.squad), dt);
-    this.gates?.update(state, dt);
-    this.enemies?.update(state, dt);
-    this.boss?.update(state.boss, state.squad.z, dt, this.timeScale(dt));
-    this.effects?.update(dt);
+    views.sprites.begin();
+    views.projectiles.update(state.projectiles, weaponOf(state.squad), dt);
+    views.gates.update(state, dt);
+    views.enemies.update(state, dt);
+    views.boss.update(state.boss, state.squad.z, dt, this.timeScale(dt));
+    views.effects.update(dt);
     // After the enemies, because both read positions the enemy view has just
     // refreshed: the wall's flare sprite and the wisp's spark, which homes on
     // its target through `EnemyView.positionOf`.
-    this.walls?.update(state.squad.z, dt);
-    this.wisp?.update(this.preview.familiarFor(state), this.events?.targetLookup ?? noTarget, dt);
-    this.burn?.update(state, dt);
-    this.sprites?.end();
+    views.walls.update(state.squad.z, dt);
+    views.wisp.update(this.preview.familiarFor(state), views.events.targetLookup, dt);
+    views.burn.update(state, dt);
+    views.sprites.end();
 
     this.rig?.update(state.squad, dt);
     // After the rig, because the sky dome rides on the camera: a dome that
     // follows a frame late shears against the fog on a fast lateral drag.
     const camera = this.rig?.camera;
-    if (camera !== undefined) this.road?.update(camera.position.x, camera.position.z, dt);
+    if (camera !== undefined) views.road.update(camera.position.x, camera.position.z, dt);
 
     // Last, and after the rig: every label is billboarded against the camera's
     // final pose for this frame, so a number never lags the thing it names.
-    this.labels?.commit();
+    views.labels.commit();
 
     scene.render();
   }
@@ -438,7 +358,7 @@ export class Renderer {
    */
   absorbEvents(events: readonly SimEvent[]): void {
     if (this.disposed) return;
-    this.events?.apply(events);
+    this.views?.events.apply(events);
   }
 
   resize(): void {
@@ -450,32 +370,8 @@ export class Renderer {
     if (this.disposed) return;
     this.disposed = true;
 
-    this.squad?.dispose();
-    this.projectiles?.dispose();
-    this.effects?.dispose();
-    this.sprites?.dispose();
-    this.gates?.dispose();
-    this.enemies?.dispose();
-    this.boss?.dispose();
-    this.walls?.dispose();
-    this.props?.dispose();
-    this.road?.dispose();
-    this.labels?.dispose();
-
-    this.squad = null;
-    this.projectiles = null;
-    this.effects = null;
-    this.sprites = null;
-    this.gates = null;
-    this.enemies = null;
-    this.boss = null;
-    this.walls = null;
-    this.wisp = null;
-    this.burn = null;
-    this.events = null;
-    this.props = null;
-    this.road = null;
-    this.labels = null;
+    this.views?.dispose();
+    this.views = null;
     this.rig?.dispose();
     this.rig = null;
 

@@ -155,14 +155,14 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
-    "wallRows": 1,
+    "wallRows": 0,
     "startCount": 7,
     "peakTarget": 225,
     "hpScale": 0.5,
     "streamPressure": 0.75,
     "streamDensity": 1.0,
     "boss": {
-      "hp": 8600,
+      "hp": 8400,
       "bite": 0.77
     },
     "gateValues": {
@@ -192,14 +192,14 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
-    "wallRows": 2,
+    "wallRows": 1,
     "startCount": 8,
     "peakTarget": 260,
     "hpScale": 0.55,
     "streamPressure": 0.86,
     "streamDensity": 1.15,
     "boss": {
-      "hp": 8700,
+      "hp": 8800,
       "bite": 1.0
     },
     "gateValues": {
@@ -229,14 +229,14 @@
     "mixedRows": 4,
     "hordeRows": 2,
     "bruteRows": 2,
-    "wallRows": 2,
+    "wallRows": 1,
     "startCount": 9,
     "peakTarget": 295,
     "hpScale": 0.6,
     "streamPressure": 0.88,
     "streamDensity": 1.2,
     "boss": {
-      "hp": 10200,
+      "hp": 9400,
       "bite": 1.0
     },
     "gateValues": {
@@ -266,14 +266,14 @@
     "mixedRows": 4,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 3,
+    "wallRows": 1,
     "startCount": 10,
     "peakTarget": 325,
     "hpScale": 0.62,
     "streamPressure": 0.9,
     "streamDensity": 1.2,
     "boss": {
-      "hp": 10600,
+      "hp": 10200,
       "bite": 1.0
     },
     "gateValues": {
@@ -303,7 +303,7 @@
     "mixedRows": 5,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 3,
+    "wallRows": 1,
     "startCount": 11,
     "peakTarget": 360,
     "hpScale": 0.68,
@@ -340,15 +340,15 @@
     "mixedRows": 5,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 3,
+    "wallRows": 1,
     "startCount": 12,
-    "peakTarget": 400,
+    "peakTarget": 390,
     "hpScale": 0.75,
     "streamPressure": 0.9,
     "streamDensity": 1.3,
     "boss": {
-      "hp": 11400,
-      "bite": 1.0
+      "hp": 11600,
+      "bite": 0.95
     },
     "gateValues": {
       "mul": {
@@ -377,15 +377,15 @@
     "mixedRows": 6,
     "hordeRows": 4,
     "bruteRows": 2,
-    "wallRows": 4,
+    "wallRows": 2,
     "startCount": 13,
-    "peakTarget": 410,
+    "peakTarget": 415,
     "hpScale": 0.76,
     "streamPressure": 0.9,
     "streamDensity": 1.3,
     "boss": {
-      "hp": 17400,
-      "bite": 1.0
+      "hp": 15800,
+      "bite": 0.94
     },
     "gateValues": {
       "mul": {
@@ -414,15 +414,15 @@
     "mixedRows": 6,
     "hordeRows": 4,
     "bruteRows": 2,
-    "wallRows": 4,
+    "wallRows": 2,
     "startCount": 14,
-    "peakTarget": 420,
+    "peakTarget": 436,
     "hpScale": 0.78,
     "streamPressure": 0.9,
     "streamDensity": 1.31,
     "boss": {
-      "hp": 17600,
-      "bite": 1.0
+      "hp": 16600,
+      "bite": 0.93
     },
     "gateValues": {
       "mul": {
@@ -451,15 +451,15 @@
     "mixedRows": 6,
     "hordeRows": 4,
     "bruteRows": 2,
-    "wallRows": 5,
+    "wallRows": 2,
     "startCount": 15,
-    "peakTarget": 430,
+    "peakTarget": 453,
     "hpScale": 0.8,
     "streamPressure": 0.91,
     "streamDensity": 1.32,
     "boss": {
-      "hp": 17800,
-      "bite": 1.0
+      "hp": 17300,
+      "bite": 0.91
     },
     "gateValues": {
       "mul": {
@@ -488,15 +488,15 @@
     "mixedRows": 6,
     "hordeRows": 4,
     "bruteRows": 2,
-    "wallRows": 5,
+    "wallRows": 2,
     "startCount": 16,
-    "peakTarget": 440,
+    "peakTarget": 467,
     "hpScale": 0.82,
     "streamPressure": 0.91,
     "streamDensity": 1.33,
     "boss": {
-      "hp": 18000,
-      "bite": 1.0
+      "hp": 17800,
+      "bite": 0.89
     },
     "gateValues": {
       "mul": {
@@ -525,15 +525,15 @@
     "mixedRows": 7,
     "hordeRows": 4,
     "bruteRows": 2,
-    "wallRows": 5,
+    "wallRows": 1,
     "startCount": 17,
-    "peakTarget": 450,
+    "peakTarget": 478,
     "hpScale": 0.84,
     "streamPressure": 0.92,
     "streamDensity": 1.34,
     "boss": {
-      "hp": 18200,
-      "bite": 1.0
+      "hp": 18400,
+      "bite": 0.87
     },
     "gateValues": {
       "mul": {
@@ -562,15 +562,15 @@
     "mixedRows": 7,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 6,
+    "wallRows": 1,
     "startCount": 18,
-    "peakTarget": 460,
+    "peakTarget": 486,
     "hpScale": 0.86,
-    "streamPressure": 0.92,
-    "streamDensity": 1.35,
+    "streamPressure": 0.88,
+    "streamDensity": 1.25,
     "boss": {
-      "hp": 16200,
-      "bite": 1.0
+      "hp": 18560,
+      "bite": 0.83
     },
     "gateValues": {
       "mul": {
@@ -599,15 +599,15 @@
     "mixedRows": 7,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 6,
+    "wallRows": 1,
     "startCount": 19,
-    "peakTarget": 470,
+    "peakTarget": 492,
     "hpScale": 0.88,
     "streamPressure": 0.93,
     "streamDensity": 1.36,
     "boss": {
-      "hp": 16400,
-      "bite": 1.0
+      "hp": 18680,
+      "bite": 0.81
     },
     "gateValues": {
       "mul": {
@@ -636,15 +636,15 @@
     "mixedRows": 8,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 6,
+    "wallRows": 1,
     "startCount": 20,
-    "peakTarget": 480,
+    "peakTarget": 496,
     "hpScale": 0.9,
     "streamPressure": 0.93,
     "streamDensity": 1.37,
     "boss": {
-      "hp": 16900,
-      "bite": 1.0
+      "hp": 18770,
+      "bite": 0.79
     },
     "gateValues": {
       "mul": {
@@ -673,15 +673,15 @@
     "mixedRows": 8,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 7,
+    "wallRows": 1,
     "startCount": 21,
-    "peakTarget": 490,
+    "peakTarget": 499,
     "hpScale": 0.92,
     "streamPressure": 0.94,
     "streamDensity": 1.38,
     "boss": {
-      "hp": 17000,
-      "bite": 1.0
+      "hp": 18830,
+      "bite": 0.77
     },
     "gateValues": {
       "mul": {
@@ -710,15 +710,15 @@
     "mixedRows": 8,
     "hordeRows": 3,
     "bruteRows": 2,
-    "wallRows": 7,
+    "wallRows": 1,
     "startCount": 22,
     "peakTarget": 500,
     "hpScale": 0.94,
     "streamPressure": 0.94,
     "streamDensity": 1.4,
     "boss": {
-      "hp": 17100,
-      "bite": 1.0
+      "hp": 18870,
+      "bite": 0.75
     },
     "gateValues": {
       "mul": {

@@ -149,17 +149,20 @@ describe('the wall generator', () => {
     expect(seen).toBeGreaterThan(100);
   });
 
-  it('never covers a gate row, and never reaches the arena', () => {
+  it('covers no gate row but the one it guards, and never reaches the arena', () => {
     everyLevel((def, index, seed) => {
       const gateRows = def.rows.filter((r) => r.gates.some((g) => g !== null));
       for (const w of def.walls ?? []) {
         const where = `L${String(index)} s${String(seed)} wall ${w.zStart.toFixed(1)}-${w.zEnd.toFixed(1)}`;
-        expect(`${where} length`).toBe(`${where} length`);
         expect(w.zEnd - w.zStart).toBeGreaterThanOrEqual(TUNING.minLength);
         expect(w.zEnd - w.zStart).toBeLessThanOrEqual(TUNING.length.max);
         expect(w.zEnd).toBeLessThanOrEqual(def.arenaZ - TUNING.gateClearance);
         for (const gateRow of gateRows) {
+          // The guarded row sits `gateGap` past the far end; every other row is
+          // clear of the whole stretch by `gateClearance`.
+          const guarded = Math.abs(gateRow.z - TUNING.gateGap - w.zEnd) < 1e-6;
           const clear =
+            guarded ||
             gateRow.z <= w.zStart - TUNING.gateClearance ||
             gateRow.z >= w.zEnd + TUNING.gateClearance;
           expect(`${where} vs gate ${gateRow.z.toFixed(1)}: ${String(clear)}`).toBe(
@@ -170,18 +173,54 @@ describe('the wall generator', () => {
     });
   });
 
-  it('guards a gate row, and never one of the opening rows', () => {
+  it('runs each stretch up to the gate row it guards, and never an opening row', () => {
     everyLevel((def, index, seed) => {
       const gateRows = def.rows
         .map((r, i) => ({ index: i, z: r.z, gates: r.gates }))
         .filter((r) => r.gates.some((g) => g !== null));
       for (const w of def.walls ?? []) {
-        const guarded = gateRows.find((r) => Math.abs(r.z - TUNING.gateClearance - w.zEnd) < 1e-6);
+        const guarded = gateRows.find((r) => Math.abs(r.z - TUNING.gateGap - w.zEnd) < 1e-6);
         const where = `L${String(index)} s${String(seed)} wall ends ${w.zEnd.toFixed(1)}`;
         expect(`${where}: ${String(guarded !== undefined)}`).toBe(`${where}: true`);
         expect(guarded?.index ?? -1).toBeGreaterThanOrEqual(TUNING.fromRow);
       }
     });
+  });
+
+  /**
+   * The commitment itself (Milestone 4 Phase C). The squad steers at
+   * `squad.lateralSpeed` while the road runs past at `squad.runSpeed`, so every
+   * metre of road it is *not* clamped for buys it 1.6 m of lane — and it is only
+   * held `margin` off the boundary. So any stretch of free road before the
+   * panels undoes the whole choice, which is why the clamp runs to the row and
+   * only the fence stops short of it.
+   */
+  it('holds the squad on its own side of the fence all the way to the row', () => {
+    const freeLane = TUNING.gateGap * (balance.squad.lateralSpeed / balance.squad.runSpeed);
+    // The gap the clamp covers is worth far more lane than the margin holds:
+    // release the squad there and it is over the line in a sixth of a second.
+    expect(freeLane).toBeGreaterThan(TUNING.margin);
+
+    // Held left by a fence that stops half a metre short of the row, a squad
+    // leaning on the far lane from the first step is still left of the boundary
+    // when it crosses — so it takes the gate on its own side.
+    const run = runOf(
+      level({
+        startCount: 1,
+        rows: [row(30, [{ kind: 'add', value: 10 }, null, { kind: 'add', value: 10 }])],
+        walls: [wall(1, 10, 30 - TUNING.gateGap)],
+        arenaZ: 400,
+      }),
+    );
+    play(run, 1.5, -99);
+
+    let atRow = Number.NaN;
+    for (let step = 0; step < 60 * 10 && Number.isNaN(atRow); step++) {
+      run.setTargetX(99);
+      run.tick(1 / 60);
+      if (run.state.squad.z >= 30) atRow = run.state.squad.x;
+    }
+    expect(atRow).toBeLessThan(LINE);
   });
 
   it('walls both boundaries only over a horde, and only late', () => {

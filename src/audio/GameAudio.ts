@@ -88,6 +88,16 @@ export class GameAudio {
    * is remembered here and replayed at the end of `load` instead.
    */
   private unlockWanted = false;
+  /**
+   * A room reveal that was owed while the context was still locked.
+   *
+   * The Academy paints its home — and plays the reveal of any room the save has
+   * just opened — on the frame the game boots, which is always before the first
+   * gesture, so the very first reveal (the Yard, at level 1) was silent every
+   * time. Remembered here and played from the `unlock` that the next tap runs,
+   * which is a gesture the browser will start a context for.
+   */
+  private revealOwed = false;
   private mutedFlag: boolean;
   private disposed = false;
 
@@ -171,6 +181,10 @@ export class GameAudio {
     engine.unlockAsync().then(
       () => {
         this.unlocked = engine.state === 'running';
+        if (this.unlocked && this.revealOwed) {
+          this.revealOwed = false;
+          this.playCue(audioMix.ui.roomReveal);
+        }
       },
       (error: unknown) => {
         console.warn('[arcane-rush] audio could not be unlocked', error);
@@ -212,8 +226,16 @@ export class GameAudio {
     this.playCue(audioMix.ui.unlock);
   }
 
-  /** A room opening for the first time. Once per room, ever. */
+  /**
+   * A room opening for the first time. Once per room, ever — and the first one
+   * is owed at boot, before any gesture has been made, so a locked context
+   * holds it over to the next tap rather than dropping it (`revealOwed`).
+   */
   playRoomReveal(): void {
+    if (!this.mutedFlag && !this.refreshUnlocked()) {
+      this.revealOwed = true;
+      return;
+    }
     this.playCue(audioMix.ui.roomReveal);
   }
 

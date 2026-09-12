@@ -50,10 +50,12 @@ vi.mock('@/render/characters', () => ({
       'sfx_gate_pass_good',
       'sfx_shatter',
       // Milestone 4 reuses these three as the wisp's spark, the Academy's
-      // purchase chime and its coin tick (D33).
+      // purchase chime and its coin tick, and the win fanfare as a room's
+      // reveal (D33).
       'sfx_shot_storm',
       'sfx_units_gained',
       'sfx_gate_tick',
+      'sfx_win_fanfare',
     ].map((id) => ({ kind: 'audio', id, url: `audio/${id}.wav` })),
   resolveAssetUrl: (id: string) => `/assets/${id}.wav`,
   assetBytes: () => Promise.resolve(new ArrayBuffer(0)),
@@ -120,6 +122,28 @@ describe('GameAudio', () => {
     audio.unlock();
 
     expect(engine.unlockAsync).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The Academy paints its home on the boot frame, so the first room reveal is
+   * always owed before any gesture has happened. Dropped on the floor before
+   * Milestone 4 Phase C, which is why the very first Yard opened in silence.
+   */
+  it('holds a room reveal owed while the context is locked and plays it on the next gesture', async () => {
+    const audio = new GameAudio();
+    await audio.load();
+
+    audio.playRoomReveal();
+    expect(plays('sfx_win_fanfare')).toBe(0);
+
+    audio.unlock();
+    await Promise.resolve();
+    expect(plays('sfx_win_fanfare')).toBe(1);
+
+    // Owed once, not once per tap.
+    audio.unlock();
+    await Promise.resolve();
+    expect(plays('sfx_win_fanfare')).toBe(1);
   });
 
   /**

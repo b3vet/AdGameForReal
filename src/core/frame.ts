@@ -100,6 +100,10 @@ export class FrameDriver {
     labels: 0,
     labelGlyphs: 0,
     labelsDropped: 0,
+    walls: 0,
+    wisp: false,
+    sparks: 0,
+    burning: 0,
     timeScale: 1,
     ragdolls: 0,
     shards: 0,
@@ -300,6 +304,11 @@ export class FrameDriver {
     this.stats.labels = labels.labels;
     this.stats.labelGlyphs = labels.glyphs;
     this.stats.labelsDropped = labels.dropped;
+    const features = host.renderer.featureStats;
+    this.stats.walls = features.walls;
+    this.stats.wisp = features.wisp;
+    this.stats.sparks = features.sparks;
+    this.stats.burning = features.burning;
     this.stats.ragdolls = physics?.stats.ragdolls ?? 0;
     this.stats.shards = physics?.stats.shards ?? 0;
     this.stats.physicsBodies = physics?.stats.bodies ?? 0;

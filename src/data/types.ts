@@ -147,8 +147,24 @@ export interface Balance {
      *  on the line reads as the side lane (`laneOf`), so zero would let a
      *  clamped squad take the gate it was walled away from. */
     margin: number;
-    /** No wall may come within this of a gate row's `z`, either side. */
+    /**
+     * No wall may come within this of a gate row's `z`, either side — except
+     * the row it guards, which is `gateGap` past its far end.
+     */
     gateClearance: number;
+    /**
+     * Metres between a stretch's far end and the gate row it guards: the fence
+     * stops short of the panels, and the clamp covers the gap (`wallHolds`).
+     *
+     * The pair is what makes a wall a decision rather than a nudge (Milestone 4
+     * Phase C). The fence used to stop a whole `gateClearance` short with the
+     * clamp ending on it, and at `squad.lateralSpeed` over `squad.runSpeed` the
+     * squad buys 1.6 m of lane per metre of road — so it crossed the boundary
+     * it had been held behind long before the panels and the wall changed
+     * nothing. Now the choice is settled at the row and only the fence's last
+     * half-metre is missing, which is what keeps the posts out of the panels.
+     */
+    gateGap: number;
     /** A stretch shorter than this is not placed at all. */
     minLength: number;
     /** How long a stretch runs, before the clearance rules trim it. */
