@@ -212,3 +212,14 @@
 | 3. Product owner reads it as studio-designed; phone holds rung 0 at native with render median under 8 ms | Awaiting the product owner's read and a phone capture |
 | 4. Bands and golden tests pass with the new formation and spring | Done, Phase B |
 | 5. Docs, ASSETS.md rows, ledger entries | Done: D36 to D41, ASSETS.md rows for Dungeon pieces, textures and the UI kit |
+
+## 2026-09-13 — Product owner read: the formation was misread
+
+- The owner's Milestone 4 note "linear line-filling rather than circular"
+  meant a vertical column one lane wide, not a horizontal line across the
+  road; it is the shape that makes sense once walls separate the lanes.
+  Testing waits on the fix. Plan in `docs/16-lane-column-formation.md`,
+  ledger D42 supersedes the formation half of D37. Two tracks launched in
+  parallel: sim (lane band, clamp, keep-off, spacing floor, balance
+  re-measure) and render (camera framing of the column's front, flock lag
+  down the column, stress scene).
