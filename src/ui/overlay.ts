@@ -19,9 +19,9 @@
  * with two overlays fighting over the same buttons.
  */
 
-import './styles.css';
 // Imported for the effect, not the value: it starts the display faces loading
-// at boot (see `./fonts`), which the overlay itself only benefits from.
+// at boot and it is the one place the overlay's stylesheets are put in order
+// (see `./fonts`).
 import './fonts';
 
 import type { PlayerState, RoomId } from '@/core/player';
@@ -143,6 +143,7 @@ export class Overlay {
 
     this.resultPanel = new ResultPanel(
       {
+        ribbon: requireElement(root, '#result-ribbon'),
         kicker: requireElement(root, '#result-kicker'),
         title: requireElement(root, '#result-title'),
         badge: requireElement(root, '#result-first-clear'),
@@ -159,9 +160,10 @@ export class Overlay {
     this.hud = new Hud({
       levelLabel: requireElement(root, '#hud-level'),
       count: requireElement(root, '#hud-count'),
+      plaque: requireElement(root, '#hud-plaque'),
+      staffIcon: requireElement(root, '#hud-staff-icon'),
       staffBadge: requireElement(root, '#hud-staff'),
       bossBar: requireElement(root, '#boss-bar'),
-      bossFill: requireElement(root, '#boss-bar-fill'),
       bossValue: requireElement(root, '#boss-bar-value'),
       bossLabel: requireElement(root, '#boss-bar-label'),
     });

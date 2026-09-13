@@ -1,0 +1,118 @@
+/*
+ * The overlay's tokens: the two faces, and every name the stylesheets use for a
+ * colour, a frame, an easing or an inset.
+ *
+ * Colour comes from one place (decision D36). `./palette.css` is generated from
+ * `src/data/palette.json` and declares `--c-<role>-<shade>`; everything here
+ * names a *use* — `--paper`, `--chip`, `--gold` — in terms of those, and no
+ * stylesheet in `src/ui` may write a literal colour. A translucent shade is
+ * `color-mix(..., transparent)` of a palette colour rather than an `rgba()`
+ * with numbers in it, so a palette change moves the whole overlay with it.
+ * `src/ui/__tests__/palette.test.ts` enforces both halves of that.
+ *
+ * The UI kit's own files are named here as `--frame-*` and `--button-*` and
+ * used in `./kit.css`; `scripts/fetch-ui.mjs` writes them from Kenney's CC0
+ * packs with the palette's colours baked in (decision D39). `npm run dev` and
+ * `npm run build` load them from `/assets/ui/`; the single-file builds rewrite
+ * these `url()`s into `data:` URIs (`scripts/inline-assets.mjs`), exactly as
+ * they already do for the two faces.
+ *
+ * Split out of `./styles.css` in Milestone 5 Phase D, which had grown past the
+ * file-size rule. Loaded first of the hand-written sheets (`./fonts.ts`).
+ */
+
+/*
+ * One file per family: Google serves Cinzel and Nunito as variable fonts, so
+ * the `latin` file for weight 700 and for weight 900 is the same download. The
+ * `font-weight` range is what lets one face answer both.
+ */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+  src: url('/assets/fonts/cinzel-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/assets/fonts/nunito-latin.woff2') format('woff2');
+}
+
+:root {
+  /* --- Ink ---------------------------------------------------------------- */
+  --ink: var(--c-ink-base);
+  --ink-soft: var(--c-ink-soft);
+  --ink-dim: color-mix(in srgb, var(--c-ink-base) 42%, transparent);
+  /* Warm off-white: text that floats over the road, never over paper. */
+  --ink-bright: var(--c-parchment-base);
+  --ink-bright-dim: color-mix(in srgb, var(--c-parchment-base) 72%, transparent);
+  /* The stroke every number over the road is painted with. */
+  --outline: color-mix(in srgb, var(--c-ink-base) 92%, transparent);
+
+  /* --- Surfaces ----------------------------------------------------------- */
+  --paper: var(--c-parchment-panel);
+  --paper-shade: var(--c-parchment-shade);
+  /* The board over the road: parchment, sheer enough to keep the shop window. */
+  --panel: color-mix(in srgb, var(--c-parchment-base) 95%, transparent);
+  /* Dark plates, for anything that sits directly on the scene. */
+  --chip: color-mix(in srgb, var(--c-ink-base) 62%, transparent);
+  --chip-strong: color-mix(in srgb, var(--c-ink-base) 84%, transparent);
+  --sunk: color-mix(in srgb, var(--c-ink-base) 30%, transparent);
+
+  /* --- Accents ------------------------------------------------------------ */
+  --gold: var(--c-gold-base);
+  --gold-light: var(--c-gold-light);
+  --gold-deep: var(--c-gold-deep);
+  --accent: var(--c-arcane-base);
+  --accent-light: var(--c-arcane-light);
+  --danger: var(--c-danger-base);
+  --danger-light: var(--c-danger-light);
+
+  /*
+   * Parchment grain. Two crosshatches a few pixels apart at four percent ink:
+   * invisible as a pattern, and the difference between paper and a flat fill.
+   * Gradients rather than a texture file — they rasterise at the device's own
+   * resolution, so there is nothing to go soft on a 3x screen.
+   */
+  --grain: repeating-linear-gradient(
+      115deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--c-stone-deep) 6%, transparent) 3px 4px
+    ),
+    repeating-linear-gradient(
+      19deg,
+      transparent 0 5px,
+      color-mix(in srgb, var(--c-stone-deep) 5%, transparent) 5px 6px
+    );
+
+  /* --- The UI kit --------------------------------------------------------- */
+  --frame-panel: url('/assets/ui/frame-panel.svg');
+  --frame-card: url('/assets/ui/frame-card.svg');
+  --frame-plaque: url('/assets/ui/frame-plaque.svg');
+  --frame-bar: url('/assets/ui/frame-bar.svg');
+  --frame-inset: url('/assets/ui/frame-inset.svg');
+  --divider: url('/assets/ui/divider.svg');
+  --button-gold: url('/assets/ui/button-gold.svg');
+  --button-stone: url('/assets/ui/button-stone.svg');
+
+  /* --- Motion ------------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --pop: cubic-bezier(0.2, 1.6, 0.4, 1);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* One column, phone-shaped, whatever the viewport is. */
+  --column: 520px;
+
+  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: light;
+  font-family: var(--font-body);
+}

@@ -1,90 +1,22 @@
 /*
- * Portrait-first overlay.
+ * Portrait-first overlay: the layout every screen is laid out inside, the
+ * panels, the wordmark and the landscape rules.
  *
- * Milestone 3 puts two web fonts in here (decision D30): Cinzel for the
- * wordmark, the squad count, chips, buttons and result numbers, Nunito for the
- * few remaining body lines. Both are the `latin` subset only, downloaded by
- * `scripts/fetch-fonts.mjs`. `npm run dev` serves the `/assets/fonts/` path
- * below as written and `npm run build` re-emits the file into `dist/bundle/`
- * with a content hash; only the single-file builds rewrite these `url()`s into
- * `data:` URIs, so a page with the network switched off still gets them
- * (`scripts/inline-assets.mjs`).
+ * The tokens are `./tokens.css` and the frame kit and button are `./kit.css`,
+ * both split out of this file in Milestone 5 Phase D when it grew past the
+ * file-size rule. Each screen's own furniture is `./screens.css`,
+ * `./result.css`, `./academy.css`, `./rooms.css` and `./hud.css`.
  *
- * This file is the overlay's tokens, layout and shared controls; each screen's
- * own furniture — the level picker, the result numbers, the mute button — is
- * `./screens.css`, loaded straight after it.
+ * The fonts are Milestone 3's (decision D30): Cinzel for the wordmark, the
+ * squad count, chips, buttons and result numbers, Nunito for the few body
+ * lines. Both are the `latin` subset, downloaded by `scripts/fetch-fonts.mjs`.
  *
  * Layout rules that matter beyond looks:
  *   - The canvas fills the viewport; overlays are a centred column so landscape
  *     and desktop do not stretch a phone UI across 2000 px.
  *   - Overlays are `pointer-events: none` except buttons, so a drag that starts
  *     anywhere on screen still steers the squad.
- *
- * Colour rules, since the art direction is now bright and casual (D28): panels
- * are light paper with dark ink, and anything that floats directly over the
- * road — the count, the wordmark, the level chip — is a dark chip with warm
- * off-white ink or carries its own stroke. Both read against a daylight scene
- * *and* against the dusk one, which matters while the render phase lands.
  */
-
-/*
- * One file per family: Google serves Cinzel and Nunito as variable fonts, so
- * the `latin` file for weight 700 and for weight 900 is the same download. The
- * `font-weight` range is what lets one face answer both.
- */
-@font-face {
-  font-family: 'Cinzel';
-  font-style: normal;
-  font-weight: 700 900;
-  font-display: swap;
-  src: url('/assets/fonts/cinzel-latin.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Nunito';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url('/assets/fonts/nunito-latin.woff2') format('woff2');
-}
-
-:root {
-  /* Ink on paper, and ink on the scene. */
-  --ink: #2b2140;
-  --ink-soft: #6a6086;
-  --ink-bright: #fff5e6;
-  --ink-bright-dim: rgba(255, 245, 230, 0.72);
-
-  /* Light panels; `--chip` is the dark plate used where the scene shows through. */
-  --paper: rgba(255, 250, 243, 0.94);
-  --paper-soft: rgba(255, 250, 243, 0.7);
-  /* The title's plate: opaque enough to read ink on, sheer enough to see the
-     road through. */
-  --frost: rgba(255, 249, 240, 0.84);
-  --chip: rgba(38, 26, 62, 0.55);
-  --chip-strong: rgba(38, 26, 62, 0.72);
-
-  --accent: #7b4cff;
-  --accent-bright: #a98cff;
-  --accent-ink: #fffaf2;
-  --danger: #ff4d6d;
-
-  /* The stroke every number over the road is painted with. */
-  --outline: rgba(32, 18, 58, 0.92);
-
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
-  /* One column, phone-shaped, whatever the viewport is. */
-  --column: 520px;
-
-  --font-display: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
-  --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-
-  color-scheme: light;
-  font-family: var(--font-body);
-}
 
 * {
   box-sizing: border-box;
@@ -98,7 +30,7 @@ body {
   overflow: hidden;
   /* Only ever seen for the frame before the scene paints; a daylight sky, not
      a black flash. */
-  background: #bfe4f5;
+  background: var(--c-sky-mid);
   color: var(--ink);
   /* The canvas handles all gestures; nothing on the page should scroll or zoom. */
   touch-action: none;
@@ -115,6 +47,14 @@ body {
   display: block;
   outline: none;
   touch-action: none;
+}
+
+/* The icon sprite is a definition, not a picture: it must take no space. */
+#ui-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 /* Overlay layers sit above the canvas but stay click-through except on controls. */
@@ -157,49 +97,46 @@ body {
      squad count off the screen's centre line. */
   min-width: 0;
   height: 100%;
-  padding: 5vh 1.25rem calc(4vh + 0.5rem);
+  padding: 5vh 1rem calc(4vh + 0.5rem);
 }
+
+/* --- Panels --------------------------------------------------------------- */
 
 /*
  * The Academy is a shop window: the dressed road and the idle mages behind it
- * are the first thing a player sees, so it does not dim the scene at all. Milestone
- * 2's dark violet wash down from the top is gone with the dusk it was drawn
- * for — over D28's daylight sky it read as a bruise — and what is left is a
- * breath of warm light off the road. The controls carry their own panel
- * instead (`.screen__panel`), which is what a bright scene needs.
- *
- * The result screen is the opposite: the run is over and the numbers are the
- * point, so it lays a near-opaque sheet of paper over the whole thing.
+ * are the first thing a player sees, so it does not dim the scene. What is left
+ * of Milestone 2's wash is a breath of warm light off the road; the controls
+ * carry their own board instead (`.screen__panel`).
  */
 .screen--academy {
   background: radial-gradient(
     150% 50% at 50% 100%,
-    rgba(255, 247, 233, 0.35),
-    rgba(255, 247, 233, 0) 62%
+    color-mix(in srgb, var(--c-sky-haze) 34%, transparent),
+    transparent 62%
   );
 }
 
 /*
- * The frosted plate the title's controls sit on. Warm white rather than neutral
- * so it belongs to the same daylight as the road, and translucent so the scene
- * behind it still reads as the shop window it is.
+ * The parchment board the controls sit on: warm paper, a grain, a darker edge
+ * where the gold frame meets it, and a shadow so it lifts off the road.
  */
 .screen__panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
   width: 100%;
-  padding: 1.1rem 1.1rem 1.25rem;
-  border-radius: 1.75rem;
-  background: var(--frost);
+  padding: 0.7rem;
+  background-color: var(--panel);
+  background-image: var(--grain),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--paper) 86%, transparent),
+      color-mix(in srgb, var(--paper-shade) 70%, transparent)
+    );
   box-shadow:
-    0 0.6rem 1.6rem rgba(46, 30, 74, 0.24),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-  /* Progressive: a browser without it keeps the semi-opaque white, which is
-     what makes the text readable — the blur is only polish. */
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
+    0 0.5rem 1.4rem color-mix(in srgb, var(--c-ink-base) 30%, transparent),
+    inset 0 0 2.4rem color-mix(in srgb, var(--c-stone-deep) 26%, transparent);
 }
 
 /* Inside the panel the two rows are packed, not spread down the screen. */
@@ -208,12 +145,27 @@ body {
   margin-bottom: 0;
 }
 
+/*
+ * The result sheet is the opposite of the Academy's shop window: the run is
+ * over and the numbers are the point, so it lays a near-opaque sheet of
+ * parchment over the whole scene — grain, a warm light at the top and the
+ * shade of a page's foot at the bottom.
+ */
 .screen--result {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 248, 236, 0.9) 0%,
-    rgba(244, 235, 255, 0.95) 100%
-  );
+  background-color: color-mix(in srgb, var(--c-parchment-base) 96%, transparent);
+  background-image: var(--grain),
+    radial-gradient(
+      110% 60% at 50% 0%,
+      color-mix(in srgb, var(--gold-light) 24%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(180deg, transparent 40%, color-mix(in srgb, var(--c-stone-deep) 26%, transparent));
+}
+
+/* Ribbon at the top, buttons at the foot, numbers centred between them. */
+.screen--result .screen__middle {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .screen--hud {
@@ -239,7 +191,7 @@ body {
   width: 100%;
   /* Groups the picker with the buttons instead of stranding it mid-screen. */
   margin-top: auto;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 
 /*
@@ -258,23 +210,49 @@ body {
 }
 
 /*
- * On the title the wordmark floats over the sky with nothing behind it — the
- * dark wash that used to back it is gone — so it carries its own edge: a stroke
- * to cut it out of the pale blue, and a tight drop shadow under the stroke so
- * it does not lie flat on the dome.
+ * The logo treatment. The wordmark floats over the sky with nothing behind it,
+ * so it carries its own edge and its own light:
+ *
+ *   - the element itself is the ink cut-out: the same word in the same place,
+ *     painted as a thick stroke, which is what lifts the letters off a pale
+ *     sky and also what holds the line's layout;
+ *   - the `::after` copy on top of it is the gold, a gradient poured into the
+ *     letterforms (`background-clip: text`), light at the cap line and deep at
+ *     the baseline, so they read as struck metal rather than coloured text. It
+ *     has to be a second copy: a background clipped to text paints *behind* the
+ *     element's own content, so one element cannot carry the stroke under the
+ *     gradient, and `paint-order` is not dependable for HTML text;
+ *   - the shadow is on the parent, so it falls under stroke and fill together.
  */
-.screen--academy .screen__title {
-  color: var(--ink-bright);
-  -webkit-text-stroke: 0.16rem var(--outline);
-  paint-order: stroke fill;
-  text-shadow:
-    0 0.16rem 0.06rem rgba(46, 30, 74, 0.4),
-    0 0.24rem 1.1rem rgba(32, 18, 58, 0.4);
+.wordmark {
+  position: relative;
+  white-space: nowrap;
+  color: var(--outline);
+  -webkit-text-stroke: 0.13em var(--outline);
+  filter: drop-shadow(0 0.16rem 0.05rem color-mix(in srgb, var(--c-ink-base) 55%, transparent))
+    drop-shadow(0 0.3rem 0.9rem color-mix(in srgb, var(--c-ink-base) 45%, transparent));
 }
 
-/* On the result sheet it is ink on paper. */
+.wordmark::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  -webkit-text-stroke: 0;
+  background-image: linear-gradient(
+    180deg,
+    var(--c-parchment-base) 2%,
+    var(--gold-light) 26%,
+    var(--gold) 56%,
+    var(--gold-deep) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* On the result sheet the heading is ink on paper. */
 .screen__title--result {
-  font-size: clamp(1.7rem, 8vw, 2.4rem);
+  font-size: clamp(1.6rem, 7.5vw, 2.3rem);
   color: var(--ink);
 }
 
@@ -282,52 +260,8 @@ body {
 .screen__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.55rem;
   width: min(100%, 22rem);
-}
-
-.button {
-  appearance: none;
-  border: none;
-  border-radius: 1.6rem;
-  padding: 1.15rem 1.5rem;
-  font-family: var(--font-display);
-  font-size: clamp(1.1rem, 4.8vw, 1.3rem);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent-ink);
-  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
-  /* A solid lower edge rather than a blur: the chunky, pressable look D28 asks
-     for, and it survives the light background the result screen puts behind it. */
-  box-shadow:
-    0 0.35rem 0 rgba(74, 40, 160, 0.85),
-    0 0.6rem 1.2rem rgba(74, 40, 160, 0.28);
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none;
-  /* The only interactive things in the overlay. */
-  pointer-events: auto;
-}
-
-.button:active {
-  transform: translateY(0.3rem);
-  box-shadow:
-    0 0.05rem 0 rgba(74, 40, 160, 0.85),
-    0 0.2rem 0.5rem rgba(74, 40, 160, 0.25);
-}
-
-.button--ghost {
-  color: var(--accent);
-  background: var(--paper);
-  box-shadow:
-    0 0.35rem 0 rgba(126, 108, 168, 0.35),
-    inset 0 0 0 2px rgba(123, 76, 255, 0.35);
-}
-
-.button--ghost:active {
-  box-shadow:
-    0 0.05rem 0 rgba(126, 108, 168, 0.35),
-    inset 0 0 0 2px rgba(123, 76, 255, 0.35);
 }
 
 /*
@@ -351,6 +285,41 @@ body {
   .screen__top {
     margin-top: 0;
   }
+
+  .screen__panel {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  /* A 568x320 phone has height to spare nowhere and width to spare here, so
+     the ornament under a heading is the first thing to go. */
+  .flourish {
+    display: none;
+  }
+
+  .screen__title--panel {
+    font-size: clamp(1.2rem, 4.4vw, 1.7rem);
+  }
+
+  /*
+   * Two buttons side by side rather than stacked: 320 px of height cannot
+   * afford a column of them, and a wide screen has the room across.
+   */
+  .screen__actions {
+    flex-direction: row;
+    justify-content: center;
+    width: min(100%, 26rem);
+  }
+
+  .screen__actions > .button {
+    flex: 1 1 0;
+  }
+
+  .button {
+    padding-top: 0.25rem;
+    padding-bottom: 0.2rem;
+    font-size: 1rem;
+  }
 }
 
 /* --- Defeat: the scene drains of colour before the result screen ---------- */
@@ -371,6 +340,10 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   #game-canvas {
+    transition-duration: 1ms;
+  }
+
+  .button {
     transition-duration: 1ms;
   }
 }

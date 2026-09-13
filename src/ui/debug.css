@@ -39,11 +39,11 @@
   padding: 0.5rem 0.6rem;
   max-width: 100%;
   border-radius: 0.5rem;
-  background: rgba(6, 4, 14, 0.78);
+  background: color-mix(in srgb, var(--c-ink-base) 88%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
   line-height: 1.35;
-  color: #9dffc9;
+  color: var(--c-grass-light);
   white-space: pre;
 }
 
@@ -53,8 +53,8 @@
  * a number ever comes out longer than expected.
  */
 .debug__capture {
-  color: #ffe08a;
-  box-shadow: inset 0 0 0 1px rgba(255, 224, 138, 0.35);
+  color: var(--c-gold-light);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-gold-light) 35%, transparent);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -71,8 +71,8 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #06040e;
-  background: #9dffc9;
+  color: var(--c-ink-base);
+  background: var(--c-grass-light);
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;

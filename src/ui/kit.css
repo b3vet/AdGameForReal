@@ -1,0 +1,159 @@
+/*
+ * The UI kit (decision D39): the nine-slice frames, the heading flourish, the
+ * shared button and the icon host.
+ *
+ * The pieces are Kenney's Fantasy UI Borders and UI Pack, recoloured from the
+ * palette by `scripts/fetch-ui.mjs` and named in `./tokens.css`. They are SVG,
+ * so a corner ornament is exact at a phone's 3x pixel ratio.
+ *
+ * Split out of `./styles.css` in Milestone 5 Phase D, which had grown past the
+ * file-size rule; that file is the layout and this one is what dresses it.
+ * Loaded after it (`./fonts.ts`), so a rule here wins a tie.
+ */
+
+/* --- The frame kit -------------------------------------------------------- */
+
+/*
+ * A nine-slice: `border-width` is how big the ornament is drawn, the slice is
+ * how much of the source that ornament occupies. Kenney's pieces are 48 units
+ * square with the corner inside the first 16, so 16 is the slice for all of
+ * them and the border width is what varies by how loud the frame should be.
+ *
+ * `border-image` paints *over* the element's background, and the background
+ * runs under the border by default, so one element carries both: the parchment
+ * or the dark plate, and the gold ornament on top of it.
+ */
+.frame {
+  border-style: solid;
+  border-color: transparent;
+  border-image-slice: 16;
+  border-image-repeat: stretch;
+}
+
+.frame--panel {
+  border-width: 15px;
+  border-image-source: var(--frame-panel);
+}
+
+.frame--card {
+  border-width: 9px;
+  border-image-source: var(--frame-card);
+}
+
+.frame--plaque {
+  border-width: 13px;
+  border-image-source: var(--frame-plaque);
+}
+
+.frame--bar {
+  border-width: 9px;
+  border-image-source: var(--frame-bar);
+}
+
+.frame--inset {
+  border-width: 7px;
+  border-image-source: var(--frame-inset);
+}
+
+/*
+ * The flourish under a heading: one ornament, centred, at its own aspect. The
+ * box is sized so `contain` lands on the art's own 96:18 — a shorter box would
+ * shrink the rule to a scratch.
+ */
+.flourish {
+  width: min(9.5rem, 90%);
+  height: 1.8rem;
+  margin: 0.2rem auto 0;
+  background: var(--divider) center / contain no-repeat;
+  /* It sits on the road on every screen that uses it. */
+  filter: drop-shadow(0 0.08rem 0.1rem var(--outline));
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+/*
+ * The button body is a nine-slice from Kenney's UI Pack, recoloured to the
+ * palette's gold: a rounded plate with a lit top edge, a dark rim, and a depth
+ * edge along the bottom. The depth is in the image rather than in a
+ * `box-shadow`, which is what lets the press *compress* it — the bottom border
+ * shrinks by the depth and the button moves down by the same amount, so it
+ * behaves like a key rather than sliding about on the page.
+ *
+ * `fill` on the slice is what paints the face; without it the middle of the
+ * source is dropped and the button is a ring.
+ */
+.button {
+  --depth: 5px;
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.9rem 0.35rem;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 9px 11px calc(9px + var(--depth)) 11px;
+  border-image-source: var(--button-gold);
+  border-image-slice: 9 11 14 11 fill;
+  border-image-repeat: stretch;
+  background: none;
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 4.6vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--gold-light) 70%, transparent);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  /* The only interactive things in the overlay. */
+  pointer-events: auto;
+  transition:
+    transform 90ms var(--ease),
+    border-bottom-width 90ms var(--ease);
+}
+
+.button:active {
+  transform: translateY(var(--depth));
+  border-bottom-width: 9px;
+}
+
+.button--ghost {
+  border-image-source: var(--button-stone);
+  color: var(--ink);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--c-parchment-base) 80%, transparent);
+}
+
+/*
+ * Disabled is drained rather than redrawn: the same plate with the colour taken
+ * out of it, which keeps the row's rhythm and still reads as unavailable at a
+ * glance. A dead button also stops taking taps.
+ */
+.button:disabled {
+  filter: grayscale(0.72) brightness(0.96) opacity(0.6);
+  cursor: default;
+  pointer-events: none;
+}
+
+.button:disabled:active {
+  transform: none;
+  border-bottom-width: calc(9px + var(--depth));
+}
+
+/* --- Icons ---------------------------------------------------------------- */
+
+/*
+ * Every glyph is a `<use>` of a symbol in the sprite at the top of `index.html`
+ * (`./icons.ts`). The span is what carries the size and the colour, so an icon
+ * inside a chip is the chip's colour and an icon on a button is the button's.
+ */
+.icon {
+  display: inline-flex;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}

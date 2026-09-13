@@ -1,0 +1,56 @@
+/*
+ * GENERATED FILE — do not edit. Run `node scripts/palette-css.mjs` after
+ * changing src/data/palette.json; src/ui/__tests__/palette.test.ts fails if
+ * this file and the JSON disagree.
+ *
+ * One custom property per leaf of the palette (decision D36), nested keys
+ * flattened with a dash: `spell.ember.core` is `--c-spell-ember-core`. These
+ * are the only literal colours the overlay's CSS is allowed to contain; every
+ * other stylesheet builds what it needs out of them.
+ */
+
+:root {
+  --c-arcane-base: #6d4fd6;
+  --c-arcane-light: #a48cff;
+  --c-arcane-deep: #3b2a7a;
+  --c-gold-base: #f2b33d;
+  --c-gold-light: #ffd97a;
+  --c-gold-deep: #b5741c;
+  --c-sky-top: #4f9de6;
+  --c-sky-mid: #8fc6f2;
+  --c-sky-horizon: #e2f1fb;
+  --c-sky-haze: #f6e7cf;
+  --c-grass-base: #7cc35a;
+  --c-grass-deep: #4f9a3c;
+  --c-grass-light: #a6dd7f;
+  --c-stone-base: #c9b79a;
+  --c-stone-deep: #8f7f66;
+  --c-stone-light: #e6d9c2;
+  --c-stone-kerb: #a89a80;
+  --c-ink-base: #1e1633;
+  --c-ink-soft: #4a3f66;
+  --c-ink-muted: #8a80a3;
+  --c-parchment-base: #f7efe2;
+  --c-parchment-panel: #fbf6ec;
+  --c-parchment-shade: #e8dcc6;
+  --c-bone-base: #e9dcc4;
+  --c-bone-deep: #b8a88b;
+  --c-danger-base: #e0483f;
+  --c-danger-light: #ff8a7a;
+  --c-danger-deep: #9a2a24;
+  --c-spell-ember-core: #ffd06b;
+  --c-spell-ember-body: #ff7a2f;
+  --c-spell-ember-edge: #c8341a;
+  --c-spell-storm-core: #e0d4ff;
+  --c-spell-storm-body: #9d7bff;
+  --c-spell-storm-edge: #5a3fd0;
+  --c-spell-frost-core: #e6fbff;
+  --c-spell-frost-body: #6fe0ff;
+  --c-spell-frost-edge: #2a8fc0;
+  --c-gate-add: #4fd27a;
+  --c-gate-sub: #e0483f;
+  --c-gate-mul: #f2b33d;
+  --c-gate-fireRate: #5ec8ff;
+  --c-gate-weapon: #a48cff;
+  --c-shadow-blob: #2a1f3d;
+}

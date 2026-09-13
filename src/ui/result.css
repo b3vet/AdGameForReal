@@ -1,0 +1,258 @@
+/*
+ * The result sheet: the verdict ribbon, the framed stats, the first-clear badge
+ * and the purse line.
+ *
+ * Split out of `./screens.css` in Milestone 5 Phase D when that file grew past
+ * the size rule, and imported by `./result.ts` the way `./hud.css` is imported
+ * by `./hud.ts` — one screen's styles beside the module that paints it.
+ */
+
+/* --- Result --------------------------------------------------------------- */
+
+/*
+ * The verdict rides in on a ribbon: a notched banner that slides down over the
+ * sheet and takes its colour from the outcome. It is the first thing on the
+ * screen and the only thing on it that moves, which is what makes a win feel
+ * like one without a second of fanfare.
+ */
+.ribbon {
+  --ribbon-a: var(--gold-light);
+  --ribbon-b: var(--gold);
+  --ribbon-c: var(--gold-deep);
+  position: relative;
+  padding: 0.3rem 2.4rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(180deg, var(--ribbon-a), var(--ribbon-b) 55%, var(--ribbon-c));
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    calc(100% - 1.15rem) 50%,
+    100% 100%,
+    0 100%,
+    1.15rem 50%
+  );
+}
+
+/* `result.ts` re-adds this class on every result, so the slide plays again
+   rather than only on the first sheet of the session. */
+.ribbon--in {
+  animation: ribbon-slide 520ms var(--ease) both;
+}
+
+.ribbon[data-won='false'] {
+  --ribbon-a: var(--c-danger-light);
+  --ribbon-b: var(--c-danger-base);
+  --ribbon-c: var(--c-danger-deep);
+}
+
+/* The inner rule: the same notch, inset, so the band reads as folded cloth. */
+.ribbon::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  clip-path: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-parchment-base) 45%, transparent);
+  pointer-events: none;
+}
+
+.ribbon__text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ink);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--c-parchment-base) 45%, transparent);
+}
+
+.ribbon[data-won='false'] .ribbon__text {
+  color: var(--c-parchment-base);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--c-danger-deep) 70%, transparent);
+}
+
+@keyframes ribbon-slide {
+  0% {
+    transform: translateY(-130%) scaleX(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scaleX(1);
+    opacity: 1;
+  }
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  width: min(100%, 22rem);
+}
+
+.stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.55rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--paper) 94%, transparent),
+    color-mix(in srgb, var(--paper-shade) 86%, transparent)
+  );
+}
+
+.stats__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.stats__icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--accent);
+}
+
+.stats__value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* --- Result: coins and the first-clear badge (Milestone 4, D33) ----------- */
+
+.stats__row--coins {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gold-light) 46%, var(--paper)),
+    color-mix(in srgb, var(--gold) 30%, var(--paper-shade))
+  );
+}
+
+.stats__row--coins .stats__icon {
+  color: var(--c-gold-deep);
+}
+
+.stats__row--coins .stats__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.result__badge {
+  margin: 0.5rem 0 0;
+  padding: 0.25rem 0.9rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  box-shadow: 0 0.15rem 0 var(--c-gold-deep);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.result__badge--pop {
+  animation: badge-pop 700ms var(--pop);
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.result__total {
+  margin: 0.6rem 0 0;
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.result__total span {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/*
+ * Landscape: the result sheet is a column of three stat rows and three buttons,
+ * and a phone on its side has 320 px for all of it. The stats go side by side
+ * as three tiles — label over number — and every piece of type drops a step.
+ * Measured at 568x320, where the column put the buttons below the fold.
+ */
+@media (orientation: landscape) {
+  .ribbon {
+    padding: 0.15rem 2rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .ribbon__text {
+    font-size: 0.7rem;
+  }
+
+  .screen__title--result {
+    font-size: clamp(1.2rem, 4.4vw, 1.6rem);
+  }
+
+  .result__badge {
+    margin-top: 0.3rem;
+    padding: 0.15rem 0.7rem;
+    font-size: 0.68rem;
+  }
+
+  .stats {
+    flex-direction: row;
+    gap: 0.4rem;
+    width: min(100%, 30rem);
+  }
+
+  .stats__row {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.05rem;
+    padding: 0.15rem 0.3rem;
+  }
+
+  .stats__key {
+    font-size: 0.7rem;
+  }
+
+  .stats__icon {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .stats__value {
+    font-size: 1.2rem;
+  }
+
+  .result__total {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result__badge--pop,
+  .ribbon--in {
+    animation-duration: 1ms;
+  }
+}

@@ -3,15 +3,16 @@
  * picker's pages (decision D33). The rooms behind the cards are `./rooms.css`
  * and the result sheet's coins are `./screens.css`, with the rest of that sheet.
  *
- * Same palette and the same two faces as the rest of the overlay
- * (`./styles.css`, D28 and D30): Cinzel for anything that names or counts,
- * Nunito for the lines that explain. Two rules carry most of the look:
+ * Same kit as the rest of the overlay (`./styles.css`, decisions D30 and D39):
+ * gold nine-slice frames, Cinzel for anything that names or counts, Nunito for
+ * the lines that explain, and no colour that is not a palette variable. Two
+ * rules carry most of the look:
  *
- *   - Anything on a frosted panel is ink on near-white paper with a violet
- *     ring; anything floating on the road is a dark chip with warm ink. The
- *     coin purse sits over the road, so it is a chip.
- *   - A card or row the player cannot use is not hidden, it is greyed. The
- *     Academy is a map of what is coming as much as a menu of what is here.
+ *   - Anything on the parchment board is ink on paper in a gold frame; anything
+ *     floating on the road is a dark plate with warm ink in a gold frame. The
+ *     coin purse sits over the road, so it is a plate.
+ *   - A card the player cannot use is not hidden, it is drained. The Academy is
+ *     a map of what is coming as much as a menu of what is here.
  *
  * The panels take pointer events, unlike the rest of the overlay: a room can
  * be taller than a short screen and has to scroll, and nothing is being
@@ -23,9 +24,8 @@
 .coins {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.7rem 0.35rem 0.5rem;
-  border-radius: 999px;
+  gap: 0.3rem;
+  padding: 0.1rem 0.45rem 0.1rem 0.3rem;
   background: var(--chip-strong);
   color: var(--ink-bright);
   font-family: var(--font-display);
@@ -34,24 +34,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A struck coin, drawn rather than downloaded: a gold disc with a rim. */
+/* The struck coin, at the size of the number beside it. */
 .coins__icon {
-  width: 1.05rem;
-  height: 1.05rem;
-  border-radius: 999px;
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, #f5b93c 62%, #c4801a);
-  box-shadow: inset 0 0 0 1px rgba(120, 74, 12, 0.55);
-}
-
-/* On paper (the result sheet and the buy buttons) it is a shade deeper. */
-.coins__icon--inline {
-  width: 0.85rem;
-  height: 0.85rem;
-  vertical-align: -0.08em;
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--gold);
+  filter: drop-shadow(0 0.04em 0.04em color-mix(in srgb, var(--c-gold-deep) 70%, transparent));
 }
 
 .coins__value--bump {
-  animation: coin-bump 340ms ease-out;
+  animation: coin-bump 340ms var(--pop);
 }
 
 @keyframes coin-bump {
@@ -59,7 +51,7 @@
     transform: scale(1);
   }
   35% {
-    transform: scale(1.22);
+    transform: scale(1.24);
   }
   100% {
     transform: scale(1);
@@ -83,81 +75,120 @@
  * is `justify-content: space-between` and with three children the middle one
  * was centred — right over the gate preview, where Milestone 4's frame review
  * found it (13, Phase B3). `margin-bottom: auto` pulls it up against the purse
- * and leaves the whole run of road between it and the card panel clear, which
- * is the shop window the Academy is for. The stroke and shadow are unchanged
- * (`./styles.css`, `.screen--academy .screen__title`).
+ * and leaves the whole run of road between it and the card board clear, which
+ * is the shop window the Academy is for.
  */
 .screen--academy .screen__top {
   margin-top: 1.5vh;
   margin-bottom: auto;
 }
 
+/*
+ * `minmax(0, 1fr)`, not `1fr`: a bare `1fr` floors each column at its own
+ * min-content, and "Workbench" in Cinzel is wider than half a 390 px phone once
+ * the icon and the gaps are counted — the board overflowed the column and took
+ * the mute button off the right edge with it.
+ */
 .cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
   width: 100%;
 }
 
+/*
+ * A card is an icon and two lines in a gold frame. The icon is what makes the
+ * board read as a menu of places rather than a list of words — four rooms at a
+ * glance, before any of the titles are read.
+ */
 .card {
   /* The Workbench's staff badge is placed against the card's own box. */
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-height: 4.4rem;
-  padding: 0.8rem 0.9rem;
-  border: none;
-  border-radius: 1.1rem;
-  background: #fffdf9;
-  box-shadow:
-    0 0.2rem 0 rgba(126, 108, 168, 0.4),
-    inset 0 0 0 1px rgba(123, 76, 255, 0.22);
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 3.6rem;
+  padding: 0.35rem 0.4rem;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--paper) 96%, transparent),
+      color-mix(in srgb, var(--paper-shade) 88%, transparent)
+    );
   color: var(--ink);
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
   pointer-events: auto;
+  transition: transform 90ms var(--ease);
+}
+
+.card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.card__icon {
+  /* Half of a 360 px screen is 138 px of card, and the glyph, the gap and the
+     hint all have to live in it on one line. */
+  width: clamp(1.4rem, 6.2vw, 1.7rem);
+  height: clamp(1.4rem, 6.2vw, 1.7rem);
+  color: var(--c-arcane-base);
 }
 
 .card:active {
-  transform: translateY(0.15rem);
-  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.22);
+  transform: translateY(0.12rem);
 }
 
-/* Play is the one thing every visit is for, so it takes the full width and
-   the primary colour the buttons use. */
+/*
+ * Play is the one thing every visit is for, so it takes the full width and the
+ * gold plate the primary button wears. Its frame is the ornate one: this is the
+ * card the eye should land on.
+ */
 .card--play {
   grid-column: 1 / -1;
-  align-items: center;
-  min-height: 3.6rem;
+  justify-content: center;
+  min-height: 3.2rem;
   text-align: center;
-  color: var(--accent-ink);
-  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
-  box-shadow: 0 0.35rem 0 rgba(74, 40, 160, 0.85);
+  border-image-source: var(--frame-panel);
+  background: linear-gradient(180deg, var(--gold-light), var(--gold) 62%, var(--gold-deep));
+  box-shadow: inset 0 -0.35rem 0.6rem color-mix(in srgb, var(--c-gold-deep) 45%, transparent);
 }
 
-.card--play:active {
-  box-shadow: 0 0.05rem 0 rgba(74, 40, 160, 0.85);
+.card--play .card__body {
+  flex: none;
+}
+
+.card--play .card__icon {
+  color: color-mix(in srgb, var(--c-ink-base) 78%, transparent);
+}
+
+.card--play .card__title {
+  font-size: 1.25rem;
 }
 
 .card__title {
   font-family: var(--font-display);
-  font-size: 1.02rem;
+  /* Sized off the card rather than the root: the longest room name has to fit
+     one line of a half-width card at 360 px. */
+  font-size: clamp(0.78rem, 3.7vw, 1rem);
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .card__hint {
   font-family: var(--font-body);
-  font-size: 0.76rem;
+  font-size: clamp(0.65rem, 3.1vw, 0.74rem);
   line-height: 1.25;
   color: var(--ink-soft);
 }
 
 .card--play .card__hint {
-  color: rgba(255, 250, 242, 0.85);
+  color: color-mix(in srgb, var(--c-ink-base) 70%, transparent);
 }
 
 /*
@@ -166,66 +197,62 @@
  * front of it, so nothing else on the home screen can say. Same three colours
  * as the HUD's in-run badge (`./hud.css`), so one glance learns both.
  *
- * Bottom right, not top right: "Workbench" in Cinzel is 109 px of a 124 px card
- * and the badge is 49, so the two share the title's line. The blurb under it is
- * 68 px of Nunito and leaves the corner free, which is where this sits.
+ * It sits in the card's flow rather than pinned to a corner. Pinned, it landed
+ * on the end of "Forge a staff" at 390 px; in the flow it takes a line of its
+ * own and the grid row grows for both cards together, so nothing collides at
+ * any width.
  */
 .card__badge {
-  position: absolute;
-  bottom: 0.55rem;
-  right: 0.6rem;
-  padding: 0.12rem 0.4rem;
-  border-radius: 0.5rem;
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.4rem;
   background: var(--chip-strong);
   box-shadow: inset 0 0 0 1px currentcolor;
   font-family: var(--font-display);
-  font-size: 0.56rem;
+  font-size: 0.54rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   white-space: nowrap;
-  color: var(--staff-color, var(--accent-bright));
+  color: var(--staff-color, var(--accent-light));
 }
 
 .card__badge[data-staff='ember'] {
-  --staff-color: #ffb066;
+  --staff-color: var(--c-spell-ember-core);
 }
 .card__badge[data-staff='storm'] {
-  --staff-color: #c0adff;
+  --staff-color: var(--c-spell-storm-core);
 }
 .card__badge[data-staff='frost'] {
-  --staff-color: #8ee9ff;
+  --staff-color: var(--c-spell-frost-body);
 }
 
+/*
+ * Locked: drained, not hidden, and the icon becomes a padlock so the card says
+ * what it is at a glance rather than only in its hint line.
+ */
 .card[data-locked='true'] {
-  color: rgba(43, 33, 64, 0.42);
-  background: rgba(238, 232, 244, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.12);
+  filter: grayscale(0.8) opacity(0.62);
   cursor: default;
 }
 
-.card[data-locked='true'] .card__hint {
-  color: rgba(43, 33, 64, 0.42);
-}
-
-/* The one-time reveal: the card swells and a violet ring blooms out of it. */
+/* The one-time reveal: the card swells and a gold ring blooms out of it. */
 .card--reveal {
-  animation: card-reveal 900ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  animation: card-reveal 900ms var(--ease);
 }
 
 @keyframes card-reveal {
   0% {
     transform: scale(0.86);
-    box-shadow: 0 0 0 0 rgba(123, 76, 255, 0.65);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 75%, transparent);
   }
   45% {
     transform: scale(1.06);
-    box-shadow: 0 0 0 0.55rem rgba(123, 76, 255, 0.22);
+    box-shadow: 0 0 0 0.55rem color-mix(in srgb, var(--gold) 22%, transparent);
   }
   100% {
     transform: scale(1);
-    box-shadow:
-      0 0.2rem 0 rgba(126, 108, 168, 0.4),
-      inset 0 0 0 1px rgba(123, 76, 255, 0.22);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -241,27 +268,31 @@
   appearance: none;
   border: none;
   border-radius: 999px;
-  padding: 0.35rem 0.85rem;
+  padding: 0.3rem 0.8rem;
   font-family: var(--font-display);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--ink-soft);
-  background: rgba(123, 76, 255, 0.1);
+  background: color-mix(in srgb, var(--c-stone-deep) 22%, transparent);
   cursor: pointer;
   touch-action: manipulation;
   pointer-events: auto;
 }
 
 .pager__tab[aria-pressed='true'] {
-  color: var(--accent-ink);
-  background: var(--accent);
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .card--reveal,
   .coins__value--bump {
     animation-duration: 1ms;
+  }
+
+  .card {
+    transition-duration: 1ms;
   }
 }
 
@@ -281,20 +312,60 @@
     margin-top: 0;
   }
 
+  /*
+   * A phone on its side is 320 px tall and has width to spare, so the rooms go
+   * four across in one row instead of two rows of two, and each card stacks its
+   * icon over its title. Measured at 568x320, where two rows of two put the
+   * Bestiary card below the fold with no way to scroll to it.
+   */
+  .cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
   .card {
-    min-height: 3.4rem;
-    padding: 0.55rem 0.8rem;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 2.6rem;
+    gap: 0.1rem;
+    padding: 0.25rem;
+    text-align: center;
+  }
+
+  .card__body {
+    align-items: center;
+  }
+
+  .card__icon {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .card--play {
-    min-height: 2.9rem;
+    flex-direction: row;
+    min-height: 2.3rem;
   }
 
-  .cards {
-    gap: 0.45rem;
+  .card__title {
+    font-size: 0.84rem;
+  }
+
+  .card--play .card__title {
+    font-size: 1.05rem;
+  }
+
+  .card__hint {
+    font-size: 0.62rem;
+    line-height: 1.15;
+  }
+
+  .card__badge {
+    align-self: center;
+    font-size: 0.48rem;
   }
 
   .screen--academy .screen__panel {
-    padding: 0.7rem 0.8rem 0.8rem;
+    padding: 0.45rem;
   }
 }

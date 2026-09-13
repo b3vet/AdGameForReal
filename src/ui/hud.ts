@@ -16,6 +16,8 @@
 import { weaponOf } from '@/sim';
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
+import { setIcon, staffIcon } from './icons';
+
 import './hud.css';
 
 const BUMP_CLASS = 'hud__count--bump';
@@ -43,9 +45,12 @@ const now = (): number => (typeof performance === 'undefined' ? 0 : performance.
 export interface HudElements {
   levelLabel: HTMLElement;
   count: HTMLElement;
+  /** The plaque the count sits on; it carries the staff colour. */
+  plaque: HTMLElement;
+  /** The staff's glyph on the plaque, re-pointed rather than rebuilt. */
+  staffIcon: HTMLElement;
   staffBadge: HTMLElement;
   bossBar: HTMLElement;
-  bossFill: HTMLElement;
   bossValue: HTMLElement;
   bossLabel: HTMLElement;
 }
@@ -78,6 +83,9 @@ export class Hud {
     this.setBossEnraged(false);
     this.shownBossHp = -1;
     this.shownBossRatio = -1;
+    // The fill is an inline custom property, so it outlives a run unless it is
+    // taken off; a fresh bar would otherwise open on the last boss's HP.
+    this.elements.bossBar.style.removeProperty('--boss-fill');
   }
 
   update(state: Readonly<RunState>, events: readonly SimEvent[]): void {
@@ -139,7 +147,10 @@ export class Hud {
     // Rounded before comparing: sub-pixel bar changes are not worth a style write.
     const quantised = Math.round(ratio * 200) / 200;
     if (quantised !== this.shownBossRatio) {
-      this.elements.bossFill.style.transform = `scaleX(${String(quantised)})`;
+      // One property for two elements: the fill scales by it and the gem rides
+      // at its head (`./hud.css`), so they cannot disagree and only one style
+      // write happens per change.
+      this.elements.bossBar.style.setProperty('--boss-fill', String(quantised));
       this.shownBossRatio = quantised;
     }
 
@@ -178,6 +189,9 @@ export class Hud {
     const badge = this.elements.staffBadge;
     badge.textContent = STAFF_NAMES[staff];
     badge.dataset['staff'] = staff;
+    // The plaque takes the same stamp, which is what colours its glyph.
+    this.elements.plaque.dataset['staff'] = staff;
+    setIcon(this.elements.staffIcon, staffIcon(staff));
     if (announce) replayAnimation(badge, SWAP_CLASS);
   }
 

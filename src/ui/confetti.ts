@@ -11,6 +11,8 @@
  * app's main loop has nothing to draw there.
  */
 
+import palette from '@/data/palette.json';
+
 import './confetti.css';
 
 /** Particles per cannon. Two cannons, so twice this many. */
@@ -25,8 +27,18 @@ const GRAVITY = 900;
 /** Fraction of velocity kept per second, applied to both axes. */
 const DRAG = 0.72;
 
-/** The three staffs' colours plus gold, so the win reads as ours. */
-const COLORS = ['#ff9d5c', '#a48cff', '#7fe6ff', '#ffd76a', '#f4f1ff'];
+/**
+ * The three staffs' colours plus gold and paper, straight from the palette
+ * (decision D36), so the paper that falls on a win is the same set of colours
+ * the spells on the road were painted with.
+ */
+const COLORS = [
+  palette.spell.ember.body,
+  palette.spell.storm.body,
+  palette.spell.frost.body,
+  palette.gold.light,
+  palette.parchment.base,
+];
 
 /** Frame delta ceiling: a backgrounded tab must not teleport the paper. */
 const MAX_DT = 0.05;
@@ -78,7 +90,7 @@ export class Confetti {
         width: 0,
         height: 0,
         life: 0,
-        color: '#ffffff',
+        color: palette.parchment.base,
       });
     }
   }
@@ -112,7 +124,8 @@ export class Confetti {
       particle.width = 5 + this.random() * 7;
       particle.height = 8 + this.random() * 10;
       particle.life = LIFE * (0.7 + this.random() * 0.45);
-      particle.color = COLORS[Math.floor(this.random() * COLORS.length)] ?? '#ffffff';
+      particle.color =
+        COLORS[Math.floor(this.random() * COLORS.length)] ?? palette.parchment.base;
     }
 
     this.live = this.particles.length;

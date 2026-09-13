@@ -21,7 +21,8 @@ import type { RoomId } from '@/core/player';
 import { academy, fill } from '@/data/academy-types';
 import type { WeaponId } from '@/sim';
 
-import { replay } from './widgets';
+import { icon, roomIcon, setIcon } from './icons';
+import { element, replay } from './widgets';
 
 /** How many level chips a page of the picker holds (plan: two pages of ten). */
 const PAGE_SIZE = 10;
@@ -66,6 +67,8 @@ export class Academy {
   /** One card per room, in `academy.json` order, built once. */
   private readonly cards = new Map<RoomId, HTMLButtonElement>();
   private readonly cardHints = new Map<RoomId, HTMLElement>();
+  /** The card's glyph, which becomes a padlock while the room is shut. */
+  private readonly cardIcons = new Map<RoomId, HTMLElement>();
   /** The Workbench card's staff badge; see `AcademyView.selectedStaff`. */
   private staffBadge: HTMLElement | null = null;
 
@@ -102,6 +105,11 @@ export class Academy {
           ? room.blurb
           : fill(academy.home.lockedHint, { level: String(room.unlockLevel) });
       }
+      // A shut room says so twice: the hint names the level, the glyph is a
+      // padlock. The icon is re-pointed rather than rebuilt so the reveal
+      // animation below has something stable to play on.
+      const glyph = this.cardIcons.get(id);
+      if (glyph !== undefined) setIcon(glyph, open ? roomIcon(id) : 'lock');
       if (open && view.reveal.includes(id)) replay(card, 'card--reveal');
     }
   }
@@ -152,9 +160,13 @@ export class Academy {
 
       const card = document.createElement('button');
       card.type = 'button';
-      card.className = `card card--room card--${id}`;
+      // The frame classes are the UI kit's (`./styles.css`): a card is a gold
+      // nine-slice around parchment, and Play wears the ornate one.
+      card.className = `card card--room card--${id} frame frame--card`;
       card.id = `academy-${id}`;
       card.dataset['room'] = id;
+
+      const glyph = icon(roomIcon(id), 'card__icon');
 
       const title = document.createElement('span');
       title.className = 'card__title';
@@ -164,7 +176,9 @@ export class Academy {
       hint.className = 'card__hint';
       hint.textContent = room.blurb;
 
-      card.append(title, hint);
+      const body = element('span', 'card__body');
+      body.append(title, hint);
+      card.append(glyph, body);
       if (id === 'workbench') {
         // Named by the same copy the Workbench itself uses, and coloured by the
         // same three tokens as the HUD's in-run badge, so the staff reads the
@@ -172,7 +186,7 @@ export class Academy {
         const badge = document.createElement('span');
         badge.className = 'card__badge';
         badge.id = 'academy-staff';
-        card.append(badge);
+        body.append(badge);
         this.staffBadge = badge;
       }
       this.bind(card, () => {
@@ -182,6 +196,7 @@ export class Academy {
       this.elements.cards.append(card);
       this.cards.set(id, card);
       this.cardHints.set(id, hint);
+      this.cardIcons.set(id, glyph);
     }
   }
 

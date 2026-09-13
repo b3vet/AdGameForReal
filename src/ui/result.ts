@@ -15,6 +15,8 @@ import { academy } from '@/data/academy-types';
 
 import { replay } from './widgets';
 
+import './result.css';
+
 export interface ResultView {
   levelIndex: number;
   won: boolean;
@@ -31,6 +33,8 @@ export interface ResultView {
 }
 
 export interface ResultElements {
+  /** The banner the verdict rides in on; `data-won` picks its colour. */
+  ribbon: HTMLElement;
   kicker: HTMLElement;
   title: HTMLElement;
   badge: HTMLElement;
@@ -47,6 +51,17 @@ export interface ResultCallbacks {
   onCountTick: () => void;
   /** One step of the coin roll-up; a brighter click. */
   onCoinTick: () => void;
+}
+
+/**
+ * Whether the player has asked their system for less movement. Read per result
+ * rather than once: a preference can change while the game is open, and this is
+ * one call on a screen that appears at most once a minute.
+ */
+function reducedMotion(): boolean {
+  return (
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 }
 
 /** How long each roll takes, and the gap between two ticks of it. */
@@ -78,6 +93,11 @@ export class ResultPanel {
     const total = Math.max(0, Math.round(view.totalCoins));
 
     this.elements.kicker.textContent = view.won ? 'Horde slain' : 'Overwhelmed';
+    // Gold for a clear, crimson for a loss, and the slide replayed either way:
+    // the screen is otherwise a still image, and the banner is what says the
+    // run is over before a single number has been read.
+    this.elements.ribbon.dataset['won'] = view.won ? 'true' : 'false';
+    replay(this.elements.ribbon, 'ribbon--in');
     this.elements.title.textContent = `Level ${String(view.levelIndex)}`;
     this.elements.badge.textContent = academy.result.firstClear;
     this.elements.badge.hidden = !(view.won && view.firstClear);
@@ -88,8 +108,11 @@ export class ResultPanel {
     this.elements.levels.hidden = false;
 
     this.stop();
-    if (!view.won) {
-      // A lost run is not a moment for a fanfare of numbers.
+    // A count-up is motion, and a player who has asked for less of it gets the
+    // numbers rather than the roll — the ticks that go with it too.
+    if (!view.won || reducedMotion()) {
+      // A lost run is not a moment for a fanfare of numbers, and neither is a
+      // won one when the player has asked for stillness.
       this.elements.survivors.textContent = String(survivors);
       this.elements.peak.textContent = String(peak);
       this.elements.coins.textContent = String(coins);

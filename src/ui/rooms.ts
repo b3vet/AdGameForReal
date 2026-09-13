@@ -31,6 +31,7 @@ import { weaponIds } from '@/sim';
 import type { WeaponId } from '@/sim';
 
 import type { BindButton } from './academy';
+import { beastIcon, icon, staffIcon, upgradeIcon } from './icons';
 import { amount, element, priceButton, replay, setPrice, text } from './widgets';
 
 export interface RoomElements {
@@ -155,9 +156,9 @@ export class Rooms {
       const id = upgradeIds.find((known) => known === copy.id);
       if (id === undefined) continue;
 
-      const root = element('div', 'row');
+      const root = element('div', 'row frame frame--card');
       const head = element('div', 'row__head');
-      head.append(text('span', 'row__name', copy.name));
+      head.append(icon(upgradeIcon(id), 'row__icon'), text('span', 'row__name', copy.name));
       const level = text('span', 'row__level', '');
       head.append(level);
 
@@ -199,10 +200,10 @@ export class Rooms {
       const id = weaponIds.find((known) => known === copy.id);
       if (id === undefined) continue;
 
-      const root = element('div', 'row row--card');
+      const root = element('div', 'row row--card frame frame--card');
       root.dataset['staff'] = id;
       const head = element('div', 'row__head');
-      head.append(text('span', 'row__name', copy.name));
+      head.append(icon(staffIcon(id), 'row__icon'), text('span', 'row__name', copy.name));
       const tag = text('span', 'row__level', '');
       head.append(tag);
 
@@ -265,9 +266,9 @@ export class Rooms {
     if (this.familiarRow !== null) return;
     const copy = academy.sanctum;
 
-    const root = element('div', 'row row--card');
+    const root = element('div', 'row row--card frame frame--card');
     const head = element('div', 'row__head');
-    head.append(text('span', 'row__name', copy.name));
+    head.append(icon('wisp', 'row__icon'), text('span', 'row__name', copy.name));
     root.append(head, text('p', 'row__effect', copy.blurb));
 
     const line = text('p', 'row__effect row__effect--tier2', copy.tiers[0] ?? '');
@@ -320,11 +321,12 @@ export class Rooms {
   private buildBestiary(): void {
     if (this.beastBlurbs.size > 0) return;
     for (const entry of academy.bestiary.entries) {
-      const root = element('div', 'beast');
+      const root = element('div', 'beast frame frame--card');
       root.dataset['beast'] = entry.id;
-      root.append(text('span', 'beast__name', entry.name));
+      const head = element('div', 'row__head');
+      head.append(icon(beastIcon(entry.id), 'beast__icon'), text('span', 'beast__name', entry.name));
       const blurb = text('p', 'beast__blurb', entry.blurb);
-      root.append(blurb);
+      root.append(head, blurb);
       this.elements.bestiary.append(root);
       this.beastBlurbs.set(entry.id, blurb);
     }

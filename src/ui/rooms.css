@@ -1,6 +1,6 @@
 /*
  * The four Academy rooms behind the home's cards, and the level picker's screen
- * (decision D33): the frosted list, its rows, the buy buttons and the bestiary.
+ * (decision D33): the framed list, its rows, the buy buttons and the bestiary.
  *
  * Split out of `./academy.css` when that file grew past the size rule; the
  * tokens, the coin chip and the cards are still there, and this file only
@@ -17,29 +17,29 @@
 .screen--room {
   background: radial-gradient(
     150% 50% at 50% 100%,
-    rgba(255, 247, 233, 0.4),
-    rgba(255, 247, 233, 0) 66%
+    color-mix(in srgb, var(--c-sky-haze) 38%, transparent),
+    transparent 66%
   );
 }
 
-/* Panel headings are ink on the plate, like the result sheet's. */
+/* Panel headings float over the road, so they carry their own edge. */
 .screen__title--panel {
   font-size: clamp(1.5rem, 7vw, 2.1rem);
   color: var(--ink-bright);
   -webkit-text-stroke: 0.13rem var(--outline);
   paint-order: stroke fill;
-  text-shadow: 0 0.14rem 0.05rem rgba(46, 30, 74, 0.35);
+  text-shadow: 0 0.14rem 0.05rem color-mix(in srgb, var(--c-ink-base) 45%, transparent);
 }
 
-/* A chip rather than bare text: it sits on whatever the road happens to be
+/* A plate rather than bare text: it sits on whatever the road happens to be
    showing, and a drop shadow was not enough over a lit gate panel. */
 .room__subtitle {
   margin: 0.4rem 0 0;
-  padding: 0.2rem 0.7rem;
+  padding: 0.15rem 0.7rem;
   border-radius: 999px;
   background: var(--chip-strong);
   font-family: var(--font-body);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--ink-bright);
@@ -53,7 +53,7 @@
 .room__panel {
   /* A room is a list, and a short screen has to be able to reach the end of
      it; the overlay is click-through, so this is the one place that opts in. */
-  max-height: 62vh;
+  max-height: 60vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
@@ -63,63 +63,81 @@
 .beasts {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.4rem;
   width: 100%;
 }
 
-.row {
+/*
+ * A row is a framed card of its own inside the board: a drill has a name, an
+ * icon, a level, a promise and a price, and five of them stacked need an edge
+ * each or they read as one grey block.
+ */
+.row,
+.beast {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 1rem;
-  background: rgba(123, 76, 255, 0.09);
+  gap: 0.2rem;
+  padding: 0.25rem 0.45rem 0.35rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--paper) 92%, transparent),
+    color-mix(in srgb, var(--paper-shade) 82%, transparent)
+  );
   text-align: left;
 }
 
 .row__head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-.row__name {
+.row__icon,
+.beast__icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--accent);
+}
+
+.row__name,
+.beast__name {
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: var(--ink);
 }
 
 .row__level {
+  margin-left: auto;
   font-family: var(--font-display);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .row__effect {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   line-height: 1.3;
   color: var(--ink-soft);
 }
 
-/* The evolution's promise: greyed while it is unbought, violet once it is. */
+/* The evolution's promise: greyed while it is unbought, gold once it is. */
 .row__effect--tier2 {
-  color: rgba(43, 33, 64, 0.38);
+  color: var(--ink-dim);
 }
 
 .row__effect--tier2[data-active='true'] {
-  color: var(--accent);
+  color: var(--c-gold-deep);
   font-weight: 700;
 }
 
 .row__actions {
   display: flex;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .row__actions > .button {
@@ -130,23 +148,27 @@
   color: var(--ink-soft);
 }
 
+.row[data-locked='true'] .row__icon {
+  color: var(--ink-dim);
+}
+
 /* A purchase lands on the row it changed. */
 .row--bump {
-  animation: row-bump 420ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  animation: row-bump 420ms var(--ease);
 }
 
 @keyframes row-bump {
   0% {
     transform: scale(1);
-    background: rgba(123, 76, 255, 0.09);
+    box-shadow: 0 0 0 0 transparent;
   }
   30% {
     transform: scale(1.03);
-    background: rgba(123, 76, 255, 0.24);
+    box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--gold) 30%, transparent);
   }
   100% {
     transform: scale(1);
-    background: rgba(123, 76, 255, 0.09);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -155,11 +177,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  min-height: 2.75rem;
-  padding: 0.55rem 1rem;
-  border-radius: 1.1rem;
-  font-size: 0.92rem;
+  gap: 0.3rem;
+  width: auto;
+  min-height: 2.1rem;
+  padding: 0.1rem 0.55rem 0.05rem;
+  font-size: 0.86rem;
   letter-spacing: 0.04em;
   align-self: flex-start;
 }
@@ -168,64 +190,47 @@
   font-variant-numeric: tabular-nums;
 }
 
-.button:disabled {
-  color: rgba(43, 33, 64, 0.38);
-  background: rgba(228, 222, 238, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(123, 76, 255, 0.12);
-  cursor: default;
-}
-
-.button:disabled:active {
-  transform: none;
+.button__coin {
+  width: 1em;
+  height: 1em;
+  color: var(--c-gold-deep);
 }
 
 /* --- Bestiary ------------------------------------------------------------- */
 
-.beast {
-  padding: 0.7rem 0.8rem;
-  border-radius: 1rem;
-  background: rgba(123, 76, 255, 0.09);
-  text-align: left;
-}
-
-.beast__name {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-
 .beast__blurb {
-  margin: 0.15rem 0 0;
+  margin: 0;
   font-family: var(--font-body);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   line-height: 1.3;
   color: var(--ink-soft);
 }
 
 .beast[data-seen='false'] {
-  background: rgba(228, 222, 238, 0.75);
+  filter: grayscale(0.8) opacity(0.66);
 }
 
-.beast[data-seen='false'] .beast__name,
 .beast[data-seen='false'] .beast__blurb {
-  color: rgba(43, 33, 64, 0.4);
   font-style: italic;
 }
 
 /* Landscape: the scroll box is shortened so Back cannot be pushed off-screen. */
 @media (orientation: landscape) {
-  .screen--room .screen__panel,
-  .screen--levels .screen__panel {
-    padding: 0.7rem 0.8rem 0.8rem;
+  /* The heading and the Back button are fixed cost; everything else the short
+     screen has goes to the list, which scrolls. */
+  .room__panel {
+    max-height: 52vh;
   }
 
-  .room__panel {
-    max-height: 46vh;
+  .row,
+  .beast {
+    gap: 0.15rem;
+    padding: 0.2rem 0.4rem 0.3rem;
   }
 
   .room__subtitle {
     margin-top: 0.2rem;
+    font-size: 0.7rem;
   }
 }
 

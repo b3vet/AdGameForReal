@@ -18,7 +18,14 @@
  * The import is what guarantees the rules are in by the time the call is made.
  */
 
+// The generated palette first: every other sheet is written in terms of the
+// `--c-*` variables it declares (decision D36, `scripts/palette-css.mjs`).
+import './palette.css';
+// Then the names every other sheet is written in, the layout, and the kit that
+// dresses it.
+import './tokens.css';
 import './styles.css';
+import './kit.css';
 // The screens' own controls, after the layout and the tokens they use.
 import './screens.css';
 // The Academy's purse and cards, then the rooms behind them (D33).

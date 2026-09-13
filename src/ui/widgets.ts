@@ -9,6 +9,8 @@
 
 import { academy } from '@/data/academy-types';
 
+import { icon } from './icons';
+
 export function element(tag: string, className: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
@@ -27,8 +29,7 @@ export function priceButton(): { button: HTMLButtonElement; price: HTMLElement }
   button.type = 'button';
   button.className = 'button button--row';
   const label = text('span', 'button__label', academy.buttons.buy);
-  const coin = element('span', 'coins__icon coins__icon--inline');
-  coin.setAttribute('aria-hidden', 'true');
+  const coin = icon('coin', 'button__coin');
   const price = text('span', 'button__price', '0');
   button.append(label, coin, price);
   return { button, price };
