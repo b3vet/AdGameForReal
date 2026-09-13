@@ -151,6 +151,24 @@ describe('formationOffsets', () => {
     expect(grown / iterations).toBeLessThan(200);
   });
 
+  it('caches per balance, so a modified tuning is not served the shipped crowd', () => {
+    // Every function here takes a `Balance`, so the cache has to be keyed by one
+    // too: a flat cache would hand a run built on a tweaked balance whatever the
+    // shipped one had already produced for that count and width — silently, and
+    // only for the counts something else had asked about first.
+    const tuned = structuredClone(balance);
+    tuned.formation.spacing.max = balance.formation.spacing.max * 2;
+    tuned.formation.spacing.min = balance.formation.spacing.min * 2;
+
+    // Shipped first, so a shared cache would already be warm for this key.
+    const shipped = formationOffsets(9, OPEN);
+    const wider = formationOffsets(9, OPEN, tuned);
+    expect(unitSpacing(9, tuned)).toBeCloseTo(unitSpacing(9) * 2, 9);
+    expect(maxAbs(wider, 'x')).toBeGreaterThan(maxAbs(shipped, 'x'));
+    // And the shipped answer is still the shipped answer afterwards.
+    expect(formationOffsets(9, OPEN)).toBe(shipped);
+  });
+
   it('is deterministic: the same count always produces the same positions', () => {
     const first = formationOffsets(12).map((o) => `${o.x.toFixed(6)},${o.z.toFixed(6)}`);
     const second = formationOffsets(12).map((o) => `${o.x.toFixed(6)},${o.z.toFixed(6)}`);

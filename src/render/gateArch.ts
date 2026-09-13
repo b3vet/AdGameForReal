@@ -130,20 +130,26 @@ export async function loadArch(scene: Scene): Promise<Mesh | null> {
 
   // The parapet across the top, which is also what the `mul` crown stands on.
   if (parapet !== undefined) {
-    const span = (ARCH_CLEAR_WIDTH + ARCH_LEG_THICKNESS * 2) / PARAPET_LENGTH;
+    // A leg narrower than the legs span: the parapet used to run the arch's
+    // full 1.88 m, which left 12 cm of the 2 m lane between one gate's parapet
+    // and its neighbour's — at three rows out that gap is under a pixel and a
+    // row of arches read as one lintel across the road, which is the fence the
+    // ring of voussoirs exists to avoid. Half a leg shorter each side leaves
+    // 0.44 m of daylight and still lands the parapet on both legs.
+    const span = ARCH_CLEAR_WIDTH + ARCH_LEG_THICKNESS;
     parts.push({
       source: parapet,
-      scale: scale3(span, ARCH_CROWN_HEIGHT / PARAPET_HEIGHT, ARCH_DEPTH / PARAPET_DEPTH),
+      scale: scale3(
+        span / PARAPET_LENGTH,
+        ARCH_CROWN_HEIGHT / PARAPET_HEIGHT,
+        ARCH_DEPTH / PARAPET_DEPTH,
+      ),
       // The piece runs from x = 0 to x = 2 in its own file and comes out of the
       // loader mirrored (`loadDungeonPieces`), so it now runs from -2 to 0 and
       // is pushed *right* by half its new length to sit centred over the
       // opening. Getting that sign wrong puts every arch's parapet over its
       // neighbour's lane, which reads as one long bar across the road.
-      position: at(
-        ARCH_CLEAR_WIDTH / 2 + ARCH_LEG_THICKNESS,
-        ARCH_HEIGHT - ARCH_CROWN_HEIGHT,
-        0,
-      ),
+      position: at(span / 2, ARCH_HEIGHT - ARCH_CROWN_HEIGHT, 0),
     });
   }
 
@@ -197,7 +203,9 @@ export function createBoxArch(scene: Scene): Mesh {
   const crown = CreateBox(
     'archCrown',
     {
-      width: ARCH_CLEAR_WIDTH + ARCH_LEG_THICKNESS * 2,
+      // The same short parapet the real arch gets, for the same reason: at the
+      // full span three of them meet across the road and read as one lintel.
+      width: ARCH_CLEAR_WIDTH + ARCH_LEG_THICKNESS,
       height: ARCH_CROWN_HEIGHT,
       depth: ARCH_DEPTH,
     },

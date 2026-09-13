@@ -61,7 +61,12 @@ import type { GateState } from '@/sim';
  * `GATE_CENTER_Y` and is 0.8 m tall, and *that* is the box a number can be lost
  * in. The clearance share below still opens a margin around it.
  */
-const GATE_LABEL_BAND = GATE_PLAQUE_HEIGHT;
+/** A quarter taller than the slab, because a number is hidden by a plaque a
+ *  little before it is *inside* one: at the plaque's own height a stream's
+ *  count came to rest on the top rail of a `+3` (`artifacts/smoke/t6.png`).
+ *  It hides slightly more block HP behind a gate, which is the cheaper miss. */
+const GATE_LABEL_BAND_MARGIN = 1.25;
+const GATE_LABEL_BAND = GATE_PLAQUE_HEIGHT * GATE_LABEL_BAND_MARGIN;
 
 /**
  * Where the camera stands this frame. One per frame, re-used: the sim must not
@@ -183,8 +188,8 @@ function crowded(
       if (Math.abs(gap) < (gate.z - view.eyeZ) * share) return true;
     }
 
-    // A panel outside the draw range is not on screen, so there is nothing for
-    // the number to stand on (`GateView.paintIdle` disables it there).
+    // An arch outside the draw range is not on screen, so there is nothing for
+    // the number to stand on (`GateView.draw` writes no instance for it).
     const ahead = gate.z - view.squadZ;
     if (ahead >= GATE_DRAW_RANGE || ahead <= -LABEL_BEHIND * 2) continue;
     const top = screenY(view, GATE_CENTER_Y + GATE_LABEL_BAND / 2, gate.z);

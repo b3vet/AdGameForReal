@@ -34,8 +34,27 @@ import path from 'node:path';
 
 import { SCREENSHOT_TIMEOUT_MS, sleep } from './smoke-browser.mjs';
 
-/** The ratios the set is shot at, and the suffix each one writes. */
-const SCALES = [2, 3];
+/**
+ * The ratios the set is shot at, and the suffix each one writes.
+ *
+ * Both, because the plan's definition of done asks for both (pixel ratio 2 and
+ * 3) — and they are the longest third of the smoke, so `SMOKE_HERO_SCALES=2`
+ * is the lever that gives about forty seconds back when a run is not the one
+ * the milestone is judged on. It is not the default: a set missing its 3x half
+ * is a set the product owner cannot read the phone's own frames off.
+ */
+const DEFAULT_SCALES = [2, 3];
+const SCALES = readScales(process.env.SMOKE_HERO_SCALES);
+
+/** The env list, or the default — never empty, or the set silently vanishes. */
+function readScales(value) {
+  if (value === undefined) return DEFAULT_SCALES;
+  const parsed = value
+    .split(',')
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isFinite(entry) && entry > 0);
+  return parsed.length > 0 ? parsed : DEFAULT_SCALES;
+}
 
 /** One level, one seed, for both scales: the two sets are the same run twice. */
 const HERO_QUERY = '?bot=greedy&level=1&seed=1&turbo=60&screenshot=1&quality=0';

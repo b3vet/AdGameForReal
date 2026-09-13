@@ -94,6 +94,18 @@ const DRAW_CALL_LIMIT = Number(process.env.SMOKE_DRAW_CALLS ?? 52);
  */
 const WARM_UP_TIMEOUT_MS = 90_000;
 
+/**
+ * How long a page is given to report `__arcane.ready`.
+ *
+ * Ninety seconds, not thirty. Booting is the most expensive thing a page does —
+ * the glyph atlas, seven model loads and thirty-six shader programs through
+ * SwiftShader — and the smoke can be told to drive two runs at once
+ * (`smoke.mjs`, `RUN_CONCURRENCY`), where a page boots while another is mid-run
+ * on the same four cores and thirty seconds is not enough. Nothing is weakened:
+ * a page that never boots still fails the smoke, it just takes longer to say so.
+ */
+const READY_TIMEOUT_MS = 90_000;
+
 /** Waits until the warm-up has run and the physics layer is attached. */
 function waitForWarmUp(page) {
   return page
@@ -193,19 +205,41 @@ function releaseStop(page) {
   });
 }
 
-/** Plays one scripted run to its result screen, writing every shot it asks for. */
+/**
+ * Plays one scripted run to its result screen, writing every shot it asks for.
+ *
+ * Every line this prints is buffered and flushed in one block at the end rather
+ * than written as it happens, so that `RUN_CONCURRENCY` above 1 (`smoke.mjs`)
+ * cannot interleave two runs' readouts into one unreadable column. Nothing here
+ * is timing-sensitive, so a run's own numbers are as true at the end of it as
+ * they were in the middle.
+ */
 export async function driveRun(page, url, run, failures, outDir) {
+  const lines = [];
+  const say = (line) => lines.push(line);
+  try {
+    return await playRun(page, url, run, failures, outDir, say);
+  } finally {
+    // In a `finally`, so a run that throws — a blank frame — still says what it
+    // had got through before it did.
+    console.log(lines.join('\n'));
+  }
+}
+
+async function playRun(page, url, run, failures, outDir, say) {
   const shot = async (name) => {
     const file = path.join(outDir, name);
     await page.screenshot({ path: file, timeout: SCREENSHOT_TIMEOUT_MS });
     const { size } = await stat(file);
-    console.log(`[smoke] screenshot ${name}`);
+    say(`[smoke] screenshot ${name}`);
     return `${name} (${(size / 1024).toFixed(0)} KB)`;
   };
 
-  console.log(`[smoke] ${run.label}: ${run.query}`);
+  say(`[smoke] ${run.label}: ${run.query}`);
   await page.goto(url, { waitUntil: 'load' });
-  await page.waitForFunction(() => globalThis.__arcane?.ready === true, null, { timeout: 30_000 });
+  await page.waitForFunction(() => globalThis.__arcane?.ready === true, null, {
+    timeout: READY_TIMEOUT_MS,
+  });
 
   const written = [];
 
@@ -217,7 +251,7 @@ export async function driveRun(page, url, run, failures, outDir) {
   if (!warm) {
     failures.push(`${run.label}: the shader warm-up never finished`);
   } else {
-    console.log(
+    say(
       `[smoke]   warm-up: ${before.warmed} materials compiled, ${before.skipped} with ` +
         `nothing to compile, ${before.failed} still unready, ` +
         `${before.programs} shader programs before the first frame`,
@@ -309,7 +343,7 @@ export async function driveRun(page, url, run, failures, outDir) {
   // did is a frame the phone spent inside the driver rather than drawing.
   const after = await page.evaluate(() => globalThis.__arcane?.shaders() ?? null);
   const grew = after !== null && before !== null ? after.programs - before.programs : 0;
-  console.log(
+  say(
     `[smoke]   shader programs: ${before?.programs ?? -1} before, ` +
       `${after?.programs ?? -1} after (${grew} compiled during play)`,
   );
@@ -324,8 +358,8 @@ export async function driveRun(page, url, run, failures, outDir) {
     );
   }
 
-  console.log(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
-  console.log(
+  say(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
+  say(
     `[smoke]   draw calls: peak ${draws.peak} (limit ${DRAW_CALL_LIMIT}), ` +
       `ladder rung ${quality.rung}, physics quality ${quality.physics}`,
   );
@@ -333,7 +367,7 @@ export async function driveRun(page, url, run, failures, outDir) {
   // The purse is the meta layer's whole point: a run that paid nothing at all
   // means `runRewards` or the save never ran (D33).
   const purse = await page.evaluate(() => globalThis.__arcane?.player().coins ?? -1);
-  console.log(`[smoke]   coins after the run: ${purse}`);
+  say(`[smoke]   coins after the run: ${purse}`);
   if (purse < 0) failures.push(`${run.label}: the debug handle has no player`);
   if (status === 'won' && purse <= 0) {
     failures.push(`${run.label}: a cleared level paid no coins`);
@@ -347,7 +381,7 @@ export async function driveRun(page, url, run, failures, outDir) {
   written.push(await shot(run.endShot));
 
   if (run.assertNotBlank !== undefined) {
-    await assertNotBlank(path.join(outDir, run.assertNotBlank), run.assertNotBlank);
+    say(await assertNotBlank(path.join(outDir, run.assertNotBlank), run.assertNotBlank));
   }
 
   return written;

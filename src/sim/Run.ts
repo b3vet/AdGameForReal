@@ -233,7 +233,7 @@ export class Run {
       squad.x,
       this.clampLimit(),
       this.limits,
-      this.balance.road.laneWidth,
+      this.balance,
       wallKeep(squad.count, squad.formationWidth, this.balance),
     );
     const wanted = squad.targetX;

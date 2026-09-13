@@ -3,12 +3,13 @@
  * into a rune plaque hanging in it.
  *
  * Milestone 5 replaced the translucent slab (plan, "Gates too basic"). What a
- * gate is made of is `./gateArch.ts`; this file is the pool — which arch is
- * bound to which gate id, what is close enough to draw, and the reactions.
+ * gate is made of is `./gateArch.ts`, which slot is bound to which gate id is
+ * `./gateSlots.ts`, and this file is the frame: what is close enough to draw,
+ * what carries a number, and what the arch, the plaque, the shimmer and the
+ * kind dressing are written with.
  *
- * Slots are bound to gate ids the first time a gate shows up in `RunState`, and
- * released when its exit animation finishes. Every mesh, material and label is
- * built in `Renderer.init`; `loadLevel` only unbinds them.
+ * Every mesh, material and label is built in `Renderer.init`; `loadLevel` only
+ * unbinds them.
  *
  * The draw-call arithmetic, because it is the reason for the shape of this
  * file: every arch in view is one thin instance of one mesh, every plaque one
@@ -38,6 +39,8 @@ import {
   SHIMMER_WIDTH,
   SHIMMER_Y,
 } from './gateLook';
+import { GateSlots } from './gateSlots';
+import type { GateSlot } from './gateSlots';
 import { StaffProps } from './gateStaffs';
 import { gateText } from './gateText';
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
@@ -56,13 +59,10 @@ import {
   GATE_WORD_MIN,
   GATE_WORD_SIZE,
   LABEL_BEHIND,
-  LANE_WIDTH,
   POOL,
   SIDE_GATE_LABEL_RANGE,
 } from './theme';
-import type { GateKind, GateState, RunState } from '@/sim';
-
-type Exit = 'none' | 'chosen' | 'skipped';
+import type { RunState } from '@/sim';
 
 /** Metres behind the squad at which an exiting arch is dropped outright. */
 const EXIT_CUTOFF_BEHIND = 2;
@@ -75,30 +75,9 @@ const ORNAMENT_CAPACITY = 8;
 /** Arches, plaques and shimmers in view at once. Three rows of three, plus exits. */
 const GATE_DRAW_CAPACITY = 16;
 
-interface GateSlot {
-  /** This slot's label id in the shared atlas; see `src/render/labels.ts`. */
-  label: number;
-  gateId: number;
-  rowIndex: number;
-  x: number;
-  z: number;
-  /** Last kind seen. A shot-down `sub` gate flips to `add` and must re-dress. */
-  kind: GateKind;
-  /** Last value printed. Re-building the string every frame allocates. */
-  shownValue: number;
-  /** The string that value produced, handed back to the atlas every frame. */
-  shownText: string;
-  /** Seconds left on the hit flash. */
-  pulse: number;
-  exit: Exit;
-  exitAge: number;
-  /** Frame counter of the last `RunState` that still listed this gate. */
-  seen: number;
-}
-
 export class GateView {
-  private readonly slots: GateSlot[] = [];
-  private readonly byGateId = new Map<number, GateSlot>();
+  /** The slot pool, and the frame stamp the draw pass reads (`./gateSlots.ts`). */
+  private readonly pool: GateSlots;
   private readonly scene: Scene;
   private readonly labels: NumberLabels;
 
@@ -119,12 +98,12 @@ export class GateView {
 
   /** The staff a `weapon` gate offers, floating over its arch (`./gateStaffs.ts`). */
   private readonly staffs: StaffProps;
-  private frame = 0;
   private scroll = 0;
 
   constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
     this.labels = labels;
+    this.pool = new GateSlots(labels, POOL.gates);
     this.staffs = new StaffProps(scene);
 
     // A box arch stands in until the dungeon pieces arrive, and stays if they
@@ -152,23 +131,6 @@ export class GateView {
       );
       this.ornamentCounts.push(0);
     }
-
-    for (let i = 0; i < POOL.gates; i++) {
-      this.slots.push({
-        label: labels.claim(),
-        gateId: -1,
-        rowIndex: -1,
-        x: 0,
-        z: 0,
-        kind: 'add',
-        shownValue: Number.NaN,
-        shownText: '',
-        pulse: 0,
-        exit: 'none',
-        exitAge: 0,
-        seen: 0,
-      });
-    }
   }
 
   /** The three staff props out of the mage model, and the arch's stonework. */
@@ -184,8 +146,7 @@ export class GateView {
 
   /** Hands every arch back to the pool. Called from `loadLevel`. */
   reset(): void {
-    this.byGateId.clear();
-    for (const slot of this.slots) this.release(slot);
+    this.pool.reset();
     this.staffs.hideAll();
     commitInstances(this.arch, 0);
     commitInstances(this.plaques, 0);
@@ -196,7 +157,7 @@ export class GateView {
 
   /** A shot landed on this gate: flash it so the player sees the number move. */
   onHit(gateId: number): void {
-    const slot = this.byGateId.get(gateId);
+    const slot = this.pool.find(gateId);
     if (slot === undefined || slot.exit !== 'none') return;
     slot.pulse = GATE_PULSE_DURATION;
   }
@@ -206,31 +167,26 @@ export class GateView {
    * the same row dim, so the choice reads back to the player.
    */
   onPassed(gateId: number): void {
-    const chosen = this.byGateId.get(gateId);
-    if (chosen === undefined) return;
-    this.startExit(chosen, 'chosen');
-    for (const slot of this.slots) {
-      if (slot.gateId < 0 || slot === chosen) continue;
-      if (slot.rowIndex === chosen.rowIndex) this.startExit(slot, 'skipped');
-    }
+    const chosen = this.pool.find(gateId);
+    if (chosen !== undefined) this.pool.exitRow(chosen);
   }
 
   update(state: RunState, dt: number): void {
-    this.frame++;
+    const frame = this.pool.beginFrame();
     const squadZ = state.squad.z;
     this.staffs.begin();
 
     // What the sim says, first: every bound slot learns where its gate is and
     // what it is worth before anything is written.
     for (const gate of state.gates) {
-      const slot = this.bind(gate);
+      const slot = this.pool.bind(gate);
       if (slot === undefined) continue;
-      slot.seen = this.frame;
+      slot.seen = frame;
       if (slot.exit !== 'none') continue;
       // The sim mutates `passed` even when it emits no event for the skipped
       // lanes, so treat a passed-but-unanimated gate as a fade.
       if (gate.passed || gate.z < squadZ - 1.5) {
-        this.startExit(slot, 'skipped');
+        this.pool.startExit(slot, 'skipped');
         continue;
       }
       slot.kind = gate.kind;
@@ -260,8 +216,7 @@ export class GateView {
       ornament.mesh.dispose();
     }
     this.ornaments.length = 0;
-    this.slots.length = 0;
-    this.byGateId.clear();
+    this.pool.dispose();
     this.staffs.dispose();
   }
 
@@ -281,13 +236,14 @@ export class GateView {
     let plaques = 0;
     this.ornamentCounts.fill(0);
 
-    for (const slot of this.slots) {
+    const frame = this.pool.frame;
+    for (const slot of this.pool.all) {
       if (slot.gateId < 0) continue;
 
       if (slot.exit === 'none') {
         // Gone from the state without a `gatePassed`: retire it quietly.
-        if (slot.seen !== this.frame) {
-          this.release(slot);
+        if (slot.seen !== frame) {
+          this.pool.release(slot);
           continue;
         }
         slot.pulse = Math.max(0, slot.pulse - dt);
@@ -296,7 +252,7 @@ export class GateView {
         const done =
           slot.exitAge >= GATE_EXIT_DURATION || slot.z < squadZ - EXIT_CUTOFF_BEHIND;
         if (done) {
-          this.release(slot);
+          this.pool.release(slot);
           continue;
         }
       }
@@ -410,56 +366,5 @@ export class GateView {
       this.scroll + (slot.gateId % 5) * 0.2,
       0,
     );
-  }
-
-  private bind(gate: GateState): GateSlot | undefined {
-    const existing = this.byGateId.get(gate.id);
-    if (existing !== undefined) return existing;
-    if (gate.passed) return undefined;
-
-    const slot = this.freeSlot();
-    if (slot === undefined) return undefined;
-
-    slot.gateId = gate.id;
-    slot.rowIndex = gate.rowIndex;
-    slot.shownValue = Number.NaN;
-    slot.shownText = '';
-    slot.pulse = 0;
-    slot.exit = 'none';
-    slot.exitAge = 0;
-    slot.kind = gate.kind;
-    slot.x = gate.lane * LANE_WIDTH;
-    slot.z = gate.z;
-
-    this.byGateId.set(gate.id, slot);
-    return slot;
-  }
-
-  /** First unbound slot, or undefined when the pool is full. An index loop
-   *  rather than `find`: this runs per gate per frame and a closure per call is
-   *  an allocation in the steady-state path. */
-  private freeSlot(): GateSlot | undefined {
-    for (let i = 0; i < this.slots.length; i++) {
-      const slot = this.slots[i];
-      if (slot !== undefined && slot.gateId < 0) return slot;
-    }
-    return undefined;
-  }
-
-  private startExit(slot: GateSlot, exit: Exit): void {
-    if (slot.exit !== 'none' || exit === 'none') return;
-    slot.exit = exit;
-    slot.exitAge = 0;
-  }
-
-  private release(slot: GateSlot): void {
-    if (slot.gateId >= 0) this.byGateId.delete(slot.gateId);
-    this.labels.hide(slot.label);
-    slot.gateId = -1;
-    slot.rowIndex = -1;
-    slot.exit = 'none';
-    slot.exitAge = 0;
-    slot.pulse = 0;
-    slot.shownText = '';
   }
 }

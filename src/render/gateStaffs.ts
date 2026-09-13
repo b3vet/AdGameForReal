@@ -32,10 +32,19 @@ const STAFF_MESHES: Record<WeaponId, string> = {
 const STAFF_Y = Math.max(GATE_PROP_Y, ARCH_HEIGHT + 0.35);
 const STAFF_BOB = 0.06;
 
-/** Where one staff is being offered this frame, or `null`. */
+/**
+ * Where one staff is being offered this frame.
+ *
+ * One slot per weapon, allocated once and rewritten in place: `live` is what a
+ * frame clears rather than the slot itself, because nulling the slot and
+ * building a fresh `{ x, z }` in `offer` is an allocation every frame a staff
+ * gate is on screen — in the steady-state path CLAUDE.md keeps clear.
+ */
 interface Target {
   x: number;
   z: number;
+  /** True when some gate has offered this staff since the last `begin`. */
+  live: boolean;
 }
 
 export class StaffProps {
@@ -46,14 +55,14 @@ export class StaffProps {
    * array per entry per frame.
    */
   private readonly meshes: (Mesh | null)[] = [];
-  private readonly targets: (Target | null)[] = [];
+  private readonly targets: Target[] = [];
   private spin = 0;
 
   constructor(scene: Scene) {
     this.scene = scene;
     for (let i = 0; i < weaponIds.length; i++) {
       this.meshes.push(null);
-      this.targets.push(null);
+      this.targets.push({ x: 0, z: 0, live: false });
     }
   }
 
@@ -75,22 +84,20 @@ export class StaffProps {
 
   /** Forgets last frame's offers. Called once per frame, before any `offer`. */
   begin(): void {
-    for (let i = 0; i < this.targets.length; i++) this.targets[i] = null;
+    for (const target of this.targets) target.live = false;
   }
 
   /** A gate at `(x, z)` is offering `weaponId`. The nearest offer wins. */
   offer(weaponId: WeaponId, x: number, z: number): void {
     const at = weaponIds.indexOf(weaponId);
     if (at < 0) return;
-    const held = this.targets[at] ?? null;
-    if (held !== null && held.z <= z) return;
-    // The slot object is reused rather than replaced: this runs per gate per
-    // frame and a fresh object here is an allocation in the steady-state path.
-    if (held === null) this.targets[at] = { x, z };
-    else {
-      held.x = x;
-      held.z = z;
-    }
+    const held = this.targets[at];
+    if (held === undefined) return;
+    if (held.live && held.z <= z) return;
+    // Written in place: this runs per gate per frame (see `Target`).
+    held.x = x;
+    held.z = z;
+    held.live = true;
   }
 
   /**
@@ -103,8 +110,8 @@ export class StaffProps {
     for (let i = 0; i < this.meshes.length; i++) {
       const mesh = this.meshes[i];
       if (mesh === null || mesh === undefined) continue;
-      const target = this.targets[i] ?? null;
-      if (target === null) {
+      const target = this.targets[i];
+      if (target === undefined || !target.live) {
         if (mesh.isEnabled()) mesh.setEnabled(false);
         continue;
       }
@@ -117,10 +124,8 @@ export class StaffProps {
 
   /** Takes every prop off the road; `GateView.reset` calls this per level. */
   hideAll(): void {
-    for (let i = 0; i < this.meshes.length; i++) {
-      this.meshes[i]?.setEnabled(false);
-      this.targets[i] = null;
-    }
+    for (let i = 0; i < this.meshes.length; i++) this.meshes[i]?.setEnabled(false);
+    for (const target of this.targets) target.live = false;
   }
 
   dispose(): void {

@@ -15,8 +15,8 @@
  *  3. **Move.** A still sky over a moving road reads as a painted backdrop.
  *
  * Two meshes and no more, because the shadows and the dome together may add at
- * most two draw calls to the frame (plan, Phase A) — three meshes in, Milestone
- * 3's dome out (`retireLegacyDome`):
+ * most two draw calls to the frame (plan, Phase A). Milestone 3's own dome
+ * (built by `RoadView`) went with the road it lived in:
  *
  *   dome    one inverted sphere, gradient and hills in its *vertex colours* —
  *           `sky.top` through `sky.mid` to `sky.horizon`, with the hill band
@@ -129,22 +129,6 @@ export class SkyDome {
       if (mesh.material instanceof StandardMaterial) materials.push(mesh.material);
     }
     this.materials = materials;
-  }
-
-  /**
-   * Takes Milestone 3's dome out of the frame, if this build still has one.
-   *
-   * `RoadView` built its own sky (`./road.ts`), and the render art track is
-   * replacing that file in the same milestone this one arrives in. Rather than
-   * either track waiting on the other, the new dome retires the old one by name
-   * the moment both exist: a disabled mesh costs no draw call, and once the
-   * art track's road lands without a dome this is a lookup that finds nothing.
-   */
-  retireLegacyDome(scene: Scene): void {
-    const legacy = scene.getMeshByName('sky');
-    if (legacy === null) return;
-    legacy.setEnabled(false);
-    legacy.isVisible = false;
   }
 
   /**

@@ -42,7 +42,37 @@ const OUT_DIR = path.join(ROOT, 'artifacts', 'smoke');
  * budget (docs/06-milestone-2-plan.md) and turbo is what buys it. The app's own
  * ceiling is 40.
  */
+
 const TURBO = 60;
+
+/**
+ * Scripted runs driven at once. One by default — see below.
+ *
+ * The smoke sits at about 5 min 57 s against a 7 min ceiling and the four runs
+ * are half of it (runs 182 s, stress 44 s, hero 122 s, build and boot 9 s,
+ * measured off the frame timestamps). The runs are independent — their own
+ * context, their own save, their own screenshots — and every assertion a run
+ * carries is a *count*: draw calls, shader programs, coins, a phase. None is a
+ * wall-clock measurement, so running two at once cannot change an answer.
+ *
+ * It cannot be the default anyway. Measured at 2 in Milestone 5 Phase F: the
+ * run phase dropped from 182 s to about 105 s, and both attempts *failed* in
+ * the same place — the page that boots while another is already playing does
+ * not finish `page.goto`'s `load` inside Playwright's 30 s navigation default,
+ * because one page compiling thirty-six programs through SwiftShader while
+ * another draws a five-hundred-mage frame is all four cores. Turning it on
+ * therefore means raising the navigation timeout as well
+ * (`page.setDefaultNavigationTimeout`), which is a change worth making against
+ * a full smoke run rather than inside a review. `SMOKE_RUN_CONCURRENCY=2` is
+ * the lever; the timeout is `READY_TIMEOUT_MS` in `./smoke-run.mjs` and the
+ * navigation one is Playwright's own.
+ */
+const RUN_CONCURRENCY = Number(process.env.SMOKE_RUN_CONCURRENCY ?? 1);
+
+/** Wall clock since `start`, for the budget line at the end. */
+function since(start) {
+  return `${((Date.now() - start) / 1000).toFixed(1)}s`;
+}
 
 /**
  * The runs this smoke drives, in order. The first is the definition-of-done
@@ -126,6 +156,7 @@ const RUNS = [
 ];
 
 async function main() {
+  const startedAt = Date.now();
   console.log('[smoke] building...');
   await build({ logLevel: 'warn' });
 
@@ -142,18 +173,40 @@ async function main() {
   const failures = [];
   const written = [];
 
-  try {
-    for (const run of RUNS) {
-      const page = await openPage(browser, failures);
-      try {
-        written.push(
-          ...(await driveRun(page, `http://127.0.0.1:${port}/${run.query}`, run, failures, OUT_DIR)),
-        );
-      } finally {
-        await page.context().close();
-      }
+  const playOne = async (run) => {
+    const page = await openPage(browser, failures);
+    try {
+      return await driveRun(page, `http://127.0.0.1:${port}/${run.query}`, run, failures, OUT_DIR);
+    } finally {
+      await page.context().close();
     }
+  };
 
+  const timings = [];
+  try {
+    const runsAt = Date.now();
+    // A sliding window rather than fixed pairs: the moment one run finishes the
+    // next one starts, so the long level-10 run never holds a core idle.
+    const queue = RUNS.slice();
+    const workers = [];
+    for (let i = 0; i < Math.max(1, Math.min(RUN_CONCURRENCY, queue.length)); i++) {
+      workers.push(
+        (async () => {
+          for (let run = queue.shift(); run !== undefined; run = queue.shift()) {
+            written.push(...(await playOne(run)));
+          }
+        })(),
+      );
+    }
+    // `allSettled`, so a run that throws — a blank frame — does not leave its
+    // partner running against a browser the `finally` below is closing. The
+    // first rejection is rethrown once every worker has stopped.
+    const settled = await Promise.allSettled(workers);
+    timings.push(`runs ${since(runsAt)}`);
+    const broke = settled.find((result) => result.status === 'rejected');
+    if (broke !== undefined) throw broke.reason;
+
+    const stressAt = Date.now();
     const stressPage = await openPage(browser, failures);
     try {
       written.push(
@@ -167,19 +220,27 @@ async function main() {
     } finally {
       await stressPage.context().close();
     }
+    timings.push(`stress ${since(stressAt)}`);
 
     // Last, and in its own file: the frames the milestone is *judged* on, at
     // the pixel ratios a phone renders at (`./smoke-hero.mjs`). Everything
     // above is an assertion with a picture attached; this is the picture.
+    const heroAt = Date.now();
     written.push(
       ...(await driveHeroSet(browser, `http://127.0.0.1:${String(port)}/`, OUT_DIR, failures, openPage)),
     );
+    timings.push(`hero ${since(heroAt)}`);
   } finally {
     await browser.close();
     await new Promise((resolve) => {
       server.close(resolve);
     });
   }
+
+  // The budget, every run: the whole smoke has a seven-minute ceiling
+  // (docs/06-milestone-2-plan.md), and the phase line is what says which part
+  // of it moved when a change makes it longer.
+  console.log(`[smoke] ${timings.join(', ')}, total ${since(startedAt)}`);
 
   if (failures.length > 0) {
     throw new Error(`page reported ${failures.length} error(s):\n  ${failures.join('\n  ')}`);

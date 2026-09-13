@@ -152,7 +152,8 @@ export async function openPage(browser, failures, overrides = {}) {
 /**
  * Throws unless the PNG at `file` has real contrast in it. A blank canvas, a
  * lost WebGL context and a scene that never drew all look the same from Node:
- * a picture with one luminance in it.
+ * a picture with one luminance in it. Answers the line describing what it
+ * measured, for the caller to print with the rest of its run's readout.
  */
 export async function assertNotBlank(file, label) {
   const stats = luminanceStats(decodePng(await readFile(file)));
@@ -164,5 +165,5 @@ export async function assertNotBlank(file, label) {
   if (stats.stdDev < BLANK_STD_DEV_FLOOR || stats.distinctBuckets < BLANK_BUCKET_FLOOR) {
     throw new Error(`${label} looks blank (${summary}). Nothing rendered.`);
   }
-  console.log(`  ${label}: ${summary}`);
+  return `[smoke]   ${label}: ${summary}`;
 }

@@ -115,6 +115,27 @@ describe('the wall clamp', () => {
     }
   });
 
+  it('reads the fence geometry off the balance it was handed', () => {
+    // `wallLimits` used to take a lane width and read the approach zone, the
+    // release and the default margin off the shipped object, so a `Run` on a
+    // modified tuning — and `availableWidth(state, custom)` with it — was
+    // clamped by the shipped fences rather than by its own.
+    const tuned = testBalance();
+    tuned.walls.approach = TUNING.approach * 4;
+    tuned.walls.margin = TUNING.margin * 5;
+
+    const walls = [wall(1, 20, 40)];
+    const out: WallLimits = { lo: 0, hi: 0, wall: -1 };
+    // Inside the wider approach zone and outside the shipped one.
+    const z = 20 - TUNING.approach * 2;
+
+    expect(wallLimits(walls, z, 0, balance.road.clampX, out).hi).toBe(balance.road.clampX);
+    expect(wallLimits(walls, z, 0, balance.road.clampX, out, tuned).hi).toBeCloseTo(
+      LINE - tuned.walls.margin,
+      9,
+    );
+  });
+
   it('holds a range that never comes out empty', () => {
     const walls = [wall(1, 0, 100)];
     // A squad so wide its own taper is tighter than the fence: the road wins,

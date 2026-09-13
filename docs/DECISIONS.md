@@ -41,3 +41,5 @@
 | D37 | 2026-09-15 | The formation fills the available road width in staggered lines and narrows under walls; lateral motion is a damped spring; drawn units follow their slots with per-row lag. | 14 |
 | D38 | 2026-09-15 | Rung 0 renders at native device pixel ratio up to 3 without multisampling; fog 120 to 260 m; tone mapping in materials; blob shadows. | 14 |
 | D39 | 2026-09-15 | Game UI from Kenney Fantasy UI Borders, UI Pack and Game Icons (CC0); gates are dungeon-piece arches with rune plaques. | 14 |
+| D40 | 2026-09-13 | Tone mapping is KHR PBR Neutral at exposure 1.185, chosen by measured palette fidelity (rms 11 of 255 against ACES's 17); the swatch harness in `scripts/swatch-check.mjs` is the test for any future change. | 15 (Phase E) |
+| D41 | 2026-09-13 | The full look needs iOS 16.2 or newer (`color-mix` in the UI kit); iOS 15 to 16.1 plays with opaque fallback tokens. The device guide states 16.2. | 15 (Phase F), DEVICE.md |

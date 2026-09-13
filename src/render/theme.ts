@@ -136,8 +136,10 @@ export const SHADOW = {
   alpha: 0.45,
   /** How much wider than the thing above it a blob is drawn. */
   spread: 1.3,
-  /** Metres above the road, clear of the lane runes at 0.02. */
-  y: 0.012,
+  /** Metres above the road, and *above* the lane runes at 0.02 rather than under
+   *  them: a blob writes no depth but is still depth-tested, so at 0.012 every
+   *  rune cut a stripe clean out of the crowd's contact patches. */
+  y: 0.026,
   /**
    * What a body is worth on the ground, in metres of half-width at full scale
    * (D38, wired in Phase E).

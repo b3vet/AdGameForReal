@@ -22,7 +22,8 @@
 import { shuffle } from './gateGen';
 import { mulberry32 } from './rng';
 import type { RowDef } from './rows';
-import { balance } from '@/data';
+import { balance as shipped } from '@/data';
+import type { Balance } from '@/data/types';
 
 /** The two boundaries of the middle lane. */
 export type WallBoundary = -1 | 1;
@@ -37,7 +38,7 @@ export interface WallDef {
 const WALL_STREAM_SALT = 0x7a_11_5e_ed;
 
 /** Where the fence itself stands: the boundary between two lanes. */
-export function wallX(boundary: WallBoundary, laneWidth = balance.road.laneWidth): number {
+export function wallX(boundary: WallBoundary, laneWidth = shipped.road.laneWidth): number {
   return (boundary * laneWidth) / 2;
 }
 
@@ -56,8 +57,8 @@ export function wallX(boundary: WallBoundary, laneWidth = balance.road.laneWidth
 export function wallHolds(
   wall: WallDef,
   z: number,
-  approach = balance.walls.approach,
-  release = balance.walls.gateGap,
+  approach = shipped.walls.approach,
+  release = shipped.walls.gateGap,
 ): boolean {
   return z >= wall.zStart - approach && z <= wall.zEnd + release;
 }
@@ -83,6 +84,12 @@ export interface WallLimits {
  * metres wide, and holding only its centre off the fence is what let a crowd
  * stand through one all through Milestone 4. Callers that reason about lanes
  * rather than about bodies — the bots — leave it at the margin.
+ *
+ * The whole wall geometry — the lane the fence stands on, the approach zone and
+ * the release past its end — comes out of the balance passed in rather than out
+ * of the shipped one, so a `Run` built on a modified tuning is clamped by its
+ * own fences. It was the shipped numbers until Milestone 5 Phase F, which made
+ * `availableWidth(state, custom)` hand that run the shipped approach zone.
  */
 export function wallLimits(
   walls: readonly WallDef[],
@@ -90,7 +97,7 @@ export function wallLimits(
   x: number,
   limit: number,
   out: WallLimits,
-  laneWidth = balance.road.laneWidth,
+  balance: Balance = shipped,
   keep = balance.walls.margin,
 ): WallLimits {
   out.lo = -limit;
@@ -103,7 +110,7 @@ export function wallLimits(
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
     if (wall === undefined || !wallHolds(wall, z, approach, release)) continue;
-    const line = wallX(wall.boundary, laneWidth);
+    const line = wallX(wall.boundary, balance.road.laneWidth);
     if (x < line) {
       if (line - keep < out.hi) {
         out.hi = line - keep;
@@ -135,6 +142,7 @@ export function wallAhead(
   walls: readonly WallDef[],
   fromZ: number,
   toZ: number,
+  balance: Balance = shipped,
 ): WallDef | null {
   const approach = balance.walls.approach;
   let best: WallDef | null = null;
@@ -191,7 +199,7 @@ export function generateWalls(
   arenaZ: number,
   wallRows: number,
 ): WallDef[] {
-  const tuning = balance.walls;
+  const tuning = shipped.walls;
   const wanted = Math.max(0, Math.round(wallRows));
   if (index < tuning.fromLevel || wanted <= 0) return [];
 

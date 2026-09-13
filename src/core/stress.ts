@@ -24,7 +24,7 @@ import type { Renderer } from '@/render/Renderer';
 import { crowdScale } from '@/render/squad';
 import { GRUNT_SCALE, MAGE_SCALE } from '@/render/theme';
 import { balance } from '@/data';
-import { formationOffsets, mulberry32 } from '@/sim';
+import { formationOffsets, mulberry32, openRoadWidth } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
 
 import { StressBodies } from './stressBodies';
@@ -123,7 +123,11 @@ const STREAM_LANES = [-1, 0] as const;
  */
 const DEFAULT_KILL_EVERY = 0.05;
 
-/** Where the crowd stands: the camera's default pose looks straight at it. */
+/**
+ * Where the crowd's *front rank* stands; the formation runs backward from it
+ * (D37), so 500 units reach `CROWD_Z - 7.2`. The camera is posed for that depth
+ * every frame (`Renderer.poseCamera`).
+ */
 const CROWD_Z = 2;
 const ENEMY_Z = 14;
 const ARENA_Z = 40;
@@ -236,7 +240,7 @@ export async function runStressScene(
   // remove. Measured with it: one 14.6 s frame in seven became none.
   await renderer.warmUp();
 
-  const state = fakeState();
+  const state = fakeState(mageCount);
   const events: SimEvent[] = [];
   let enemyId = 1000;
   // Primed, so the first frame already throws a body: a software rasteriser
@@ -300,6 +304,11 @@ export async function runStressScene(
     skeletons.commit();
     physics.onEvents(events, state);
     physics.update(dt);
+
+    // The game's own rig, not the camera's default pose: without the
+    // depth-driven pull-back (D37) this crowd's back rows stand under the
+    // bottom edge, and the frame measured here is not one the game draws.
+    renderer.poseCamera(state.squad, dt);
 
     const start = now();
     scene.render();
@@ -374,28 +383,32 @@ function fakeLevel(): LevelDef {
  * Just enough state for `PhysicsLayer.onEvents`, which reads the squad position
  * to know which way to throw a corpse. Nothing here ever ticks.
  */
-function fakeState(): RunState {
+function fakeState(mages: number): RunState {
   return {
     levelIndex: 1,
     seed: 1,
     time: 0,
     status: 'running',
     squad: {
-      count: DEFAULT_MAGES,
+      count: mages,
       x: 0,
       targetX: 0,
       z: CROWD_Z,
       fireRate: balance.squad.fireRate,
       damage: balance.squad.damage,
       fireRateBonus: 0,
+      vx: 0,
+      // The open road: this scene has no walls, and it is what the camera's
+      // pull-back measures the crowd's depth against.
+      formationWidth: openRoadWidth(),
     },
     gates: [],
     enemies: [],
     streams: [],
     projectiles: [],
     boss: null,
-    peakCount: DEFAULT_MAGES,
-    survivors: DEFAULT_MAGES,
+    peakCount: mages,
+    survivors: mages,
     arenaZ: ARENA_Z,
   };
 }

@@ -41,8 +41,21 @@ export const CAMERA = {
   behind: 11,
   lookAhead: 8,
   lookHeight: 1,
-  /** The camera tracks the squad's x only partly, so the road stays framed. */
-  lateralFollow: 0.35,
+  /**
+   * The camera tracks the squad's x only partly, so the road stays framed: a
+   * shot that followed the thumb exactly would slide the road out from under
+   * it, and one that never moved would leave the crowd against the edge.
+   *
+   * 0.45, up from Milestone 3's 0.35, because the line-filling crowd (D37) is
+   * what the edge of the frame now meets. At 500 units the crowd reaches 2.1 m
+   * either side of the squad and the clamp stands it at 1.2 m, so its outer
+   * column sits at 3.3 m; the frame's half width at the *back* rank — the
+   * lowest thing on screen — is 2.85 m at 390x844, and 0.35 put the eye at
+   * 0.42 m, which left that column exactly on the edge (measured: 1 px of
+   * margin to the unit's centre, so its body was cut). 0.45 moves the eye to
+   * 0.54 m and buys 0.12 m there, a whole mage clear of the edge.
+   */
+  lateralFollow: 0.45,
   /**
    * The far plane. It has to hold the sky dome (420 m, `./sky.ts`), which in
    * turn has to sit outside the fog's 260 m end — clip the dome and the top of

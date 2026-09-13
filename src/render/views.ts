@@ -91,8 +91,6 @@ export class SceneViews {
     // and the dome is painted before the road that stands in front of it.
     this.sky = new SkyDome(scene);
     this.road = new RoadView(scene);
-    // After the road, because that is what still owns Milestone 3's dome.
-    this.sky.retireLegacyDome(scene);
     this.shadows = new ShadowLayer(scene, {
       capacity: SHADOW_CAPACITY,
       staticCapacity: PROP_SHADOW_CAPACITY,

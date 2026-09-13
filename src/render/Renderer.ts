@@ -27,7 +27,7 @@ import { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
 import { weaponOf } from '@/sim';
-import type { LevelDef, PlayerState, RunState, SimEvent } from '@/sim';
+import type { LevelDef, PlayerState, RunState, SimEvent, SquadState } from '@/sim';
 
 export interface RendererOptions {
   /**
@@ -271,6 +271,19 @@ export class Renderer {
   /** Kicks the camera; see `CameraRig.shake`. */
   shake(strength: number, seconds: number): void {
     this.rig?.shake(strength, seconds);
+  }
+
+  /**
+   * Poses the camera at the play rig's pose for this squad, and nothing else,
+   * for a caller that draws into the scene and renders it itself: the stress
+   * scene (`src/core/stress.ts`). Without it that scene keeps the rig's
+   * *constructor* pose — the framing a one-unit squad gets — and its 500-unit
+   * crowd stands with its back rows under the bottom edge, so the frame the
+   * performance tripwire measures is not one the game ever draws (D37).
+   */
+  poseCamera(squad: SquadState, dt: number): void {
+    if (this.disposed) return;
+    this.rig?.update(squad, dt);
   }
 
   /**

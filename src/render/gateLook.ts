@@ -5,12 +5,13 @@
  * and is not this track's file — so the arch's geometry lives next to the code
  * that builds it (`./gateArch.ts`) and the view that places it (`./gates.ts`).
  *
- * Everything is measured off the lane. A lane is 2 m wide and an arch is 1.76 m
- * of it: the opening is what the squad walks through and the legs stand either
- * side of it, with a hand's breadth of road left between one arch and its
- * neighbour. That gap is the whole reason for the number — three arches that
- * spanned their lanes exactly met at the legs and read as one barrier across
- * the road rather than as three doors to choose between.
+ * Everything is measured off the lane. A lane is 2 m wide and an arch is 1.88 m
+ * of it (`ARCH_CLEAR_WIDTH` plus a leg each side): the opening is what the squad
+ * walks through and the legs stand either side of it, with a hand's breadth of
+ * road left between one arch and its neighbour. That gap is the whole reason for
+ * the number — three arches that spanned their lanes exactly met at the legs and
+ * read as one barrier across the road rather than as three doors to choose
+ * between.
  */
 
 import { balance } from '@/data';

@@ -122,16 +122,6 @@ export class MotesView {
     this.quads.end();
   }
 
-  /**
-   * Wraps every mote back around a camera that has just jumped — a level load,
-   * or the Academy backdrop coming up — so the field is already around the new
-   * position on the first frame rather than streaming in over a second.
-   */
-  recentre(cameraZ: number): void {
-    const random = mulberry32(MOTE_SEED ^ Math.floor(cameraZ));
-    for (const mote of this.motes) mote.z = cameraZ + (random() * 2 - 1) * MOTE_SPAN_Z;
-  }
-
   /** Motes drawn last frame, for the debug panel. */
   get drawn(): number {
     return this.quads.count;

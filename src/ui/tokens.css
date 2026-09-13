@@ -116,3 +116,32 @@
   color-scheme: light;
   font-family: var(--font-body);
 }
+
+/*
+ * iOS 15 and 16.0-16.1 have no `color-mix` (Safari shipped it in 16.2), and
+ * docs/DEVICE.md still says "iOS 15 or newer". A custom property whose value the
+ * browser cannot parse is not simply ignored: it is invalid *at computed-value
+ * time* wherever it is used, so `background: var(--chip-strong)` becomes
+ * transparent and `-webkit-text-stroke: ... var(--outline)` loses its stroke —
+ * the HUD plaque with no plate behind it and numbers with no outline over the
+ * road. Opaque stand-ins from the same palette cost those surfaces their
+ * translucency on an old phone and nothing else.
+ *
+ * The tokens only. A handful of stylesheets mix a colour inline — panel
+ * gradients in `./academy.css`, `./result.css`, `./rooms.css` and
+ * `./screens.css`, and the shadows everywhere — and those declarations are
+ * dropped one by one rather than poisoning anything, so the worst of them is a
+ * panel that falls back to whatever `background` it already had.
+ */
+@supports not (color: color-mix(in srgb, currentcolor 50%, transparent)) {
+  :root {
+    --ink-dim: var(--c-ink-muted);
+    --ink-bright-dim: var(--c-parchment-shade);
+    --outline: var(--c-ink-base);
+    --panel: var(--c-parchment-base);
+    --chip: var(--c-ink-soft);
+    --chip-strong: var(--c-ink-base);
+    --sunk: var(--c-stone-deep);
+    --grain: none;
+  }
+}

@@ -168,6 +168,8 @@ export async function driveStress(page, url, failures, outDir) {
     );
   }
 
-  await assertNotBlank(file, 'stress.png');
+  // The line it answers is the readout; nothing else prints it now that a run's
+  // own lines are buffered (`./smoke-run.mjs`).
+  console.log(await assertNotBlank(file, 'stress.png'));
   return line;
 }

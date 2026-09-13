@@ -74,7 +74,7 @@ export class DevExtras {
       squad.x,
       balance.road.clampX,
       this.limits,
-      balance.road.laneWidth,
+      balance,
     );
     const wanted = squad.x;
     squad.x = clampToWalls(wanted, limits);

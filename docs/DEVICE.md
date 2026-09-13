@@ -19,7 +19,7 @@ two commands.
 | Command line tools | `xcode-select --install` in Terminal. If Xcode was installed first, this is usually already done. |
 | Node 22 | Same as the repo uses (`node -v` should say v22.x). |
 | An Apple ID | The free one you already have is enough to run the game on your own phone. A paid Apple Developer account ($99/year) is only needed for TestFlight — see the end. |
-| An iPhone | iOS 15 or newer, plus its cable. |
+| An iPhone | iOS 16.2 or newer for the full look (the UI kit mixes its colours with `color-mix`, which Safari added in 16.2; on iOS 15 to 16.1 the game plays with plain fallback colours), plus its cable. |
 
 **You do not need CocoaPods.** Capacitor 8 creates the iOS project with Swift
 Package Manager by default, and Xcode resolves the packages itself the first

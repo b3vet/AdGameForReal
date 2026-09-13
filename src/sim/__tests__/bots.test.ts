@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
+import { clampLimit, halfWidth, openRoadWidth } from '../formation';
 import { laneCenter, laneOf } from '../lanes';
 import type { EnemyState, GateState, Lane, RunState, StreamState, WeaponId } from '../types';
 import { balance } from '@/data';
@@ -224,5 +225,30 @@ describe('bots', () => {
     done.squad.x = 1.1;
     expect(createBot('greedy', 1)(done)).toBe(1.1);
     expect(createBot('worst', 1)(done)).toBe(1.1);
+  });
+
+  it('steers by the balance its run was built on, not by the shipped one', () => {
+    // A bot asks the formation how wide its crowd is and how much road the
+    // clamp leaves it, and both are functions of a `Balance` (D37). Reading the
+    // shipped object while the run reads its own is the same hazard the
+    // formation cache has (`formation.test.ts`), one layer up: the bot asks for
+    // a lane centre its crowd is too wide to reach and sails past the row.
+    const tuned = structuredClone(balance);
+    tuned.formation.spacing.max = balance.formation.spacing.max * 2;
+    tuned.formation.spacing.min = balance.formation.spacing.min * 2;
+
+    const width = openRoadWidth();
+    expect(halfWidth(8, width, tuned)).toBeGreaterThan(halfWidth(8, width));
+
+    // Both want the `mul` in the right lane; the wider crowd is held further
+    // off the verge, so it asks for less of the road to get there.
+    const squad = state(ROW, [], 8);
+    const onShipped = createBot('greedy', 1)(squad);
+    const onTuned = createBot('greedy', 1, tuned)(squad);
+    expect(lane(onShipped)).toBe(1);
+    expect(lane(onTuned)).toBe(1);
+    expect(onShipped).toBeCloseTo(clampLimit(8, width), 9);
+    expect(onTuned).toBeCloseTo(clampLimit(8, width, tuned), 9);
+    expect(onTuned).toBeLessThan(onShipped);
   });
 });

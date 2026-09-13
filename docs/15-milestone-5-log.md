@@ -155,3 +155,60 @@
   the old camera rig, the widest crowd touches the frame edge at the
   bottom on 360-wide portrait, and the smoke sits close to its 7 min
   ceiling.
+
+## 2026-09-13 — Phase F: independent review and fixes (verified and committed)
+
+- Review of the whole milestone diff (113 files) by a fresh agent, then a
+  bounded fix batch for the calls the tech lead made on its findings.
+- Fixed by the reviewer: the formation cache was keyed by count and width
+  only, so a `Run` on a modified balance was handed the shipped crowd for any
+  count another caller had warmed (now a `WeakMap` per balance, test added);
+  `gateStaffs` allocated a target object every frame a weapon gate was on
+  screen (slots built once, rewritten in place); blob shadows sat 8 mm
+  *under* the lane runes and were depth-cut into four stripes (now 0.026 m);
+  the stress scene now poses the camera through the game's rig (500 units
+  framed 1.6 m clear instead of six ranks off the bottom; draw calls and the
+  12 ms tripwire unchanged); dead code (`retireLegacyDome`, `MotesView.
+  recentre`) and two stale comments removed; `gates.ts` 465 → 371 lines with
+  the slot pool in `gateSlots.ts` (165); `color-mix` tokens get an
+  `@supports` fallback for iOS 15 to 16.1 (D41).
+- Fixed by the fix batch: arch parapets shortened by half a leg each side so
+  neighbouring gates leave 0.44 m of daylight instead of 12 cm (a row read as
+  one lintel two rows out; box-arch stand-in matched); the label clearance
+  band is 1.25 × the plaque height so a stream count no longer rests on a
+  plaque's top rail; bots and `wallLimits`/`wallAhead` read the run's balance
+  instead of the shipped one (two tests); `lateralFollow` 0.35 → 0.45,
+  measured headless at 500 units pinned to a side: the outer column's centre
+  went from 1 px to 8 px inside the edge at 390×844 and 33 px to 38 px at
+  360×640.
+- Open item 5c (smoke time): phase breakdown printed at the end of every run
+  (runs 184 s, stress 40 s, hero 120 s); two scripted runs at a time drops the
+  run phase to about 105 s but two attempts failed at page boot under
+  SwiftShader load, so the default stays serial with `SMOKE_RUN_CONCURRENCY`
+  and `SMOKE_HERO_SCALES` as documented levers; the ready timeout is 90 s.
+- Correction to the Phase B entry: the balance diff also carried
+  `gen.hpPerEnemy.min` 1 → 0.2 (stream bodies may carry fractional HP so the
+  pressure budget divides evenly at small counts).
+- Not fixed, noted: `botScore.ts` and `generateWalls` still read the shipped
+  balance (valuation and level generation, not the clamp); `SHADOW.y` is
+  still under the arena band at 0.04; at the widest crowd pinned to one side
+  the outermost column still touches the edge on tall phones (the remaining
+  levers are `road.clampMin`, `formation.inset` or the field of view, all
+  whole-game framing calls); files still over ~400 lines all predate the
+  milestone (App 461, effects 449, Renderer 442, squad 439, debug 423,
+  spritePainters 418, stress 414, Run 412, labels 403, theme 400).
+- Verified: typecheck 0 errors, lint clean, 319 tests, smoke PASS in
+  5 min 45 s (draw peaks 40 / 40 / 41 / 42, 0 shader compiles during play,
+  stress 34 calls), UI clean at 360×640, 390×844 and 568×320 across six
+  screens. Tech lead frame review of the refreshed hero set: three separate
+  arches, readable plaques and stream counts, crowd framed at the boss.
+
+## Milestone 5 status
+
+| Definition of done | Status |
+|---|---|
+| 1. All checks; smoke with the hero set at pixel ratio 2 and 3 | Done: 319 tests, smoke PASS 5:45, 14 hero frames |
+| 2. Tech lead frame review: one palette, readable numbers, crafted road and gates, crowd in lines, long view, game UI | Done, Phases E and F |
+| 3. Product owner reads it as studio-designed; phone holds rung 0 at native with render median under 8 ms | Awaiting the product owner's read and a phone capture |
+| 4. Bands and golden tests pass with the new formation and spring | Done, Phase B |
+| 5. Docs, ASSETS.md rows, ledger entries | Done: D36 to D41, ASSETS.md rows for Dungeon pieces, textures and the UI kit |

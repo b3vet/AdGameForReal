@@ -19,7 +19,8 @@ import { mulberry32 } from './rng';
 import type { GateState, Lane, RunState } from './types';
 import { clampToWalls, wallAhead, wallLimits, wallX } from './walls';
 import type { WallDef, WallLimits } from './walls';
-import { balance } from '@/data';
+import { balance as shipped } from '@/data';
+import type { Balance } from '@/data/types';
 
 export type BotKind = 'greedy' | 'random' | 'worst';
 
@@ -37,16 +38,16 @@ const limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
  * would believe it could reach a lane centre its own crowd's width keeps it
  * from, and would sail past a gate row still asking for it.
  */
-function reachable(state: RunState): WallLimits {
+function reachable(state: RunState, balance: Balance): WallLimits {
   const squad = state.squad;
   return wallLimits(
     state.walls ?? [],
     squad.z,
     squad.x,
-    clampLimit(squad.count, squad.formationWidth),
+    clampLimit(squad.count, squad.formationWidth, balance),
     limits,
-    balance.road.laneWidth,
-    wallKeep(squad.count, squad.formationWidth),
+    balance,
+    wallKeep(squad.count, squad.formationWidth, balance),
   );
 }
 
@@ -59,7 +60,7 @@ function reachable(state: RunState): WallLimits {
  * decides which gate a squad takes is `laneOf`, so that is what this asks —
  * whether the range reaches any `x` the lane would claim.
  */
-function laneOpen(lane: Lane, range: WallLimits): boolean {
+function laneOpen(lane: Lane, range: WallLimits, balance: Balance): boolean {
   const edge = balance.road.laneWidth / 2;
   if (lane < 0) return range.lo <= -edge + 1e-9;
   if (lane > 0) return range.hi >= edge - 1e-9;
@@ -68,10 +69,10 @@ function laneOpen(lane: Lane, range: WallLimits): boolean {
 
 /** The same question for the whole road. An index loop, not `some`: a callback
  *  is a closure, and a bot is asked for a lane on every step (CLAUDE.md). */
-function anyLaneOpen(range: WallLimits): boolean {
+function anyLaneOpen(range: WallLimits, balance: Balance): boolean {
   for (let i = 0; i < LANES.length; i++) {
     const lane = LANES[i];
-    if (lane !== undefined && laneOpen(lane, range)) return true;
+    if (lane !== undefined && laneOpen(lane, range, balance)) return true;
   }
   return false;
 }
@@ -138,14 +139,20 @@ function gateAt(state: RunState, rowIndex: number, lane: Lane): GateState | null
   return null;
 }
 
-function pickLane(state: RunState, rowIndex: number, sign: number, range: WallLimits): Lane {
+function pickLane(
+  state: RunState,
+  rowIndex: number,
+  sign: number,
+  range: WallLimits,
+  balance: Balance,
+): Lane {
   let bestLane: Lane = 0;
   let bestScore = -Infinity;
   let bestDistance = Infinity;
-  const narrowed = anyLaneOpen(range);
+  const narrowed = anyLaneOpen(range, balance);
 
   for (const lane of LANES) {
-    if (narrowed && !laneOpen(lane, range)) continue;
+    if (narrowed && !laneOpen(lane, range, balance)) continue;
     const gate = gateAt(state, rowIndex, lane);
     const score = sign * laneScore(gate, state);
     const distance = Math.abs(laneCenter(lane, balance.road.laneWidth) - state.squad.x);
@@ -187,7 +194,7 @@ const stand = { x: 0, bodies: 0 };
  * `range` bounds the candidates, so the same routine answers both "where should
  * I stand" and "what would standing on that side of a fence be worth".
  */
-function bestStreamStand(state: RunState, range: WallLimits): boolean {
+function bestStreamStand(state: RunState, range: WallLimits, balance: Balance): boolean {
   if (state.streams.length === 0) return false;
   const squadZ = state.squad.z;
   const reach = balance.bots.streamLookahead;
@@ -209,7 +216,7 @@ function bestStreamStand(state: RunState, range: WallLimits): boolean {
   // How far off its centre the crowd can still put a shot into a body: its own
   // half-width plus what the body is worth to a shot.
   const cover =
-    halfWidth(state.squad.count, state.squad.formationWidth) +
+    halfWidth(state.squad.count, state.squad.formationWidth, balance) +
     balance.streams.footprint +
     balance.streams.aimAssist;
 
@@ -243,9 +250,9 @@ function bestStreamStand(state: RunState, range: WallLimits): boolean {
  * single soldier, and the squad is standing where it is precisely in order to
  * shoot the lane it came down. A block costs a share of its whole unit count.
  */
-function contactCost(state: RunState, x: number): number {
+function contactCost(state: RunState, x: number, balance: Balance): number {
   const squad = state.squad;
-  const squadHalf = halfWidth(squad.count, squad.formationWidth);
+  const squadHalf = halfWidth(squad.count, squad.formationWidth, balance);
   const minShare = balance.enemies.contactMinShare;
   let cost = 0;
   for (const enemy of state.enemies) {
@@ -261,8 +268,8 @@ function contactCost(state: RunState, x: number): number {
 /** True when a block already on its way will run into a squad standing where
  *  it stands now. Greedy would rather hold and shoot a block than swerve for
  *  it, and only swerves once the gate row is close. */
-function blockedByEnemy(state: RunState): boolean {
-  return contactCost(state, state.squad.x) > 0;
+function blockedByEnemy(state: RunState, balance: Balance): boolean {
+  return contactCost(state, state.squad.x, balance) > 0;
 }
 
 /** The half of the road on one side of a fence, so each can be scored. */
@@ -292,6 +299,7 @@ function chooseSide(
   sign: number,
   range: WallLimits,
   line: number,
+  balance: Balance,
 ): void {
   // The bare margin, not the crowd's own `wallKeep`: this asks which half of
   // the road the squad *wants*, and by the time it is inside the stretch its
@@ -313,15 +321,16 @@ function chooseSide(
     // the row the commitment is really about. Scoring only one of them loses a
     // multiplier on the other, whichever one it is (level 9 seed 2 lost a x3 on
     // the near row, level 11 seed 2 a x3 on the far one).
-    const lane = pickLane(state, row, sign, half);
+    const lane = pickLane(state, row, sign, half, balance);
     let ratio = laneRatio(gateAt(state, row, lane), state);
     if (guarded !== row && guarded >= 0) {
-      ratio *= laneRatio(gateAt(state, guarded, pickLane(state, guarded, sign, half)), state);
+      const far = pickLane(state, guarded, sign, half, balance);
+      ratio *= laneRatio(gateAt(state, guarded, far), state);
     }
     let score = sign * state.squad.count * ratio;
     // The worst bot is asked for the worst half, so the river it gives up is
     // added rather than subtracted for it: `sign` flips both terms together.
-    if (bestStreamStand(state, half)) score += sign * stand.bodies;
+    if (bestStreamStand(state, half, balance)) score += sign * stand.bodies;
     if (score > bestScore) {
       bestScore = score;
       best = side;
@@ -332,8 +341,21 @@ function chooseSide(
   else if (best > 0) range.lo = Math.max(range.lo, line + margin);
 }
 
-/** Returns a policy: given the current state, the `targetX` the bot wants. */
-export function createBot(kind: BotKind, seed: number): (state: RunState) => number {
+/**
+ * Returns a policy: given the current state, the `targetX` the bot wants.
+ *
+ * `balance` is the tuning the run it steers was built on, and every geometry
+ * question the policy asks — the crowd's own half-width, the clamp it leaves,
+ * how far off a fence the centre is held, where the lanes are — is asked
+ * against it. Before Milestone 5 Phase F the bot read the shipped object while
+ * its `Run` read its own, so a run on a modified balance was steered by a bot
+ * that believed in a different road.
+ */
+export function createBot(
+  kind: BotKind,
+  seed: number,
+  balance: Balance = shipped,
+): (state: RunState) => number {
   // Constructed here (not per call) so each bot's random stream is deterministic
   // across a whole run, which is what the balance tests rely on.
   const rng = mulberry32(seed);
@@ -355,7 +377,7 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
   return function decide(state: RunState): number {
     const row = nextGateRow(state);
     const distance = row >= 0 ? distanceToRow(state, row) : Infinity;
-    const range = reachable(state);
+    const range = reachable(state, balance);
 
     // A wall between here and the row settles which half of the road the squad
     // arrives on, so the *side* has to be chosen before the fence rather than at
@@ -365,7 +387,9 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
     // the bot still covers the river and still picks a lane, it just does both
     // on the half it has decided to arrive on.
     const wall =
-      row < 0 ? null : wallAhead(state.walls ?? [], state.squad.z, state.squad.z + distance);
+      row < 0
+        ? null
+        : wallAhead(state.walls ?? [], state.squad.z, state.squad.z + distance, balance);
     if (
       wall !== null &&
       wall.zStart - balance.walls.approach - state.squad.z <= balance.bots.wallCommitDistance
@@ -377,6 +401,7 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
         sign,
         range,
         wallX(wall.boundary, balance.road.laneWidth),
+        balance,
       );
     }
 
@@ -385,14 +410,17 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
     if (kind === 'greedy' && !committed) {
       // Between rows the squad's job is the river, not the next panel — but
       // only as far as the wall it is already inside allows.
-      if (bestStreamStand(state, range)) return stand.x;
+      if (bestStreamStand(state, range, balance)) return stand.x;
       // Nothing streaming: greedy would rather stand and shoot a block than
       // dodge it, and only swerves once the row is close.
-      if (blockedByEnemy(state)) return clampToWalls(state.squad.x, range);
+      if (blockedByEnemy(state, balance)) return clampToWalls(state.squad.x, range);
     }
 
     // No gates left: hold station and shoot whatever is in front.
     if (row < 0) return clampToWalls(state.squad.x, range);
-    return clampToWalls(laneCenter(pickLane(state, row, sign, range), balance.road.laneWidth), range);
+    return clampToWalls(
+      laneCenter(pickLane(state, row, sign, range, balance), balance.road.laneWidth),
+      range,
+    );
   };
 }

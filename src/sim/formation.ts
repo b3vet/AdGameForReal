@@ -74,9 +74,28 @@ const EMPTY: Formation = Object.freeze({
  * run only ever visits a handful of widths — the open road, one side of a
  * fence, the strip between two of them — so the cache stays small in practice;
  * the cap is there so a pathological caller cannot grow it without bound.
+ *
+ * Keyed by the `Balance` object first, because every function here takes one and
+ * a formation is a function of the tuning as much as of the count: spacing, row
+ * depth, padding and the bucket size all come out of `balance.formation`. A
+ * single flat cache would hand a `Run` built on a modified balance the crowd the
+ * shipped one produces — silently, and only for the counts some other caller had
+ * already asked about, which is the worst shape a determinism bug can take. A
+ * `WeakMap` because a balance is an ordinary object a test may make and drop:
+ * the entry goes with it, and a lookup is still one hash and no allocation.
  */
-const cache = new Map<number, Formation>();
+const caches = new WeakMap<Balance, Map<number, Formation>>();
 const CACHE_MAX = 4096;
+
+/** This balance's own cache, created on first use. */
+function cacheFor(balance: Balance): Map<number, Formation> {
+  let cache = caches.get(balance);
+  if (cache === undefined) {
+    cache = new Map<number, Formation>();
+    caches.set(balance, cache);
+  }
+  return cache;
+}
 
 /** Widths are bucketed into this many slots when they are folded into a key. */
 const WIDTH_SLOTS = 1024;
@@ -115,7 +134,7 @@ export function availableWidth(state: RunState, balance: Balance = shipped): num
   const road = balance.road;
   const squad = state.squad;
   const walls = state.walls ?? [];
-  const limits = wallLimits(walls, squad.z, squad.x, road.halfWidth, wallScratch, road.laneWidth);
+  const limits = wallLimits(walls, squad.z, squad.x, road.halfWidth, wallScratch, balance);
   return bandRoom(limits.hi - limits.lo, balance);
 }
 
@@ -205,6 +224,7 @@ function formationOf(count: number, width: number, balance: Balance): Formation 
     Math.max(0, Math.round(Math.max(0, width) / Math.max(1e-3, bucket))),
   );
   const key = n * WIDTH_SLOTS + slot;
+  const cache = cacheFor(balance);
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
 

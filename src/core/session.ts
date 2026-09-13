@@ -53,7 +53,9 @@ export class RunSession {
   constructor(levelIndex: number, options: QueryOptions, player: PlayerState) {
     this.level = buildLevel(levelIndex, options.seed, player);
     this.run = buildRun(this.level, balance, player);
-    this.bot = options.bot === null ? null : createBot(options.bot, this.level.seed);
+    // The same tuning object the run was built on: a bot steers by the crowd's
+    // own width and the clamp it leaves, and both come out of the balance.
+    this.bot = options.bot === null ? null : createBot(options.bot, this.level.seed, balance);
     this.bossId = bossIdOf(this.level);
   }
 
