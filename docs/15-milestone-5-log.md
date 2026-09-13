@@ -276,3 +276,12 @@
   under a packed column (`SHADOW.mage` was sized for 0.28 m spacing); the
   stress scene slows within a page session from 0.7 to 1.9 s a frame in
   both builds, which starves its later windows.
+
+## 2026-09-13 — Product owner read of Version 14; Milestone 6 draft
+
+- "Looks a bit better." Movement still not smooth or responsive, wizards do
+  not move as individuals or interact with each other or the walls; levels
+  too easy and money too easy; Capacitor and device testing held until
+  closer to final. Milestone 5's definition-of-done item 3 (the phone
+  capture) is therefore parked. Milestone 6 draft written as
+  `docs/17-milestone-6-plan-draft.md` with the diagnosis and six questions.

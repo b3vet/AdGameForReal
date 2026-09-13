@@ -31,5 +31,6 @@ Index:
 | `14-milestone-5-plan.md` | Milestone 5 plan, approved: studio-quality look and feel, palette, formation and movement, rendering quality, gates, road, game UI |
 | `15-milestone-5-log.md` | Milestone 5 process log (append-only) |
 | `16-lane-column-formation.md` | Correction after Milestone 5: the crowd fills one lane and grows backward as a column (supersedes the formation half of D37) |
+| `17-milestone-6-plan-draft.md` | Milestone 6 draft plan v1: crowd agents, responsive head, a game that can be lost, economy; awaiting answers |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |
