@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { genDials } from '../gateGen';
 import { generateLevel, laneCenter, laneOf, rowOffersGrowth, squadCurve, BOSS_Z_OFFSET } from '../level';
 import type { LevelDef, RowDef } from '../level';
 import type { GateDef, StreamDef } from '../types';
@@ -295,10 +296,17 @@ describe('generateLevel', () => {
     });
   });
 
-  it('keeps a curse under a third of the squad the row was built for', () => {
+  it('keeps a curse under its level\'s share of the squad the row was built for', () => {
+    // A third on an ordinary level, and `gen.milestone.curseShare` on one of
+    // the four the road is not meant to give up (D45). A row that deals two
+    // curses splits the ceiling between them (`rowGates`), so the row still
+    // costs what one curse costs.
     everyLevel((level, index, seed) => {
+      const dials = genDials(levelConfig(index));
       level.rows.forEach((row, i) => {
-        const ceiling = Math.max(2, Math.floor(squadCurve(levelConfig(index), i) * balance.gen.curseShare));
+        const curses = row.gates.filter((gate) => gate?.kind === 'sub').length;
+        const whole = Math.max(2, Math.floor(squadCurve(levelConfig(index), i) * dials.curseShare));
+        const ceiling = curses > 1 ? Math.max(2, Math.floor(whole / curses)) : whole;
         for (const gate of row.gates) {
           if (gate?.kind !== 'sub') continue;
           const where = `L${String(index)} s${String(seed)} row ${String(i)}`;
@@ -310,10 +318,20 @@ describe('generateLevel', () => {
   });
 
   it('keeps curses inside the level\'s own range once the squad is big enough', () => {
-    // Level 1 curses read 2 to 6, level 10's read 15 to 60, level 20's 25 to 100.
+    // Level 1 curses read 2 to 6 and level 20's 25 to 100; a milestone level
+    // (D45) carries a heavier range than its neighbours, which is one of the
+    // three things `levels.json` uses to make it one — level 10's read 20 to 75
+    // where level 9's read 13 to 54 and level 11's 16 to 64.
     expect(levelConfig(1).gateValues.sub).toEqual({ min: 2, max: 6 });
-    expect(levelConfig(10).gateValues.sub).toEqual({ min: 15, max: 60 });
+    expect(levelConfig(10).gateValues.sub).toEqual({ min: 20, max: 75 });
     expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 25, max: 100 });
+    for (const level of [5, 10]) {
+      const here = levelConfig(level).gateValues.sub;
+      const before = levelConfig(level - 1).gateValues.sub;
+      expect(`L${String(level)} curses over L${String(level - 1)}`).toBe(
+        here.max > before.max ? `L${String(level)} curses over L${String(level - 1)}` : 'softer',
+      );
+    }
     everyLevel((level, index) => {
       const range = levelConfig(index).gateValues.sub;
       for (const gate of gatesOf(level)) {

@@ -55,6 +55,7 @@ export class Obstacles {
     walls: readonly WallDef[],
     gates: readonly GateState[],
     enemies: readonly EnemyState[],
+    boss: EnemyState | null,
     balance: Balance,
     anchorZ: number,
   ): void {
@@ -85,7 +86,7 @@ export class Obstacles {
     // between the two in which somebody could walk through the line.
     this.gatherFences(walls, balance, zLo, Math.max(zHi, anchorZ));
     this.gatherArches(gates, balance, zLo, zHi);
-    this.gatherShovers(enemies, balance, xLo, xHi, zLo, zHi);
+    this.gatherShovers(enemies, boss, balance, xLo, xHi, zLo, zHi);
   }
 
   private gatherFences(
@@ -153,6 +154,7 @@ export class Obstacles {
 
   private gatherShovers(
     enemies: readonly EnemyState[],
+    boss: EnemyState | null,
     balance: Balance,
     xLo: number,
     xHi: number,
@@ -162,16 +164,21 @@ export class Obstacles {
     const body = balance.crowd.bodyRadius;
     const reach = balance.crowd.shove.reach;
     let count = 0;
-    for (let i = 0; i < enemies.length && count < MAX_SHOVERS; i++) {
-      const enemy = enemies[i];
-      if (enemy === undefined || !enemy.alive || !enemy.active) continue;
+    // The boss shoves like anything else it stands in. It is not in
+    // `state.enemies` — it is the one actor `Run` keeps beside them — so it is
+    // offered to the same loop rather than given a rule of its own: the arena
+    // fight then bows the front of the column exactly as a block on the road
+    // does, which is what Phase A left undone.
+    for (let i = -1; i < enemies.length && count < MAX_SHOVERS; i++) {
+      const enemy = i < 0 ? boss : enemies[i];
+      if (enemy === undefined || enemy === null || !enemy.alive || !enemy.active) continue;
       const halfX = enemyHalfWidth(enemy, balance) + body;
       // Deeper than it is wide. A body meets the crowd at
       // `enemies.contactDistance` — 1.2 m, an abstraction of "they met" rather
       // than a footprint — so a shove that only reached the body's own width
       // would never happen at all: the body would die on the step it first
       // came within reach. `reach` is what buys the bow its approach.
-      const halfZ = halfX + reach;
+      const halfZ = halfX + (enemy.kind === 'boss' ? balance.enemies.boss.shoveReach : reach);
       if (enemy.x + halfX < xLo || enemy.x - halfX > xHi) continue;
       if (enemy.z + halfZ < zLo || enemy.z - halfZ > zHi) continue;
       const at = count * SHOVE_STRIDE;

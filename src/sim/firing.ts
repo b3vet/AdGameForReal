@@ -15,7 +15,7 @@ import type { Burn } from './burn';
 import { killEnemy, unitsOf } from './contact';
 import type { CrowdSim } from './crowd';
 import type { EventBuffer } from './events';
-import { applyGateGrowth } from './gates';
+import { applyCurseCreep, applyGateGrowth } from './gates';
 import { laneCenter, laneOf } from './lanes';
 import { WeaponEffects } from './effects';
 import { evolutionOf, NO_MODS } from './player';
@@ -117,9 +117,25 @@ export class Firing {
     return squad.count * squad.fireRate * (1 + squad.fireRateBonus) * weapon.fireRateMul;
   }
 
-  /** Called once at the top of the step, before anything can hit a gate. */
-  beginStep(state: RunState): void {
+  /**
+   * Called once at the top of the step, before anything can hit a gate: the
+   * step's shot rate, which both growth rules are measured against, and the
+   * creep every curse in play puts on while nobody is shooting it (Phase C2).
+   *
+   * "In play" is the same window the squad can shoot into — a gate inside
+   * `projectiles.range` and not yet walked through — so a curse grows exactly
+   * while the player can do something about it.
+   */
+  beginStep(state: RunState, dt: number): void {
     this.shotRate = this.rateOf(state);
+
+    if (state.levelIndex < this.balance.gates.creep.fromLevel) return;
+    const from = state.squad.z;
+    const to = from + this.balance.projectiles.range;
+    for (const gate of state.gates) {
+      if (gate.passed || gate.kind !== 'sub' || gate.z < from || gate.z > to) continue;
+      applyCurseCreep(gate, dt, this.balance);
+    }
   }
 
   update(state: RunState, dt: number): void {

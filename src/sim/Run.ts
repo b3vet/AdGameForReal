@@ -297,7 +297,7 @@ export class Run {
     // into its lane and can be shot in the same step it appears in.
     this.streams.spawn(state, dt);
     this.targets.update(state, this.balance, dt);
-    this.firing.beginStep(state);
+    this.firing.beginStep(state, dt);
     this.firing.update(state, dt);
     if (state.status !== 'running') return;
     this.firing.fire(state, dt);

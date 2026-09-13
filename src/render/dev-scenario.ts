@@ -12,7 +12,7 @@
 
 import { DevCombat } from './dev-combat';
 import { DevExtras } from './dev-extras';
-import { buildDevLevel, emptyDevState } from './dev-fixture';
+import { buildDevLevel, emptyDevState, syncDevCrowd } from './dev-fixture';
 import { DevStreams } from './dev-streams';
 import { balance } from '@/data';
 import { BOSS_Z_OFFSET, gateCap, laneCenter, weaponDef, weaponIds } from '@/sim';
@@ -148,6 +148,10 @@ export class DevScenario {
 
     if (state.squad.count > state.peakCount) state.peakCount = state.squad.count;
     state.survivors = state.squad.count;
+    // Last, after everything that could have moved the squad or changed its
+    // count: render draws the agents, so the agents have to be where the
+    // fixture has just decided the squad is (`./dev-fixture.ts`).
+    syncDevCrowd(state, dt);
 
     // A wiped squad has nothing left to animate, and the fixture is meant to
     // loop forever: end the run the way the sim would and start again.

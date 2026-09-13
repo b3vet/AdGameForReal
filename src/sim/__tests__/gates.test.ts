@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyGateGrowth, clampCount, countAfterGate, gateCap, isShootable } from '../gates';
+import {
+  applyCurseCreep,
+  applyGateGrowth,
+  clampCount,
+  countAfterGate,
+  gateCap,
+  isShootable,
+} from '../gates';
 import type { GateState } from '../types';
 import { level, play, row, runOf, testBalance } from './fixtures';
 
@@ -221,5 +228,34 @@ describe('one gate per row', () => {
     expect(run.state.status).toBe('lost');
     expect(events.some((e) => e.type === 'unitsLost' && e.reason === 'gate')).toBe(true);
     expect(events.some((e) => e.type === 'runEnded' && e.status === 'lost')).toBe(true);
+  });
+});
+
+describe('curse creep', () => {
+  it('grows a curse the squad is not shooting, and shrinks one it is', () => {
+    // The other half of D19 (Phase C2). `beginStep` applies the creep to every
+    // curse in play before any of the step's shots land, so a lane the crowd is
+    // pointed at still counts down: `growthPerSecond.sub` is more than three
+    // times `creep.perSecond`.
+    const quiet: GateState = gate('sub', 20);
+    const shot: GateState = gate('sub', 20);
+    for (let i = 0; i < 60; i++) {
+      applyCurseCreep(quiet, 1 / 60, balance);
+      applyCurseCreep(shot, 1 / 60, balance);
+      // The whole squad's fire on this one gate, which is what "share = 1" is.
+      applyGateGrowth(shot, 600, 600, balance);
+    }
+    expect(quiet.value).toBeCloseTo(20 + balance.gates.creep.perSecond, 6);
+    expect(shot.value).toBeLessThan(20);
+    expect(balance.gates.growthPerSecond.sub).toBeGreaterThan(balance.gates.creep.perSecond * 2);
+  });
+
+  it('leaves every other kind of gate alone', () => {
+    // A bonus that grew on its own would pay a player for looking away.
+    for (const kind of ['add', 'fireRate', 'mul'] as const) {
+      const panel: GateState = gate(kind, 10);
+      applyCurseCreep(panel, 1, balance);
+      expect(`${kind} ${String(panel.value)}`).toBe(`${kind} 10`);
+    }
   });
 });

@@ -8,6 +8,8 @@ import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { playLevel } from './harness';
+import { playerHolding } from './fixtures';
+import { runCampaign } from '../campaign';
 import { squadCurve } from '../curve';
 import { generateLevel } from '../level';
 import { laneShareOf, streamPressure } from '../pressure';
@@ -93,5 +95,159 @@ describe.skipIf(!ON)('tuning readout', () => {
     lines.push('- losses -', ...(losses.length > 0 ? losses : ['(none)']));
     writeFileSync(process.env.TUNE_OUT ?? '/tmp/tune.txt', `${lines.join('\n')}\n`);
     expect(lines.length).toBeGreaterThan(0);
-  });
+  }, 900_000);
 });
+
+/**
+ * The human bot's own table (D45), which is what Phase C2 tunes against:
+ * first-attempt clear rate, what a clear walks away with, how long the boss
+ * takes, and what the fences cut off on the way.
+ *
+ * `TUNE_SEEDS` and `TUNE_LEVELS` narrow it while a dial is being turned; the
+ * numbers in the milestone log are the full ten seeds over all twenty levels.
+ */
+const HUMAN_SEEDS = Number(process.env.TUNE_SEEDS ?? '10');
+const HUMAN_LEVELS = Number(process.env.TUNE_LEVELS ?? String(levelCount));
+
+describe.skipIf(!ON)('human readout', () => {
+  it('prints the human campaign', () => {
+    const seeds = Array.from({ length: HUMAN_SEEDS }, (_, i) => i + 1);
+    const lines: string[] = [];
+    lines.push(
+      'L   win  surv  boss  peak  target arena @boss bl hp%  made  units rejoin  back  wipe arena',
+    );
+    for (let level = 1; level <= HUMAN_LEVELS; level++) {
+      lines.push(humanLine(level, seeds));
+    }
+    process.stdout.write(`${lines.join('\n')}\n`);
+    writeFileSync(process.env.TUNE_OUT ?? '/tmp/human.txt', `${lines.join('\n')}\n`);
+    expect(lines.length).toBeGreaterThan(0);
+  }, 900_000);
+});
+
+function humanLine(level: number, seeds: readonly number[]): string {
+  let wins = 0;
+  let share = 0;
+  let boss = 0;
+  let peak = 0;
+  let made = 0;
+  let units = 0;
+  let rejoined = 0;
+  let unitsBack = 0;
+  let wiped = 0;
+  let arena = 0;
+  let reached = 0;
+  let atBoss = 0;
+  let hpLeft = 0;
+  let bossLosses = 0;
+  for (const seed of seeds) {
+    const result = playLevel(level, seed, 'human');
+    peak += result.peakCount;
+    made += result.stragglers.groups;
+    units += result.stragglers.units;
+    rejoined += result.stragglers.rejoined;
+    unitsBack += result.stragglers.unitsRejoined;
+    wiped += result.stragglers.wiped;
+    arena += result.stragglers.atArena;
+    if (result.countAtBoss > 0) {
+      reached++;
+      atBoss += result.countAtBoss;
+    }
+    if (result.status === 'won') {
+      wins++;
+      share += result.survivors / Math.max(1, result.peakCount);
+      boss += result.bossSeconds;
+    } else if (result.countAtBoss > 0) {
+      bossLosses++;
+      hpLeft += result.bossHpLeft / Math.max(1, levelConfig(level).boss.hp);
+    }
+  }
+  const n = seeds.length;
+  return [
+    String(level).padStart(2),
+    `${String(wins)}/${String(n)}`.padStart(6),
+    (share / Math.max(1, wins)).toFixed(2).padStart(5),
+    (boss / Math.max(1, wins)).toFixed(1).padStart(5),
+    (peak / n).toFixed(0).padStart(5),
+    String(levelConfig(level).peakTarget).padStart(6),
+    (reached / n).toFixed(2).padStart(5),
+    (atBoss / Math.max(1, reached)).toFixed(0).padStart(6),
+    String(bossLosses).padStart(4),
+    ((hpLeft / Math.max(1, bossLosses)) * 100).toFixed(0).padStart(5),
+    (made / n).toFixed(2).padStart(6),
+    (units / n).toFixed(1).padStart(6),
+    (rejoined / n).toFixed(2).padStart(7),
+    (unitsBack / n).toFixed(1).padStart(7),
+    (wiped / n).toFixed(2).padStart(5),
+    (arena / n).toFixed(2).padStart(5),
+  ].join(' ');
+}
+
+/**
+ * The milestone levels (D45), measured the two ways the band is written: with
+ * nothing bought, and with the set the campaign says the human bot is holding
+ * when it first gets there (D46). The sets themselves are printed, because
+ * they move whenever the difficulty does and `balance.test.ts` pins them.
+ */
+describe.skipIf(!ON)('milestone readout', () => {
+  it('prints the milestone levels with and without the upgrades of the day', () => {
+    const seeds = Array.from({ length: HUMAN_SEEDS }, (_, i) => i + 1);
+    const campaign = runCampaign({ bot: 'human', seed: 1 });
+    const lines: string[] = [];
+    for (const level of MILESTONE_LEVELS) {
+      const held = campaign.levels.find((entry) => entry.level === level)?.held;
+      const player =
+        held === undefined
+          ? undefined
+          : playerHolding({
+              upgrades: held.upgrades,
+              staffs: held.staffs,
+              evolved: held.evolved,
+              wispTier: held.wispTier,
+              unlockedLevel: level,
+            });
+      let bare = 0;
+      let armed = 0;
+      let armedBoss = 0;
+      for (const seed of seeds) {
+        if (playLevel(level, seed, 'human').status === 'won') bare++;
+        const withKit = playLevel(level, seed, 'human', player);
+        if (withKit.status === 'won') {
+          armed++;
+          armedBoss += withKit.bossSeconds;
+        }
+      }
+      const n = seeds.length;
+      lines.push(
+        `L${String(level).padStart(2)} bare ${String(bare)}/${String(n)}` +
+          `  armed ${String(armed)}/${String(n)}` +
+          `  armed boss ${(armedBoss / Math.max(1, armed)).toFixed(1)}s` +
+          `  held ${held === undefined ? '-' : loadoutText(held)}`,
+      );
+    }
+    // Greedy with no upgrades on the milestone levels, for the report.
+    for (const level of MILESTONE_LEVELS) {
+      let wins = 0;
+      for (const seed of seeds) if (playLevel(level, seed, 'greedy').status === 'won') wins++;
+      lines.push(`L${String(level).padStart(2)} greedy bare ${String(wins)}/${String(seeds.length)}`);
+    }
+    process.stdout.write(`${lines.join('\n')}\n`);
+    expect(lines.length).toBeGreaterThan(0);
+  }, 900_000);
+});
+
+const MILESTONE_LEVELS = [7, 10, 15, 20];
+
+function loadoutText(held: {
+  upgrades: Record<string, number>;
+  staffs: readonly string[];
+  evolved: readonly string[];
+  wispTier: number;
+}): string {
+  const rungs = Object.entries(held.upgrades)
+    .map(([id, level]) => `${id}${String(level)}`)
+    .join(' ');
+  const extras = [...held.staffs, ...held.evolved.map((id) => `${id}+`)];
+  if (held.wispTier > 0) extras.push(`wisp${String(held.wispTier)}`);
+  return `${rungs}${extras.length > 0 ? ` | ${extras.join(' ')}` : ''}`;
+}

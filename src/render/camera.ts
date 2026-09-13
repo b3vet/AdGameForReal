@@ -162,7 +162,14 @@ export class CameraRig {
     }
     const back = cameraBack(this.depth);
     const lift = cameraLift(this.depth);
-    const lateral = squad.x * CAMERA.lateralFollow;
+    // The *finger*, not the crowd (D43). The head is on `targetX` 1:1 and the
+    // column chains behind it, so a shot that followed `squad.x` would be
+    // following the same spring the player is trying to read against: the road
+    // and the crowd would move together and neither would show a response.
+    // Following the target puts the road under the thumb on the frame the drag
+    // happens, and the head's 50 ms and the tail's half-second then read as
+    // exactly what they are — the crowd catching up with the player.
+    const lateral = squad.targetX * CAMERA.lateralFollow;
 
     // The backdrop stands further back and lower than the game does, so the
     // crowd sits above the Academy's cards rather than behind them (see

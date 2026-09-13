@@ -13,7 +13,7 @@
 
 import { addValueAt, squadCurve } from './curve';
 import { gateCap } from './gates';
-import { emptyLane, growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
+import { emptyLane, genDials, growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
 import type { RowBudget } from './gateGen';
 import { playerMods } from './player';
 import type { PlayerMods } from './player';
@@ -87,7 +87,7 @@ function budgetFor(config: LevelGenConfig, rowIndex: number): RowBudget {
     addValue: addValueAt(config, estimate),
     // Floored at two: the plan's own level-1 curses read 2 to 6, and a row
     // cannot hold two distinct curses if the ceiling is one.
-    curseCeiling: Math.max(2, Math.floor(estimate * balance.gen.curseShare)),
+    curseCeiling: Math.max(2, Math.floor(estimate * genDials(config).curseShare)),
   };
 }
 

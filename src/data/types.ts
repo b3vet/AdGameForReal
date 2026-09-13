@@ -28,13 +28,36 @@ export interface EnemyBalance {
 }
 
 export interface BossBalance extends EnemyBalance {
+  /**
+   * How fast the boss walks the squad down, and with it when the fight stops
+   * being a ranged trade (Milestone 6, the C2 follow-up).
+   *
+   * It starts `level.bossOffset` metres up the arena and stops at
+   * `enemies.contactDistance`, so the seconds to contact are
+   * `(bossOffset - contactDistance) / speed`: at 22 m, 1.2 m and 1.75 m/s that
+   * is 11.9 s, about half of the 24 second fight the campaign is sized for.
+   *
+   * It used to be 0.55, which is 37.8 s — longer than any fight that is going
+   * to be won — so `contactShare` below never fired at all and the whole of a
+   * run's attrition was stomps. That is what made the share of the crowd that
+   * walks away and the share of runs that are won the same number read two
+   * ways: both were `1 - e^{-kT}` for the one decay the fight had.
+   */
+  speed: number;
   stompInterval: number;
   stompRange: number;
   /** Floor on the units one stomp removes, whatever the squad size. */
   stompKills: number;
   /** Share of the squad one stomp removes, above that floor. */
   stompShare: number;
-  /** Share of the squad standing in contact that dies every second. */
+  /**
+   * Share of the squad standing in contact that dies every second.
+   *
+   * Live since the C2 follow-up (see `speed`). It is the unit sink the road did
+   * not have: a fight that runs past the boss's arrival costs the crowd whether
+   * or not it is eventually won, so what walks away can be pulled down without
+   * pulling the clear rate down with it.
+   */
   contactShare: number;
   /** Fraction of max HP at which the boss enrages. */
   enrageAt: number;
@@ -44,6 +67,16 @@ export interface BossBalance extends EnemyBalance {
   enrageSpeedMul: number;
   /** How fast the boss slides sideways to line itself up with the squad. */
   lateralSpeed: number;
+  /**
+   * How deep in front of itself the boss pushes the crowd (D43's shove, Phase
+   * C2). Its own `crowd.shove.reach` rather than the shared one because the
+   * boss never gets within a body's length of the column: it starts
+   * `level.bossOffset` away and closes at half a metre a second, so a fight it
+   * loses ends with it still ten metres out. This is the depth of the push
+   * field instead — the crowd starts to bow at about the range the boss can
+   * stomp from, and leans harder the closer the thing gets.
+   */
+  shoveReach: number;
 }
 
 export interface Balance {
@@ -340,6 +373,21 @@ export interface Balance {
       add: number;
       fireRate: number;
     };
+    /**
+     * The other half of D19's rule, for curses (Milestone 6, Phase C2): a `sub`
+     * gate the squad's fire is *not* on grows while the crowd walks up to it,
+     * at `perSecond` units a second scaled by the share of the squad's output
+     * that is landing somewhere else.
+     *
+     * It needs no ceiling of its own: a gate is only in play while it is within
+     * `projectiles.range` of the squad, which at the run speed is under seven
+     * seconds, so the most a curse can put on is `perSecond` times that.
+     * `fromLevel` keeps it off the levels D31 calls generous.
+     */
+    creep: {
+      perSecond: number;
+      fromLevel: number;
+    };
   };
   /**
    * Level generator tuning. The generator scales every number it writes by a
@@ -394,6 +442,12 @@ export interface Balance {
     mixedEnemyOffset: number;
     /** Longest run of rows with no gate at all before one is forced. */
     maxEnemyRun: number;
+    /**
+     * Rows at the end of a level that carry no gates: the gauntlet the squad
+     * walks to the arena with what it has (Phase C2). See `rowKinds.ts` for
+     * why `survivors / peak` cannot be tuned without it.
+     */
+    gauntletRows: number;
     /** Staff gates in generated levels. On since Phase C drew the staffs. */
     weaponGatesEnabled: boolean;
     /** First level that may carry one (the plan's "from level 2"). */
@@ -405,6 +459,26 @@ export interface Balance {
     weaponGateManyFromLevel: number;
     /** Lanes between the two streams of a horde row: 2 means opposite sides. */
     hordeLaneGap: number;
+    /**
+     * The screws a milestone level turns (D45), as one shared set of numbers
+     * rather than four hand-fitted levels: levels 5, 10, 15 and 20 carry
+     * `milestone: true` in `levels.json` and are otherwise built from the same
+     * recipe as their neighbours.
+     *
+     * Every entry but `blockScale` replaces the `gen` dial of the same name on
+     * such a level; `blockScale` has no ordinary twin and multiplies the size
+     * of every generated block, so 1 there is "unchanged".
+     */
+    milestone: {
+      /** A milestone curse may take this share of the expected squad. */
+      curseShare: number;
+      /** 1 fills all three lanes, so no row offers a free walk-through. */
+      thirdGateChance: number;
+      /** How often a milestone row carries two curses rather than one. */
+      doubleSubChance: number;
+      /** Multiplies generated block sizes. */
+      blockScale: number;
+    };
   };
   bots: {
     /** How far ahead a scripted player looks for a block about to reach it. */
@@ -531,6 +605,16 @@ export interface LevelGenConfig {
    * 0.95 from 6.
    */
   streamPressure: number;
+  /**
+   * A milestone level (D45): one of 5, 10, 15 and 20, which the road is not
+   * meant to give up without the upgrades the economy has paid for by then.
+   * The generator turns `balance.gen.milestone`'s screws on it; everything
+   * else about the level is the ordinary per-level tuning below.
+   *
+   * Optional because the render fixtures and the stress scene build a config
+   * by hand and an ordinary level is the default.
+   */
+  milestone?: boolean;
   /**
    * Bodies one stream sends per unit of the squad the row is built for. It is
    * the density dial — and it is also what a leak costs, since a leak takes one

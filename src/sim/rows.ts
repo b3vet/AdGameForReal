@@ -9,7 +9,7 @@
  * lives between gates and never on top of one.
  */
 
-import { emptyGates, rowGateKinds, rowGates, shuffle } from './gateGen';
+import { emptyGates, genDials, rowGateKinds, rowGates, shuffle } from './gateGen';
 import type { RowBudget, RowPermits } from './gateGen';
 import { countAfterGate, FIRE_RATE_GATE_WORTH } from './gates';
 import { sizeStream } from './pressure';
@@ -61,12 +61,22 @@ function gateWorth(def: GateDef, count: number): number {
  * The earliest levels fill all three (D31, "levels 1 to 3 are generous"): with
  * no curses to dodge there, an empty lane is the only way a row can hand a
  * player nothing, and it is exactly what a player who is not yet steering well
- * walks into. From `gen.fullGateRowsFromLevel` on, a row keeps a lane clear
- * most of the time and the third gate is the exception again.
+ * walks into.
+ *
+ * From `gen.fullGateRowsFromLevel` most rows fill all three too, which is
+ * Phase C2's change and the single biggest one in the retune. A two-lane row is
+ * a grower and a curse with a clear lane beside them, and a player who reads it
+ * late walks the clear lane and comes out of the row exactly as big as they
+ * went in — so a hand that misses three rows in ten misses a third of the
+ * level's growth, and the human bot peaked at 45 percent of the curve while
+ * greedy peaked at 100. A three-lane row is a grower, a curse and a *second*
+ * grower, so the same miss costs the difference between two panels instead of
+ * a whole row. Greedy is nearly unmoved by it: it was taking the best panel
+ * either way.
  */
 function gateSlots(rng: Rng, config: LevelGenConfig): number {
   if (config.index < balance.gen.fullGateRowsFromLevel) return 3;
-  return rng() < balance.gen.thirdGateChance ? 3 : 2;
+  return rng() < genDials(config).thirdGateChance ? 3 : 2;
 }
 
 /** Lanes that carry a gate this row, in ascending lane order. */
@@ -87,7 +97,7 @@ function blockUnits(
 ): number {
   const gen = balance.gen;
   const frac = randomRange(rng, gen.enemyFrac.min, gen.enemyFrac.max);
-  const gruntUnits = estimate * frac * config.hpScale * scale;
+  const gruntUnits = estimate * frac * config.hpScale * scale * genDials(config).blockScale;
   const kindScale = kind === 'brute' ? gen.bruteUnitFrac : 1;
   return Math.max(1, Math.round(gruntUnits * kindScale));
 }
@@ -134,7 +144,7 @@ export function gateRow(
 ): RowDef {
   const slots = gateSlots(rng, config);
   const lanes = pickLanes(rng, slots);
-  const kinds = rowGateKinds(rng, config.index, slots, permits);
+  const kinds = rowGateKinds(rng, config, slots, permits);
 
   const row: RowDef = {
     z,
@@ -159,7 +169,7 @@ export function mixedRow(
 ): RowDef {
   const slots = Math.min(gateSlots(rng, config), 3);
   const lanes = pickLanes(rng, slots);
-  const kinds = rowGateKinds(rng, config.index, slots, permits);
+  const kinds = rowGateKinds(rng, config, slots, permits);
   const gates = rowGates(rng, config, budget, lanes, kinds);
 
   let guardedLane: Lane = lanes[0] ?? 0;

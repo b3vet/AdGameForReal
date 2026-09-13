@@ -360,6 +360,7 @@ export class CrowdSim {
       this.walls,
       state.gates,
       state.enemies,
+      state.boss,
       this.balance,
       state.squad.z,
     );

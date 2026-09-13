@@ -107,20 +107,19 @@ export const IDLE_CLIP_SPEED = 1;
 /**
  * How the squad decides it is running rather than standing still.
  *
- * The renderer has no "advancing" flag from the sim, only the squad's z, and z
- * moves in the sim's own fixed 1/60 s steps behind an accumulator. A frame that
- * happens to fall between two steps sees *no* movement at all, and a frame on a
- * 120 Hz display sees none every other frame — so a per-frame delta made the
- * whole crowd cut from `run` to `idle` and back, with the idle sway snapping on
- * top of it. That was the "glitchy walking" of the Milestone 3 playtest
- * (Milestone 4, task P): measured at 8.3 ms frames, 120 frames in 240 were
- * drawn standing still.
+ * Milestone 4 (task P) answered this by differencing `squad.z` between frames,
+ * which on a 120 Hz display saw the squad standing still every other frame — a
+ * whole crowd cutting from `run` to `idle` and back, with the idle sway
+ * snapping on top of it, 120 frames in 240 drawn standing still. The smoothing
+ * below is what bridged that gap.
  *
- * So the view low-passes the speed it measures over `ADVANCE_SMOOTHING`
- * seconds — long enough to swallow a step the sim has not taken yet, short
- * enough that the squad stops looking like it is running about a fifth of a
- * second after it stops — and switches on hysteresis, so a squad hovering at
- * the threshold cannot flicker.
+ * D43 removes the gap instead of bridging it: the agents carry their own
+ * velocities, so the view reads the crowd's mean `vz` — a physical fact the
+ * sim already holds, which is the same number on a frame that took a step and
+ * on one that fell between two. What the smoothing still buys is the *stop*:
+ * the crowd should not cut out of `run` on the single step it touches the
+ * arena, and a squad hovering at the threshold should not flicker, which is
+ * what the hysteresis pair is for.
  */
 export const ADVANCE_SMOOTHING = 0.12;
 export const ADVANCE_START_SPEED = 0.5;
@@ -164,64 +163,74 @@ export const UNIT_CLIP_SPREAD = 1.15;
 export const GATE_HOP_WAVE_FLOOR = 4;
 
 /**
- * Per-unit following (D37, re-shaped for the column in D42).
+ * Reactions (D43). The sim writes a flag bit per unit per step and render turns
+ * each one into something the eye can read; `SquadView` reads the whole set
+ * once per unit per frame, so everything here has to be an arithmetic term on a
+ * transform rather than a state change.
  *
- * The sim places a unit exactly on its formation slot; drawing it there makes
- * five hundred mages one rigid sheet that slides sideways as a block. Each
- * drawn unit instead chases its slot through a first-order spring whose
- * stiffness falls with how far back in the crowd it stands: the front line is
- * nearly pinned, the ranks behind it arrive a beat later, and a turn ripples
- * backward through the crowd. A first-order lag rather than a damped
- * second-order one because a lag cannot overshoot, and a crowd whose back rows
- * bounce past their slots reads as a mistake rather than as weight.
+ * Milestone 5's per-unit follow lag is gone with the flock it belonged to: the
+ * units are agents now, they carry their own positions and velocities, and a
+ * lag on top of that would be a second, slower crowd drawn over the real one.
  *
- * Rates are in inverse seconds; a unit closes `1 - exp(-rate * dt)` of its gap
- * per frame, which is frame-rate independent.
- *
- * Two things changed with the column. The fall is measured in *metres of
- * depth*, not in rows: rows are 0.29 m apart at a handful of units and 0.175 m
- * apart at five hundred, so a row count is a different distance at every squad
- * size, while a metre of crowd is always a metre of crowd. And it is a
- * hyperbola toward the floor rather than a ramp onto it,
- *
- *   rate(d) = BACK + (FRONT - BACK) / (1 + d / UNIT_FOLLOW_DEPTH)
- *
- * because the ramp *arrived*: it reached the floor ten rows back, which on the
- * 33 ranks of a 4.4 m wide crowd left two thirds of it moving at one rate and
- * on a 77-rank column leaves sixty-seven — the front ten ranks turned and the
- * rest slid as a block, 1.75 m into 13.3. The hyperbola never quite reaches the floor, so rank 34 (the last one
- * the camera frames) and rank 77 still differ, and the turn keeps travelling
- * all the way down the column.
- *
- * Half the fall happens inside `UNIT_FOLLOW_DEPTH`, which is a lane's width of
- * crowd — the same distance the column is wide, and about nine of its ranks.
- * The floor stays at 8: what a unit may trail is bounded by `UNIT_SNAP_GAP`,
- * and at the squad's own lateral speed cap of 8 m/s a rate of 8 is exactly one
- * metre of trail. Below that the leash would start biting on ordinary drags,
- * and a drawn unit a metre and a half off its slot in a 1.6 m lane is a mage
- * standing through a fence.
+ * The stumble is what a shove looks like from outside. A `VatCrowd` instance
+ * carries a yaw, a height and a non-uniform y scale and nothing else — there is
+ * no pitch to lean back with — so a stumble is a crouch (the dip and the
+ * squash) with a twist away from whatever pushed, over a third of a second,
+ * which is about as long as a person takes to catch their footing. The clip
+ * phase is kicked at the same moment so the stride visibly breaks rather than
+ * marching on through the shove.
  */
-export const UNIT_FOLLOW_FRONT = 26;
-export const UNIT_FOLLOW_BACK = 8;
-/** Metres of crowd depth over which half the fall from front to back happens. */
-export const UNIT_FOLLOW_DEPTH = 1.6;
+export const STUMBLE_DURATION = 0.34;
+/** Metres the unit drops at the bottom of the crouch, and the squash with it. */
+export const STUMBLE_DIP = 0.075;
+export const STUMBLE_SQUASH = 0.16;
+/** Radians twisted away from the side the shove came from. */
+export const STUMBLE_YAW = 0.55;
+/** Seconds of clip the stride jumps by, so a shoved unit breaks step. */
+export const STUMBLE_CLIP_KICK = 0.37;
 
 /**
- * The leash. A unit further than this from its slot stops springing and is
- * simply placed: it is the only thing that keeps `?turbo` honest (the sim runs
- * up to sixty times faster while the render clock does not, so a single frame
- * moves every slot the better part of a lane and the crowd would trail metres
- * behind), and it doubles as the teleport guard for a level start or a camera
- * cut.
+ * The shoulder bump, for a unit the fence is holding (`CROWD_ON_FENCE`).
  *
- * Unchanged by D42, and the floor above is what keeps it unchanged. The two
- * worst honest trails are a unit at the back of the column during a full-speed
- * drag (8 m/s over rate 9.9 at the 77th rank: 0.81 m) and the same unit running
- * forward at the level's run speed (5 m/s: 0.51 m), both comfortably inside it;
- * the smallest dishonest one is a single turbo frame, which moves a slot metres
- * and snaps.
+ * Shorter and smaller than the stumble, and it points the other way: a unit
+ * against a fence turns its shoulder *into* the line and stands a little
+ * taller, because it is being pressed from behind rather than knocked over.
+ * It is re-armed every step the flag is still set, so a column leaning on a
+ * fence for two seconds holds the pose instead of flickering through it.
  */
-export const UNIT_SNAP_GAP = 1.2;
+export const BUMP_DURATION = 0.24;
+export const BUMP_YAW = 0.42;
+export const BUMP_SQUASH = 0.07;
+
+/**
+ * The dust a held unit kicks up at the line, drawn into the shared sprite batch
+ * (`./squadDust.ts`) so it costs no draw call.
+ *
+ * Capped twice: a ring of `DUST_POOL` puffs, and at most `DUST_PER_FRAME` new
+ * ones a frame. A column of five hundred jammed against a fence has a hundred
+ * units on the line at once and a puff each would be a fog bank; two a frame is
+ * a scuffle at the point of contact, which is what the eye is looking for.
+ */
+export const DUST_POOL = 14;
+export const DUST_PER_FRAME = 2;
+export const DUST_DURATION = 0.42;
+export const DUST_SIZE = 0.34;
+/** Metres above the road the puff sits, and how far it drifts up as it fades. */
+export const DUST_Y = 0.12;
+export const DUST_RISE = 0.18;
+
+/**
+ * Rejoining (D44): a straggler group has been released and is scurrying back to
+ * the column's tail.
+ *
+ * The sim already gives these units a raised speed cap (`crowd.rejoinSpeed`),
+ * so what render owes is the *look* of hurrying: the run clip runs faster than
+ * the column's, and the unit is drawn hunched — a little shorter and a little
+ * wider — which is the only forward lean a yaw-and-scale instance can carry.
+ */
+export const REJOIN_CLIP_SPEED = 1.45;
+export const REJOIN_CROUCH = 0.93;
+export const REJOIN_WIDEN = 1.04;
 
 /**
  * Lean. A unit turns a little into the direction it is sliding, which is the

@@ -178,6 +178,29 @@ function gateRowZs(rows: readonly RowDef[]): Array<{ index: number; z: number }>
   return out;
 }
 
+/** A lane a squad comes out of no smaller: a grower, a bonus, or no gate. */
+function laneKeeps(row: RowDef, lane: -1 | 0 | 1): boolean {
+  const gate = row.gates[lane + 1];
+  return gate === null || gate === undefined || gate.kind !== 'sub';
+}
+
+/**
+ * True when a fence on `boundary` leaves *both* halves of the road a lane of
+ * the guarded row worth taking.
+ *
+ * A fence divides the row into the one lane outside it and the two inside, and
+ * there is no crossing back once it holds (D32). A stretch that shuts the
+ * squad in with nothing but curses is not a choice, it is a toll — and with
+ * three-lane rows a `[sub, sub, add]` row walled on the `add`'s own boundary
+ * cost greedy eighteen of its twenty-three units on level 10 seed 3 with no
+ * lane to answer it. Candidates that fail on both boundaries are simply not
+ * walled.
+ */
+function bothHalvesPayable(row: RowDef, boundary: WallBoundary): boolean {
+  if (boundary < 0) return laneKeeps(row, -1) && (laneKeeps(row, 0) || laneKeeps(row, 1));
+  return laneKeeps(row, 1) && (laneKeeps(row, -1) || laneKeeps(row, 0));
+}
+
 /** True when a horde (two streams at once) stands inside `[from, to]`. */
 function hordeInside(rows: readonly RowDef[], from: number, to: number): boolean {
   for (const row of rows) {
@@ -233,12 +256,28 @@ export function generateWalls(
     const zStart = Math.max(zEnd - length, floor);
     if (zEnd - zStart < tuning.minLength) continue;
 
-    const boundary: WallBoundary = rng() < 0.5 ? -1 : 1;
+    const drawn: WallBoundary = rng() < 0.5 ? -1 : 1;
+    const guarded = rows[candidate.index];
+    if (guarded === undefined) continue;
+    // The drawn side first, the other one only if the row cannot take it.
+    const boundary = bothHalvesPayable(guarded, drawn)
+      ? drawn
+      : ((-drawn) as WallBoundary);
+    if (!bothHalvesPayable(guarded, boundary)) continue;
     walls.push({ boundary, zStart, zEnd });
     // A horde pours down two lanes at once; walling both boundaries over it
     // means the squad answers one lane and eats the other (D32, the plan's
     // "on horde rows both boundaries may be walled").
-    if (index >= tuning.bothFromLevel && hordeInside(rows, zStart, zEnd)) {
+    //
+    // Both fences leave the squad exactly one lane of the guarded row — the
+    // middle one — so the second fence goes up only if that lane is worth
+    // walking through. Otherwise the row is a toll with no choice in it, which
+    // is the same rule `bothHalvesPayable` makes for one fence.
+    if (
+      index >= tuning.bothFromLevel &&
+      hordeInside(rows, zStart, zEnd) &&
+      laneKeeps(guarded, 0)
+    ) {
       walls.push({ boundary: (-boundary) as WallBoundary, zStart, zEnd });
     }
   }

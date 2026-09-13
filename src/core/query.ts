@@ -6,7 +6,7 @@
  * writes a URL.
  *
  *   ?level=3        start on a level, ignoring the save's unlock state
- *   ?bot=greedy     hand steering to a scripted policy (greedy|random|worst)
+ *   ?bot=greedy     hand steering to a scripted policy (greedy|human|random|worst)
  *   ?seed=7         override the level's generator seed
  *   ?debug          show the debug panel
  *   ?turbo=8        run the sim this many times faster than the wall clock
@@ -84,7 +84,9 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
 
   const botParam = params.get('bot');
   const bot: BotKind | null =
-    botParam === 'greedy' || botParam === 'random' || botParam === 'worst' ? botParam : null;
+    botParam === 'greedy' || botParam === 'human' || botParam === 'random' || botParam === 'worst'
+      ? botParam
+      : null;
 
   const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
   const qualityParam = Number.parseInt(params.get('quality') ?? '', 10);

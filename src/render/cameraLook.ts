@@ -59,6 +59,16 @@ export const CAMERA = {
    * at 0.99 m, leaving that column's centre 4 px *outside* the frame. 0.55
    * moves the eye to 1.21 m and puts it 18 px inside — a mage's width clear.
    * Past that the shot starts to strafe with the thumb rather than pan with it.
+   *
+   * Re-measured for D43, where the crowd is five hundred agents rather than a
+   * formation and its outer edge is wherever the units actually stand. It is
+   * the same edge: the column is 77 ranks of at most seven, 1.5 m across, so
+   * the outermost unit is 0.75 m from the head and stands at 2.95 m with the
+   * head pinned at 2.2. The bottom corner of the frame is at 1.21 + 1.92 =
+   * 3.13 m, so the margin is 0.18 m — 18 px of the 390 — and the front rank's
+   * outermost mage sits 86 px inside the frame. Unchanged, because the number
+   * this follows changed (`squad.targetX` rather than `squad.x`) but not what
+   * it follows *to*: at rest the two are the same.
    */
   lateralFollow: 0.55,
   /**
@@ -83,8 +93,19 @@ export const CAMERA = {
    * settled, which is what makes a fast drag read as the shot following the
    * squad rather than as the world sliding sideways under it. Critically
    * damped, never under: an overshoot at this distance is a wobble.
+   *
+   * D43 raises it from 7 to 13 and changes what it is chasing: the finger
+   * (`squad.targetX`) rather than the head. Seven was tuned against a head that
+   * was itself an eased follow of the finger, and the two lags stacked — a
+   * lane change took the better part of a second to settle on screen, which is
+   * the "not responsive" of the Milestone 5 playtest as much as the crowd was.
+   * At 13 the pose is 95 percent of the way in 0.36 s, which is still slower
+   * than the head's own 50 ms into the lane: the road arrives with the thumb,
+   * the head arrives just after it, and the tail comes in behind that. Faster
+   * again and the shot strafes; slower and the crowd's response is hidden
+   * inside the camera's.
    */
-  lateralFrequency: 7,
+  lateralFrequency: 13,
   /**
    * The roll, in radians per metre per second of the camera's own lateral
    * speed, and the most it may ever reach.

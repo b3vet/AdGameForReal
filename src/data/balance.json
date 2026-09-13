@@ -71,14 +71,15 @@
     },
     "boss": {
       "hpPerUnit": 10,
-      "speed": 0.55,
+      "speed": 1.75,
       "footprint": 2.2,
       "lateralSpeed": 1.2,
+      "shoveReach": 16,
       "stompInterval": 2,
       "stompRange": 18,
       "stompKills": 3,
       "stompShare": 0.07,
-      "contactShare": 0.15,
+      "contactShare": 0.03,
       "enrageAt": 0.3,
       "enrageStompInterval": 1.2,
       "enrageSpeedMul": 1.3
@@ -123,14 +124,18 @@
     "capFloor": {
       "add": 4,
       "fireRate": 0.04
+    },
+    "creep": {
+      "perSecond": 0.6,
+      "fromLevel": 4
     }
   },
   "gen": {
     "mulChance": 0.12,
     "mulFromLevel": 2,
     "mulX3FromLevel": 6,
-    "fireRateChance": 0.16,
-    "thirdGateChance": 0.2,
+    "fireRateChance": 0.1,
+    "thirdGateChance": 0.9,
     "fullGateRowsFromLevel": 2,
     "addShotBonus": 0.6,
     "addValueShare": 1,
@@ -148,15 +153,22 @@
     "bruteUnitFrac": 0.35,
     "mixedBlockFrac": 0.7,
     "negativeFromLevel": 2,
-    "doubleSubChance": 0.3,
+    "doubleSubChance": 0.08,
     "mixedEnemyOffset": 6,
     "maxEnemyRun": 2,
+    "gauntletRows": 1,
     "weaponGatesEnabled": true,
     "weaponFromLevel": 2,
     "weaponGatesEarly": 1,
     "weaponGatesLate": 2,
     "weaponGateManyFromLevel": 4,
-    "hordeLaneGap": 1
+    "hordeLaneGap": 1,
+    "milestone": {
+      "curseShare": 0.42,
+      "thirdGateChance": 1,
+      "doubleSubChance": 0.2,
+      "blockScale": 1.1
+    }
   },
   "bots": {
     "threatLookahead": 6,
@@ -175,7 +187,7 @@
     }
   },
   "input": {
-    "sensitivity": 6
+    "sensitivity": 8
   },
   "ui": {
     "resultDelay": 0.8,

@@ -287,6 +287,28 @@ export class Renderer {
   }
 
   /**
+   * Draws the crowd and its blob shadows and nothing else, for a caller that
+   * renders the scene itself: the stress scene (`src/core/stress.ts`), whose
+   * whole job is to measure the frame the game draws at five hundred units.
+   *
+   * It opens and closes both shared buffers around the one view that writes
+   * into them here, exactly as `update` does, so the scene measures the real
+   * path — the interpolation, the flags, the five hundred instance writes and
+   * the five hundred contact patches — rather than a crowd written once at
+   * startup and left there.
+   */
+  drawSquad(state: RunState, dt: number): void {
+    if (this.disposed) return;
+    const views = this.views;
+    if (views === null) return;
+    views.shadows.begin();
+    views.sprites.begin();
+    views.squad.update(state, dt, views.shadows, views.sprites);
+    views.sprites.end();
+    views.shadows.commit();
+  }
+
+  /**
    * The physics layer's quality, mirrored here because it decides who draws a
    * death: at 1 and 2 `src/physics` spawns ragdolls and shards, so the renderer
    * only takes the block away; at 0 it plays the baked death animation itself.
@@ -335,11 +357,13 @@ export class Renderer {
     // the buffer and this rewinds to just past them (`./shadows.ts`).
     views.shadows.begin();
 
-    views.squad.update(state.squad, state.arenaZ, dt, views.shadows);
     // The sprite batch is opened before anything writes into it and closed
     // after everything has: projectiles, their trails, impacts and flashes all
-    // land in the same buffer and the same draw call.
+    // land in the same buffer and the same draw call. The squad is inside it
+    // rather than before it because the dust its units kick up at a fence goes
+    // into the same batch (`./squadDust.ts`).
     views.sprites.begin();
+    views.squad.update(state, dt, views.shadows, views.sprites);
     views.projectiles.update(state.projectiles, weaponOf(state.squad), dt);
     views.gates.update(state, dt);
     views.enemies.update(state, dt, views.shadows);

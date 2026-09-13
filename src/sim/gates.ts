@@ -68,6 +68,26 @@ function capOf(gate: GateState, balance: Balance): number {
 }
 
 /**
+ * The other half of D19, for curses (Phase C2): a `sub` gate the squad is not
+ * shooting grows while the crowd walks up to it.
+ *
+ * Flat per second rather than scaled by the share of fire that is *not* on it,
+ * because the counter-term is already there and is four times bigger: focused
+ * fire counts a curse down at `growthPerSecond.sub` in the same step, so a lane
+ * the crowd is pointed at still shrinks, and one it is not grows. What it
+ * punishes is the hand that reads the row late — the curse the player walks
+ * into is the one they never aimed at.
+ *
+ * It needs no ceiling: a curse is only in play while it is inside
+ * `projectiles.range`, which at the run speed is under seven seconds, so the
+ * most one can put on is `perSecond` times that.
+ */
+export function applyCurseCreep(gate: GateState, dt: number, balance: Balance): void {
+  if (gate.kind !== 'sub') return;
+  gate.value += balance.gates.creep.perSecond * dt;
+}
+
+/**
  * Shoot-to-grow (D19). `hits` shots have landed on this gate; `shotRate` is the
  * squad's *whole* output in shots per second at that moment.
  *

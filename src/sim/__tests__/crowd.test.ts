@@ -305,3 +305,52 @@ describe('the enemy shove', () => {
     expect(shoved).toBeGreaterThan(100);
   });
 });
+
+describe('the boss shove', () => {
+  it('bows the crowd once the boss is close enough to stomp it', () => {
+    // Phase A left this undone and Phase C2 wired it: the boss is not in
+    // `state.enemies`, so the obstacle gatherer is offered it separately.
+    // It pushes from `enemies.boss.shoveReach` rather than the shared reach
+    // because it never gets within a body's length of the column — it starts
+    // `level.bossOffset` out and closes at half a metre a second — so without a
+    // reach of its own the wiring is live and the crowd never feels a thing.
+    const run = new Run(generateLevel(1, levelConfig(1), 1), balance);
+    const bot = createBot('greedy', 1);
+    const crowd = crowdOf(run);
+    let bossSteps = 0;
+    let shovedSteps = 0;
+    for (let step = 0; step < 60 * 240 && run.state.status === 'running'; step++) {
+      run.setTargetX(bot(run.state));
+      run.tick(DT);
+      if (run.state.boss?.active !== true) continue;
+      bossSteps++;
+      let shoved = false;
+      forEachLive(crowd, (i) => {
+        if (((crowd.flags[i] ?? 0) & CROWD_SHOVED) !== 0) shoved = true;
+      });
+      if (shoved) shovedSteps++;
+    }
+    expect(bossSteps).toBeGreaterThan(600);
+    // Not from the first step of the fight: the boss has to walk in first.
+    expect(shovedSteps).toBeGreaterThan(bossSteps * 0.3);
+    expect(shovedSteps).toBeLessThan(bossSteps);
+  }, 60_000);
+
+  it('changes where the boss kills, never how many', () => {
+    // The same promise the body shove makes (D43): a stomp takes a share of the
+    // squad measured against the count, and the shove only moves the people it
+    // lands on.
+    const survivors = (reach: number): number => {
+      const tuning = testBalance();
+      tuning.enemies.boss.shoveReach = reach;
+      const run = new Run(generateLevel(1, levelConfig(1), 1), tuning);
+      const bot = createBot('greedy', 1, tuning);
+      for (let step = 0; step < 60 * 240 && run.state.status === 'running'; step++) {
+        run.setTargetX(bot(run.state));
+        run.tick(DT);
+      }
+      return run.state.survivors;
+    };
+    expect(survivors(balance.enemies.boss.shoveReach)).toBe(survivors(0));
+  }, 60_000);
+});

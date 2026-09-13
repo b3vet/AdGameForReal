@@ -33,45 +33,55 @@ const SAMPLE_EVERY = 30;
 /**
  * Levels 1 to 3, greedy, seeds 1 to 5.
  *
- * Re-captured for Milestone 6 Phase A — the crowd as agents (D43) — as Phase B
- * re-captured them for D37 and the lane column re-captured them for D42. Every
- * one of them moves, and none of the reasons is subtle:
+ * Re-captured for Milestone 6 Phase C2 — the difficulty retune (D45) — as Phase
+ * A re-captured them for the crowd as agents (D43), Milestone 5 Phase B for D37
+ * and the lane column for D42. Every one of them moves, and the reasons are the
+ * retune itself:
  *
- *   - a shot leaves the unit that fired it rather than the slot the formation
- *     says that unit should be standing in, so a crowd that is bowing, closing
- *     a gap or piling against a fence lands its fire somewhere slightly else;
- *   - the head is on the finger now (a 30 rad/s spring, no acceleration cap)
- *     instead of easing across the road under one, so the squad arrives at a
- *     lane in a sixth of a second rather than most of one;
- *   - a body, a block and a stomp take the people standing nearest to them
- *     rather than an anonymous slice of the count, and the survivors close the
- *     gap by walking into it.
+ *   - a gate row fills all three lanes nine times in ten instead of two in ten
+ *     (`rows.ts`), so almost every row the campaign deals is a different row,
+ *     and a `fireRate` or a second curse is a second grower more often;
+ *   - the last row before the arena is never a gate row (`rowKinds.ts`), which
+ *     re-orders the tail of every level;
+ *   - a curse the squad is not shooting grows while the crowd walks up to it
+ *     (`gates.ts`), so the number on a red panel when it is passed is not the
+ *     number it was generated with — from level 4, so not on these three, but
+ *     the same commit moves them;
+ *   - the boss shoves the crowd it is standing over (`crowdObstacles.ts`),
+ *     which moves where people are standing in the arena and therefore which of
+ *     them a stomp takes;
+ *   - levels 1 to 3 carry new boss hp and bite from the retune itself.
  *
- * What did *not* change is how many units a contact costs: that is still
- * measured against the group's leader and its formation half-width
- * (`contact.ts`), which is what keeps the campaign's pressure model meaning the
- * same thing. The bands in `balance.test.ts` are what says the run these
- * hashes describe is the same campaign re-measured.
+ * Re-captured once more for the C2 follow-up, for one reason on top of those:
+ * the boss walks the squad down now. `enemies.boss.speed` is 1.75 rather than
+ * 0.55, so it reaches `enemies.contactDistance` 11.9 seconds into the fight
+ * instead of 37.8 — past the end of any fight that was going to be won — and
+ * `contactShare`, which had never fired in the history of the game, is a live
+ * unit sink for the second half of every arena. Levels 1 to 3 also carry the
+ * follow-up's boss hp, bite and river density.
  *
- * Phase C2 re-captures them again once the human bot and the milestone levels
- * land; these are the sim's own answer with the shipped tuning as it stands.
+ * What did *not* change is the shape of the contract: the same runs, hashed the
+ * same way. The second half of the file — a player who has bought nothing being
+ * the identity, on every level — is what these goldens are really guarding, and
+ * the bands in `balance.test.ts` are what says the campaign they describe is the
+ * campaign that was measured.
  */
 const GOLDEN: Readonly<Record<string, string>> = {
-  '1:1': '2fcf4225',
-  '1:2': 'c19ce2be',
-  '1:3': '3f7ef421',
-  '1:4': '03dfdae4',
-  '1:5': '50e1f984',
-  '2:1': 'b24e0c86',
-  '2:2': 'b0f0040c',
-  '2:3': '6e23bc22',
-  '2:4': 'b5b6762a',
-  '2:5': '9de4ef99',
-  '3:1': '0e2d7f75',
-  '3:2': '07d0f237',
-  '3:3': 'ead2db98',
-  '3:4': '29ed87a2',
-  '3:5': 'cb8396b1',
+  '1:1': '1da6466a',
+  '1:2': '20d75661',
+  '1:3': 'd17d1e4b',
+  '1:4': '9a95ba94',
+  '1:5': 'c73ba3ee',
+  '2:1': '46b489a8',
+  '2:2': '910a937b',
+  '2:3': '68b71f2e',
+  '2:4': 'b6077425',
+  '2:5': 'b3c4f859',
+  '3:1': '1c7a47da',
+  '3:2': '729e0872',
+  '3:3': '9df96959',
+  '3:4': '7708fdc8',
+  '3:5': 'e76f1d7c',
 };
 
 /** FNV-1a, 32 bit. Any stable hash would do; this one is short enough to read. */
@@ -136,12 +146,18 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
 
 describe('no-upgrade regression', () => {
   it('replays the recorded run on the levels the design did not touch', () => {
+    // Every mismatch at once, in the shape `GOLDEN` is written in: a golden
+    // that moves is re-captured deliberately, and re-capturing it one failure
+    // at a time is fifteen runs of the suite.
+    const moved: string[] = [];
     for (let level = 1; level <= 3; level++) {
       for (const seed of SEEDS) {
         const key = `${String(level)}:${String(seed)}`;
-        expect(`${key} ${runHash(level, seed)}`).toBe(`${key} ${String(GOLDEN[key])}`);
+        const hash = runHash(level, seed);
+        if (hash !== GOLDEN[key]) moved.push(`  '${key}': '${hash}',`);
       }
     }
+    expect(moved.join('\n')).toBe('');
   }, 120_000);
 
   it('makes a player with nothing bought the identity, on every level', () => {

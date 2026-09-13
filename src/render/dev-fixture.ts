@@ -6,7 +6,7 @@
  */
 
 import { balance, levelConfig } from '@/data';
-import { generateLevel } from '@/sim';
+import { CROWD_JUST_SPAWNED, createCrowdState, formationOffsets, generateLevel, openRoadWidth } from '@/sim';
 import type {
   EnemyState,
   GateState,
@@ -133,5 +133,58 @@ export function emptyDevState(level: LevelDef): RunState {
     // are optional on `RunState`, and both are written by `DevExtras.reset`.
     familiar: null,
     walls: level.walls ?? [],
+    // The crowd render actually draws (D43). Empty here and filled by
+    // `syncDevCrowd` on every step, which is what the fixture is.
+    crowd: createCrowdState(balance.squad.maxCount),
+    groups: [{ id: 0, count: 0, leaderX: 0, z: 0, lane: null, rejoinAt: 0 }],
   };
+}
+
+/**
+ * Puts the fixture's agents where the sim would have put them.
+ *
+ * The fixture is not a second sim (see the file header): it sets `squad.count`
+ * outright and walks `squad.x` and `squad.z` on a script, so there is nothing
+ * for a crowd of agents to *seek*. What render needs from it is a `CrowdState`
+ * that is true — one live index per unit, front-first slots, a velocity that is
+ * the unit's real one — so that the view under review is the shipped one: one
+ * instance per index, the two-step interpolation, the pops, the leans and the
+ * corpses at the positions the units actually stood in.
+ *
+ * Called once per fixed step, so the velocities it writes are per-step
+ * differences exactly as the sim's are.
+ */
+export function syncDevCrowd(state: RunState, dt: number): void {
+  const crowd = state.crowd;
+  const group = state.groups?.[0];
+  if (crowd === undefined || group === undefined) return;
+
+  const squad = state.squad;
+  const want = Math.min(crowd.capacity, Math.max(0, Math.floor(squad.count)));
+  const offsets = formationOffsets(want, squad.formationWidth ?? openRoadWidth());
+  const perSecond = dt > 0 ? 1 / dt : 0;
+
+  for (let i = 0; i < crowd.capacity; i++) {
+    if (i >= want) {
+      crowd.alive[i] = 0;
+      crowd.flags[i] = 0;
+      continue;
+    }
+    const offset = offsets[i];
+    const x = squad.x + (offset?.x ?? 0);
+    const z = squad.z + (offset?.z ?? 0);
+    const fresh = (crowd.alive[i] ?? 0) === 0;
+    crowd.vx[i] = fresh ? 0 : (x - (crowd.x[i] ?? x)) * perSecond;
+    crowd.vz[i] = fresh ? 0 : (z - (crowd.z[i] ?? z)) * perSecond;
+    crowd.x[i] = x;
+    crowd.z[i] = z;
+    crowd.alive[i] = 1;
+    crowd.group[i] = 0;
+    crowd.slot[i] = i;
+    crowd.flags[i] = fresh ? CROWD_JUST_SPAWNED : 0;
+  }
+
+  group.count = want;
+  group.leaderX = squad.x;
+  group.z = squad.z;
 }

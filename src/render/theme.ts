@@ -146,12 +146,23 @@ export const SHADOW = {
    *
    * A KayKit character is about 0.4 m across the shoulders at the heights in
    * `./crowdLook.ts`, so the contact patch is half that and the blob is drawn
-   * `spread` wider again. The squad's own is a shade smaller than the
-   * skeletons': the crowd packs to 0.28 m between units at 500, and a blob per
-   * mage at the skeleton's size merges into one grey sheet under the whole
-   * formation rather than reading as five hundred bodies standing on a road.
+   * `spread` wider again. The squad's own is smaller than the skeletons', and
+   * under D42's column it is smaller again: a blob per mage at the skeleton's
+   * size merges into one grey ribbon under the whole crowd rather than reading
+   * as five hundred bodies standing on a road.
+   *
+   * Derived rather than chosen, from the one number that decides it — the gap
+   * the sim leaves between two units at five hundred, which is
+   * `formation.spacing.min`, 0.25 m. A blob is drawn `radius * spread * 2`
+   * across and the crowd's own mesh scale bottoms out at `CROWD_SCALE_MIN`, so
+   * the widest a mage's blob can ever be is `mage * 0.7 * 1.3 * 2` — 1.82 times
+   * this number. At 0.135 that is 0.246 m, a hair inside the gap, so the discs
+   * touch and never merge; the old 0.17 drew 0.310 m into a 0.25 m gap, which
+   * is the ribbon. At fifty units, where the crowd is loose, the blob is 0.32 m
+   * under a mage standing 0.37 m from its neighbour — still a contact patch,
+   * still separate.
    */
-  mage: 0.17,
+  mage: 0.135,
   grunt: 0.2,
   brute: 0.26,
 } as const;

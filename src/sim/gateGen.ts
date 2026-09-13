@@ -34,6 +34,35 @@ export interface RowPermits {
   mul: boolean;
 }
 
+/** The four dials a milestone level turns (D45), or the ordinary ones. */
+export interface GenDials {
+  curseShare: number;
+  thirdGateChance: number;
+  doubleSubChance: number;
+  blockScale: number;
+}
+
+/**
+ * The dials this level is built with. A milestone level (5, 10, 15, 20) reads
+ * `gen.milestone`; every other level reads `gen` itself, with no block scaling.
+ *
+ * One place rather than three `config.milestone === true` tests spread through
+ * the generator, and the reason the flag is on the level rather than a list of
+ * indices in code: which levels are milestones is tuning, not logic.
+ */
+export function genDials(config: LevelGenConfig): GenDials {
+  const gen = balance.gen;
+  if (config.milestone !== true) {
+    return {
+      curseShare: gen.curseShare,
+      thirdGateChance: gen.thirdGateChance,
+      doubleSubChance: gen.doubleSubChance,
+      blockScale: 1,
+    };
+  }
+  return { ...gen.milestone };
+}
+
 function clampToRange(value: number, range: ValueRange): number {
   return Math.min(Math.max(value, range.min), range.max);
 }
@@ -112,22 +141,23 @@ function makeGate(kind: GateKind, rng: Rng, config: LevelGenConfig, budget: RowB
  */
 export function rowGateKinds(
   rng: Rng,
-  index: number,
+  config: LevelGenConfig,
   slots: number,
   permits: RowPermits,
 ): GateKind[] {
   const gen = balance.gen;
+  const dials = genDials(config);
   const kinds: GateKind[] = [];
 
   // The level's own budget decides which rows may carry one (see `mulBudget`).
   if (permits.mul) kinds.push('mul');
 
-  const negativesAllowed = index >= gen.negativeFromLevel;
+  const negativesAllowed = config.index >= gen.negativeFromLevel;
   let subs = 0;
   if (negativesAllowed) {
     // Never fill the row with penalties: at least one lane must be worth taking.
     const maxSubs = slots - Math.max(1, kinds.length);
-    subs = Math.min(maxSubs, rng() < gen.doubleSubChance ? 2 : 1);
+    subs = Math.min(maxSubs, rng() < dials.doubleSubChance ? 2 : 1);
   }
   for (let i = 0; i < subs; i++) kinds.push('sub');
 
@@ -292,7 +322,16 @@ export function emptyGates(): [GateDef | null, GateDef | null, GateDef | null] {
   return [null, null, null];
 }
 
-/** Builds one row's gates, keeping the numbers on it distinct. */
+/**
+ * Builds one row's gates, keeping the numbers on it distinct.
+ *
+ * The row's curses *share* the ceiling rather than each taking it: two panels
+ * at 45 percent of the expected squad is a row that costs 90 percent of
+ * everything the player has if they read it late, which is a wipe with a number
+ * on it rather than a choice. Split, a double-curse row is two panels the
+ * player is equally unhappy to walk into and the row still costs what one curse
+ * costs — which is the shape the milestone levels lean on (D45).
+ */
 export function rowGates(
   rng: Rng,
   config: LevelGenConfig,
@@ -302,13 +341,18 @@ export function rowGates(
 ): [GateDef | null, GateDef | null, GateDef | null] {
   const gates = emptyGates();
   const taken = new Set<string>();
+  const curses = kinds.reduce((total, kind) => total + (kind === 'sub' ? 1 : 0), 0);
+  const shared: RowBudget =
+    curses > 1
+      ? { ...budget, curseCeiling: Math.max(2, Math.floor(budget.curseCeiling / curses)) }
+      : budget;
 
   for (let i = 0; i < lanes.length; i++) {
     const lane = lanes[i];
     const kind = kinds[i];
     if (lane === undefined || kind === undefined) continue;
-    const def = makeGate(kind, rng, config, budget);
-    makeDistinct(def, taken, config, budget);
+    const def = makeGate(kind, rng, config, shared);
+    makeDistinct(def, taken, config, shared);
     taken.add(gateKey(def));
     gates[lane + 1] = def;
   }

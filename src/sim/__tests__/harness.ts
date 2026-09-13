@@ -8,12 +8,29 @@ import type { BotKind } from '../bots';
 import { generateLevel } from '../level';
 import { Run } from '../Run';
 import { balance, levelConfig, levelCount } from '@/data';
+import type { PlayerState } from '@/data/types';
 
 /** One sim step; the bots are asked for a target every step, as the app does. */
 const DT = 1 / 60;
 
 /** A run longer than this is a stalemate and counts as a loss. */
 const MAX_SECONDS = 240;
+
+/** What a straggler group cost and what came back from it (D44). */
+export interface StragglerTally {
+  /** Groups the level's fences cut off during the run. */
+  groups: number;
+  /** Units in them the moment they were cut. */
+  units: number;
+  /** Groups that walked home when their fence released them. */
+  rejoined: number;
+  /** Units alive in those groups when they rejoined. */
+  unitsRejoined: number;
+  /** Groups whose last member died before the fence let them go. */
+  wiped: number;
+  /** Groups still fighting on their own when the column reached the arena. */
+  atArena: number;
+}
 
 export interface PlayResult {
   status: 'won' | 'lost';
@@ -34,17 +51,43 @@ export interface PlayResult {
   streamsSeen: number;
   /** Worst single stream's `leaked / count`. */
   worstLeakShare: number;
+  /** What the fences cut off on the way (D44). */
+  stragglers: StragglerTally;
 }
 
-export function playLevel(levelIndex: number, seed: number, kind: BotKind): PlayResult {
-  const level = generateLevel(levelIndex, levelConfig(levelIndex), seed);
-  const run = new Run(level, balance);
+/**
+ * `player` is optional and a player who has bought nothing is the identity
+ * (D35): the ordinary bands are measured without one, and the milestone levels
+ * are measured both ways — with nothing, and with the set the economy affords
+ * by then (D45).
+ */
+export function playLevel(
+  levelIndex: number,
+  seed: number,
+  kind: BotKind,
+  player?: PlayerState,
+): PlayResult {
+  const level = generateLevel(levelIndex, levelConfig(levelIndex), seed, player);
+  const run = new Run(level, balance, player);
   const bot = createBot(kind, seed * 7919 + levelIndex);
 
   let steps = 0;
   let bossStart = -1;
   let countAtBoss = 0;
   const maxSteps = Math.round(MAX_SECONDS / DT);
+  const stragglers: StragglerTally = {
+    groups: 0,
+    units: 0,
+    rejoined: 0,
+    unitsRejoined: 0,
+    wiped: 0,
+    atArena: 0,
+  };
+  // Per straggler group: the count it carried at the end of the previous step,
+  // so a cut (0 to n) and a release (n to 0) are read off the edges.
+  const held: number[] = [];
+  const reachedArena: boolean[] = [];
+
   while (run.state.status === 'running' && steps < maxSteps) {
     run.setTargetX(bot(run.state));
     run.tick(DT);
@@ -53,6 +96,7 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
       bossStart = steps;
       countAtBoss = run.state.squad.count;
     }
+    noteStragglers(run.state, stragglers, held, reachedArena);
   }
 
   const state = run.state;
@@ -81,7 +125,50 @@ export function playLevel(levelIndex: number, seed: number, kind: BotKind): Play
     leakShare: seen > 0 ? shareTotal / seen : 0,
     streamsSeen: seen,
     worstLeakShare: worst,
+    stragglers,
   };
+}
+
+/**
+ * Reads this step's straggler edges off the groups.
+ *
+ * A group that empties with its lane released (`lane === null`) walked home —
+ * `CrowdSim.rejoinToMain` clears the lane as it moves everybody across — and one
+ * that empties still confined to a lane died where it stood.
+ */
+function noteStragglers(
+  state: { arenaZ: number; groups?: ReadonlyArray<{ count: number; z: number; lane: number | null }> },
+  tally: StragglerTally,
+  held: number[],
+  reachedArena: boolean[],
+): void {
+  const groups = state.groups;
+  if (groups === undefined) return;
+  for (let g = 1; g < groups.length; g++) {
+    const group = groups[g];
+    if (group === undefined) continue;
+    const before = held[g] ?? 0;
+    if (before === 0 && group.count > 0) {
+      tally.groups++;
+      tally.units += group.count;
+      reachedArena[g] = false;
+    }
+    if (before > 0 && group.count === 0) {
+      if (group.lane === null) {
+        tally.rejoined++;
+        tally.unitsRejoined += before;
+      } else {
+        tally.wiped++;
+      }
+    }
+    if (group.count > 0 && group.lane !== null && group.z >= state.arenaZ - 1e-6) {
+      if (reachedArena[g] !== true) {
+        reachedArena[g] = true;
+        tally.atArena++;
+      }
+    }
+    held[g] = group.count;
+  }
 }
 
 export interface BotSummary {

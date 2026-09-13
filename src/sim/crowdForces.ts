@@ -80,11 +80,12 @@ export class CrowdScene {
     walls: readonly WallDef[],
     gates: readonly GateState[],
     enemies: readonly EnemyState[],
+    boss: EnemyState | null,
     balance: Balance,
     anchorZ: number,
   ): void {
     this.fenceWall = -1;
-    this.obstacles.gather(crowd, walls, gates, enemies, balance, anchorZ);
+    this.obstacles.gather(crowd, walls, gates, enemies, boss, balance, anchorZ);
   }
 
   /**

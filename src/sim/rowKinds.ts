@@ -79,7 +79,46 @@ export function dealRowKinds(rng: Rng, config: LevelGenConfig, rowCount: number)
   }
 
   separateHordes(tail);
+  gauntletLast(tail, Math.max(0, Math.round(balance.gen.gauntletRows)));
   return [GATE_ROW, ...tail];
+}
+
+/**
+ * The gauntlet: the last `count` rows before the arena carry no gates.
+ *
+ * A level's crowd peaks at its last gate row, so whatever the road costs before
+ * that is paid for by the gates that follow and never shows on the result
+ * screen. `survivors / peak` is therefore a measure of what happens *after* the
+ * peak — and with gate rows running to the arena, that is the boss fight and
+ * nothing else, which is why D45's survivor band and its clear band pulled
+ * against each other: measured on the human bot, a boss that takes half the
+ * crowd is a boss half the runs lose to, and the two numbers moved together
+ * whatever the boss's hp and bite were set to.
+ *
+ * A gauntlet gives the road its share of the answer. The squad stops growing,
+ * walks the last stretch through rivers and blocks, and the fight starts from
+ * whatever that leaves — which is the shape the plan asks for in words ("a
+ * squad that arrives at the result screen thinned") and could not reach in
+ * numbers.
+ *
+ * It is the last rule applied, and it overrides `maxEnemyRun` on purpose: that
+ * rule exists because a run of threat rows is a dead zone the curve behind the
+ * *next* row's numbers has already left behind, and at the end of a level there
+ * is no next row. Swapped rather than rewritten, like the rules above, and it
+ * draws no randomness, so a level stays a function of its seed.
+ */
+function gauntletLast(tail: number[], count: number): void {
+  for (let k = 0; k < count; k++) {
+    const last = tail.length - 1 - k;
+    if (last < 1 || (tail[last] ?? GATE_ROW) > MIXED_ROW) continue;
+    for (let j = last - 1; j >= 0; j--) {
+      const candidate = tail[j];
+      if (candidate === undefined || candidate <= MIXED_ROW) continue;
+      tail[j] = tail[last] ?? GATE_ROW;
+      tail[last] = candidate;
+      break;
+    }
+  }
 }
 
 /**

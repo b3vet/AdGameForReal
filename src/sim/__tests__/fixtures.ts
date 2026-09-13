@@ -104,3 +104,42 @@ export function withFamiliar(tier: FamiliarTier): PlayerState {
   player.familiar = { unlocked: tier > 0, tier };
   return player;
 }
+
+/**
+ * A whole shopping basket at once: what `campaign.ts` reports a player is
+ * holding when they first reach a level (D46), as a `PlayerState` a run can be
+ * played with.
+ *
+ * The milestone levels (D45) are measured twice — with nothing bought and with
+ * this — so the set has to be written down somewhere both `balance.test.ts` and
+ * the tuning readout can say it the same way.
+ */
+export function playerHolding(held: Held): PlayerState {
+  const player = emptyPlayer();
+  for (const [id, level] of Object.entries(held.upgrades ?? {})) {
+    player.upgrades[id as UpgradeId] = level;
+  }
+  for (const id of held.staffs ?? []) {
+    player.staffs[id] = { unlocked: true, tier: held.evolved?.includes(id) === true ? 2 : 1 };
+  }
+  for (const id of held.evolved ?? []) {
+    player.staffs[id] = { unlocked: true, tier: 2 };
+  }
+  const last = held.staffs?.[held.staffs.length - 1];
+  if (last !== undefined) player.selectedStaff = last;
+  if (held.wispTier !== undefined && held.wispTier > 0) {
+    player.familiar = { unlocked: true, tier: held.wispTier };
+  }
+  player.unlockedLevel = held.unlockedLevel ?? 1;
+  return player;
+}
+
+/** What the Academy has sold a player by some point in the campaign. */
+export interface Held {
+  upgrades?: Partial<Record<UpgradeId, number>>;
+  /** Staffs owned beyond the starting ember; the last is the one in hand. */
+  staffs?: WeaponId[];
+  evolved?: WeaponId[];
+  wispTier?: FamiliarTier;
+  unlockedLevel?: number;
+}

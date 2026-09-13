@@ -64,3 +64,61 @@
   `stress.ts` should use `createCrowdState`; the boss shove is two lines
   in the obstacle gatherer; `bots.test.ts` is 534 lines; `campaign.ts`
   mirrors the purchase rules in `src/core/player.ts`.
+
+## 2026-09-13 — Wave two: drawing the agents, balance on the human bot (verified and committed)
+
+- Phase B, render: one thin instance per crowd index drawn from the agent
+  arrays (a dead index writes a zero-scale matrix once); positions
+  interpolated between sim steps by an alpha derived from `state.time` and
+  the frame's `dt` (a 120 Hz probe: 23 of 23 frame gaps moved the head,
+  where the sim itself repeats every other frame); the follow-lag layer
+  (`squadFlock.ts`) deleted; reactions from the flags (stumble on a shove,
+  shoulder bump and a pooled dust puff on a fence, pop-in on spawn, a
+  scurry on rejoin); corpses carry the unit's last position and velocity;
+  gait from the crowd's mean forward velocity rather than a frame delta.
+  Camera's lateral target is the finger (`squad.targetX`) at frequency 13;
+  `input.sensitivity` 6 → 8 (a lane is a quarter of the screen width, 1:1
+  with no ease); `?bot=human` accepted; the stress scene and dev fixture
+  build a real `CrowdState` and draw through the shipped path (35 draws,
+  medians unchanged within noise); `SHADOW.mage` 0.17 → 0.135 so blobs no
+  longer merge into a ribbon at the 0.25 m spacing. Head within a tenth of
+  a lane of a jumped target in 150 ms on screen. New `squadAgents.ts`,
+  `squadReact.ts`, `squadGait.ts`, `squadDust.ts`.
+- Phase C2, balance: gate rows fill all three lanes nine times in ten
+  (`thirdGateChance` 0.2 → 0.9; a two-lane row had a free lane that let a
+  late thumb walk past a misread, which alone took the human bot from 32 to
+  55 percent), a row's curses share the ceiling, `sub` curses creep at
+  0.6 per second while in projectile range from level 4, the last row
+  before the arena is never a gate row, a fence never guards a row whose
+  reachable half is all curses (a level 10 toll row found and fixed),
+  `milestone: true` per level with a `gen.milestone` dial block read in one
+  place. The boss now shoves (its own 16 m reach; changes who a stomp
+  lands on, never how many), closes at 1.75 m/s so its contact grind is
+  live at half the fight (`contactShare` 0.15 → 0.03; it had never fired),
+  and its hp ladder is monotone with the milestone wall carried by `bite`.
+  Per-level hp, bite, density and horde rows fitted closed-loop on ten
+  seeds. `bots.test.ts` split into fixtures, greedy and human files; new
+  `levelRules.test.ts`; goldens re-captured with the reasons.
+- Measured, human bot, ten seeds: ordinary first-attempt clears 119 of
+  160 (74 percent), levels 1 to 3 at 30 of 30, survivors over clears 0.45
+  of peak (0.50 before the grind; the grind is the unit sink after the
+  last gate that separates "won" from "what walks away"), boss 19 to 34 s.
+  Greedy 100 of 100 on ordinary levels and 10 of 10 on every milestone.
+  Economy untouched and in band (1.87 runs per purchase early, 3.77 by
+  level 10). Stragglers: 0 to 0.7 groups per run, 85 percent rejoin, none
+  reach the arena (every fence releases before it).
+- Decision taken on the balance report: milestones are 7, 10, 15 and 20
+  (level 5 back to ordinary), because the set the economy affords by
+  level 5 is worth a few percent of output. Finding for the owner: the
+  Academy sells nothing that compounds before a `gateBonus` rung, so only
+  15 and 20 separate armed from bare (+0.2 each); 7 and 10 are the
+  hardest levels greedy still clears, at the same rate armed or bare.
+  Options: a cheap early compounding rung, or milestones at 15 and 20
+  only. The human boss band was widened to 19 to 35 s to pay for the
+  monotone ladder (levels 13 and 19 run 33 s).
+- Combined tree: typecheck 0 errors, lint clean, 378 tests, build OK.
+- Carried to Phase E: a squad-death ragdoll entry point in `src/physics`
+  (corpses carry velocity today; ragdolls still key on stream ids); the
+  smoke's injected coins; the result sheet's coin roll on a loss; the
+  stress tripwire margin on the machine that runs the smoke; `squad.ts`
+  439 and `stress.ts` 432 lines.

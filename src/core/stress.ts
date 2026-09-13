@@ -15,17 +15,26 @@
  * hundred walking bodies in the *same* crowd as the block skeletons, so they
  * cost instances and animation but not a draw call, dying twenty times a second
  * so the death range, the corpse recycle and the ragdoll rule are all in frame.
+ *
+ * D43 hands the mages back to the renderer. This scene used to build a mage
+ * crowd of its own and write its instances *once*, at startup, which measured a
+ * draw call and nothing else: the game's real per-frame cost — the two-step
+ * interpolation, the flags, five hundred instance writes and five hundred blob
+ * shadows — was not in the number at all. It fills a real `CrowdState` now and
+ * asks the renderer to draw it (`Renderer.drawSquad`) every frame. The crowd
+ * stands still and its clock advances one sim step a frame, which keeps the
+ * scene deterministic and the screenshot stable.
  */
 
 import { PhysicsLayer } from '@/physics';
 import type { PhysicsQuality } from '@/physics';
 import { VatCrowd, loadCharacterAsset } from '@/render/characters';
 import type { Renderer } from '@/render/Renderer';
-import { crowdScale } from '@/render/squad';
-import { GRUNT_SCALE, MAGE_SCALE, timeOffsetOf, yawOf } from '@/render/theme';
+import { SIM_STEP } from '@/render/squadAgents';
+import { GRUNT_SCALE } from '@/render/theme';
 import { balance } from '@/data';
-import { formationOffsets, mulberry32, openRoadWidth } from '@/sim';
-import type { LevelDef, RunState, SimEvent } from '@/sim';
+import { createCrowdState, formationOffsets, mulberry32, openRoadWidth } from '@/sim';
+import type { CrowdState, LevelDef, RunState, SimEvent } from '@/sim';
 
 import { StressBodies } from './stressBodies';
 
@@ -124,17 +133,15 @@ const STREAM_LANES = [-1, 0] as const;
 const DEFAULT_KILL_EVERY = 0.05;
 
 /**
- * Where the crowd's *front rank* stands; the formation runs backward from it
- * (D37), and since D42 it runs backward a long way — five hundred units are one
- * lane wide and seventy-seven ranks deep, so the tail stands at `CROWD_Z - 13.3`
- * and the camera, posed for that depth every frame (`Renderer.poseCamera`),
- * frames the front six metres of it exactly as the game does. The ranks past
- * that are below the bottom edge: they still cost their instances and their
- * animation, which is the point of keeping all five hundred here.
+ * Where the crowd's *front rank* stands; the column runs backward from it (D42)
+ * a long way — five hundred units are one lane wide and seventy-seven ranks
+ * deep, so the tail stands at `CROWD_Z - 13.3` and the camera, posed for that
+ * depth every frame (`Renderer.poseCamera`), frames the front six metres of it
+ * exactly as the game does. The ranks past that are below the bottom edge and
+ * still cost their instances, which is the point of keeping all five hundred.
  *
- * The 2 m of road in front of the front rank is what keeps the tail in front of
- * the *camera*: the eye stands 14.4 m behind the anchor and the column is 13.3
- * long, so the last rank clears it by a metre.
+ * The 2 m in front of the front rank keeps the tail in front of the *camera*:
+ * the eye stands 14.4 m behind the anchor and the column is 13.3 long.
  */
 const CROWD_Z = 2;
 const ENEMY_Z = 14;
@@ -179,8 +186,6 @@ export async function runStressScene(
   const scene = renderer.scene;
   const random = mulberry32(0x57_2e_55);
 
-  const mageAsset = await loadCharacterAsset(scene, 'mage', { variant: 'ember' });
-  const mages = new VatCrowd(mageAsset, mageCount);
   const skeletonAsset = await loadCharacterAsset(scene, 'skeleton_minion');
   // One crowd for the block skeletons *and* the river, exactly as the game
   // packs them: two crowds of the same character would be a second draw call
@@ -188,34 +193,6 @@ export async function runStressScene(
   const skeletons = new VatCrowd(skeletonAsset, skeletonCount + streamCount);
   const stream = new StressBodies(streamCount, STREAM_LANES, killEvery);
   stream.setDeathSeconds(skeletons.durationOf('death'));
-
-  // The sim's own formation, not an approximation of it: the crowd this scene
-  // measures has to be the shape and density the game will actually draw.
-  const offsets = formationOffsets(mageCount);
-  // The game's own unit scale, not 1: a crowd drawn larger than the game draws
-  // it measures a fill rate the game never pays (Phase B4 open issue).
-  const mageScale = crowdScale(mageCount) * MAGE_SCALE;
-  for (let i = 0; i < mageCount; i++) {
-    const offset = offsets[i] ?? { x: 0, z: 0 };
-    mages.setInstance(
-      i,
-      offset.x,
-      0,
-      CROWD_Z + offset.z,
-      // The view's own facing and clip phase rather than this scene's old
-      // `sin(i)` and `i % 17`: both are per-unit scrambles now (D42) because a
-      // column seven wide turns any short period into a diagonal, and a scene
-      // measuring a frame the game does not draw measures the wrong frame.
-      yawOf(i),
-      mageScale,
-      'run',
-      // Staggered, or five hundred mages cast in lockstep and the VAT's one
-      // texture read becomes visible as a single animated dummy.
-      timeOffsetOf(i),
-    );
-  }
-  mages.setCount(mageCount);
-  mages.commit();
 
   for (let i = 0; i < skeletonCount; i++) {
     const row = Math.floor(i / 10);
@@ -290,7 +267,6 @@ export async function runStressScene(
       frameMs = frameMs === 0 ? real * 1000 : frameMs + (real * 1000 - frameMs) * AVERAGE_WEIGHT;
     }
 
-    mages.update(dt);
     skeletons.update(dt);
 
     events.length = 0;
@@ -321,6 +297,11 @@ export async function runStressScene(
     // depth-driven pull-back (D37) this crowd's back rows stand under the
     // bottom edge, and the frame measured here is not one the game draws.
     renderer.poseCamera(state.squad, dt);
+    // One sim step a frame, so the view's own step interpolation runs its full
+    // path — the snapshot swap, the birth and death scan, the lerp — on a crowd
+    // that is standing still and therefore photographs the same every time.
+    state.time += SIM_STEP;
+    renderer.drawSquad(state, dt);
 
     const start = now();
     scene.render();
@@ -368,7 +349,6 @@ export async function runStressScene(
       disposed = true;
       pause();
       physics.dispose();
-      mages.dispose();
       skeletons.dispose();
       if (globalThis.__stress === handle) globalThis.__stress = undefined;
     },
@@ -396,6 +376,8 @@ function fakeLevel(): LevelDef {
  * to know which way to throw a corpse. Nothing here ever ticks.
  */
 function fakeState(mages: number): RunState {
+  const crowd = createCrowdState(balance.squad.maxCount);
+  fillColumn(crowd, mages, CROWD_Z);
   return {
     levelIndex: 1,
     seed: 1,
@@ -422,5 +404,29 @@ function fakeState(mages: number): RunState {
     peakCount: mages,
     survivors: mages,
     arenaZ: ARENA_Z,
+    crowd,
+    groups: [{ id: 0, count: mages, leaderX: 0, z: CROWD_Z, lane: null, rejoinAt: 0 }],
   };
+}
+
+/**
+ * A full column standing in its slots: the main group, front rank first, at the
+ * sim's own formation. Every unit carries the level's run speed on `z`, which
+ * is what makes the view draw the run clip — the crowd is standing still in
+ * world space but it is a *walking* crowd, and the frame the tripwire measures
+ * has to be the one the game draws.
+ */
+function fillColumn(crowd: CrowdState, count: number, z: number): void {
+  const offsets = formationOffsets(count);
+  const wanted = Math.min(crowd.capacity, count);
+  for (let i = 0; i < wanted; i++) {
+    const offset = offsets[i];
+    crowd.alive[i] = 1;
+    crowd.group[i] = 0;
+    crowd.slot[i] = i;
+    crowd.x[i] = offset?.x ?? 0;
+    crowd.z[i] = z + (offset?.z ?? 0);
+    crowd.vx[i] = 0;
+    crowd.vz[i] = balance.squad.runSpeed;
+  }
 }
