@@ -43,6 +43,7 @@ import {
   SHATTER_PUFF_SPOKES,
   SPLASH_DURATION,
   STORM_COLOR,
+  paletteColor,
 } from './theme';
 import { startWeapon } from '@/sim';
 import type { WeaponId } from '@/sim';
@@ -70,7 +71,7 @@ const IMPACT_BOOKS: Record<WeaponId, SpriteBook> = {
  */
 const PUFF_DURATION = 0.28;
 const PUFF_SIZE = 0.85;
-const PUFF_COLOR = new Color3(0.85, 0.8, 0.72);
+const PUFF_COLOR = paletteColor('bone.deep');
 
 interface Burst {
   x: number;

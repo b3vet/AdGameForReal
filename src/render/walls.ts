@@ -10,14 +10,16 @@
  *
  * Two meshes, two draw calls, whatever a level's walls add up to:
  *
- *   - a stone piece — a post with the two metres of rail behind it, merged into
- *     one mesh so the pair is one instance and one draw call. It is never
- *     scaled, which is what keeps a post a post: the rail length is baked into
- *     the geometry rather than stretched per instance, and the piece that
- *     closes the near end simply overhangs the wall's `zStart` by up to that
- *     same two metres — which is the approach zone (`balance.walls.approach`),
- *     where the clamp is already biting, so the drawn fence starts exactly
- *     where the wall starts to be felt.
+ *   - a stone piece — a dungeon column with the two metres of low parapet
+ *     behind it (KayKit Dungeon Remastered, D39), merged into one mesh so the
+ *     pair is one instance and one draw call. It is never scaled, which is what
+ *     keeps a post a post: the run length is baked into the geometry rather
+ *     than stretched per instance, and the piece that closes the near end
+ *     simply overhangs the wall's `zStart` by up to that same two metres —
+ *     which is the approach zone (`balance.walls.approach`), where the clamp is
+ *     already biting, so the drawn wall starts exactly where the wall starts to
+ *     be felt. Milestone 5 swapped the boxes for the carved pieces; the boxes
+ *     stay as the stand-in for a build whose models never loaded.
  *   - a rune bar, additive and amber, capping every post, flaring on the post
  *     the squad is being pushed against, and lying flat on the road as the
  *     approach marker.
@@ -37,6 +39,8 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
 import type { SpriteLayer } from './sprites';
+import { buildBoxPiece, loadWallPiece } from './wallPiece';
+import { applyToonRamp } from './toonRamp';
 import { bookCell } from './spriteSheets';
 import {
   POOL,
@@ -49,12 +53,8 @@ import {
   WALL_MARKER_SCALE,
   WALL_POST_HEIGHT,
   WALL_POST_SPACING,
-  WALL_POST_WIDTH,
   WALL_PULSE_DEPTH,
   WALL_PULSE_RATE,
-  WALL_RAIL_HEIGHT,
-  WALL_RAIL_WIDTH,
-  WALL_RAIL_Y,
   WALL_RUNE_COLOR,
   WALL_RUNE_HEIGHT,
   WALL_RUNE_WIDTH,
@@ -81,8 +81,11 @@ interface Marker {
 }
 
 export class WallView {
-  private readonly stone: Mesh;
-  private readonly stoneMatrices: Float32Array;
+  private readonly scene: Scene;
+  /** Swapped for the carved assembly once `load` has it; see `loadPieces`. */
+  private stone: Mesh;
+  private stoneMatrices: Float32Array;
+  private loading: Promise<void> | null = null;
   private readonly runes: Mesh;
   private readonly runeMatrices: Float32Array;
   private readonly runeMaterial: StandardMaterial;
@@ -99,13 +102,15 @@ export class WallView {
   private flashing = false;
 
   constructor(scene: Scene, sprites: SpriteLayer) {
+    this.scene = scene;
     this.sprites = sprites;
 
     const stoneMaterial = new StandardMaterial('wallStoneMat', scene);
     stoneMaterial.diffuseColor = WALL_STONE_COLOR;
     stoneMaterial.specularColor = Color3.Black();
+    applyToonRamp(stoneMaterial);
 
-    this.stone = buildPiece(scene);
+    this.stone = buildBoxPiece(scene);
     this.stone.material = stoneMaterial;
     this.stoneMatrices = createMatrixBuffer(this.stone, POOL.wallPosts);
 
@@ -142,6 +147,37 @@ export class WallView {
     // boot and the right one inside the frame that first draws a wall.
     commitInstances(this.stone, 0);
     commitInstances(this.runes, 0);
+
+    // Kicked off here so a renderer that never awaits `load` still gets carved
+    // walls; `load` hands back this same promise for one that does.
+    void this.load();
+  }
+
+  /**
+   * The dungeon pieces the wall is built from. Idempotent, and worth awaiting
+   * from `SceneViews.load`: the warm-up pass compiles what exists when it runs,
+   * and a material that arrives after it compiles inside the first frame that
+   * draws a wall.
+   */
+  load(): Promise<void> {
+    this.loading ??= this.swapInCarvedPiece();
+    return this.loading;
+  }
+
+  /**
+   * Builds the carved piece (`./wallPiece.ts`) and swaps it in for the boxes.
+   */
+  private async swapInCarvedPiece(): Promise<void> {
+    const piece = await loadWallPiece(this.scene);
+    if (piece === null) return;
+    this.stone.material?.dispose();
+    this.stone.dispose();
+    this.stone = piece;
+    this.stoneMatrices = createMatrixBuffer(piece, POOL.wallPosts);
+    // The buffer is new and empty. `update` writes the pieces in range again on
+    // the next frame; until it does, the mesh stays disabled rather than
+    // drawing one copy of itself at the world origin.
+    commitInstances(piece, 0);
   }
 
   /**
@@ -322,39 +358,4 @@ export class WallView {
     this.posts.length = 0;
     this.markers.length = 0;
   }
-}
-
-/**
- * One fence piece: a post, and the rail that runs back from it toward the
- * squad, as a single mesh.
- *
- * Merged rather than parented, because a thin instance transforms *geometry*:
- * two meshes would be two buffers and two draw calls, and a parent-child pair
- * cannot be thin-instanced at all.
- */
-function buildPiece(scene: Scene): Mesh {
-  const post = CreateBox(
-    'wallPost',
-    { width: WALL_POST_WIDTH, height: WALL_POST_HEIGHT, depth: WALL_POST_WIDTH },
-    scene,
-  );
-  post.position.y = WALL_POST_HEIGHT / 2;
-
-  const rail = CreateBox(
-    'wallRail',
-    { width: WALL_RAIL_WIDTH, height: WALL_RAIL_HEIGHT, depth: WALL_POST_SPACING },
-    scene,
-  );
-  rail.position.y = WALL_RAIL_Y;
-  rail.position.z = -WALL_POST_SPACING / 2;
-
-  const merged = Mesh.MergeMeshes([post, rail], true, true);
-  if (merged === null) {
-    // `MergeMeshes` only returns null when it is handed nothing to merge, which
-    // cannot happen here; the post alone is still a readable fence.
-    post.position.y = WALL_POST_HEIGHT / 2;
-    return post;
-  }
-  merged.name = 'wallPiece';
-  return merged;
 }

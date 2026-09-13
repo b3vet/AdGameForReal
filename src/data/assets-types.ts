@@ -11,7 +11,7 @@
  * `src/render/characters/manifest.ts`.
  */
 
-export type AssetKind = 'model' | 'vat' | 'audio' | 'texture' | 'font';
+export type AssetKind = 'model' | 'vat' | 'audio' | 'texture' | 'font' | 'ui';
 
 interface AssetBase {
   id: string;
@@ -130,7 +130,23 @@ export interface FontAsset extends AssetBase {
   weight: string;
 }
 
-export type AssetEntry = ModelAsset | VatAsset | AudioAsset | TextureAsset | FontAsset;
+/**
+ * A piece of the UI kit: a nine-slice frame or a button body (decision D39),
+ * written by `scripts/fetch-ui.mjs` from Kenney's Fantasy UI Borders and UI
+ * Pack with the palette's own colours baked in.
+ *
+ * Like a `font` and unlike everything else here, nothing loads one through
+ * `resolveAssetUrl`: the browser fetches it from a `url()` in the overlay's CSS,
+ * and the single-file builds inline the bytes into that rule
+ * (`scripts/inline-assets.mjs`). The entry is the inventory record — it is what
+ * tells the inliner which files those are, and what `fetch-ui.mjs` checks
+ * itself against.
+ */
+export interface UiAsset extends AssetBase {
+  kind: 'ui';
+}
+
+export type AssetEntry = ModelAsset | VatAsset | AudioAsset | TextureAsset | FontAsset | UiAsset;
 
 export interface AssetManifest {
   /** Prefix for every relative `url`. Rewritten by the single-file builds. */

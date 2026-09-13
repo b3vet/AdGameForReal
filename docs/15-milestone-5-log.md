@@ -86,3 +86,36 @@
   track's in-flight gate work: typecheck, lint, 301 tests, smoke, hosted
   10.46 MB and artifact 13.80 MB, both offline at pixel ratio 3; portrait
   390 and 360 and landscape 568×320 on all five screens.
+
+## 2026-09-13 — Phase C: road, gates, walls, arena, props (verified and committed)
+
+- Assets (452 KB): five KayKit Dungeon Remastered pieces (column, half
+  barrier, pillar, blue banner, lit torch) through the jsDelivr mirror; an
+  ambientCG cobblestone albedo (color × ambient occlusion, 1024 px) and a
+  grass albedo (512 px), both CC0 1.0, resized in Chromium because Node has
+  no image decoder and no image dependency is allowed. `assets/` is 3.9 MB.
+- Gates: two pillar legs, a seven-piece semicircular arch with a proud
+  keystone and a parapet, baked into one mesh in one material (one draw
+  call for every arch on screen); a dark rune plaque carries the atlas
+  number with the label API unchanged; a kind-tinted shimmer drifts across
+  each opening from a per-instance-tinted quad batch shared with the motes;
+  vines, thorns, crown and crystals as one merged mesh per kind within 34
+  m; a box arch stands in if a model fails.
+- Road: a vertex-colored grid with lane wear and kerb-gutter shadow baked
+  into vertex colors (free), the cobble albedo at a 2.2 m tile, chamfered
+  kerb stones thin-instanced along both edges, a grass fringe with an
+  opacity ramp, runs past the fog end with a filler strip. Arena markers
+  are a pillar and banner; walls are a carved column-and-parapet piece with
+  the rune cap and approach marker kept; props re-tinted from palette
+  roles; the torch replaces the lantern from level 6.
+- Draw peaks 40 / 40 / 41 / 42 (art budget 45); stress 34 calls; 36
+  shader programs warmed, 0 compiles during play; 316 tests; hosted
+  10.49 MB, artifact 13.84 MB.
+- Tech lead frame review: the look is coherent now (cobble road with
+  kerbs, arches with plaques, ornate plaque HUD, framed coins, gold
+  wordmark, parchment board, line formation, long view with clouds). For
+  Phase E: the cobble reads slightly olive; the crowd's rear rows run off
+  the bottom of the frame at 100+ units; wire `road.load()` and
+  `walls.load()` into the views' load so a slow load cannot miss the
+  warm-up; label clearance should use the plaque height; unused theme
+  constants; blob shadows for squad, streams and blocks.

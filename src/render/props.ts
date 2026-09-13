@@ -31,7 +31,8 @@ import { modelAsset } from './characters';
 import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
 import { liftEmissive, loadStaticMesh, meshExtent, tintMaterial } from './models';
 import { applyToonRamp } from './toonRamp';
-import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH } from './theme';
+import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH, paletteColor } from './theme';
+import type { PaletteRole } from './theme';
 import { mulberry32 } from '@/sim';
 
 /**
@@ -49,19 +50,78 @@ interface PropKind {
   size?: number;
   /** Albedo multiplier, for the daylight re-tint; see `tintMaterial`. */
   tint?: readonly [number, number, number];
+  /**
+   * True when the manifest's `scale` is already metres per model unit. The
+   * KayKit *character* packs are authored at a scale the mage's own 0.35 was
+   * derived from, and the roadside inherited that; the dungeon pieces (D39) are
+   * authored in metres, so they must not be put through it twice.
+   */
+  metres?: boolean;
+  /** How far below its own origin the model hangs, in model units. */
+  lift?: number;
+  /** A flame rides at this share of the prop's height, this many metres across. */
+  flame?: { at: number; size: number };
+  /** Levels this kind is dressed on. Absent means every level. */
+  fromLevel?: number;
+  untilLevel?: number;
 }
 
-/** Warmer and a shade lighter: the pack is painted for a night scene. */
-const WARM: readonly [number, number, number] = [1.16, 1.06, 0.9];
+/**
+ * The daylight re-tint, as a palette role rather than three numbers (D36).
+ *
+ * `mix` is how much of the role's own hue is folded into white and `gain` is
+ * how much the result is lifted: the Halloween pack is painted for a night
+ * scene, so every prop needs both a hue and a lift or it reads as soot under
+ * D28's daylight. The gain is a look number, the hue is the palette's.
+ */
+function tintFrom(role: PaletteRole, mix: number, gain: number): [number, number, number] {
+  const color = paletteColor(role);
+  const blend = (channel: number): number => (1 - mix + mix * channel) * gain;
+  return [blend(color.r), blend(color.g), blend(color.b)];
+}
+
+/** Warmer and a shade lighter, for the foliage. */
+const WARM = tintFrom('gold.light', 0.3, 1.12);
 /** For the greys — stone and iron — which go to soot under daylight. */
-const PALE: readonly [number, number, number] = [1.28, 1.22, 1.12];
+const PALE = tintFrom('stone.light', 0.45, 1.3);
+/** The dungeon pieces are painted for torchlight; this brings them outside. */
+const DUNGEON = tintFrom('stone.light', 0.35, 1.18);
+
+/** From this level, the roadside lights are dungeon torches, not lanterns. */
+const TORCH_FROM_LEVEL = 6;
 
 const KINDS: readonly PropKind[] = [
   { id: 'prop_tree_pine_orange_large', weight: 3.2, near: 2.2, far: 9, size: 1.2, tint: WARM },
   { id: 'prop_tree_pine_orange_medium', weight: 3, near: 1.4, far: 7, tint: WARM },
   { id: 'prop_fence', weight: 1.8, near: 0.5, far: 1.1, tint: PALE },
   { id: 'prop_gravestone', weight: 0.6, near: 0.9, far: 4, tint: PALE },
-  { id: 'prop_post_lantern', weight: 0.8, near: 0.7, far: 1.4, tint: PALE },
+  {
+    id: 'prop_post_lantern',
+    weight: 0.8,
+    near: 0.7,
+    far: 1.4,
+    tint: PALE,
+    flame: { at: 0.88, size: 0.34 },
+    untilLevel: TORCH_FROM_LEVEL - 1,
+  },
+  /**
+   * The dungeon torch takes the lantern's place from level 6 (plan, "a few
+   * torches near gates on later levels"): the same slot in the layout and the
+   * same flame, in the stonework the arches and walls are built from, so the
+   * later road reads as a dungeon approach rather than as a country lane.
+   */
+  {
+    id: 'prop_dungeon_torch_lit',
+    weight: 1.1,
+    near: 0.55,
+    far: 1.2,
+    tint: DUNGEON,
+    metres: true,
+    size: 1.5,
+    lift: 0.395,
+    flame: { at: 0.94, size: 0.3 },
+    fromLevel: TORCH_FROM_LEVEL,
+  },
 ];
 
 /** Metres between one roadside prop and the next, per side. */
@@ -69,16 +129,16 @@ const GAP_MIN = 6;
 const GAP_MAX = 10;
 /** Props of one kind per level. Long levels simply stop dressing past this. */
 const PER_KIND = 56;
-const LANTERN_CAP = 24;
+/** Flames the roadside can carry at once, whichever kind is lighting it. */
+const FLAME_CAP = 24;
 /**
  * See `liftEmissive`. Almost nothing now: Milestone 2 needed scenery to carry
  * its own light because the biome was a near-black dusk, and under daylight the
  * same lift flattens every trunk to a flat orange card.
  */
 const PROP_LIFT = 0.05;
-/** Where a lantern's flame sits, as a share of the post's own height. */
-const LANTERN_FLAME_Y = 0.88;
-const LANTERN_FLAME_SIZE = 0.34;
+/** The flame mesh's own diameter; a kind's `flame.size` scales this. */
+const FLAME_SIZE = 0.34;
 
 interface PropSlot {
   kind: PropKind;
@@ -99,7 +159,7 @@ export class PropsView {
   constructor(scene: Scene) {
     this.scene = scene;
 
-    const material = new StandardMaterial('lanternFlameMat', scene);
+    const material = new StandardMaterial('propFlameMat', scene);
     material.emissiveColor = EMBER_COLOR.scale(1.1);
     material.diffuseColor = Color3.Black();
     material.specularColor = Color3.Black();
@@ -107,9 +167,9 @@ export class PropsView {
     material.alphaMode = Constants.ALPHA_ADD;
     material.alpha = 0.85;
 
-    this.flames = CreateSphere('lanternFlame', { diameter: LANTERN_FLAME_SIZE, segments: 6 }, scene);
+    this.flames = CreateSphere('propFlame', { diameter: FLAME_SIZE, segments: 6 }, scene);
     this.flames.material = material;
-    this.flameMatrices = createMatrixBuffer(this.flames, LANTERN_CAP);
+    this.flameMatrices = createMatrixBuffer(this.flames, FLAME_CAP);
     this.flames.setEnabled(false);
   }
 
@@ -128,12 +188,13 @@ export class PropsView {
       if (tint !== undefined) tintMaterial(mesh.material, tint[0], tint[1], tint[2]);
       applyToonRamp(mesh.material);
       const manifestScale = modelAsset(kind.id).scale ?? 1;
+      const unit = kind.metres === true ? manifestScale : manifestScale * MAGE_SCALE;
       this.slots.push({
         kind,
         mesh,
         matrices: createMatrixBuffer(mesh, PER_KIND),
         count: 0,
-        scale: manifestScale * MAGE_SCALE * (kind.size ?? 1),
+        scale: unit * (kind.size ?? 1),
         height: meshExtent(mesh).y,
       });
     });
@@ -148,32 +209,46 @@ export class PropsView {
     let flames = 0;
 
     const random = mulberry32(0x1eaf_0000 + levelIndex * 7919);
-    const total = KINDS.reduce((sum, kind) => sum + kind.weight, 0);
+    // Only the kinds this level dresses with: the lantern gives way to the
+    // dungeon torch at level 6, and a weight that is not in the roll is what
+    // keeps the layout from leaving a gap where the other one would have gone.
+    const lit = this.slots.filter((slot) => dressedOn(slot.kind, levelIndex));
+    const total = lit.reduce((sum, slot) => sum + slot.kind.weight, 0);
 
     for (const side of [-1, 1]) {
       let z = startZ + random() * GAP_MIN;
       while (z < endZ) {
         z += GAP_MIN + random() * (GAP_MAX - GAP_MIN);
-        const slot = pick(this.slots, random() * total);
+        const slot = pick(lit, random() * total);
         if (slot === undefined || slot.count >= PER_KIND) continue;
 
         const out = slot.kind.near + random() * (slot.kind.far - slot.kind.near);
         const x = side * (ROAD_HALF_WIDTH + out);
         const scale = slot.scale * (0.85 + random() * 0.4);
         const yaw = (slot.kind.yaw ?? 0) + random() * Math.PI * 2;
-        writeRotatedInstance(slot.matrices, slot.count, scale, scale, scale, yaw, x, 0, z);
+        // A piece authored around its own middle has to be lifted to stand on
+        // the road; one authored on its base has `lift` 0 and is untouched.
+        const base = (slot.kind.lift ?? 0) * scale;
+        writeRotatedInstance(slot.matrices, slot.count, scale, scale, scale, yaw, x, base, z);
         slot.count++;
 
-        if (slot.kind.id === 'prop_post_lantern' && flames < LANTERN_CAP) {
+        const flame = slot.kind.flame;
+        if (flame !== undefined && flames < FLAME_CAP) {
+          const size = flame.size / FLAME_SIZE;
+          // Measured from the prop's *top*, not from its full height: a piece
+          // that hangs below its own origin has already been lifted by `base`,
+          // and counting that overhang twice put the torch's flame half a metre
+          // above the torch.
+          const above = (slot.height - (slot.kind.lift ?? 0)) * scale * flame.at;
           writeRotatedInstance(
             this.flameMatrices,
             flames,
-            1,
-            1,
-            1,
+            size,
+            size,
+            size,
             0,
             x,
-            slot.height * scale * LANTERN_FLAME_Y,
+            base + above,
             z,
           );
           flames++;
@@ -210,6 +285,13 @@ export class PropsView {
     this.flames.material?.dispose();
     this.flames.dispose();
   }
+}
+
+/** Whether a kind is dressed on this level. Absent bounds mean every level. */
+function dressedOn(kind: PropKind, levelIndex: number): boolean {
+  if (kind.fromLevel !== undefined && levelIndex < kind.fromLevel) return false;
+  if (kind.untilLevel !== undefined && levelIndex > kind.untilLevel) return false;
+  return true;
 }
 
 /** Weighted pick over the prop kinds that actually loaded. */

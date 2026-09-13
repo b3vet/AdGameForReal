@@ -10,6 +10,7 @@ into `assets/licenses/`; the quoted lines below are from those files.
 
 ```
 node scripts/fetch-assets.mjs    # download the packs, trim, write assets/
+node scripts/fetch-ui.mjs        # assets/ui/*.svg, recoloured from palette.json
 node scripts/bake-vat.mjs        # assets/vat/*.bin + *.json from the models
 node scripts/audio-convert.mjs   # assets/audio/*.wav from the cached Kenney zips
 ```
@@ -17,7 +18,13 @@ node scripts/audio-convert.mjs   # assets/audio/*.wav from the cached Kenney zip
 `scripts/glb.mjs` is the glTF/GLB document surgery the first of those uses; it
 knows nothing about the network or our asset list, which is why it is separate.
 
-All three are idempotent. Downloads are cached in `node_modules/.asset-cache/`
+All of them are idempotent. `fetch-assets.mjs` needs Playwright's Chromium for
+one step — the two ambientCG albedos are decoded, composited and re-encoded in a
+browser page, because there is no JPEG decoder in Node and no image dependency
+may be added. It is the same browser the smoke test uses (`npx playwright
+install chromium`), and nothing else in the script touches it.
+
+Downloads are cached in `node_modules/.asset-cache/`
 (git-ignored because `node_modules/` is); delete it to force a refetch. If a
 future sandbox has a Node build whose `fetch` ignores `HTTPS_PROXY`, prefix the
 first command with `NODE_USE_ENV_PROXY=1`.
@@ -44,6 +51,9 @@ likewise. Two routes work and are the ones the script uses:
   paths were discovered.
 - **Google Drive** for Quaternius, who publishes his packs as shared folders.
   `https://drive.google.com/uc?export=download&id=<id>` serves a file directly.
+- **ambientCG directly**: `https://ambientcg.com/get?file=<id>_1K-JPG.zip`
+  redirects to its own CDN and `fetch` follows it. Reachable from here, so the
+  plan's procedural fallback for the road tile was not needed.
 
 If a future session can reach GitHub, the same files are at
 `github.com/KayKit-Game-Assets/...` and nothing else needs to change.
@@ -55,12 +65,17 @@ If a future session can reach GitHub, the same files are at
 | KayKit Character Pack: Adventurers (1.0) | `KayKit-Character-Pack-Adventures-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
 | KayKit Character Pack: Skeletons (1.0) | `KayKit-Character-Pack-Skeletons-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
 | KayKit Halloween Bits (1.0) | `KayKit-Halloween-Bits-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
+| KayKit Dungeon Remastered (1.0) | `KayKit-Dungeon-Remastered-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
+| ambientCG materials (PavingStones131, Grass004) | ambientcg.com/get → acg-download.struffelproductions.com | "All ambientCG assets are provided under the Creative Commons CC0 1.0 Universal License." (quoted from ambientcg.com/license into `assets/licenses/ambientcg.txt`; the zips carry no licence file) |
 | Quaternius Ultimate Monsters | quaternius.com → Google Drive | "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication" |
 | Kenney Impact Sounds (1.0) | kenney.nl/assets/impact-sounds | "License: (Creative Commons Zero, CC0)" |
 | Kenney RPG Audio | kenney.nl/assets/rpg-audio | "License (Creative Commons Zero, CC0)" |
 | Kenney UI SFX Set | kenney.nl/assets/ui-audio | "License (Creative Commons Zero, CC0)" |
 | Kenney Sci-Fi Sounds (1.0) | kenney.nl/assets/sci-fi-sounds | "License: (Creative Commons Zero, CC0)" |
 | Kenney Music Jingles | kenney.nl/assets/music-jingles | "License (Creative Commons Zero, CC0)" |
+| Kenney Fantasy UI Borders (1.0) | kenney.nl/assets/fantasy-ui-borders | "License: (Creative Commons Zero, CC0)" |
+| Kenney UI Pack (2.0) | kenney.nl/assets/ui-pack | "License: (Creative Commons Zero, CC0)" |
+| Kenney Game Icons | kenney.nl/assets/game-icons | "License (CC0)" — fetched and evaluated; nothing from it ships (see "UI kit" below) |
 | Cinzel (v26) | fonts.googleapis.com CSS API → fonts.gstatic.com; OFL via jsDelivr | "This Font Software is licensed under the SIL Open Font License, Version 1.1." |
 | Nunito (v32) | fonts.googleapis.com CSS API → fonts.gstatic.com; OFL via jsDelivr | "This Font Software is licensed under the SIL Open Font License, Version 1.1." |
 
@@ -88,9 +103,11 @@ the game's about screen when there is one.
 
 ## Files
 
-Sizes are the shipped file, after trimming. `assets/` totals **3.4 MB**, against
+Sizes are the shipped file, after trimming. `assets/` totals **3.9 MB**, against
 a 12 MB budget (it was 3.0 MB before the Milestone 3 re-bake added a clip to
-each character).
+each character, 3.4 MB before Milestone 5's UI kit added 10 KB of SVG, and 3.6 MB
+before Milestone 5's art track added the dungeon pieces and the two albedos —
+435 KB in all).
 
 ### Models — `assets/models/`
 
@@ -169,6 +186,55 @@ file is that atlas, repeated).
 | `post_lantern.glb` | 44 KB | Light source at the roadside; pairs with the glow pass |
 | `fence.glb` | 44 KB | Road edge |
 
+Milestone 5 (D39) adds five pieces from **KayKit Dungeon Remastered (1.0)**,
+`Assets/gltf/`. That pack already ships each piece as `<name>.gltf.glb` — a
+self-contained GLB with the shared `dungeon_texture` atlas embedded — so unlike
+the Halloween props nothing is folded together on the way in and the bytes are
+copied through unchanged. About 15 KB of each file is that atlas, repeated; the
+duplication is cheaper than the second material a shared texture would cost at
+runtime, and it is what lets a whole arch be one mesh in one draw call.
+
+Two things to know before placing one. They are authored **in metres** (the
+Halloween props are not, which is why `assets.json` gives these `scale: 1`), and
+they come out of `loadStaticMesh` **mirrored in x**, because that loader bakes
+the glTF loader's right-to-left-handed flip into the vertices: a piece the
+artist authored from x = 0 to x = 2 arrives spanning -2 to 0
+(`src/render/dungeonPieces.ts`).
+
+| File | Size | Source | Use |
+|---|---|---|---|
+| `dungeon_column.glb` | 20 KB | `column.gltf.glb` (0.7 × 1.4 × 0.7 m) | Every voussoir of a gate arch's ring, rolled to its own angle on the curve |
+| `dungeon_barrier_half.glb` | 19 KB | `barrier_half.gltf.glb` (2 × 1.1 × 0.5 m) | The parapet across the top of a gate arch, and the 2 m run of a lane wall (D32) |
+| `dungeon_pillar.glb` | 25 KB | `pillar.gltf.glb` (1.5 × 4 × 1.5 m) | A gate arch's two legs, and the boss arena's markers |
+| `dungeon_banner_blue.glb` | 24 KB | `banner_blue.gltf.glb` (1.5 × 3.2 m) | Hangs on the arena pillars, re-tinted through the material |
+| `dungeon_torch_lit.glb` | 31 KB | `torch_lit.gltf.glb` (0.55 × 1.13 m) | The roadside light from level 6, where the lantern stops |
+
+### Textures — `assets/textures/`
+
+The road and the field, from **ambientCG** — CC0, photogrammetry, and the one
+place a hand-painted tile could not compete: real medieval paving with moss in
+the joints (Milestone 5 plan, "Road texture bad").
+
+Both are downsized and re-encoded by `fetch-assets.mjs` rather than shipped as
+downloaded. The 1K JPEGs in those zips are 1.8 and 2.0 MB, which the single-file
+builds (12 MB hosted, D25) cannot afford; at the sizes below the pair is 314 KB
+and still oversampled for a road tile 2.2 m across on a phone. There is no JPEG
+decoder in Node and no image dependency may be added, so the resize runs in
+Playwright's Chromium — already a devDependency for the smoke test — which is
+also where the paving's ambient-occlusion map is multiplied into its albedo.
+That multiply is what puts the shadow in the joints: the road material is unlit
+stone with a toon ramp over it, and nothing in the scene would otherwise cast it.
+
+| File | Size | Source | Use |
+|---|---|---|---|
+| `road_cobble.jpg` | 250 KB | ambientCG `PavingStones131`, 1K JPG, colour × AO, re-encoded to 1024 px at quality 0.75 | The road surface, one repeat every 2.2 m |
+| `field_grass.jpg` | 64 KB | ambientCG `Grass004`, 1K JPG, re-encoded to 512 px at quality 0.72 | The field either side, and the grass fringe that blends over the kerbs |
+
+Everything else the road, the gates and the motes are painted with is drawn in
+code at boot (`src/render/artTextures.ts`): the plaque face, the gate shimmer,
+the mote blob and the alpha ramps. A gradient or a mask is a few hundred bytes
+of drawing commands and would be a hundred kilobytes of PNG.
+
 ### Audio — `assets/audio/`
 
 17 clips, **421 KB** total, all 22050 Hz mono 16-bit PCM WAV, trimmed, faded and
@@ -230,9 +296,58 @@ into a `data:` URI in the CSS of the single-file builds. The `font` entries in
 `assets.json` are the inventory record that tells the inliner which files those
 are, and carry the family and weight the digit atlas asks for.
 
+### UI kit — `assets/ui/`
+
+The game UI's nine-slice frames and button bodies (decision D39), added by
+Milestone 5 Phase D and rebuilt with `node scripts/fetch-ui.mjs`. Two Kenney
+packs, both CC0.
+
+**SVG, not PNG, and generated rather than copied.** Kenney ships every piece as
+a 48 px PNG *and* as one vector sheet; a 48 px corner ornament stretched onto a
+3x phone is a blurry corner ornament, and the vector is exact at any density for
+about a kilobyte. Generated because the colours are ours: the script reads
+`src/data/palette.json` and writes Kenney's white frames out as a gold gradient
+and the UI Pack's grey ramp as gold or parchment, so the only hex in these files
+came from the palette and a palette change is one command from the whole kit.
+The eight files total **10 KB**.
+
+| File | Size | Source piece | Use |
+|---|---|---|---|
+| `frame-panel.svg` | 1,291 B | Fantasy UI Borders, `panel_border_026` | The parchment boards on the Academy, the picker and the rooms; also the Play card |
+| `frame-card.svg` | 659 B | Fantasy UI Borders, `panel_border_001` | Room cards, Yard and Workbench rows, bestiary entries, result stats |
+| `frame-plaque.svg` | 828 B | Fantasy UI Borders, `panel_border_013` | The HUD's squad-count plaque |
+| `frame-bar.svg` | 1,084 B | Fantasy UI Borders, `panel_border_003` | The boss bar |
+| `frame-inset.svg` | 872 B | Fantasy UI Borders, `panel_border_012` | Quiet frames: the coin purse, the level chip, the picker's level tiles |
+| `divider.svg` | 737 B | Fantasy UI Borders, `divider_003`, mirrored | The flourish under a screen heading |
+| `button-gold.svg` | 2,278 B | UI Pack, `Vector/Grey/button_rectangle_depth_border.svg` | Primary buttons: Play, Buy, Ascend |
+| `button-stone.svg` | 2,278 B | the same piece, parchment ramp | Secondary buttons: Back, Again, Academy, Select |
+
+Every frame is sliced at **16** of the piece's own 48 units
+(`border-image-slice: 16`); the button is sliced `9 11 14 11 fill`, where the 14
+is Kenney's depth edge along the bottom — `.button:active` shrinks that border
+to 9 and moves the button down by the difference, so a press compresses the
+bevel instead of sliding the whole plate.
+
+Kenney's dividers are drawn one-ended, to be used in mirrored pairs; the script
+stamps the piece twice, the second copy flipped about x, so one file is a
+symmetric ornament.
+
+The icons — the coin, the three staffs, the five drills, the wisp, the four
+rooms and the padlock — are **not** here. They are an inline `<symbol>` sprite
+at the top of `index.html` (`src/ui/icons.ts` references it), because what this
+game needs is thematic and Kenney's Game Icons is a set of interface glyphs. An
+inline path costs no request in any build and takes its colour from the same
+CSS variables as everything around it.
+
+These reach an offline build the way the fonts do, through the stylesheet rather
+than the manifest loader: `scripts/inline-assets.mjs` rewrites
+`url(/assets/ui/…)` into a `data:` URI for the single-file builds. The `ui`
+entries in `assets.json` are the inventory record that tells the inliner which
+files those are.
+
 ### Licences — `assets/licenses/`
 
-Nine `.txt` files, one per pack, copied verbatim from the source archives.
+Twelve `.txt` files, one per pack, copied verbatim from the source archives.
 
 ## The boss
 

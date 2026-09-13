@@ -239,6 +239,51 @@
       "scale": 0.35
     },
     {
+      "id": "prop_dungeon_column",
+      "kind": "model",
+      "url": "props/dungeon_column.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "prop_dungeon_barrier_half",
+      "kind": "model",
+      "url": "props/dungeon_barrier_half.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "prop_dungeon_pillar",
+      "kind": "model",
+      "url": "props/dungeon_pillar.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "prop_dungeon_banner_blue",
+      "kind": "model",
+      "url": "props/dungeon_banner_blue.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "prop_dungeon_torch_lit",
+      "kind": "model",
+      "url": "props/dungeon_torch_lit.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "texture_road_cobble",
+      "kind": "texture",
+      "url": "textures/road_cobble.jpg"
+    },
+    {
+      "id": "texture_field_grass",
+      "kind": "texture",
+      "url": "textures/field_grass.jpg"
+    },
+    {
       "id": "vat-mage",
       "kind": "vat",
       "url": "vat/mage.bin",
@@ -354,6 +399,46 @@
       "url": "fonts/nunito-latin.woff2",
       "family": "Nunito",
       "weight": "400 700"
+    },
+    {
+      "id": "ui-frame-panel",
+      "kind": "ui",
+      "url": "ui/frame-panel.svg"
+    },
+    {
+      "id": "ui-frame-card",
+      "kind": "ui",
+      "url": "ui/frame-card.svg"
+    },
+    {
+      "id": "ui-frame-plaque",
+      "kind": "ui",
+      "url": "ui/frame-plaque.svg"
+    },
+    {
+      "id": "ui-frame-bar",
+      "kind": "ui",
+      "url": "ui/frame-bar.svg"
+    },
+    {
+      "id": "ui-frame-inset",
+      "kind": "ui",
+      "url": "ui/frame-inset.svg"
+    },
+    {
+      "id": "ui-divider",
+      "kind": "ui",
+      "url": "ui/divider.svg"
+    },
+    {
+      "id": "ui-button-gold",
+      "kind": "ui",
+      "url": "ui/button-gold.svg"
+    },
+    {
+      "id": "ui-button-stone",
+      "kind": "ui",
+      "url": "ui/button-stone.svg"
     }
   ]
 }

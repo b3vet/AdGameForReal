@@ -12,10 +12,11 @@
  *      no runtime code changes; the glTF loader takes a `data:` URI through its
  *      `directLoad` path and `src/render/characters/manifest.ts` decodes the
  *      rest itself rather than fetching.
- *   2. Every `@font-face` in our CSS — the `url(/assets/fonts/*.woff2)` the
- *      browser would otherwise fetch becomes a `data:` URI of the file. The
- *      files are named by the `font` entries in `assets.json`, so the manifest
- *      stays the one place that says which faces we ship.
+ *   2. Every `url()` in our CSS that points into `assets/` — the faces in the
+ *      `@font-face` rules and the UI kit's frames and buttons (decision D39) —
+ *      becomes a `data:` URI of the file. The files are named by the `font` and
+ *      `ui` entries in `assets.json`, so the manifest stays the one place that
+ *      says which of them we ship.
  *   3. `src/physics/havokWasm.ts` — the module that carries the Havok WASM.
  *      Normally it exports the `?url` Vite emits and an empty base64 string;
  *      here it is replaced wholesale with the base64 of the WASM and an empty
@@ -63,7 +64,15 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.ktx2': 'image/ktx2',
   '.woff2': 'font/woff2',
+  '.svg': 'image/svg+xml',
 };
+
+/**
+ * Kinds whose bytes ride in a CSS `url()` rather than in the JSON manifest.
+ * Inlining one in both places would ship it twice — 80 KB of woff2 and the UI
+ * kit for nothing — so `inlineManifest` absolutises their URLs and leaves them.
+ */
+const CSS_KINDS = new Set(['font', 'ui']);
 
 function mimeOf(file) {
   const type = MIME[path.extname(file).toLowerCase()];
@@ -88,11 +97,10 @@ export async function inlineManifest() {
   let files = 0;
 
   for (const entry of manifest.entries) {
-    // A font's bytes ride in the `@font-face` rule (see `inlineFontCss`), and
-    // nothing loads one through `resolveAssetUrl`. Inlining it here as well
-    // would ship every glyph twice. The URL is absolutised instead, so it still
-    // means what it meant before `basePath` was emptied.
-    if (entry.kind === 'font') {
+    // A font's or a frame's bytes ride in the stylesheet (see `inlineCssUrls`),
+    // and nothing loads one through `resolveAssetUrl`. The URL is absolutised
+    // instead, so it still means what it meant before `basePath` was emptied.
+    if (CSS_KINDS.has(entry.kind)) {
       entry.url = `${basePath}${entry.url}`;
       continue;
     }
@@ -113,23 +121,23 @@ export async function inlineManifest() {
 }
 
 /**
- * Every `font` entry in the manifest as `<absolute url> -> data: URI`.
+ * Every `font` and `ui` entry in the manifest as `<absolute url> -> data: URI`.
  *
- * The `@font-face` rules in `src/ui/styles.css` point at `/assets/fonts/...`.
- * That is all a normal build needs: the dev server serves the path straight
- * from the repo root, and `npm run build` resolves it against the root and
- * re-emits the file into `dist/bundle/` with a content hash. Only the
- * single-file builds need the bytes in the rule itself, and this is where they
- * come from.
+ * The `@font-face` rules in `src/ui/styles.css` point at `/assets/fonts/...`
+ * and the frame rules at `/assets/ui/...`. That is all a normal build needs:
+ * the dev server serves those paths straight from the repo root, and `npm run
+ * build` resolves them against the root and re-emits each file into
+ * `dist/bundle/` with a content hash. Only the single-file builds need the
+ * bytes in the rule itself, and this is where they come from.
  */
-async function fontDataUris() {
+async function cssDataUris() {
   const manifest = JSON.parse(await readFile(MANIFEST_FILE, 'utf8'));
   const basePath = manifest.basePath ?? '';
   const map = new Map();
   let bytes = 0;
 
   for (const entry of manifest.entries) {
-    if (entry.kind !== 'font') continue;
+    if (!CSS_KINDS.has(entry.kind)) continue;
     const asset = await dataUri(basePath, entry.url);
     map.set(`${basePath}${entry.url}`, asset.uri);
     bytes += asset.bytes;
@@ -144,11 +152,11 @@ async function fontDataUris() {
  * A URL that is in the CSS but not in the manifest is an error rather than a
  * silent pass-through: it would be a runtime fetch on a host that allows none.
  */
-function inlineFontCss(code, fonts) {
-  return code.replace(/url\(\s*(['"]?)(\/assets\/fonts\/[^'")]+)\1\s*\)/g, (match, _q, url) => {
-    const uri = fonts.get(url);
+function inlineCssUrls(code, assets) {
+  return code.replace(/url\(\s*(['"]?)(\/assets\/[^'")]+)\1\s*\)/g, (match, _q, url) => {
+    const uri = assets.get(url);
     if (uri === undefined) {
-      throw new Error(`inline-assets: ${url} is not a font entry in assets.json`);
+      throw new Error(`inline-assets: ${url} is not a font or ui entry in assets.json`);
     }
     return `url("${uri}")`;
   });
@@ -172,7 +180,7 @@ async function inlineHavok() {
 export function inlineAssets(options = {}) {
   const report = options.onReport ?? (() => {});
   /** Read once and shared by every stylesheet the build passes through. */
-  let fonts = null;
+  let cssAssets = null;
 
   return {
     name: 'arcane-rush:inline-assets',
@@ -183,13 +191,16 @@ export function inlineAssets(options = {}) {
 
     async transform(code, id) {
       if (!/\.css(\?|$)/.test(id)) return null;
-      if (!code.includes('/assets/fonts/')) return null;
+      if (!code.includes('/assets/')) return null;
 
-      if (fonts === null) {
-        fonts = await fontDataUris();
-        report(`inlined ${String(fonts.map.size)} fonts, ${(fonts.bytes / 1024).toFixed(0)} KB raw`);
+      if (cssAssets === null) {
+        cssAssets = await cssDataUris();
+        report(
+          `inlined ${String(cssAssets.map.size)} fonts and UI pieces, ` +
+            `${(cssAssets.bytes / 1024).toFixed(0)} KB raw`,
+        );
       }
-      return { code: inlineFontCss(code, fonts.map), map: null };
+      return { code: inlineCssUrls(code, cssAssets.map), map: null };
     },
 
     async load(id) {

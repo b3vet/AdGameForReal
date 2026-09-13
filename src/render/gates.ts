@@ -1,36 +1,57 @@
 /**
- * Gate panels: a translucent slab per gate, tinted by kind, with the number the
- * player is deciding about printed across it.
+ * Gates: a stone arch per lane with the number the player is deciding about cut
+ * into a rune plaque hanging in it.
+ *
+ * Milestone 5 replaced the translucent slab (plan, "Gates too basic"). What a
+ * gate is made of is `./gateArch.ts`; this file is the pool — which arch is
+ * bound to which gate id, what is close enough to draw, and the reactions.
  *
  * Slots are bound to gate ids the first time a gate shows up in `RunState`, and
- * released when its exit animation finishes. Panels, materials and labels are
- * all built in `Renderer.init`; `loadLevel` only unbinds them.
+ * released when its exit animation finishes. Every mesh, material and label is
+ * built in `Renderer.init`; `loadLevel` only unbinds them.
+ *
+ * The draw-call arithmetic, because it is the reason for the shape of this
+ * file: every arch in view is one thin instance of one mesh, every plaque one
+ * instance of a second, and every shimmer one quad in a third batch. Only the
+ * kind dressing is per kind, and only inside `ORNAMENT_RANGE`. A row of three
+ * arches with three different kinds is six draw calls at its very worst and
+ * four in the common case, against nine for the nine panels it replaces.
  */
 
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { labelPixels, type NumberLabels } from './labels';
-import { loadPropMeshes, meshExtent } from './models';
+import { createShimmerTexture } from './artTextures';
+import { createBoxArch, createPlaque, loadArch } from './gateArch';
+import { createOrnaments, ORNAMENT_KINDS, ornamentIndex } from './gateOrnaments';
 import {
-  GATE_BASE_ALPHA,
+  GATE_PLAQUE_Z,
+  ORNAMENT_RANGE,
+  SHIMMER_ALPHA,
+  SHIMMER_BURST_ALPHA,
+  SHIMMER_BURST_SCALE,
+  SHIMMER_HEIGHT,
+  SHIMMER_HIT_BOOST,
+  SHIMMER_SCROLL,
+  SHIMMER_SKIPPED_ALPHA,
+  SHIMMER_WIDTH,
+  SHIMMER_Y,
+} from './gateLook';
+import { StaffProps } from './gateStaffs';
+import { gateText } from './gateText';
+import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
+import { labelPixels, type NumberLabels } from './labels';
+import { TintedQuads } from './tintedQuads';
+import {
   GATE_CENTER_Y,
   GATE_DRAW_RANGE,
   GATE_EXIT_DURATION,
-  GATE_HEIGHT,
   GATE_LABEL_COLOR,
   GATE_LABEL_MIN,
   GATE_LABEL_RANGE,
   GATE_LABEL_SIZE,
-  GATE_PROP_HEIGHT,
-  GATE_PROP_SPIN,
-  GATE_PROP_Y,
   GATE_PULSE_DURATION,
   GATE_TINTS,
-  GATE_WIDTH,
   GATE_WORD_MIN,
   GATE_WORD_SIZE,
   LABEL_BEHIND,
@@ -38,47 +59,29 @@ import {
   POOL,
   SIDE_GATE_LABEL_RANGE,
 } from './theme';
-import { weaponIds } from '@/sim';
-import type { GateKind, GateState, RunState, WeaponId } from '@/sim';
-
-/**
- * The staff each weapon gate floats above its panel, by mesh name inside
- * `mage.glb`. They are the same meshes the mages carry, so the panel offering
- * "Frost" shows the exact grimoire the crowd will be holding a second later.
- */
-const STAFF_MESHES: Record<WeaponId, string> = {
-  ember: '2H_Staff',
-  storm: '1H_Wand',
-  frost: 'Spellbook_open',
-};
+import type { GateKind, GateState, RunState } from '@/sim';
 
 type Exit = 'none' | 'chosen' | 'skipped';
 
-/**
- * What a staff gate prints. The sim's ids are lower case; a table rather than
- * `charAt(0).toUpperCase()` so the panel's word is chosen here, in render, and
- * so a new staff cannot ship without one.
- */
-const STAFF_NAMES: Record<WeaponId, string> = {
-  ember: 'Ember',
-  storm: 'Storm',
-  frost: 'Frost',
-};
-
-/** Metres behind the squad at which an exiting panel is dropped outright. */
+/** Metres behind the squad at which an exiting arch is dropped outright. */
 const EXIT_CUTOFF_BEHIND = 2;
 
-/** How far the number floats in front of the panel it is printed on. */
+/** How far the number floats in front of the plaque it is printed on. */
 const GATE_LABEL_LIFT = 0.1;
 
+/** Ornaments of one kind that can be in dressing range at once: two rows. */
+const ORNAMENT_CAPACITY = 8;
+/** Arches, plaques and shimmers in view at once. Three rows of three, plus exits. */
+const GATE_DRAW_CAPACITY = 16;
+
 interface GateSlot {
-  panel: Mesh;
-  material: StandardMaterial;
   /** This slot's label id in the shared atlas; see `src/render/labels.ts`. */
   label: number;
   gateId: number;
   rowIndex: number;
-  /** Last kind painted. A shot-down `sub` gate flips to `add` and must re-tint. */
+  x: number;
+  z: number;
+  /** Last kind seen. A shot-down `sub` gate flips to `add` and must re-dress. */
   kind: GateKind;
   /** Last value printed. Re-building the string every frame allocates. */
   shownValue: number;
@@ -88,8 +91,6 @@ interface GateSlot {
   pulse: number;
   exit: Exit;
   exitAge: number;
-  /** Whether the panel is inside the draw range; see `paintIdle`. */
-  drawn: boolean;
   /** Frame counter of the last `RunState` that still listed this gate. */
   seen: number;
 }
@@ -99,80 +100,95 @@ export class GateView {
   private readonly byGateId = new Map<number, GateSlot>();
   private readonly scene: Scene;
   private readonly labels: NumberLabels;
+
+  /** The arch, its plaque and the light inside it. */
+  private arch: Mesh;
+  private archMatrices: Float32Array;
+  private readonly plaques: Mesh;
+  private readonly plaqueMatrices: Float32Array;
+  private readonly shimmer: TintedQuads;
   /**
-   * One floating staff per weapon, shown above the nearest gate offering it,
-   * and the gate each is hovering over this frame. Both are plain arrays
-   * indexed by `weaponIds`, not maps: the second one is rebuilt every frame,
-   * and iterating a `Map` allocates a two-element array per entry per frame.
+   * One dressing mesh per kind, in `ORNAMENT_KINDS` order, with its own
+   * instance buffer and this frame's count. Parallel arrays rather than a map
+   * keyed by kind, because the counts are rewritten every frame and a `Map`
+   * allocates an entry array per iteration.
    */
-  private readonly staffMeshes: (Mesh | null)[] = [];
-  private readonly staffTargets: (GateSlot | null)[] = [];
+  private readonly ornaments: ({ mesh: Mesh; matrices: Float32Array } | null)[] = [];
+  private readonly ornamentCounts: number[] = [];
+
+  /** The staff a `weapon` gate offers, floating over its arch (`./gateStaffs.ts`). */
+  private readonly staffs: StaffProps;
   private frame = 0;
-  private spin = 0;
+  private scroll = 0;
 
   constructor(scene: Scene, labels: NumberLabels) {
     this.scene = scene;
     this.labels = labels;
-    for (let i = 0; i < weaponIds.length; i++) {
-      this.staffMeshes.push(null);
-      this.staffTargets.push(null);
-    }
-    for (let i = 0; i < POOL.gates; i++) {
-      const material = new StandardMaterial(`gateMat-${String(i)}`, scene);
-      material.specularColor = Color3.Black();
-      material.backFaceCulling = false;
-      material.alpha = GATE_BASE_ALPHA;
+    this.staffs = new StaffProps(scene);
 
-      const panel = CreateBox(
-        `gate-${String(i)}`,
-        { width: GATE_WIDTH, height: GATE_HEIGHT, depth: 0.12 },
-        scene,
+    // A box arch stands in until the dungeon pieces arrive, and stays if they
+    // never do: a build with no `/assets/` still has to show the player what
+    // they are choosing between.
+    this.arch = createBoxArch(scene);
+    this.archMatrices = createMatrixBuffer(this.arch, GATE_DRAW_CAPACITY);
+
+    this.plaques = createPlaque(scene);
+    this.plaqueMatrices = createMatrixBuffer(this.plaques, GATE_DRAW_CAPACITY);
+
+    this.shimmer = new TintedQuads(
+      scene,
+      'gateShimmer',
+      createShimmerTexture(scene),
+      GATE_DRAW_CAPACITY,
+    );
+
+    const ornaments = createOrnaments(scene);
+    for (const kind of ORNAMENT_KINDS) {
+      const mesh = ornaments.get(kind);
+      this.ornaments.push(
+        mesh === undefined ? null : { mesh, matrices: createMatrixBuffer(mesh, ORNAMENT_CAPACITY) },
       );
-      panel.material = material;
-      panel.isPickable = false;
-      panel.setEnabled(false);
+      this.ornamentCounts.push(0);
+    }
 
+    for (let i = 0; i < POOL.gates; i++) {
       this.slots.push({
-        panel,
-        material,
         label: labels.claim(),
         gateId: -1,
         rowIndex: -1,
+        x: 0,
+        z: 0,
         kind: 'add',
         shownValue: Number.NaN,
         shownText: '',
         pulse: 0,
         exit: 'none',
         exitAge: 0,
-        drawn: false,
         seen: 0,
       });
     }
   }
 
-  /** Pulls the three staff props out of the mage model. */
+  /** The three staff props out of the mage model, and the arch's stonework. */
   async load(): Promise<void> {
-    const meshes = await loadPropMeshes(this.scene, 'mage', Object.values(STAFF_MESHES));
-    for (let i = 0; i < weaponIds.length; i++) {
-      const id = weaponIds[i];
-      if (id === undefined) continue;
-      const mesh = meshes.get(STAFF_MESHES[id]);
-      if (mesh === undefined) continue;
-      const height = Math.max(0.01, meshExtent(mesh).y);
-      mesh.scaling.setAll(GATE_PROP_HEIGHT / height);
-      mesh.isPickable = false;
-      mesh.setEnabled(false);
-      this.staffMeshes[i] = mesh;
-    }
+    const [, arch] = await Promise.all([this.staffs.load(), loadArch(this.scene)]);
+    if (arch === null) return;
+    // The greybox is thrown away only once the real one is in hand.
+    this.arch.material?.dispose();
+    this.arch.dispose();
+    this.arch = arch;
+    this.archMatrices = createMatrixBuffer(arch, GATE_DRAW_CAPACITY);
   }
 
-  /** Hands every panel back to the pool. Called from `loadLevel`. */
+  /** Hands every arch back to the pool. Called from `loadLevel`. */
   reset(): void {
     this.byGateId.clear();
     for (const slot of this.slots) this.release(slot);
-    for (let i = 0; i < this.staffMeshes.length; i++) {
-      this.staffMeshes[i]?.setEnabled(false);
-      this.staffTargets[i] = null;
+    this.staffs.hideAll();
+    commitInstances(this.arch, 0);
+    commitInstances(this.plaques, 0);
+    for (const ornament of this.ornaments) {
+      if (ornament !== null) commitInstances(ornament.mesh, 0);
     }
   }
 
@@ -184,8 +200,8 @@ export class GateView {
   }
 
   /**
-   * The squad crossed this row. The gate that applied blows outward; its
-   * siblings in the same row simply fade, so the choice reads back to the player.
+   * The squad crossed this row. The gate that applied bursts; its siblings in
+   * the same row dim, so the choice reads back to the player.
    */
   onPassed(gateId: number): void {
     const chosen = this.byGateId.get(gateId);
@@ -200,80 +216,198 @@ export class GateView {
   update(state: RunState, dt: number): void {
     this.frame++;
     const squadZ = state.squad.z;
-    for (let i = 0; i < this.staffTargets.length; i++) this.staffTargets[i] = null;
+    this.staffs.begin();
 
+    // What the sim says, first: every bound slot learns where its gate is and
+    // what it is worth before anything is written.
     for (const gate of state.gates) {
       const slot = this.bind(gate);
       if (slot === undefined) continue;
       slot.seen = this.frame;
       if (slot.exit !== 'none') continue;
-
       // The sim mutates `passed` even when it emits no event for the skipped
       // lanes, so treat a passed-but-unanimated gate as a fade.
       if (gate.passed || gate.z < squadZ - 1.5) {
         this.startExit(slot, 'skipped');
         continue;
       }
-
-      this.paintIdle(slot, gate, squadZ);
-      if (gate.kind === 'weapon' && gate.weaponId !== undefined && slot.drawn) {
-        const at = weaponIds.indexOf(gate.weaponId);
-        const held = at < 0 ? null : (this.staffTargets[at] ?? null);
-        if (at >= 0 && (held === null || slot.panel.position.z < held.panel.position.z)) {
-          this.staffTargets[at] = slot;
-        }
+      slot.kind = gate.kind;
+      slot.z = gate.z;
+      if (gate.value !== slot.shownValue) {
+        slot.shownValue = gate.value;
+        slot.shownText = gateText(gate.kind, gate.value, gate.weaponId);
+      }
+      if (gate.kind === 'weapon' && gate.weaponId !== undefined) {
+        this.staffs.offer(gate.weaponId, slot.x, slot.z);
       }
     }
 
-    for (const slot of this.slots) {
-      if (slot.gateId < 0) continue;
-      if (slot.exit === 'none') {
-        // Gone from the state without a `gatePassed`: retire it quietly.
-        if (slot.seen !== this.frame) this.release(slot);
-        else slot.pulse = Math.max(0, slot.pulse - dt);
-        continue;
-      }
-      this.advanceExit(slot, dt, squadZ);
-    }
-
-    this.placeStaffs(dt);
+    this.draw(squadZ, dt);
+    this.staffs.place(dt);
   }
 
   dispose(): void {
-    // The material too: `Mesh.dispose` leaves it behind by default, and a
-    // renderer that is torn down and rebuilt (the dev scenes, a hot reload)
-    // would otherwise leak sixty of them per cycle.
-    for (const slot of this.slots) {
-      slot.material.dispose();
-      slot.panel.dispose();
+    this.arch.material?.dispose();
+    this.arch.dispose();
+    this.plaques.material?.dispose();
+    this.plaques.dispose();
+    this.shimmer.dispose();
+    for (const ornament of this.ornaments) {
+      if (ornament === null) continue;
+      ornament.mesh.material?.dispose();
+      ornament.mesh.dispose();
     }
+    this.ornaments.length = 0;
     this.slots.length = 0;
     this.byGateId.clear();
-    for (let i = 0; i < this.staffMeshes.length; i++) this.staffMeshes[i]?.dispose();
-    this.staffMeshes.length = 0;
-    this.staffTargets.length = 0;
+    this.staffs.dispose();
   }
 
   /**
-   * Floats each staff over the nearest gate offering it, turning slowly so the
-   * silhouette reads from any angle, and hides the ones nobody is offering.
+   * Writes every instance for this frame: arches, plaques, shimmers, dressing
+   * and numbers, in one pass over the pool.
+   *
+   * One pass rather than one per mesh, because a gate decides all five at once
+   * — how far away it is says whether it is drawn at all, whether its number is
+   * printed, and whether it is near enough to be dressed.
    */
-  private placeStaffs(dt: number): void {
-    this.spin += dt * GATE_PROP_SPIN;
-    const bob = Math.sin(this.spin * 2) * 0.06;
-    for (let i = 0; i < this.staffMeshes.length; i++) {
-      const mesh = this.staffMeshes[i];
-      if (mesh === null || mesh === undefined) continue;
-      const slot = this.staffTargets[i] ?? null;
-      if (slot === null) {
-        if (mesh.isEnabled()) mesh.setEnabled(false);
+  private draw(squadZ: number, dt: number): void {
+    this.scroll += dt * SHIMMER_SCROLL;
+    this.shimmer.begin();
+
+    let arches = 0;
+    let plaques = 0;
+    this.ornamentCounts.fill(0);
+
+    for (const slot of this.slots) {
+      if (slot.gateId < 0) continue;
+
+      if (slot.exit === 'none') {
+        // Gone from the state without a `gatePassed`: retire it quietly.
+        if (slot.seen !== this.frame) {
+          this.release(slot);
+          continue;
+        }
+        slot.pulse = Math.max(0, slot.pulse - dt);
+      } else {
+        slot.exitAge += dt;
+        const done =
+          slot.exitAge >= GATE_EXIT_DURATION || slot.z < squadZ - EXIT_CUTOFF_BEHIND;
+        if (done) {
+          this.release(slot);
+          continue;
+        }
+      }
+
+      const ahead = slot.z - squadZ;
+      // A level carries up to sixty gates and the ones deep in the fog are a
+      // smudge, so only the rows the player can act on are drawn at all.
+      if (ahead >= GATE_DRAW_RANGE || ahead <= -LABEL_BEHIND * 2) {
+        this.labels.hide(slot.label);
         continue;
       }
-      mesh.setEnabled(true);
-      mesh.position.set(slot.panel.position.x, GATE_PROP_Y + bob, slot.panel.position.z);
-      mesh.rotation.y = this.spin;
-      mesh.rotation.z = 0.35;
+
+      if (arches < GATE_DRAW_CAPACITY) {
+        writeInstance(this.archMatrices, arches, 1, 1, 1, slot.x, 0, slot.z);
+        arches++;
+      }
+
+      this.writeShimmer(slot);
+
+      // The plaque only where the number is: an arch three rows out carries no
+      // digits, and a dark slab hanging in it with nothing on it reads as a
+      // hole in the frame.
+      const range = slot.x === 0 ? GATE_LABEL_RANGE : SIDE_GATE_LABEL_RANGE;
+      const labelled = slot.exit === 'none' && ahead < range && ahead > -LABEL_BEHIND;
+      if (labelled && plaques < GATE_DRAW_CAPACITY) {
+        writeInstance(
+          this.plaqueMatrices,
+          plaques,
+          1,
+          1,
+          1,
+          slot.x,
+          GATE_CENTER_Y,
+          slot.z - GATE_PLAQUE_Z,
+        );
+        plaques++;
+        const word = slot.kind === 'weapon';
+        this.labels.set(
+          slot.label,
+          slot.shownText,
+          slot.x,
+          GATE_CENTER_Y,
+          // A hair in front of the plaque's own face, toward the camera.
+          slot.z - GATE_PLAQUE_Z - GATE_LABEL_LIFT,
+          GATE_LABEL_COLOR,
+          labelPixels(
+            word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
+            word ? GATE_WORD_MIN : GATE_LABEL_MIN,
+            ahead,
+          ),
+        );
+      } else {
+        this.labels.hide(slot.label);
+      }
+
+      if (slot.exit !== 'none' || ahead > ORNAMENT_RANGE) continue;
+      const at = ornamentIndex(slot.kind);
+      const ornament = at < 0 ? null : (this.ornaments[at] ?? null);
+      if (ornament === null) continue;
+      const count = this.ornamentCounts[at] ?? 0;
+      if (count >= ORNAMENT_CAPACITY) continue;
+      writeInstance(ornament.matrices, count, 1, 1, 1, slot.x, 0, slot.z);
+      this.ornamentCounts[at] = count + 1;
     }
+
+    commitInstances(this.arch, arches);
+    commitInstances(this.plaques, plaques);
+    for (let i = 0; i < this.ornaments.length; i++) {
+      const ornament = this.ornaments[i];
+      if (ornament === null || ornament === undefined) continue;
+      commitInstances(ornament.mesh, this.ornamentCounts[i] ?? 0);
+    }
+    this.shimmer.end();
+  }
+
+  /**
+   * The light inside one arch: kind-tinted, drifting across the opening,
+   * brighter for as long as a shot is landing on it, and either bursting or
+   * dimming once the squad has made its choice.
+   */
+  private writeShimmer(slot: GateSlot): void {
+    const tint = GATE_TINTS[slot.kind];
+    const pulse = slot.pulse / GATE_PULSE_DURATION;
+    let alpha = SHIMMER_ALPHA + pulse * SHIMMER_HIT_BOOST;
+    let scale = 1;
+    if (slot.exit !== 'none') {
+      const t = Math.min(1, slot.exitAge / GATE_EXIT_DURATION);
+      if (slot.exit === 'chosen') {
+        alpha = SHIMMER_BURST_ALPHA * (1 - t);
+        scale = 1 + (SHIMMER_BURST_SCALE - 1) * t;
+      } else {
+        alpha = SHIMMER_ALPHA * (1 - t) + SHIMMER_SKIPPED_ALPHA * t;
+        scale = 1 - t * 0.15;
+      }
+    }
+    this.shimmer.add(
+      slot.x,
+      SHIMMER_Y * scale,
+      slot.z,
+      SHIMMER_WIDTH * scale,
+      SHIMMER_HEIGHT * scale,
+      tint.r,
+      tint.g,
+      tint.b,
+      alpha,
+      // The pattern tiles across the arch and is clamped up it
+      // (`createShimmerTexture`), so the drift belongs on u — on v it would
+      // walk the veil off its own quad and the light would fade out over a
+      // run. The per-gate offset on the same axis keeps a row of three from
+      // shimmering as one.
+      this.scroll + (slot.gateId % 5) * 0.2,
+      0,
+    );
   }
 
   private bind(gate: GateState): GateSlot | undefined {
@@ -291,13 +425,9 @@ export class GateView {
     slot.pulse = 0;
     slot.exit = 'none';
     slot.exitAge = 0;
-
-    slot.panel.position.set(gate.lane * LANE_WIDTH, GATE_CENTER_Y, gate.z);
-    slot.panel.scaling.setAll(1);
-    slot.drawn = true;
-    slot.panel.setEnabled(true);
-    slot.material.alpha = GATE_BASE_ALPHA;
-    this.tint(slot, gate.kind);
+    slot.kind = gate.kind;
+    slot.x = gate.lane * LANE_WIDTH;
+    slot.z = gate.z;
 
     this.byGateId.set(gate.id, slot);
     return slot;
@@ -314,129 +444,20 @@ export class GateView {
     return undefined;
   }
 
-  private paintIdle(slot: GateSlot, gate: GateState, squadZ: number): void {
-    const ahead = gate.z - squadZ;
-    // A level carries up to sixty panels and each is its own draw call, so the
-    // ones deep in the fog are not drawn at all. Three rows are in frame at
-    // 11 m spacing, which is everything the player can act on.
-    const drawn = ahead < GATE_DRAW_RANGE && ahead > -LABEL_BEHIND * 2;
-    if (drawn !== slot.drawn) {
-      slot.drawn = drawn;
-      slot.panel.setEnabled(drawn);
-    }
-    if (!drawn) return;
-
-    // Shooting a `sub` gate to zero turns it into an `add` gate: the colour has
-    // to follow, or the player reads a red panel offering a bonus.
-    if (gate.kind !== slot.kind) this.tint(slot, gate.kind);
-
-    const tint = GATE_TINTS[gate.kind];
-    const pulse = slot.pulse / GATE_PULSE_DURATION;
-    // Written into the material's own colour: `scale` would allocate a Color3
-    // for every visible gate on every frame.
-    tint.scaleToRef(0.35 + pulse * 0.9, slot.material.emissiveColor);
-    slot.material.alpha = GATE_BASE_ALPHA + pulse * 0.35;
-
-    // A far row shows one number, the near row shows all three: at thirty
-    // metres out the three lanes are close enough on screen that side labels
-    // overlap the middle one, and the nearest row has to stay fully readable.
-    const range = gate.lane === 0 ? GATE_LABEL_RANGE : SIDE_GATE_LABEL_RANGE;
-    if (ahead >= range || ahead <= -LABEL_BEHIND) return;
-
-    // Only when the number actually moved: building the string every frame
-    // allocates, and the atlas is handed the cached one.
-    if (gate.value !== slot.shownValue) {
-      slot.shownValue = gate.value;
-      slot.shownText = gateText(gate.kind, gate.value, gate.weaponId);
-    }
-    const word = gate.kind === 'weapon';
-    this.labels.set(
-      slot.label,
-      slot.shownText,
-      slot.panel.position.x,
-      GATE_CENTER_Y,
-      // A hair in front of the panel's own face, toward the camera: the label
-      // does not test depth, but keeping it off the plane stops the two from
-      // z-fighting if that ever changes.
-      slot.panel.position.z - GATE_LABEL_LIFT,
-      GATE_LABEL_COLOR,
-      labelPixels(
-        word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
-        word ? GATE_WORD_MIN : GATE_LABEL_MIN,
-        ahead,
-      ),
-    );
-  }
-
-  private tint(slot: GateSlot, kind: GateKind): void {
-    slot.kind = kind;
-    // The kind changed, so the number is about to be re-printed with a new sign.
-    slot.shownValue = Number.NaN;
-    const tint = GATE_TINTS[kind];
-    tint.scaleToRef(0.5, slot.material.diffuseColor);
-    tint.scaleToRef(0.35, slot.material.emissiveColor);
-  }
-
   private startExit(slot: GateSlot, exit: Exit): void {
     if (slot.exit !== 'none' || exit === 'none') return;
     slot.exit = exit;
     slot.exitAge = 0;
   }
 
-  private advanceExit(slot: GateSlot, dt: number, squadZ: number): void {
-    slot.exitAge += dt;
-    const p = Math.min(1, slot.exitAge / GATE_EXIT_DURATION);
-    // A panel between the squad and the camera fills the screen, so cut it
-    // short once the squad is properly through rather than letting it linger.
-    if (p >= 1 || slot.panel.position.z < squadZ - EXIT_CUTOFF_BEHIND) {
-      this.release(slot);
-      return;
-    }
-
-    const grow = slot.exit === 'chosen' ? 1 + p * 0.7 : 1 - p * 0.2;
-    slot.panel.scaling.set(grow, grow, 1);
-    slot.material.alpha = GATE_BASE_ALPHA * (1 - p);
-  }
-
   private release(slot: GateSlot): void {
     if (slot.gateId >= 0) this.byGateId.delete(slot.gateId);
+    this.labels.hide(slot.label);
     slot.gateId = -1;
     slot.rowIndex = -1;
     slot.exit = 'none';
     slot.exitAge = 0;
     slot.pulse = 0;
-    slot.drawn = false;
     slot.shownText = '';
-    slot.panel.setEnabled(false);
-    slot.panel.scaling.setAll(1);
   }
-}
-
-/**
- * What the player reads. Gate values are floats — growth is rate-based — so
- * every branch rounds; `sub` stores its penalty positive, so it prints the sign.
- */
-export function gateText(kind: GateKind, value: number, weaponId?: WeaponId): string {
-  switch (kind) {
-    case 'mul':
-      return `x${String(whole(value))}`;
-    case 'add':
-      return `+${String(whole(value))}`;
-    case 'sub': {
-      const penalty = whole(value);
-      // A shot-down `sub` spends its last fraction of a unit before the sim
-      // flips it to `add`. Gluing the sign on would print "-0" for that frame.
-      return penalty === 0 ? '0' : `-${String(penalty)}`;
-    }
-    case 'fireRate':
-      return `+${String(whole(value * 100))}%`;
-    case 'weapon':
-      return weaponId === undefined ? 'Staff' : STAFF_NAMES[weaponId];
-  }
-}
-
-/** `Math.round` hands back `-0` for small negatives, which prints with a sign. */
-function whole(value: number): number {
-  const rounded = Math.round(value);
-  return rounded === 0 ? 0 : rounded;
 }

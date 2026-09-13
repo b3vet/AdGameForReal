@@ -39,6 +39,10 @@ const KAYKIT = 'https://cdn.jsdelivr.net/gh/KayKit-Game-Assets';
 const ADVENTURERS = `${KAYKIT}/KayKit-Character-Pack-Adventures-1.0@main/addons/kaykit_character_pack_adventures`;
 const SKELETONS = `${KAYKIT}/KayKit-Character-Pack-Skeletons-1.0@main/addons/kaykit_character_pack_skeletons`;
 const HALLOWEEN = `${KAYKIT}/KayKit-Halloween-Bits-1.0@main/addons/kaykit_halloween_bits/Assets`;
+const DUNGEON = `${KAYKIT}/KayKit-Dungeon-Remastered-1.0@main/addons/kaykit_dungeon_remastered/Assets`;
+
+/** ambientCG serves its zips through a redirect to its own CDN; `fetch` follows it. */
+const AMBIENTCG = 'https://ambientcg.com/get?file=';
 
 /** Quaternius publishes through Google Drive; these are file ids in that folder. */
 const DRIVE = 'https://drive.google.com/uc?export=download&id=';
@@ -75,6 +79,79 @@ const PROPS = [
   'post_lantern',
   'fence',
 ];
+
+/**
+ * KayKit Dungeon Remastered pieces (Milestone 5, decision D39): the gate arches,
+ * the lane walls and the boss arena are built from these five.
+ *
+ * The pack ships each piece as `<name>.gltf.glb` — already a self-contained GLB
+ * with the shared `dungeon_texture` atlas embedded — so unlike the Halloween
+ * props there is nothing to fold together here and the bytes are copied through.
+ * About 15 KB of every file is that atlas, repeated; five pieces is 75 KB of
+ * duplication, which is cheaper than the second material a shared texture file
+ * would cost at runtime.
+ *
+ * Only the pieces we actually place are kept (the pack has 203):
+ *   column        — the arch legs, and the post between two wall runs
+ *   barrier_half  — a 2 m stone parapet: the arch lintel, and the wall run
+ *   pillar        — the boss arena's corner markers
+ *   banner_blue   — hangs on those pillars, re-tinted to `arcane` in render
+ *   torch_lit     — roadside light beside the gate rows of later levels
+ */
+const DUNGEON_PIECES = ['column', 'barrier_half', 'pillar', 'banner_blue', 'torch_lit'];
+
+/**
+ * The road and field albedos (Milestone 5 plan, "Road texture bad"), from
+ * ambientCG — CC0, photogrammetry, and the one place a hand-painted tile cannot
+ * compete: real medieval paving with moss in the joints.
+ *
+ * Both are downsized and re-encoded here rather than shipped as downloaded. The
+ * 1K JPEGs in those zips are 1.8 and 2.0 MB, which the single-file builds (12 MB
+ * hosted, decision D25) cannot afford; at the sizes below the pair is under
+ * 320 KB and still oversampled for a road tile 2.4 m across on a phone.
+ *
+ * `ao` multiplies the pack's ambient-occlusion map into the albedo, which is
+ * what puts the shadow in the joints — the road material is unlit stone with a
+ * toon ramp over it, so there is no light in the scene that would do it.
+ */
+const AMBIENTCG_TEXTURES = [
+  {
+    file: 'road_cobble.jpg',
+    asset: 'PavingStones131',
+    size: 1024,
+    quality: 0.75,
+    ao: true,
+    use: 'the road surface',
+  },
+  {
+    file: 'field_grass.jpg',
+    asset: 'Grass004',
+    size: 512,
+    quality: 0.72,
+    ao: false,
+    use: 'the field either side and the grass fringe along the kerbs',
+  },
+];
+
+/**
+ * What `assets/licenses/ambientcg.txt` records. ambientCG's zips carry no
+ * licence file — the statement is on the site, so it is quoted here with the
+ * page it came from, exactly as the Quaternius note in docs/ASSETS.md does.
+ */
+const AMBIENTCG_LICENSE = `ambientCG (ambientcg.com) — licence record
+Copied from https://ambientcg.com/license on 2026-09-13:
+
+  "All ambientCG assets are provided under the Creative Commons CC0 1.0
+   Universal License. This applies to the downloadable asset files and the
+   material preview renders shown for each asset on the site."
+
+  "You don't need to give credit but I would of course appreciate it, if you
+   did it anyways. You can do so using this text:
+   Created using <asset name> from ambientCG.com, licensed under the Creative
+   Commons CC0 1.0 Universal License."
+
+Assets used here, downloaded as <id>_1K-JPG.zip through https://ambientcg.com/get:
+`;
 
 const KENNEY_PACKS = [
   'impact-sounds',
@@ -157,6 +234,119 @@ async function props() {
   return total;
 }
 
+/**
+ * The dungeon pieces, copied through as they come. See `DUNGEON_PIECES` for why
+ * there is no transform step here.
+ */
+async function dungeon() {
+  let total = 0;
+  for (const name of DUNGEON_PIECES) {
+    const glb = await cached(`${DUNGEON}/gltf/${name}.gltf.glb`, `kaykit/dungeon/${name}.glb`);
+    total += await writeAsset(`props/dungeon_${name}.glb`, glb);
+  }
+  return total;
+}
+
+/**
+ * The ambientCG albedos: download the zip, pull the maps out of it, and let
+ * Chromium do the compositing and the re-encode.
+ *
+ * A browser for an image resize looks heavy until you count the alternatives:
+ * there is no JPEG decoder in Node and no image dependency may be added
+ * (docs/ASSETS.md, "How to rebuild"), and Playwright is already a devDependency
+ * with a pinned browser for the smoke test. The whole pass is one page and a few
+ * seconds, and only when the cache is cold does it also cost the two downloads.
+ */
+async function ambientcg() {
+  const maps = [];
+  for (const texture of AMBIENTCG_TEXTURES) {
+    const zip = await cached(
+      `${AMBIENTCG}${texture.asset}_1K-JPG.zip`,
+      `ambientcg/${texture.asset}_1K-JPG.zip`,
+    );
+    const color = findZipEntry(zip, /_Color\.jpg$/i);
+    if (color === null) throw new Error(`no _Color.jpg in the ${texture.asset} zip`);
+    const ao = texture.ao ? findZipEntry(zip, /_AmbientOcclusion\.jpg$/i) : null;
+    maps.push({ texture, color, ao });
+  }
+
+  const encoded = await encodeTextures(maps);
+  let total = 0;
+  for (let i = 0; i < maps.length; i++) {
+    const bytes = encoded[i];
+    const entry = maps[i];
+    if (bytes === undefined || entry === undefined) continue;
+    total += await writeAsset(`textures/${entry.texture.file}`, bytes);
+  }
+
+  const record = `${AMBIENTCG_LICENSE}${AMBIENTCG_TEXTURES.map(
+    (texture) =>
+      `  ${texture.asset} — https://ambientcg.com/a/${texture.asset} — ${texture.use}\n`,
+  ).join('')}`;
+  total += await writeAsset('licenses/ambientcg.txt', Buffer.from(record, 'utf8'));
+  return total;
+}
+
+/** Composites and re-encodes every texture in one Chromium page. */
+async function encodeTextures(maps) {
+  let chromium;
+  try {
+    ({ chromium } = await import('playwright'));
+  } catch (error) {
+    throw new Error(
+      "the texture step needs Playwright's Chromium (npm i && npx playwright install chromium)",
+      { cause: error },
+    );
+  }
+
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    const jobs = maps.map((entry) => ({
+      color: entry.color.toString('base64'),
+      ao: entry.ao === null ? null : entry.ao.toString('base64'),
+      size: entry.texture.size,
+      quality: entry.texture.quality,
+    }));
+    const dataUris = await page.evaluate(async (list) => {
+      const load = (base64) =>
+        new Promise((resolve, reject) => {
+          // `globalThis`, because this body runs in Chromium and the file is
+          // linted as Node (the same convention as `scripts/smoke-run.mjs`).
+          const image = new globalThis.Image();
+          image.onload = () => {
+            resolve(image);
+          };
+          image.onerror = () => {
+            reject(new Error('could not decode a source map'));
+          };
+          image.src = `data:image/jpeg;base64,${base64}`;
+        });
+
+      const out = [];
+      for (const job of list) {
+        const canvas = globalThis.document.createElement('canvas');
+        canvas.width = job.size;
+        canvas.height = job.size;
+        const context = canvas.getContext('2d');
+        context.drawImage(await load(job.color), 0, 0, job.size, job.size);
+        if (job.ao !== null) {
+          // Multiply, so the occlusion darkens the joints without touching the
+          // hue of the stone itself.
+          context.globalCompositeOperation = 'multiply';
+          context.drawImage(await load(job.ao), 0, 0, job.size, job.size);
+          context.globalCompositeOperation = 'source-over';
+        }
+        out.push(canvas.toDataURL('image/jpeg', job.quality));
+      }
+      return out;
+    }, jobs);
+    return dataUris.map((uri) => Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64'));
+  } finally {
+    await browser.close();
+  }
+}
+
 async function boss() {
   const doc = JSON.parse(
     (await cached(`${DRIVE}${QUATERNIUS_DEMON}`, 'quaternius/Demon.gltf')).toString('utf8'),
@@ -173,6 +363,7 @@ async function licenses() {
     ['kaykit-adventurers.txt', `${ADVENTURERS}/LICENSE.txt`, 'kaykit/adventurers-LICENSE.txt'],
     ['kaykit-skeletons.txt', `${SKELETONS}/LICENSE.txt`, 'kaykit/skeletons-LICENSE.txt'],
     ['kaykit-halloween-bits.txt', `${HALLOWEEN}/LICENSE.txt`, 'kaykit/halloween-LICENSE.txt'],
+    ['kaykit-dungeon-remastered.txt', `${DUNGEON}/LICENSE.txt`, 'kaykit/dungeon-LICENSE.txt'],
     ['quaternius-ultimate-monsters.txt', `${DRIVE}${QUATERNIUS_LICENSE}`, 'quaternius/License.txt'],
   ];
   let total = 0;
@@ -263,6 +454,12 @@ async function main() {
 
   console.log('[assets] KayKit Halloween Bits props');
   total += await props();
+
+  console.log('[assets] KayKit Dungeon Remastered pieces');
+  total += await dungeon();
+
+  console.log('[assets] ambientCG road and field albedos');
+  total += await ambientcg();
 
   console.log('[assets] licences');
   total += await licenses();

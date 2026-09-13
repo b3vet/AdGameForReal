@@ -29,6 +29,20 @@ export const WALL_RAIL_HEIGHT = 0.16;
 export const WALL_RAIL_WIDTH = 0.13;
 /** Rail centre height: low enough that the posts still read as posts. */
 export const WALL_RAIL_Y = 0.3;
+/**
+ * The carved piece (D39, Milestone 5): how much taller its column stands than
+ * the parapet beside it, and how thick that parapet is once it has been turned
+ * to run along the road.
+ *
+ * The column is the only part allowed above `WALL_POST_HEIGHT`, and only by a
+ * third: the rule the height exists for is that a spell at `BOLT_Y` clears the
+ * wall, and a post that broke it would have shots stopping against the scenery.
+ * Depth is a little under the boxes' own footprint, so the wall still sits
+ * inside the lane it guards.
+ */
+export const WALL_PIECE_POST_LIFT = 1.3;
+export const WALL_PIECE_DEPTH = 0.3;
+
 /** The glowing edge: a thin bar capping the posts, and how thick it is. */
 export const WALL_RUNE_HEIGHT = 0.06;
 export const WALL_RUNE_WIDTH = 0.18;
