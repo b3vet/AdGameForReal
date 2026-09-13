@@ -36,6 +36,9 @@ function harness(forced: number | null = null): Harness {
   const applied: number[] = [];
   const ladder = new QualityLadder({
     forced,
+    // The product owner's screen, so the rung line's effective ratio is the
+    // rung's own rather than whatever the test runner claims to be.
+    deviceRatio: 3,
     apply: (_rung, index) => {
       applied.push(index);
     },
@@ -77,7 +80,7 @@ describe('QualityLadder', () => {
     const h = harness();
     expect(h.applied).toEqual([0]);
     expect(h.ladder.rung).toBe(0);
-    expect(h.ladder.reason).toBe('start');
+    expect(h.ladder.reason).toBe('start 3x');
   });
 
   it('ignores the first seconds after a level start', () => {
@@ -115,7 +118,7 @@ describe('QualityLadder', () => {
     // The second one is.
     expect(h.window(FRAME_SLOW)).toBe(1);
     expect(h.ladder.rung).toBe(1);
-    expect(h.ladder.reason).toBe('p95');
+    expect(h.ladder.reason).toBe('p95 2x');
   });
 
   it('never drops two stops of resolution at once', () => {
@@ -123,7 +126,7 @@ describe('QualityLadder', () => {
     settle(h);
     h.window(FRAME_SLOW);
     h.window(FRAME_SLOW);
-    expect(QUALITY_RUNGS[h.ladder.rung]?.pixelRatio).toBe(1.5);
+    expect(QUALITY_RUNGS[h.ladder.rung]?.pixelRatio).toBe(2);
   });
 
   it('forgets a bad window once the device catches up', () => {
@@ -147,7 +150,7 @@ describe('QualityLadder', () => {
 
     h.ladder.beginLevel();
     expect(h.ladder.rung).toBe(0);
-    expect(h.ladder.reason).toBe('level');
+    expect(h.ladder.reason).toBe('level 3x');
     expect(h.applied[h.applied.length - 1]).toBe(0);
     expect(h.ladder.windows).toBe(0);
 
@@ -181,11 +184,26 @@ describe('QualityLadder', () => {
     const h = harness(3);
     expect(h.ladder.rung).toBe(3);
     expect(h.ladder.isPinned).toBe(true);
-    expect(h.ladder.reason).toBe('pinned');
+    expect(h.ladder.reason).toBe('pinned 1x');
     expect(h.feed(FRAME_SLOW, 1000)).toBe(0);
     expect(h.ladder.rung).toBe(3);
     h.ladder.beginLevel();
     expect(h.ladder.rung).toBe(3);
+  });
+
+  it('is four pixel-ratio rungs and then the ragdolls (D38)', () => {
+    // The table itself, because it is the milestone's promise: native first,
+    // one stop of resolution at a time, and only then fewer bodies.
+    expect(QUALITY_RUNGS.map((rung) => rung.pixelRatio)).toEqual([3, 2, 1.5, 1, 1, 1]);
+    expect(QUALITY_RUNGS.map((rung) => rung.physics)).toEqual([2, 2, 2, 2, 1, 0]);
+  });
+
+  it('reports the effective ratio, which the screen can cap', () => {
+    // A 2x screen never renders at 3, whatever the rung says, so the panel has
+    // to print what the backing store actually is.
+    const ladder = new QualityLadder({ deviceRatio: 2, apply: () => {} });
+    expect(ladder.effectiveRatio).toBe(2);
+    expect(ladder.reason).toBe('start 2x');
   });
 
   it('clamps a rung from the query string', () => {

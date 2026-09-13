@@ -1,9 +1,9 @@
 /**
  * The degrade ladder, and the frame-time monitor that walks it.
  *
- * One ladder for the whole app: pixel ratio 2 → 1.5 → 1, then the ragdolls
+ * One ladder for the whole app: pixel ratio 3 → 2 → 1.5 → 1, then the ragdolls
  * 8 → 4 → 0. It lives here rather than in `src/physics` because the first
- * three steps are the renderer's and only the app can see all of them; the
+ * four steps are the renderer's and only the app can see all of them; the
  * physics layer keeps `setQuality` and no opinion about when it is called.
  *
  * Milestone 3 dropped the glow rung entirely (plan, performance step 4): the
@@ -50,12 +50,28 @@ export interface QualityRung {
 /**
  * The ladder itself, best first. Index into this is the "rung" everywhere.
  *
- * The first step is to 1.5, never straight to 1.0: on the product owner's 3×
- * screen rung 0 already renders at 2, and 1.5 is still a denser backing store
- * than most of what the phone draws for itself. Dropping two stops at once is
- * what made the Milestone 2 build look soft.
+ * Rung 0 is the screen's own pixel ratio, up to 3 (D38). Milestone 3 capped it
+ * at 2 on the theory that the extra pixels buy nothing; the product owner's
+ * verdict on that build was "resolution very low", and they are right — a 3×
+ * phone rendering at 2 is 44 percent of the pixels the screen has, and the gate
+ * numbers and the road's rune lines are exactly the thin high-contrast edges
+ * that shows on. So the top of the ladder is native, and the ladder is what
+ * decides whether the device can hold it.
+ *
+ * That is the whole guard, and it is deliberate: there is no device list and no
+ * "3× only above N cores" rule, because both would be wrong on a phone nobody
+ * on this team owns. A device that cannot hold native renders two windows —
+ * six seconds — at 3 and then steps to 2, which is where Milestone 3 started.
+ * Every step is one stop of resolution, never two: dropping straight from 3 to
+ * 1.5 is what made the Milestone 2 build look soft, and the p95 rule steps
+ * again in another six seconds if one stop was not enough.
+ *
+ * The tail is the ragdolls: physics 2 spawns eight per kill, 1 spawns four and
+ * 0 none at all (`RAGDOLL_LIVE_CAP` in `src/physics`), so the last two rungs
+ * buy frames by drawing fewer bodies once there is no resolution left to give.
  */
 export const QUALITY_RUNGS: readonly QualityRung[] = [
+  { pixelRatio: 3, physics: 2 },
   { pixelRatio: 2, physics: 2 },
   { pixelRatio: 1.5, physics: 2 },
   { pixelRatio: 1, physics: 2 },
@@ -98,11 +114,25 @@ export interface QualityLadderOptions {
   forced?: number | null;
   /** Applied on construction and on every step. */
   apply: (rung: QualityRung, index: number) => void;
+  /**
+   * What the screen offers, for the rung line's effective ratio. Defaults to
+   * the window's; passed explicitly by the tests, which have no window worth
+   * asking.
+   */
+  deviceRatio?: number;
+}
+
+/** The screen's pixel ratio, or 1 where there is no window to ask. */
+function readDeviceRatio(): number {
+  if (typeof window === 'undefined') return 1;
+  const ratio = window.devicePixelRatio;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
 export class QualityLadder {
   private readonly apply: (rung: QualityRung, index: number) => void;
   private readonly forced: boolean;
+  private readonly deviceRatio: number;
 
   private index = 0;
 
@@ -126,6 +156,7 @@ export class QualityLadder {
 
   constructor(options: QualityLadderOptions) {
     this.apply = options.apply;
+    this.deviceRatio = options.deviceRatio ?? readDeviceRatio();
     const forced = options.forced ?? null;
     this.forced = forced !== null;
     if (forced !== null) {
@@ -161,9 +192,22 @@ export class QualityLadder {
     return this.windowCount;
   }
 
-  /** One word for why the rung is where it is: `start`, `pinned` or `p95`. */
+  /**
+   * Why the rung is where it is and what it renders at: `start 3x`, `p95 2x`.
+   *
+   * The ratio rides on the reason because it is what a rung *means* and the
+   * debug panel's rung line is where the two belong together (`src/ui/debug.ts`
+   * prints `rung 1 p95 2x  p95 24.1ms`). It is the effective ratio, not the
+   * rung's — a rung of 3 on a 2× screen renders at 2 — which is the number a
+   * capture from the product owner's phone has to be read against.
+   */
   get reason(): string {
-    return this.lastReason;
+    return `${this.lastReason} ${formatRatio(this.effectiveRatio)}x`;
+  }
+
+  /** What the scene actually renders at on this screen: the rung under the device. */
+  get effectiveRatio(): number {
+    return Math.min(this.deviceRatio, this.current.pixelRatio);
   }
 
   /**
@@ -242,6 +286,11 @@ export class QualityLadder {
     this.count = 0;
     this.elapsed = 0;
   }
+}
+
+/** `3`, `1.5` — a ratio with no trailing zero, because the panel is 390 px wide. */
+function formatRatio(ratio: number): string {
+  return Number.isInteger(ratio) ? ratio.toFixed(0) : ratio.toFixed(1);
 }
 
 export function clampRung(rung: number): number {

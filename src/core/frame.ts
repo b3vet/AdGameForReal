@@ -36,6 +36,25 @@ const MAX_FRAME_DT = 0.05;
  */
 const MAX_SIM_CHUNK = 0.05;
 
+/**
+ * Frames a second the Academy's backdrop is drawn at (Milestone 4 Phase D's
+ * deferred item, "the backdrop renders behind the room panels every frame").
+ *
+ * The home screen is a preview run that never ticks, so once the camera has
+ * settled the frame is identical and the loop stops asking for one at all. The
+ * Academy broke that: its backdrop *drifts* (`CameraRig.setDrift`), so the
+ * camera never settles and the scene is re-rendered at the display's full rate
+ * — 120 Hz on the product owner's phone — behind a room panel that covers most
+ * of it, for a pose that moves half a metre every seventeen seconds.
+ *
+ * Thirty is well above what the drift needs (it is two pixels a frame at 30)
+ * and a quarter of the work. The whole accumulated interval is handed to the
+ * renderer as its `dt`, so the drift runs at the same speed it always did; a
+ * capped frame is a longer frame, not a slower world.
+ */
+const BACKDROP_FPS = 30;
+const BACKDROP_FRAME_SECONDS = 1 / BACKDROP_FPS;
+
 /** Shared empty list, so an idle frame allocates nothing. */
 export const NO_EVENTS: readonly SimEvent[] = [];
 
@@ -144,6 +163,8 @@ export class FrameDriver {
    * (a new preview, a resize) arms this again.
    */
   private previewDirty = true;
+  /** Seconds of real time the backdrop has not been drawn for; see `BACKDROP_FPS`. */
+  private previewAccum = 0;
 
   constructor(host: FrameHost) {
     this.host = host;
@@ -164,6 +185,9 @@ export class FrameDriver {
   /** The title backdrop changed (new preview, resize): draw it again. */
   markPreviewDirty(): void {
     this.previewDirty = true;
+    // Now, not in a thirtieth of a second: a resize or a new preview is a
+    // visible change and the cap is only there to stop an idle redraw.
+    this.previewAccum = BACKDROP_FRAME_SECONDS;
   }
 
   /** Worst draw-call count since `resetPeak`; 0 before the first frame. */
@@ -194,8 +218,12 @@ export class FrameDriver {
     if (session === null) {
       const preview = host.previewSession();
       if (preview !== null && this.previewDirty) {
-        host.renderer.update(preview.state, NO_EVENTS, scaledDt);
-        this.previewDirty = !host.renderer.isSettled();
+        this.previewAccum += scaledDt;
+        if (this.previewAccum >= BACKDROP_FRAME_SECONDS) {
+          host.renderer.update(preview.state, NO_EVENTS, this.previewAccum);
+          this.previewAccum = 0;
+          this.previewDirty = !host.renderer.isSettled();
+        }
       }
       // Real time, always: debris left over from the last run has to settle
       // rather than hang in the air behind the menu.
