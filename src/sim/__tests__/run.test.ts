@@ -237,22 +237,37 @@ describe('boss', () => {
 });
 
 describe('projectiles', () => {
-  it('fires from the formation, so a wide squad hits gates in several lanes', () => {
-    const def = level({
-      startCount: 120,
-      rows: [
-        row(24, [
-          { kind: 'add', value: 3 },
-          { kind: 'add', value: 3 },
-          { kind: 'add', value: 3 },
-        ]),
-      ],
-    });
-    const run = runOf(def);
-    play(run, 3, 0);
-
-    const hitLanes = run.state.gates.filter((g) => g.hits > 0).map((g) => g.lane);
-    expect(hitLanes.length).toBeGreaterThan(1);
+  it('fires from the formation, so the whole column shoots one lane', () => {
+    // The mechanic D42 is really about. Every shot leaves its firer's own slot
+    // and the column is one lane wide, so a full row of gates takes fire on
+    // exactly the lane the player is standing in and nowhere else — Phase B's
+    // road-wide crowd pumped all three at once, which is the "choose a lane"
+    // decision quietly handed back to the player for free.
+    const gates: [GateDef | null, GateDef | null, GateDef | null] = [
+      { kind: 'add', value: 3 },
+      { kind: 'add', value: 3 },
+      { kind: 'add', value: 3 },
+    ];
+    const laneWidth = testBalance().road.laneWidth;
+    for (const [lane, targetX] of [
+      [0, -laneWidth],
+      [1, 0],
+      [2, laneWidth],
+    ] as const) {
+      const run = runOf(level({ startCount: 120, rows: [row(24, gates)] }));
+      // Settled first, then measured: the squad fires all the way across the
+      // road on its way to a side lane, and what this is about is where a
+      // *standing* column's fire goes.
+      play(run, 1.5, targetX);
+      const before = run.state.gates.map((g) => g.hits);
+      play(run, 1.5, targetX);
+      const hit = run.state.gates
+        .filter((g, i) => g.hits > (before[i] ?? 0))
+        .map((g) => g.lane);
+      expect(`from ${String(targetX)}: ${JSON.stringify(hit)}`).toBe(
+        `from ${String(targetX)}: ${JSON.stringify([lane - 1])}`,
+      );
+    }
   });
 
   it('never keeps more projectiles alive than the pool allows', () => {
@@ -312,10 +327,9 @@ describe('lifecycle', () => {
 
   it('keeps a growing crowd on the road by tapering its clamp', () => {
     const balance = testBalance();
-    // What the widest crowd may hang over the verge: the difference between the
-    // clamp's floor and the room the formation leaves itself (D37). The taper
-    // is exact above the floor and this is all it ever gives away below it.
-    const slack = balance.road.clampMin - balance.formation.inset;
+    // The taper is exact now the crowd is one lane wide (D42): the outermost
+    // unit stops *on* the verge at every count, where Phase B's road-wide crowd
+    // had to give away 0.4 m of grass to keep a side gate reachable at all.
     for (const count of [1, 10, 40, 80]) {
       const run = runOf(level({ startCount: count, rows: [] }), balance);
       run.setTargetX(99);
@@ -323,29 +337,28 @@ describe('lifecycle', () => {
 
       const x = run.state.squad.x;
       expect(x).toBeLessThanOrEqual(balance.road.clampX + 1e-9);
-      expect(x + halfWidth(count)).toBeLessThanOrEqual(balance.road.halfWidth + slack + 1e-9);
+      expect(x + halfWidth(count)).toBeLessThanOrEqual(balance.road.halfWidth + 1e-9);
     }
   });
 
-  it('never clamps the squad tighter than the side lanes', () => {
+  it('takes the widest squad all the way onto a side lane centre', () => {
     const balance = testBalance();
-    // A crowd of 500 fills the road, so the taper bottoms out on its floor
-    // instead of pinning the squad to the middle lane: reaching a side gate
-    // matters more than the last few centimetres of overhang.
+    // A lane-wide column is half a lane either side of its centre, so the taper
+    // bottoms out at 2.2 m — past the side lane's centre at 2 — and the whole
+    // squad stands on a side gate instead of merely reaching into its lane.
     const run = runOf(level({ startCount: balance.squad.maxCount, rows: [] }), balance);
     run.setTargetX(99);
     play(run, 2);
 
-    expect(run.state.squad.x).toBeCloseTo(balance.road.clampMin, 6);
-    // Inside a lane centre, so a side gate is reachable — and outside a lane
-    // *boundary*, or a line-filling crowd could never commit to the far side of
-    // a wall either (D37).
-    expect(balance.road.clampMin).toBeLessThanOrEqual(balance.road.laneWidth);
-    expect(balance.road.clampMin).toBeGreaterThan(balance.road.laneWidth / 2);
-    const overhang =
-      balance.road.clampMin + halfWidth(balance.squad.maxCount) - balance.road.halfWidth;
-    expect(overhang).toBeLessThanOrEqual(balance.road.clampMin - balance.formation.inset + 1e-9);
-    expect(overhang).toBeLessThanOrEqual(0.4 + 1e-9);
+    const limit = balance.road.halfWidth - halfWidth(balance.squad.maxCount);
+    expect(run.state.squad.x).toBeCloseTo(limit, 6);
+    expect(run.state.squad.x).toBeGreaterThanOrEqual(balance.road.laneWidth);
+    // The floor is a side lane's centre and never bites, which is the point of
+    // it: it is what fails loudly if the crowd is ever widened again (D42).
+    expect(balance.road.clampMin).toBe(balance.road.laneWidth);
+    expect(limit).toBeGreaterThanOrEqual(balance.road.clampMin);
+    const overhang = limit + halfWidth(balance.squad.maxCount) - balance.road.halfWidth;
+    expect(overhang).toBeLessThanOrEqual(1e-9);
   });
 
   it('lets even the widest squad take a gate in either side lane', () => {
@@ -368,9 +381,11 @@ describe('lifecycle', () => {
 
   it('pulls a squad that just grew back off the verge', () => {
     const balance = testBalance();
+    // A pair, so the crowd is narrower than a lane and the clamp is still the
+    // plan's flat one: the multiplier then fills the lane in a single step.
     const def = level({
-      startCount: 4,
-      rows: [row(20, [null, null, { kind: 'mul', value: 60 }])],
+      startCount: 2,
+      rows: [row(20, [null, null, { kind: 'mul', value: 120 }])],
     });
     const run = runOf(def, balance);
     play(run, 3, 99);
@@ -378,10 +393,15 @@ describe('lifecycle', () => {
     play(run, 2, 99);
 
     // The clamp follows the count, not only the player's finger: a squad that
-    // multiplied at the road's edge is walked back in on the next step.
+    // multiplied at the road's edge is walked back in on the next step. It
+    // stops widening once the column fills its lane, so this is the whole of
+    // the taper now rather than the first step of it (D42).
     expect(run.state.squad.count).toBeGreaterThan(200);
     expect(run.state.squad.x).toBeLessThan(before);
-    expect(run.state.squad.x).toBeCloseTo(balance.road.clampMin, 6);
+    expect(run.state.squad.x).toBeCloseTo(
+      balance.road.halfWidth - halfWidth(run.state.squad.count),
+      6,
+    );
   });
 
   it('makes runEnded the last event of its tick', () => {

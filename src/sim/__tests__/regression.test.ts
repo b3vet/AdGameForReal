@@ -33,31 +33,35 @@ const SAMPLE_EVERY = 30;
 /**
  * Levels 1 to 3, greedy, seeds 1 to 5.
  *
- * Re-captured in Milestone 5 Phase B. The Milestone 3 values stood through
- * Milestone 4 because walls start at level 4 and nothing else on these levels
- * moved; D37 moves all of them by design — the squad now stands in
- * line-filling rows rather than a spiral, so it is wider and its shots leave
- * from different places, and `x` follows the player through a damped spring
- * instead of a flat slide. The run these hashes describe is the same campaign
- * re-measured, not a different one: the bands in `balance.test.ts` are what
- * says so.
+ * Re-captured for D42, the lane column, as Phase B re-captured them for D37.
+ * Three deliberate changes move every one of them and none of them is subtle:
+ * the crowd is one lane wide instead of the road's full 4.4 m, so every unit
+ * stands somewhere else and the whole column's fire lands in one lane; the
+ * spacing floor and row gap changed with it (0.28 to 0.25, 0.8 to 0.7); and
+ * the balance was re-measured against that concentrated fire — `dpsTrim` back
+ * to 0.38, `enrageAt` back to 0.3 and the boss's stomp share 0.06 to 0.07,
+ * because a column the blocks can be steered around gives the road almost
+ * nothing to take and the survivor share is settled at the arena.
+ *
+ * The run these hashes describe is the same campaign re-measured, not a
+ * different one: the bands in `balance.test.ts` are what says so.
  */
 const GOLDEN: Readonly<Record<string, string>> = {
-  '1:1': '49845314',
-  '1:2': '43d12bf9',
-  '1:3': '1815fbe6',
-  '1:4': '4aadc987',
-  '1:5': '5fc06d58',
-  '2:1': 'a54d72f8',
-  '2:2': '9c8bf558',
-  '2:3': 'ce454f4b',
-  '2:4': '5d507bd2',
-  '2:5': '396f04c9',
-  '3:1': '97d6048c',
-  '3:2': '3c82821a',
-  '3:3': '7ca85c35',
-  '3:4': 'bc781de2',
-  '3:5': '6282679d',
+  '1:1': '4640811a',
+  '1:2': '8734c519',
+  '1:3': '8beaecc2',
+  '1:4': 'f2de965e',
+  '1:5': 'db8e3e7a',
+  '2:1': '0e026830',
+  '2:2': '66556d4f',
+  '2:3': 'ee07f21d',
+  '2:4': 'e35dbc77',
+  '2:5': '58eef35b',
+  '3:1': '6ca03efa',
+  '3:2': 'fc58c0c2',
+  '3:3': '7d4ed62e',
+  '3:4': 'bd79d07b',
+  '3:5': 'b6f76ec1',
 };
 
 /** FNV-1a, 32 bit. Any stable hash would do; this one is short enough to read. */

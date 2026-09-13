@@ -22,7 +22,7 @@ import type { PhysicsQuality } from '@/physics';
 import { VatCrowd, loadCharacterAsset } from '@/render/characters';
 import type { Renderer } from '@/render/Renderer';
 import { crowdScale } from '@/render/squad';
-import { GRUNT_SCALE, MAGE_SCALE } from '@/render/theme';
+import { GRUNT_SCALE, MAGE_SCALE, timeOffsetOf, yawOf } from '@/render/theme';
 import { balance } from '@/data';
 import { formationOffsets, mulberry32, openRoadWidth } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
@@ -125,8 +125,16 @@ const DEFAULT_KILL_EVERY = 0.05;
 
 /**
  * Where the crowd's *front rank* stands; the formation runs backward from it
- * (D37), so 500 units reach `CROWD_Z - 7.2`. The camera is posed for that depth
- * every frame (`Renderer.poseCamera`).
+ * (D37), and since D42 it runs backward a long way — five hundred units are one
+ * lane wide and seventy-seven ranks deep, so the tail stands at `CROWD_Z - 13.3`
+ * and the camera, posed for that depth every frame (`Renderer.poseCamera`),
+ * frames the front six metres of it exactly as the game does. The ranks past
+ * that are below the bottom edge: they still cost their instances and their
+ * animation, which is the point of keeping all five hundred here.
+ *
+ * The 2 m of road in front of the front rank is what keeps the tail in front of
+ * the *camera*: the eye stands 14.4 m behind the anchor and the column is 13.3
+ * long, so the last rank clears it by a metre.
  */
 const CROWD_Z = 2;
 const ENEMY_Z = 14;
@@ -194,12 +202,16 @@ export async function runStressScene(
       offset.x,
       0,
       CROWD_Z + offset.z,
-      Math.sin(i) * 0.12,
+      // The view's own facing and clip phase rather than this scene's old
+      // `sin(i)` and `i % 17`: both are per-unit scrambles now (D42) because a
+      // column seven wide turns any short period into a diagonal, and a scene
+      // measuring a frame the game does not draw measures the wrong frame.
+      yawOf(i),
       mageScale,
       'run',
       // Staggered, or five hundred mages cast in lockstep and the VAT's one
       // texture read becomes visible as a single animated dummy.
-      (i % 17) * 0.037,
+      timeOffsetOf(i),
     );
   }
   mages.setCount(mageCount);

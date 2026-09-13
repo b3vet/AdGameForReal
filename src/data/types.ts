@@ -79,18 +79,24 @@ export interface Balance {
     clampX: number;
     /**
      * Floor on that clamp once the crowd's own half-width is taken off it
-     * (`Run.clampLimit`). It has to stay at or inside a lane centre so the
-     * widest squad can still reach a side lane's gate, and *outside* a lane
-     * boundary (`laneWidth / 2`) or a line-filling crowd could neither take a
-     * side gate nor commit to the far side of a wall, which is every choice the
-     * road offers (D37).
+     * (`Run.clampLimit`). A side lane's centre, so the widest squad can always
+     * stand *on* a side gate rather than merely inside the lane it is in: a
+     * lane-wide column is the shape the whole choice is made with (D42), and a
+     * clamp that stopped short of the centre would leave a side gate reachable
+     * only by the half of the crowd that happened to be on that side.
+     *
+     * It costs nothing at the shipped geometry — the crowd is at most half a
+     * lane wide, so the taper is 2.2 m and never reaches this floor — which is
+     * the point: the floor is what fails loudly if the crowd ever widens again.
      */
     clampMin: number;
   };
   /**
-   * The line-filling formation (D37). See `src/sim/formation.ts`: the squad
-   * fills the width the road leaves it in staggered rows and then extends
-   * backward, so a crowd reads as lines rather than as a disc.
+   * The lane column (D42, superseding the formation half of D37). See
+   * `src/sim/formation.ts`: the crowd is one lane wide and grows *backward*, so
+   * it reads as a column standing in a lane rather than as a line across the
+   * road — which is the only shape that makes sense once walls separate the
+   * lanes, and the shape that makes the squad's fire a lane the player chooses.
    */
   formation: {
     /** Spacing between neighbours, in metres: `max` at a handful, `min` at
@@ -99,7 +105,7 @@ export interface Balance {
     /** Squad size the spacing has finished shrinking at. */
     spacingTo: number;
     /** Gap between rows as a share of the spacing; under 1, so rows pack
-     *  tighter than columns and the crowd stays shallow. */
+     *  tighter than columns and the column stays framable at five hundred. */
     rowDepth: number;
     /** Added to the outermost unit's offset for `halfWidth`, so contact feels
      *  fair rather than pixel-exact. */
@@ -107,12 +113,12 @@ export interface Balance {
     /** Offsets are cached per count and per this much available width. */
     widthBucket: number;
     /**
-     * Room the formation leaves itself inside the band it stands in, each side,
-     * so a crowd as wide as its lane can still be steered inside it.
+     * How far inside its lane's edges the crowd stands, each side: the band is
+     * `road.laneWidth - 2 * laneInset`. Small, because the crowd *is* the lane
+     * — the inset is only there so the column sits visibly inside the lane
+     * lines and so its outermost unit clears a fence standing on one.
      */
-    inset: number;
-    /** However narrow the road gets, the formation is at least this wide. */
-    minWidth: number;
+    laneInset: number;
   };
   enemies: {
     activationDistance: number;

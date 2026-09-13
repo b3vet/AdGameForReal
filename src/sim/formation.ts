@@ -7,19 +7,24 @@
  * offsets to place unit instances; the sim reads `halfWidth` for gate and enemy
  * overlap and `halfExtent` for the fence it may not stand through.
  *
- * Milestone 5 (D37) replaces Milestone 2's phyllotaxis spiral. The spiral made
- * a disc, and a disc on a six-metre road reads as a blob however many units are
- * in it. The crowd now fills the width it is given in staggered rows — front
- * row centred on the anchor, further rows behind it, offset half a spacing so
- * the lines interlock — and grows *backward* once the width is full. A squad of
- * twenty-five is a few lines across the road; a squad of five hundred is the
- * same lines, thirty deep.
+ * Milestone 5 (D37) replaced Milestone 2's phyllotaxis spiral with staggered
+ * rows; D42 fixes what those rows are *measured against*. Phase B gave the
+ * crowd the whole road less an inset — 4.4 m, ten to sixteen columns — which
+ * is a line across the road. The crowd is one lane wide: the band is
+ * `road.laneWidth - 2 * formation.laneInset` whatever the road leaves open, so
+ * a squad of five hundred is the same handful of columns, seventy-odd rows
+ * deep, standing *in* a lane. That is the shape the ad crowds have, it is the
+ * only shape that means anything once walls separate the lanes, and it is what
+ * makes the squad's fire a lane the player picks rather than a spray across
+ * three of them (`firing.ts` reads each unit's `x` out of its slot).
  *
- * Two consequences the rest of the sim leans on:
+ * Three consequences the rest of the sim leans on:
  *
- *   - `halfWidth` saturates at the available half-width, so the crowd can never
- *     be wider than the road it was handed. That is what finally keeps it off a
- *     fence (Milestone 4 deferred this: the clamp bounded the centre only).
+ *   - `halfWidth` saturates at half the lane band, so the crowd can never be
+ *     wider than its lane. That is what keeps it off a fence (Milestone 4
+ *     deferred this: the clamp bounded the centre only).
+ *   - The clamp is the road less that half-width, which is 2.2 m — outside both
+ *     side-lane centres — so the whole column can stand on a side gate.
  *   - The anchor is the *front* of the crowd rather than its centre, so contact
  *     and the boss meet the front line, and shots leave from the anchor
  *     backward rather than from up to four metres ahead of it.
@@ -101,34 +106,50 @@ function cacheFor(balance: Balance): Map<number, Formation> {
 const WIDTH_SLOTS = 1024;
 
 /**
- * The width the open road gives the crowd: the road less `formation.inset` on
- * each side, which is the room the squad steers in. Also what a one-argument
- * caller gets — the stress scene and the dev fixtures have no state to read.
+ * The crowd's band: one lane less `formation.laneInset` each side.
+ *
+ * A constant, not a function of the road — that is the whole of D42. The road
+ * decides where the column may *stand*; it never decides how wide it is.
  */
-export function openRoadWidth(balance: Balance = shipped): number {
-  return bandRoom(2 * balance.road.halfWidth, balance);
+function laneBand(balance: Balance): number {
+  return Math.max(0, balance.road.laneWidth - 2 * balance.formation.laneInset);
 }
 
-/** The crowd's share of a band of road: the band less its inset, floored. */
+/**
+ * The width the open road gives the crowd, which is the lane band: the crowd is
+ * one lane wide on an open road and one lane wide inside a fence. Also what a
+ * one-argument caller gets — the stress scene and the dev fixtures have no
+ * state to read.
+ */
+export function openRoadWidth(balance: Balance = shipped): number {
+  return laneBand(balance);
+}
+
+/**
+ * The crowd's share of a band of road it may stand in: its lane, or the band
+ * itself where that is narrower still.
+ *
+ * The second case is not the shipped geometry — the tightest a wall ever leaves
+ * is the middle lane less two margins, 1.9 m against a 1.6 m column — but a
+ * band the crowd cannot fit in has to narrow the crowd rather than let it stand
+ * through a fence, so the rule is written down rather than assumed.
+ */
 function bandRoom(band: number, balance: Balance): number {
-  const room = Math.max(balance.formation.minWidth, band - 2 * balance.formation.inset);
-  // A band narrower than the floor — both boundaries walled at once — gets the
-  // band itself: the crowd fills its lane rather than standing through a fence.
-  return Math.min(room, Math.max(0, band));
+  return Math.max(0, Math.min(laneBand(balance), band));
 }
 
 /** Re-used by `availableWidth`: a wall lookup per step must not allocate. */
 const wallScratch: WallLimits = { lo: 0, hi: 0, wall: -1 };
 
 /**
- * How wide a band of road the crowd may fill right now.
+ * How wide a band of road the crowd may fill right now: its lane, unless a
+ * fence leaves it less than that.
  *
- * The band is the road, narrowed to the squad's own side of every wall in force
- * at its z — the approach zone included, so the crowd is already pulling in as
- * it arrives at a fence rather than snapping narrow at the first post. The
- * crowd takes all of that but `formation.inset` at each edge, which is the room
- * it needs to be *steered* inside its band: a crowd exactly as wide as its lane
- * has nowhere to go, and the lane is the only choice a walled stretch leaves.
+ * The room is the road narrowed to the squad's own side of every wall in force
+ * at its z — the approach zone included — and with the shipped geometry that is
+ * always wider than a lane, so this is the lane band every step of every run.
+ * It is still asked per step because the rule is "the lane, or whatever is left
+ * of it", and the second half is what keeps a unit out of a fence.
  */
 export function availableWidth(state: RunState, balance: Balance = shipped): number {
   const road = balance.road;
@@ -140,7 +161,7 @@ export function availableWidth(state: RunState, balance: Balance = shipped): num
 
 /**
  * Distance between neighbouring units at this squad size, in meters: 0.42 for a
- * handful, 0.28 at `formation.spacingTo`. Render scales its unit meshes by the
+ * handful, 0.25 at `formation.spacingTo`. Render scales its unit meshes by the
  * same number so a dense crowd reads as dense rather than as overlapping boxes.
  *
  * Interpolated on `sqrt(count)` rather than on the count, so the spacing holds
@@ -304,8 +325,12 @@ export function formationRows(
 /**
  * How far from the centre line the squad's centre may stand: the road less the
  * crowd's own half-width, never wider than `road.clampX` and never tighter than
- * `road.clampMin` (D37). `Run` steers by it and the bots read it, so the two can
- * never disagree about where a squad of this size can actually get to.
+ * `road.clampMin` (D37, D42). `Run` steers by it and the bots read it, so the
+ * two can never disagree about where a squad of this size can actually get to.
+ *
+ * With a lane-wide crowd the taper bottoms out at 2.2 m rather than on the
+ * floor, so the centre reaches either side lane's centre at every count and the
+ * outermost unit still stops exactly on the verge.
  */
 export function clampLimit(
   count: number,

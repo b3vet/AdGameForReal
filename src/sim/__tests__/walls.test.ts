@@ -282,13 +282,21 @@ describe('the wall generator', () => {
 });
 
 describe('bots and walls', () => {
-  /** One gate row past a wall: the good gate is on the far side of the fence. */
+  /**
+   * One gate row past a wall: the good gate is on the far side of the fence.
+   *
+   * The curse is a `mul` and not a `sub`, because a `sub` is shootable and a
+   * lane-wide column standing on one for twenty-odd metres of road counts it
+   * down to zero and flips it into a bonus (D19, and `gates.test.ts`) — which
+   * is a real consequence of D42 and tested below, but it is not what this
+   * fixture is about. What it is about is that the fence decides the side.
+   */
   function walledChoice(): LevelDef {
     return level({
       startCount: 20,
       rows: [
         row(30, [
-          { kind: 'sub', value: 10 },
+          { kind: 'mul', value: 0.5 },
           null,
           { kind: 'add', value: 40 },
         ]),
@@ -316,7 +324,26 @@ describe('bots and walls', () => {
 
   it('sends the worst bot to the wrong side, and it cannot come back', () => {
     const passed = drive('worst').find((e) => e.type === 'gatePassed');
-    expect(passed?.type === 'gatePassed' ? passed.kind : '').toBe('sub');
+    expect(passed?.type === 'gatePassed' ? passed.kind : '').toBe('mul');
+  });
+
+  it('lets a column walled onto a curse shoot it into a bonus', () => {
+    // The same stretch, with a shootable curse on the side the fence commits
+    // the squad to and the squad held there. A road-wide crowd spread its fire
+    // over three lanes and arrived at a curse barely dented; the column (D42)
+    // puts all of it into the one panel it stands in front of, counts it to
+    // zero and walks through a bonus — D19's shoot-to-grow finally doing what
+    // it is for, and the reason the worst bot's fixture above uses a `mul`.
+    const def = level({
+      startCount: 20,
+      rows: [row(30, [{ kind: 'sub', value: 10 }, null, { kind: 'add', value: 40 }])],
+      walls: [wall(1, 8, 28)],
+      arenaZ: 400,
+    });
+    const run = new Run(def, testBalance());
+    const passed = play(run, 8, -balance.road.laneWidth).find((e) => e.type === 'gatePassed');
+    expect(passed?.type === 'gatePassed' ? passed.kind : '').toBe('add');
+    expect(run.state.squad.count).toBeGreaterThan(20);
   });
 
   it('never asks for a lane the fence has taken away', () => {

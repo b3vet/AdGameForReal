@@ -1,6 +1,6 @@
 /**
  * The squad: a crowd of animated apprentice mages, one baked-animation thin
- * instance per unit, following the line-filling formation the sim built around
+ * instance per unit, standing on the lane column the sim built around
  * `(squad.x, squad.z)`.
  *
  * All three staffs are loaded at init and only the one in hand is drawn, so a
@@ -15,11 +15,23 @@
  * Milestone 5 (D37) adds the flock. The sim's formation is exact — every unit
  * on its slot, the whole sheet sliding sideways together — and a crowd drawn
  * that way reads as one rigid object. So each unit keeps a *drawn* position
- * that chases its slot through a spring whose stiffness falls with the unit's
- * row, and leans into the direction it is sliding. The front line is nearly
- * pinned, the back rows arrive a beat later, and a turn ripples backward
- * through the crowd. None of it touches the sim: contact, gates and the boss
- * still see the formation the sim built.
+ * that chases its slot through a spring whose stiffness falls with how deep in
+ * the crowd it stands, and leans into the direction it is sliding. The front
+ * line is nearly pinned, the ranks behind it arrive a beat later, and a turn
+ * travels backward down the crowd. None of it touches the sim: contact, gates
+ * and the boss still see the formation the sim built.
+ *
+ * D42 makes that crowd a column — one lane wide, seventy-seven ranks and 13 m
+ * deep at five hundred units, of which the camera frames the front six metres.
+ * What the view owes a shape like that is variety with no period in it: the
+ * ranks are drawn from the same handful of columns over and over, so anything
+ * handed out by `index % k` lines up into diagonals (`./crowdLook.ts`,
+ * `scramble`), and anything the whole crowd does at once — the gate hop — is
+ * seventy-seven ranks moving as one object. Both are spread out here.
+ *
+ * The shrinking dead moved to `./squadCorpses.ts` in the same change, to keep
+ * this file inside the size rule (CLAUDE.md): this view decides who died and
+ * where they were drawn, that ring decides how long they lie there.
  */
 
 import type { Scene } from '@babylonjs/core/scene';
@@ -27,18 +39,18 @@ import type { Scene } from '@babylonjs/core/scene';
 import type { Crowd } from './characters';
 import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
+import { CorpseRing } from './squadCorpses';
 import { UnitFlock } from './squadFlock';
 import {
   ADVANCE_SMOOTHING,
   ADVANCE_START_SPEED,
   ADVANCE_STOP_SPEED,
   CASTING_SHARE,
-  DEATH_DURATION,
   EMBER_COLOR,
   FROST_COLOR,
   GATE_BOUNCE_DURATION,
   GATE_BOUNCE_HEIGHT,
-  IDLE_CLIP_SPEED,
+  GATE_HOP_WAVE_FLOOR,
   IDLE_SWAY_LIFT,
   IDLE_SWAY_RATE,
   IDLE_SWAY_YAW,
@@ -49,6 +61,7 @@ import {
   POP_STRETCH,
   SHADOW,
   STORM_COLOR,
+  castsWhileRunning,
   clipSpeed,
   crowdScale,
   popScale,
@@ -75,21 +88,6 @@ const FALLBACK_COLORS: Record<WeaponId, typeof EMBER_COLOR> = {
   frost: FROST_COLOR,
 };
 
-interface Corpse {
-  x: number;
-  z: number;
-  age: number;
-  /** The crowd scale this unit died at, so it shrinks from the size it had. */
-  scale: number;
-  /**
-   * The formation slot this unit stood in. Its yaw and animation phase are
-   * derived from it, and the ring compacts as corpses expire, so deriving them
-   * from the *slot in the ring* instead would swing a dying mage's facing every
-   * time an older one finished.
-   */
-  index: number;
-}
-
 export class SquadView {
   private readonly scene: Scene;
   private readonly crowds = new Map<WeaponId, Crowd>();
@@ -101,9 +99,8 @@ export class SquadView {
   /** Where each unit is actually drawn: the flock that lags the formation. */
   private readonly flock = new UnitFlock(POOL.squad);
 
-  /** Fixed-size ring of shrinking corpses; a full pool simply drops the extras. */
-  private readonly corpses: Corpse[] = [];
-  private corpseCount = 0;
+  /** The dead, drawn out of the same buffer as the living (`./squadCorpses.ts`). */
+  private readonly corpses = new CorpseRing();
 
   private previousCount = -1;
   private previousZ = Number.NaN;
@@ -111,16 +108,17 @@ export class SquadView {
   /** Low-passed forward speed in metres a second, `NaN` until primed. */
   private advanceSpeed = Number.NaN;
   private cheering = false;
-  /** Seconds left of the hop the squad takes through a gate row, or 0. */
-  private bounce = 0;
+  /**
+   * Seconds since the crowd's *front rank* crossed a gate row, or infinity when
+   * no hop is live. Each rank hops as the row reaches it, so the beat travels
+   * down the column (`GATE_HOP_WAVE_FLOOR`).
+   */
+  private hopAge = Number.POSITIVE_INFINITY;
   /** The idle sway's own clock, in seconds of sim time. */
   private swayPhase = 0;
 
   constructor(scene: Scene) {
     this.scene = scene;
-    for (let i = 0; i < POOL.dyingUnits; i++) {
-      this.corpses.push({ x: 0, z: 0, age: 0, scale: 1, index: 0 });
-    }
   }
 
   /**
@@ -153,10 +151,10 @@ export class SquadView {
     this.previousCount = -1;
     this.previousZ = Number.NaN;
     this.advanceSpeed = Number.NaN;
-    this.corpseCount = 0;
+    this.corpses.clear();
     this.cheering = false;
     this.advancing = false;
-    this.bounce = 0;
+    this.hopAge = Number.POSITIVE_INFINITY;
     this.swayPhase = 0;
     for (const crowd of this.crowds.values()) {
       crowd.setCount(0);
@@ -180,12 +178,12 @@ export class SquadView {
   }
 
   /**
-   * The squad crossed a gate row: everyone hops. Restarted rather than
-   * accumulated, so passing two rows in one turbo frame is one hop and not a
-   * crowd bouncing at double height.
+   * The squad crossed a gate row: the crowd hops, front rank first. Restarted
+   * rather than accumulated, so passing two rows in one turbo frame is one hop
+   * and not a crowd bouncing at double height.
    */
   onGatePassed(): void {
-    this.bounce = GATE_BOUNCE_DURATION;
+    this.hopAge = 0;
   }
 
   /**
@@ -209,16 +207,19 @@ export class SquadView {
     this.trackMotion(squad.z, dt);
 
     this.swayPhase += dt;
-    this.bounce = Math.max(0, this.bounce - dt);
+    this.hopAge += dt;
 
     const inArena = squad.z >= arenaZ - 0.5;
     this.flock.beginFrame(dt);
-    // One hop for the whole crowd, so a row crossing reads as a beat rather
-    // than as five hundred units each doing their own thing.
-    const hop =
-      this.bounce <= 0
-        ? 0
-        : Math.sin((1 - this.bounce / GATE_BOUNCE_DURATION) * Math.PI) * GATE_BOUNCE_HEIGHT;
+    // The gate row does not reach the whole crowd at once: it passes the front
+    // rank first and the seventy-seventh 13 m of road later, so the hop is a
+    // wave down the column rather than one beat for five hundred units. Its
+    // speed is the crowd's own measured forward speed, which is what makes the
+    // wave arrive with the row at any run speed — and at `?turbo`, where the
+    // sim covers the column in one frame, crosses it in one frame too.
+    const hopSpeed = Number.isNaN(this.advanceSpeed)
+      ? GATE_HOP_WAVE_FLOOR
+      : Math.max(GATE_HOP_WAVE_FLOOR, this.advanceSpeed);
     // The idle crowd sways; a running one is already in motion.
     const swaying = !this.advancing && !this.cheering && !inArena;
     // One block for the whole crowd, claimed before the loop: a shared buffer
@@ -232,7 +233,15 @@ export class SquadView {
       const offset = offsets[i];
       if (offset === undefined) continue;
 
-      this.flock.follow(i, offset.row, squad.x + offset.x, squad.z + offset.z, dt);
+      // How far back this unit stands, in metres: what the flock lags by and
+      // what the hop wave arrives on. The sim's offsets run backward from the
+      // anchor, so the depth is the negated z.
+      const depth = -offset.z;
+      this.flock.follow(i, depth, squad.x + offset.x, squad.z + offset.z, dt);
+
+      const hopPhase = (this.hopAge - depth / hopSpeed) / GATE_BOUNCE_DURATION;
+      const hop =
+        hopPhase > 0 && hopPhase < 1 ? Math.sin(hopPhase * Math.PI) * GATE_BOUNCE_HEIGHT : 0;
 
       let scale = crowdScaleNow;
       // Squash and stretch: a unit pops in thin and tall, then settles. The
@@ -276,7 +285,7 @@ export class SquadView {
       );
     }
 
-    const dying = this.writeCorpses(crowd, count, dt);
+    const dying = this.corpses.write(crowd, count, dt);
     crowd.setCount(count + dying);
     crowd.commit();
     crowd.update(dt);
@@ -301,7 +310,7 @@ export class SquadView {
     // run down (`trackMotion`) and the squad must not jog on the spot in front
     // of the boss while it does.
     if (inArena) return casting;
-    if (this.advancing) return index % CASTING_SHARE === 0 ? casting : 'run';
+    if (this.advancing) return castsWhileRunning(index, CASTING_SHARE) ? casting : 'run';
     return 'idle';
   }
 
@@ -380,60 +389,8 @@ export class SquadView {
       // The outgoing units die where they were *drawn*, not where the sim had
       // them: the crowd the player is watching is the smoothed one.
       for (let i = count; i < previous; i++) {
-        this.pushCorpse(this.flock.drawnX(i, x), this.flock.drawnZ(i, z), crowd, i);
+        this.corpses.push(this.flock.drawnX(i, x), this.flock.drawnZ(i, z), crowd, i);
       }
     }
-  }
-
-  private pushCorpse(x: number, z: number, scale: number, index: number): void {
-    if (this.corpseCount >= POOL.dyingUnits) return;
-    const corpse = this.corpses[this.corpseCount];
-    if (corpse === undefined) return;
-    corpse.x = x;
-    corpse.z = z;
-    corpse.age = 0;
-    corpse.scale = scale;
-    corpse.index = index;
-    this.corpseCount++;
-  }
-
-  /**
-   * Shrinking corpses, written into the same instance buffer straight after the
-   * live units: same mesh, same draw call, and the dead keep the staff the
-   * squad was holding when they fell.
-   */
-  private writeCorpses(crowd: Crowd, base: number, dt: number): number {
-    let write = 0;
-    for (let i = 0; i < this.corpseCount; i++) {
-      const corpse = this.corpses[i];
-      if (corpse === undefined) continue;
-      corpse.age += dt;
-      if (corpse.age >= DEATH_DURATION) continue;
-
-      const fade = 1 - corpse.age / DEATH_DURATION;
-      crowd.setInstance(
-        base + write,
-        corpse.x,
-        0,
-        corpse.z,
-        yawOf(corpse.index),
-        corpse.scale * MAGE_SCALE * fade,
-        'idle',
-        timeOffsetOf(corpse.index),
-        IDLE_CLIP_SPEED,
-      );
-
-      const kept = this.corpses[write];
-      if (kept !== undefined && write !== i) {
-        kept.x = corpse.x;
-        kept.z = corpse.z;
-        kept.age = corpse.age;
-        kept.scale = corpse.scale;
-        kept.index = corpse.index;
-      }
-      write++;
-    }
-    this.corpseCount = write;
-    return write;
   }
 }

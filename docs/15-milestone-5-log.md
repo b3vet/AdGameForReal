@@ -223,3 +223,56 @@
   parallel: sim (lane band, clamp, keep-off, spacing floor, balance
   re-measure) and render (camera framing of the column's front, flock lag
   down the column, stress scene).
+
+## 2026-09-13 — Lane-column formation (verified and committed)
+
+- Sim: the crowd's band is a constant one lane less `formation.laneInset`
+  0.2 m each side, 1.6 m, on the open road and inside a fence alike
+  (`openRoadWidth` returns it; `availableWidth` can only narrow below it);
+  `spacing.min` 0.28 → 0.25 and `rowDepth` 0.8 → 0.7 put 500 units at
+  13.3 m deep in 77 rows of up to 7 (10 units 0.56 m, 100 units 5.4 m, 200
+  units 8.0 m); half width saturates at 0.8 m from four units. The centre
+  reaches ±2.2 at every count, so both side-lane centres are reachable with
+  no overhang (`road.clampMin` 1.2 → 2 as the assertion that the crowd is
+  one lane wide); under a fence the centre range in the walled lane is
+  1.85 to 2.2 m, and no unit crosses a line at any count.
+- Balance re-measured with the bots: fire concentrates in one lane, so
+  `dpsTrim` returns to 0.38 and `enrageAt` to 0.3; `weaponWorth` stays 0.5
+  (0.8 costs a clear on level 10); `stompShare` 0.06 → 0.07 because a
+  dodgeable column clears its river and the survivor share is settled at the
+  arena (late levels lost 141 to 171 of a 470 peak to stomps and single
+  digits to everything else). Greedy 100 of 100; survivors 0.72 to 0.76 on
+  levels 1 to 3, 0.60 and 0.62 on 4 to 5, 0.47 to 0.60 on 6 to 10, 0.56 to
+  0.61 on 11 to 20; boss 18.1 to 22.2 s, mean 20.1. Goldens re-captured for
+  levels 1 to 3.
+- Bot fixes forced by the column: stream coverage counted lane centres
+  against a reach that spanned every lane, so greedy never moved to a
+  river (now counts the bodies each stand reaches); greedy held its ground
+  through a block because the old crowd could not dodge (now takes the
+  cheapest reachable stand). `bots.ts` 426 → 321 with `botStand.ts` (165).
+  A new end-to-end test pins a consequence of concentrated fire: a column
+  standing on a curse counts it to zero and flips it (D19).
+- Render: the pull-back saturates at 3 m of depth (`backMax` 8.4 → 3.4,
+  `liftMax` 2.8 → 0.62, `liftPerDepth` 0.38 → 0.21) so the frame's bottom
+  edge sits 6 m behind the anchor and the tail runs off it; the front rank
+  at 500 is 74% of its size at 50 (was 48%), with `CROWD_SCALE_MIN` 0.6 →
+  0.7. `lateralFollow` 0.45 → 0.55 for the wider clamp: the outer column is
+  18 px inside the edge when pinned at 390×844. The follow lag is by metres
+  of depth (`UNIT_FOLLOW_DEPTH` 1.6) on a curve that keeps falling to the
+  tail, so a turn ripples down all 77 rows instead of the front ten; the
+  gate hop is a wave down the column; the yaw, clip offset and caster picks
+  are scrambled rather than `index % k`, which drew diagonals on a
+  seven-wide column. `squad.ts` 439 → 396 with `squadCorpses.ts` (102).
+- Stress: the scene became a column on its own and poses through the rig;
+  draws 33 to 34, first-window medians 4.1 to 5.1 ms, unchanged in kind.
+- Verified: typecheck 0 errors, lint clean, 325 tests, smoke PASS in
+  6 min 25 s (runs 210 s, stress 40 s, hero 133 s; draw peaks 40 / 41 / 41 /
+  42, 0 shader compiles during play). Hero frames: a compact column at 26
+  units, the lane filled and the tail off the bottom at 129, one arch
+  entered at a time.
+- Open: the smoke is 35 s from its 7 min ceiling (the column runs are
+  slower to clear); a large `mul` gate re-spaces the column so ranks deeper
+  than about 2.5 m snap rather than slide; blob shadows merge into a ribbon
+  under a packed column (`SHADOW.mage` was sized for 0.28 m spacing); the
+  stress scene slows within a page session from 0.7 to 1.9 s a frame in
+  both builds, which starves its later windows.

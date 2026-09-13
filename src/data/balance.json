@@ -18,19 +18,18 @@
     "laneWidth": 2,
     "halfWidth": 3,
     "clampX": 2.6,
-    "clampMin": 1.2
+    "clampMin": 2
   },
   "formation": {
     "spacing": {
       "max": 0.42,
-      "min": 0.28
+      "min": 0.25
     },
     "spacingTo": 500,
-    "rowDepth": 0.8,
+    "rowDepth": 0.7,
     "padding": 0.2,
     "widthBucket": 0.1,
-    "inset": 0.8,
-    "minWidth": 1.2
+    "laneInset": 0.2
   },
   "enemies": {
     "activationDistance": 26,
@@ -57,9 +56,9 @@
       "stompInterval": 2,
       "stompRange": 18,
       "stompKills": 3,
-      "stompShare": 0.06,
+      "stompShare": 0.07,
       "contactShare": 0.15,
-      "enrageAt": 0.27,
+      "enrageAt": 0.3,
       "enrageStompInterval": 1.2,
       "enrageSpeedMul": 1.3
     },
@@ -185,6 +184,6 @@
     "rateBonus": 0.0,
     "gateClearance": 4,
     "zJitter": 5,
-    "dpsTrim": 0.26
+    "dpsTrim": 0.38
   }
 }

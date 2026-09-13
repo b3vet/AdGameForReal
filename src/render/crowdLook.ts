@@ -47,7 +47,7 @@ export const BRUTE_SCALE = BRUTE_HEIGHT / KAYKIT_UNIT_HEIGHT;
 
 /**
  * Unit meshes shrink as the crowd tightens, so the mages never read as one
- * solid slab: the sim packs 500 units into the same 4 m of road as 100.
+ * solid slab: the sim packs 500 units into the same 1.6 m lane as 100.
  *
  * Milestone 3 changes what the shrink follows. Milestone 2 eased from 1 to 0.72
  * between 50 and 500 units, which was a guess; the number that actually decides
@@ -56,17 +56,33 @@ export const BRUTE_SCALE = BRUTE_HEIGHT / KAYKIT_UNIT_HEIGHT;
  * `crowdScale` in `./squad.ts`). A unit is then a constant fraction of the gap
  * it has to stand in, at every squad size, which is the thing the eye reads.
  *
- * This is where the plan's "formation spacing raised" landed. The spacing
- * itself could not move: `halfWidth(80)` is 1.9962 against a hard 2.0 from the
- * sim's road clamp (`road.halfWidth - road.clampMin`, asserted in
- * `run.test.ts`), so there is no headroom at all — see the Phase B2 log entry.
- * The separation had to come from the drawn size instead, and this is it.
+ * This is where the plan's "formation spacing raised" landed, and it is still
+ * where it has to land. In Milestone 3 the spacing had nowhere to go because
+ * the crowd was as wide as the road clamp allowed; under D42 the ceiling is the
+ * lane instead — `halfWidth(80)` is 0.8, which is half the 1.6 m band exactly,
+ * against the 1.0 the road clamp would permit — and a wider spacing inside a
+ * fixed band buys nothing anyway, because it takes columns *out* of the rows
+ * and pays for them in depth the camera cannot frame. The separation between
+ * two mages has to come from the drawn size instead, and this is it.
  *
  * The floor is the dense end: past about a hundred units the crowd is *meant*
  * to be shoulder to shoulder, and shrinking further only makes ants.
+ *
+ * D42 raises that floor from 0.6 to 0.7, and it is now a framing number rather
+ * than a taste one. The plan asks that a 500-unit front rank be no smaller on
+ * screen than 70% of a 50-unit one; measured at 390x844 against the column, the
+ * Phase E rig and a floor of 0.6 gave 48%. Most of that is the camera and the
+ * new caps answer it (64%), but the last of it is the mesh: the column's
+ * spacing bottoms out at 0.25 m where the wide formation's did at 0.28, so the
+ * unshrunk scale at five hundred is 0.62 where it used to be 0.69, and no
+ * camera can put that back — a shot that zoomed *in* on the biggest crowd would
+ * be framing six ranks of seventy-seven. At 0.7 the front rank measures 32.3 px
+ * against 43.5, which is 74%. A mage is then 0.55 m tall standing 0.25 m from
+ * its neighbour — shoulders just touching, which is the packed mass the plan
+ * asks for, and still short of the slab a floor of 1 would draw.
  */
 export const CROWD_SCALE_FROM = 8;
-export const CROWD_SCALE_MIN = 0.6;
+export const CROWD_SCALE_MIN = 0.7;
 /** Scale bounce for a unit that just appeared. */
 export const POP_DURATION = 0.28;
 /**
@@ -121,32 +137,89 @@ export const IDLE_SWAY_YAW = 0.11;
 export const IDLE_SWAY_LIFT = 0.012;
 
 /**
- * Per-unit following (D37).
+ * How far a unit's own facing may wander from straight ahead, in radians, and
+ * how far apart in its own loop two units may be, in seconds.
+ *
+ * Both are what `index % 7` and `index % 29` spanned before D42 scrambled them
+ * (`scramble`): a crowd that all faced exactly forward would read as printed,
+ * and one spread much wider than eight degrees stops reading as a rank at all.
+ * The clip spread is a shade under the run clip's own length, so the phases
+ * cover the loop once rather than doubling back over the first half of it.
+ */
+export const UNIT_YAW_SPREAD = 0.15;
+export const UNIT_CLIP_SPREAD = 1.15;
+
+/**
+ * Slowest the gate hop may travel down the column, in metres a second.
+ *
+ * The wave's real speed is the crowd's own measured forward speed, because what
+ * it draws is a physical fact: the row the squad just crossed reaches the tenth
+ * rank two metres of road later than the first, and a 500-unit column takes
+ * 13 m of road to pass through a gate (`SquadView.update`). The floor is only
+ * for the cases where that speed is not a speed — the first frames of a level,
+ * where it is still `NaN`, and the arena, where the crowd has stopped — and it
+ * is a little under the shipped run speed so a hop there still crosses the
+ * crowd in a couple of seconds rather than stalling half-way down it.
+ */
+export const GATE_HOP_WAVE_FLOOR = 4;
+
+/**
+ * Per-unit following (D37, re-shaped for the column in D42).
  *
  * The sim places a unit exactly on its formation slot; drawing it there makes
  * five hundred mages one rigid sheet that slides sideways as a block. Each
- * drawn unit instead chases its slot through a first-order spring, and the
- * stiffness falls with the unit's row: the front line is nearly pinned, the
- * back rows take a moment to catch up, and a turn ripples through the crowd
- * from front to back. A first-order lag rather than a damped second-order one
- * because a lag cannot overshoot, and a crowd whose back rows bounce past their
- * slots reads as a mistake rather than as weight.
+ * drawn unit instead chases its slot through a first-order spring whose
+ * stiffness falls with how far back in the crowd it stands: the front line is
+ * nearly pinned, the ranks behind it arrive a beat later, and a turn ripples
+ * backward through the crowd. A first-order lag rather than a damped
+ * second-order one because a lag cannot overshoot, and a crowd whose back rows
+ * bounce past their slots reads as a mistake rather than as weight.
  *
  * Rates are in inverse seconds; a unit closes `1 - exp(-rate * dt)` of its gap
  * per frame, which is frame-rate independent.
+ *
+ * Two things changed with the column. The fall is measured in *metres of
+ * depth*, not in rows: rows are 0.29 m apart at a handful of units and 0.175 m
+ * apart at five hundred, so a row count is a different distance at every squad
+ * size, while a metre of crowd is always a metre of crowd. And it is a
+ * hyperbola toward the floor rather than a ramp onto it,
+ *
+ *   rate(d) = BACK + (FRONT - BACK) / (1 + d / UNIT_FOLLOW_DEPTH)
+ *
+ * because the ramp *arrived*: it reached the floor ten rows back, which on the
+ * 33 ranks of a 4.4 m wide crowd left two thirds of it moving at one rate and
+ * on a 77-rank column leaves sixty-seven — the front ten ranks turned and the
+ * rest slid as a block, 1.75 m into 13.3. The hyperbola never quite reaches the floor, so rank 34 (the last one
+ * the camera frames) and rank 77 still differ, and the turn keeps travelling
+ * all the way down the column.
+ *
+ * Half the fall happens inside `UNIT_FOLLOW_DEPTH`, which is a lane's width of
+ * crowd — the same distance the column is wide, and about nine of its ranks.
+ * The floor stays at 8: what a unit may trail is bounded by `UNIT_SNAP_GAP`,
+ * and at the squad's own lateral speed cap of 8 m/s a rate of 8 is exactly one
+ * metre of trail. Below that the leash would start biting on ordinary drags,
+ * and a drawn unit a metre and a half off its slot in a 1.6 m lane is a mage
+ * standing through a fence.
  */
 export const UNIT_FOLLOW_FRONT = 26;
 export const UNIT_FOLLOW_BACK = 8;
-/** Rows over which the stiffness falls from front to back. */
-export const UNIT_FOLLOW_ROWS = 10;
+/** Metres of crowd depth over which half the fall from front to back happens. */
+export const UNIT_FOLLOW_DEPTH = 1.6;
 
 /**
  * The leash. A unit further than this from its slot stops springing and is
  * simply placed: it is the only thing that keeps `?turbo` honest (the sim runs
- * eight times faster while the render clock does not, so every slot moves half
- * a metre a frame and the crowd would trail metres behind), and it doubles as
- * the teleport guard for a level start or a camera cut. Comfortably above the
- * quarter-metre a real turn lags by.
+ * up to sixty times faster while the render clock does not, so a single frame
+ * moves every slot the better part of a lane and the crowd would trail metres
+ * behind), and it doubles as the teleport guard for a level start or a camera
+ * cut.
+ *
+ * Unchanged by D42, and the floor above is what keeps it unchanged. The two
+ * worst honest trails are a unit at the back of the column during a full-speed
+ * drag (8 m/s over rate 9.9 at the 77th rank: 0.81 m) and the same unit running
+ * forward at the level's run speed (5 m/s: 0.51 m), both comfortably inside it;
+ * the smallest dishonest one is a single turbo frame, which moves a slot metres
+ * and snaps.
  */
 export const UNIT_SNAP_GAP = 1.2;
 
@@ -169,14 +242,59 @@ export function clipSpeed(animation: string): number {
   return IDLE_CLIP_SPEED;
 }
 
+/**
+ * Everything a unit is given "at random" comes out of this: the same formation
+ * slot always gets the same number, and its neighbours get unrelated ones.
+ *
+ * The three variations below used to be `index % 7`, `index % 29` and
+ * `index % 3`, which was fine on a crowd ten to sixteen columns wide because a
+ * row's length and those periods shared no factors and the pattern drifted
+ * sideways a little every row. The column is *seven* wide (D42), and rows
+ * alternate seven and six, so `% 7` repeated every second rank and slid by one
+ * column every second rank after that: identical pairs of ranks on a diagonal,
+ * which is exactly the conveyor belt a column has to avoid. A hash has no
+ * period to resonate with, and it costs a handful of integer operations against
+ * the modulo's one. Measured over all three variations at 500 units: 2 to 4 us
+ * a frame where the modulos cost 2 to 3, both of them lost in the 8 us the same
+ * loop already spends on the flock's `exp` and in the instance writes after it.
+ *
+ * Deliberately not the sim's RNG, and deliberately not stateful: a unit's look
+ * has to survive a corpse outliving the crowd it stood in and a `mul` gate
+ * renumbering nothing (`SquadView.diffCount` keeps indices).
+ */
+function scramble(index: number, salt: number): number {
+  let h = Math.imul(index ^ salt, 0x85eb_ca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2_ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4_294_967_296;
+}
+
 /** A little turn per unit, so five hundred mages are not one rigid block. */
 export function yawOf(index: number): number {
-  return ((index % 7) - 3) * 0.05;
+  return (scramble(index, 0x9e37_79b9) - 0.5) * 2 * UNIT_YAW_SPREAD;
 }
 
 /** Seconds into the loop, spread over the crowd so nobody marches in lockstep. */
 export function timeOffsetOf(index: number): number {
-  return (index % 29) * 0.041;
+  return scramble(index, 0x632b_e5ab) * UNIT_CLIP_SPREAD;
+}
+
+/**
+ * Does this unit cast rather than run while the crowd advances? One in
+ * `CASTING_SHARE` of them does (`./theme.ts`), and which one is scrambled
+ * rather than always the first: in a seven-wide column `index % 3` is a
+ * diagonal line of spellcasters marching down the crowd.
+ *
+ * Scrambled *inside* each group of `share` rather than rolled per unit, so the
+ * share stays exact at every squad size. A coin flip per unit is the same
+ * thing on average and the wrong thing at the start of a level, where a squad
+ * of five would go a whole run with nobody casting one time in eight.
+ */
+export function castsWhileRunning(index: number, share: number): boolean {
+  const size = Math.max(1, Math.floor(share));
+  const group = Math.floor(index / size);
+  return index % size === Math.floor(scramble(group, 0x27d4_eb2f) * size);
 }
 
 /**

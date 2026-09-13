@@ -167,20 +167,18 @@ export class Run {
   /**
    * How far from the centre line the squad's *centre* may stand.
    *
-   * Tapered by the crowd's own half-width, so a line-filling squad hugging the
-   * edge still stands on the road instead of overhanging the grass:
+   * Tapered by the crowd's own half-width, so a squad hugging the edge still
+   * stands on the road instead of overhanging the grass:
    * `road.halfWidth - halfWidth(count)`, never wider than the plan's
-   * `road.clampX` and never tighter than `road.clampMin`. That floor is what
-   * keeps the side lanes reachable — a lane centre is at `|x| = laneWidth`, and
-   * `laneOf` puts everything from `road.clampMin` outward in the side lane, so
-   * even the widest squad can still choose a side gate.
+   * `road.clampX` and never tighter than `road.clampMin`.
    *
-   * The floor and the formation are two halves of one rule (D37): the crowd is
-   * built for the road less `formation.inset` a side, so at full width the taper
-   * asks for `inset` and the floor answers `clampMin`. The difference is what a
-   * maxed-out squad overhangs the verge by, and it is deliberately small —
-   * Milestone 4's rule was that a few centimetres of overhang beat a squad that
-   * cannot reach a side gate, and a line-filling crowd only makes that sharper.
+   * With the lane column (D42) the taper and the floor stopped fighting. The
+   * crowd is at most half a lane wide, so the taper bottoms out at 2.2 m: the
+   * centre reaches either side lane's *centre* at every count, the outermost
+   * unit stops exactly on the verge, and the floor never bites. Through
+   * Milestone 5 Phase B the crowd was the whole road wide, the taper asked for
+   * 0.8 m and the floor had to answer 1.2 m to keep a side gate reachable at
+   * all — which is the 0.4 m of overhang that entry recorded.
    */
   private clampLimit(): number {
     const squad = this.runState.squad;

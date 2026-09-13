@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
+import { enemyFootprint } from '../enemies';
 import { clampLimit, halfWidth, openRoadWidth } from '../formation';
 import { laneCenter, laneOf } from '../lanes';
 import type { EnemyState, GateState, Lane, RunState, StreamState, WeaponId } from '../types';
@@ -95,10 +96,11 @@ const ROW = [gate(-1, 'sub', 3), gate(0, 'add', 5), gate(1, 'mul', 2)];
 /**
  * The lane a bot's answer steers into.
  *
- * A bot asks for a lane centre and gets back what the crowd's own clamp allows
- * (D37): a line-filling squad never reaches `|x| = 2`, and what decides which
- * gate it takes is `laneOf`, not the distance to the middle of the panel. So
- * these tests read the lane rather than the coordinate.
+ * A bot asks for a lane centre and gets back what the crowd's own clamp allows.
+ * A lane-wide column reaches both side lane centres on an open road (D42), but
+ * a fence still holds it short of one, and what decides which gate it takes is
+ * `laneOf` rather than the distance to the middle of the panel — so these tests
+ * read the lane rather than the coordinate.
  */
 function lane(target: number): Lane {
   return laneOf(target);
@@ -148,10 +150,30 @@ describe('bots', () => {
     expect(lane(createBot('greedy', 1)(state(gates, packed, 100)))).not.toBe(-1);
   });
 
-  it('makes greedy hold its ground when a block is about to reach it', () => {
-    const blocked = state(ROW, [block(0, balance.bots.threatLookahead / 2)]);
+  it('makes greedy step out of a block that is about to reach it', () => {
+    // A lane-wide column fits beside a block (D42), so greedy no longer holds
+    // its ground and eats one: it goes to the nearest place its crowd clears
+    // the block from, which is the neighbouring lane's centre.
+    const small = block(0, balance.bots.threatLookahead / 2, 4);
+    const blocked = state(ROW, [small]);
     blocked.squad.x = 0.4;
-    expect(createBot('greedy', 1)(blocked)).toBe(0.4);
+    const target = createBot('greedy', 1)(blocked);
+    const squadHalf = halfWidth(blocked.squad.count, openRoadWidth());
+    const blockHalf = enemyFootprint('grunt', small.units, balance);
+    expect(target).toBe(laneCenter(1));
+    expect(Math.abs(target - small.x)).toBeGreaterThanOrEqual(squadHalf + blockHalf);
+  });
+
+  it('holds its ground when there is nowhere a block does not reach', () => {
+    // Both boundaries walled and a block filling the lane: nothing beats
+    // standing still, so it stands still rather than swerving for nothing.
+    const boxed = state(ROW, [block(0, balance.bots.threatLookahead / 2)]);
+    boxed.squad.x = 0.3;
+    boxed.walls = [
+      { boundary: -1, zStart: -5, zEnd: 40 },
+      { boundary: 1, zStart: -5, zEnd: 40 },
+    ];
+    expect(createBot('greedy', 1)(boxed)).toBe(0.3);
   });
 
   it('lets greedy commit to its lane once the row is close', () => {
@@ -238,17 +260,18 @@ describe('bots', () => {
     tuned.formation.spacing.min = balance.formation.spacing.min * 2;
 
     const width = openRoadWidth();
-    expect(halfWidth(8, width, tuned)).toBeGreaterThan(halfWidth(8, width));
+    // Wider spacing packs *fewer* units into the lane, so the tuned crowd is
+    // the narrower one — the band is a lane either way now (D42), and which
+    // way the number moves is beside the point: the bot must read its own.
+    expect(halfWidth(8, width, tuned)).not.toBeCloseTo(halfWidth(8, width), 6);
 
-    // Both want the `mul` in the right lane; the wider crowd is held further
-    // off the verge, so it asks for less of the road to get there.
+    // Both want the `mul` in the right lane, each through its own clamp.
     const squad = state(ROW, [], 8);
     const onShipped = createBot('greedy', 1)(squad);
     const onTuned = createBot('greedy', 1, tuned)(squad);
     expect(lane(onShipped)).toBe(1);
     expect(lane(onTuned)).toBe(1);
-    expect(onShipped).toBeCloseTo(clampLimit(8, width), 9);
-    expect(onTuned).toBeCloseTo(clampLimit(8, width, tuned), 9);
-    expect(onTuned).toBeLessThan(onShipped);
+    expect(onShipped).toBeCloseTo(Math.min(clampLimit(8, width), laneCenter(1)), 9);
+    expect(onTuned).toBeCloseTo(Math.min(clampLimit(8, width, tuned), laneCenter(1)), 9);
   });
 });

@@ -46,16 +46,21 @@ export const CAMERA = {
    * shot that followed the thumb exactly would slide the road out from under
    * it, and one that never moved would leave the crowd against the edge.
    *
-   * 0.45, up from Milestone 3's 0.35, because the line-filling crowd (D37) is
-   * what the edge of the frame now meets. At 500 units the crowd reaches 2.1 m
-   * either side of the squad and the clamp stands it at 1.2 m, so its outer
-   * column sits at 3.3 m; the frame's half width at the *back* rank — the
-   * lowest thing on screen — is 2.85 m at 390x844, and 0.35 put the eye at
-   * 0.42 m, which left that column exactly on the edge (measured: 1 px of
-   * margin to the unit's centre, so its body was cut). 0.45 moves the eye to
-   * 0.54 m and buys 0.12 m there, a whole mage clear of the edge.
+   * 0.55, up from Milestone 5 Phase F's 0.45, because D42 traded width for
+   * reach: the column is a third as wide (0.75 m of half extent at 500 units
+   * against 2.1) but its centre may now stand at 2.2 m rather than 1.2, so the
+   * outermost unit sits at 2.95 m — only 0.35 m nearer the middle than before,
+   * while the *lowest* thing on screen is no longer the crowd's own back rank
+   * but whatever rank the bottom edge cuts through, which is nearer the camera
+   * and therefore in a narrower slice of frame.
+   *
+   * Measured at 390x844 with the squad pinned at the clamp: the frame's half
+   * width where the bottom edge meets the road is 1.92 m, and 0.45 put the eye
+   * at 0.99 m, leaving that column's centre 4 px *outside* the frame. 0.55
+   * moves the eye to 1.21 m and puts it 18 px inside — a mage's width clear.
+   * Past that the shot starts to strafe with the thumb rather than pan with it.
    */
-  lateralFollow: 0.45,
+  lateralFollow: 0.55,
   /**
    * The far plane. It has to hold the sky dome (420 m, `./sky.ts`), which in
    * turn has to sit outside the fog's 260 m end — clip the dome and the top of
@@ -92,47 +97,54 @@ export const CAMERA = {
   roll: 0.012,
   rollMax: 0.035,
   /**
-   * The pull-back, per metre of formation *depth* (D37, retuned in Milestone 5
-   * Phase E).
+   * The pull-back, per metre of formation *depth* (D37; the caps re-derived for
+   * the column in D42).
    *
    * Milestone 2 scaled this by the count, which was right when the formation
    * was a disc: the disc's depth grew with `sqrt(count)` and saturated, so a
-   * capped linear term in the count was a rough stand-in for it. The
-   * line-filling formation is not a disc — it fills the band and then grows
-   * *backward*, 7.2 m deep at 500 units on the open road and deeper still in a
-   * walled lane — so the count is no longer a proxy for anything and the old
-   * cap of 2.4 m, reached at about seventy units, left the back of a big crowd
-   * under the bottom edge of the frame (`artifacts/smoke/boss.png`; the stress
-   * scene's own frame looks the same but is not this rig's doing — it draws
-   * straight into the scene and never moves the camera at all).
+   * capped linear term in the count was a rough stand-in for it. The formation
+   * is not a disc — it fills its band and then grows *backward* — so the count
+   * is no longer a proxy for anything and the rig reads the depth itself.
    *
-   * So the rig reads the depth itself. What the numbers have to buy is the
-   * ground at the *back row* staying inside the frame: the bottom edge of the
-   * shot meets the road at
+   * What the numbers buy is where the bottom edge of the shot meets the road,
    *
    *   z = eyeZ + eyeY / tan(pitch + fov/2)
    *
-   * relative to the squad's anchor, and at 500 units (7.17 m of crowd) `back`
-   * 8.2 and `lift` 2.7 put that at 8.8 m behind the anchor — a metre and a half
-   * of road behind the last rank, with the horizon still a fifth of the way
-   * down the frame. Distance does most of the work and height only a third as
-   * much, and that ratio is the part to keep: lifting the camera steepens the
-   * pitch, which drags the bottom edge back *toward* the camera and undoes what
-   * the height bought. A rig that pulled back on height alone would have to
-   * stand twelve metres up to frame the same crowd.
+   * relative to the squad's anchor. Phase E asked that to clear the *last* rank
+   * of a 4.4 m wide crowd, 7.2 m deep at 500 units, and 8.4 m of pull-back is
+   * what that costs. D42's column is 13.3 m deep at 500 in a 1.6 m lane, and no
+   * camera on this road frames thirteen metres of crowd at a size worth
+   * drawing: the shot frames the *front* of the column and the tail runs off
+   * the bottom, with the plaque's count saying how much of it there is.
    *
-   * A five-unit squad has no depth at all and therefore no pull-back, which is
-   * Milestone 3's framing exactly.
+   * So the caps are now a framing rather than a guard rail. The pull-back grows
+   * with the depth until the front six metres of the column are in frame and
+   * then stops: `back` 3.4 and `lift` 0.62 put the bottom edge 6.03 m behind
+   * the anchor, which is 34 of the 77 ranks a 500-unit column stands in. Past
+   * that, distance would only shrink the ranks the player can actually see.
    *
-   * The caps are a guard rail rather than a tuning: a crowd squeezed into a
-   * 1.2 m lane between two walls is over twenty metres deep, and no camera on
-   * this road frames that — past the cap the back of the queue is simply behind
-   * the shot.
+   * The pair is still 1.15 and 0.21 *per metre* so both saturate together at
+   * 2.96 m of depth (about fifty units in a lane), and below that the whole
+   * crowd is framed with metres to spare — a five-unit squad has no depth at
+   * all and therefore no pull-back, which is Milestone 3's framing exactly.
+   *
+   * The lift's job changed with the cap and its ratio to the back went with it
+   * (0.38 per metre to 0.21). It never bought depth in the first place — lifting
+   * the camera steepens the pitch, which drags the bottom edge back *toward*
+   * the camera and undoes what the height bought — what it buys is the angle
+   * the shot looks down at, `atan(eyeY / (behind + back))`. At 3.4 back and
+   * 0.62 lift that is 23.4 degrees, which is exactly what the Phase E rig
+   * reached at its own cap: the same shot, standing five metres nearer.
+   *
+   * Measured at 390x844 (front-rank mage, in CSS px; the sim's column, floor
+   * `CROWD_SCALE_MIN`): 10 units 55.5, 50 units 43.5, 100 units 39.7, 200 units
+   * 35.9, 500 units 32.3 — the 500-unit rank 74% of the 50-unit one, where the
+   * Phase E caps left it at 56%.
    */
   backPerDepth: 1.15,
-  liftPerDepth: 0.38,
-  backMax: 8.4,
-  liftMax: 2.8,
+  liftPerDepth: 0.21,
+  backMax: 3.4,
+  liftMax: 0.62,
   /**
    * How fast the rig eases toward a new depth — per second of frame time, and
    * per metre of road the squad covers.
