@@ -19,6 +19,9 @@ import { CameraRig } from './camera';
 import { loadDisplayFont } from './glyphAtlas';
 import { PreviewBackdrop } from './preview';
 import { createEngine, createScene } from './scene';
+import { writeBossShadow } from './shadows';
+import { buildPaletteSwatches, swatchesWanted } from './swatch';
+import { DEFAULT_ROAD_END_Z, ROAD_PAST_ARENA, ROAD_START_Z } from './theme';
 import { applyToonRampToScene } from './toonRamp';
 import { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
@@ -28,8 +31,9 @@ import type { LevelDef, PlayerState, RunState, SimEvent } from '@/sim';
 
 export interface RendererOptions {
   /**
-   * Ceiling on the device pixel ratio the scene renders at. Phones ship 3x and
-   * 4x screens; past 2x the extra pixels cost frames and buy nothing.
+   * Ceiling on the device pixel ratio the scene renders at. Rung 0 of the
+   * degrade ladder is the screen's own, up to 3 (D38); the ladder is what
+   * decides whether a device can hold it (`src/core/quality.ts`).
    */
   maxPixelRatio?: number;
   /**
@@ -39,22 +43,15 @@ export interface RendererOptions {
   preserveDrawingBuffer?: boolean;
 }
 
-const DEFAULT_MAX_PIXEL_RATIO = 2;
-
 /**
- * The road runs from before the first row to well past the arena. Both ends are
- * longer than the plan's 40 m on purpose: each has to sit outside the frame
- * from wherever the camera can stand, or the player sees the road stop in
- * mid-air.
+ * What the renderer renders at before the ladder has said anything: rung 0.
  *
- * The near end moved from -10 to -30 in Milestone 4 for the Academy backdrop:
- * that camera stands twenty metres behind the squad and looks along the road
- * rather than down at it (`PREVIEW_BEHIND`), so the bottom of its frame reaches
- * about `z = -14` — four metres past where the road used to start, which put a
- * band of grass and the road's own near edge under the Academy's cards.
+ * Three, not Milestone 3's two. The product owner's verdict on that build was
+ * "resolution very low" and they were reading a 3x phone at 2. There is no
+ * device check here on purpose — the ladder starts at native and steps down on
+ * its p95 rule, which is the only test that is true of the phone in the room.
  */
-const ROAD_START_Z = -30;
-const ROAD_PAST_ARENA = 70;
+const DEFAULT_MAX_PIXEL_RATIO = 3;
 
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
@@ -125,10 +122,10 @@ export class Renderer {
 
     // A default stretch of road, so the very first frame — which the app draws
     // behind the title screen before any level exists — is not empty sky.
-    views.road.setExtent(ROAD_START_Z, 200, 168);
+    views.road.setExtent(ROAD_START_Z, DEFAULT_ROAD_END_Z, 168);
 
     await views.load();
-    views.props.build(1, ROAD_START_Z, 200);
+    views.dressRoadside(1, ROAD_START_Z, DEFAULT_ROAD_END_Z);
 
     scene.blockMaterialDirtyMechanism = false;
 
@@ -137,14 +134,17 @@ export class Renderer {
     // one invisible glyph, or their shader would compile on the frame the first
     // gate comes into range — a stall exactly where the player is deciding.
     views.labels.warmUp();
+    // `?swatch=1` only: a row of palette chips in front of the camera, which is
+    // how the tone mapping's exposure was measured (`./swatch.ts`).
+    if (swatchesWanted()) buildPaletteSwatches(scene, this.rig.camera);
     await scene.whenReadyAsync();
     views.labels.commit();
 
     // After the first readiness pass, never before: a material frozen while its
-    // effect is still compiling never draws. Neither view ever changes what its
-    // materials are made of, so re-checking them every frame is pure cost.
-    views.props.freeze();
-    views.road.freeze();
+    // effect is still compiling never draws. None of these views ever changes
+    // what its materials are made of, so re-checking them every frame is pure
+    // cost (`SceneViews.freeze`).
+    views.freeze();
 
     // Last: every pooled material compiled while the title screen is still
     // being put together, so the first bolt, the first gate and the first
@@ -318,6 +318,10 @@ export class Renderer {
     views.events.observe(state.boss?.id, weaponOf(state.squad));
     views.events.apply(events);
 
+    // Before any view writes into it: the roadside's own blobs are already in
+    // the buffer and this rewinds to just past them (`./shadows.ts`).
+    views.shadows.begin();
+
     views.squad.update(state.squad, state.arenaZ, dt);
     // The sprite batch is opened before anything writes into it and closed
     // after everything has: projectiles, their trails, impacts and flashes all
@@ -336,11 +340,17 @@ export class Renderer {
     views.burn.update(state, dt);
     views.sprites.end();
 
+    // The boss's own blob, and the frame's one upload of the whole buffer.
+    writeBossShadow(views.shadows, state);
+
     this.rig?.update(state.squad, dt);
-    // After the rig, because the sky dome rides on the camera: a dome that
-    // follows a frame late shears against the fog on a fast lateral drag.
+    // After the rig, because the sky rides on the camera: a dome that follows a
+    // frame late shears against the fog on a fast lateral drag.
     const camera = this.rig?.camera;
-    if (camera !== undefined) views.road.update(camera.position.x, camera.position.z, dt);
+    if (camera !== undefined) {
+      views.road.update(camera.position.x, camera.position.z, dt);
+      views.sky.update(camera.position.x, camera.position.z, dt);
+    }
 
     // Last, and after the rig: every label is billboarded against the camera's
     // final pose for this frame, so a number never lags the thing it names.

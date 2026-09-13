@@ -16,9 +16,9 @@
  * grown past the file-size rule again.
  */
 
-import { Color3 } from '@babylonjs/core/Maths/math.color';
-
 import { balance } from '@/data';
+
+import { paletteColor } from './palette';
 
 export {
   ARENA_COLOR,
@@ -30,13 +30,12 @@ export {
   ENEMY_LABEL_COLOR,
   FIELD_COLOR,
   FOG_COLOR,
-  FOG_END,
-  FOG_START,
   FROST_COLOR,
   GATE_LABEL_COLOR,
   GATE_TINTS,
   LANE_LINE_COLOR,
   ROAD_COLOR,
+  SHADOW_COLOR,
   SKY,
   SKY_HAZE,
   SKY_HORIZON,
@@ -49,7 +48,11 @@ export {
   WALL_RUNE_COLOR,
   WALL_STONE_COLOR,
   WISP_COLOR,
+  palette,
+  paletteColor,
+  paletteHex,
 } from './palette';
+export type { PaletteRole } from './palette';
 export { POOL, WALL_POST_SPACING } from './pools';
 export * from './cameraLook';
 export * from './crowdLook';
@@ -58,6 +61,84 @@ export * from './spellLook';
 
 export const LANE_WIDTH = balance.road.laneWidth;
 export const ROAD_HALF_WIDTH = balance.road.halfWidth;
+
+/**
+ * The long view (D38, and the product owner's "visibility range crazy low").
+ *
+ * Milestone 3 fogged the road out at 130 m, which put the third gate row in a
+ * wall of haze and made the level a corridor: the player could see two rows and
+ * the arena never existed until they were standing in it. 120 to 260 is a
+ * different shot — six gate rows at the plan's 18 m spacing are all in frame,
+ * the boss arena is visible from a third of the way down a long level, and the
+ * fog is atmosphere rather than a curtain.
+ *
+ * It is a range, not a distance: nothing is *hidden* by 260 m, because the
+ * dome's hill band (`./sky.ts`) carries the same `sky.haze` the fog fades to,
+ * so the road arrives at the hills instead of ending. What the far end buys is
+ * depth — the near rows read at full colour, the far ones wash out.
+ *
+ * Two other numbers follow and must move with these: the camera's far plane
+ * (`CAMERA.maxZ`, which has to hold the dome) and the road's own length
+ * (`ROAD_PAST_ARENA` below, the level end plus 80 m).
+ */
+export const FOG_START = 120;
+export const FOG_END = 260;
+
+/**
+ * The road runs from before the first row to well past the arena. Both ends are
+ * longer than the plan's 40 m on purpose: each has to sit outside the frame
+ * from wherever the camera can stand, or the player sees the road stop in
+ * mid-air.
+ *
+ * The near end moved from -10 to -30 in Milestone 4 for the Academy backdrop:
+ * that camera stands twenty metres behind the squad and looks along the road
+ * rather than down at it (`PREVIEW_BEHIND`), so the bottom of its frame reaches
+ * about `z = -14` — four metres past where the road used to start, which put a
+ * band of grass and the road's own near edge under the Academy's cards.
+ */
+export const ROAD_START_Z = -30;
+/**
+ * Eighty metres past the arena, up from Milestone 3's seventy, and the number
+ * the sky is built against: the fog ends at 260 m (`FOG_END`), so the road has
+ * to keep going until the haze has taken it completely or the player sees it
+ * stop. Eighty is the far edge of the frame from the arena at the widest the
+ * camera ever stands.
+ */
+export const ROAD_PAST_ARENA = 80;
+/**
+ * The road behind the title screen, before any level exists. Past `FOG_END`, so
+ * the very first frame is a road running into haze rather than one that ends.
+ */
+export const DEFAULT_ROAD_END_Z = 300;
+
+/**
+ * Blob shadows (`./shadows.ts`).
+ *
+ * `radius` is in metres and multiplies whatever the caller passes, so one
+ * number moves every shadow in the scene at once. `alpha` is the darkest a
+ * shadow ever gets — a soft disc under a flat-lit crowd, not a cast shadow —
+ * and `fade` is the share of `range` over which it falls to nothing, so a
+ * shadow arrives with the thing it belongs to rather than popping on.
+ *
+ * `range` is deliberately shorter than `FOG_START`: a 0.3 m disc sixty metres
+ * out is two pixels of very slightly darker road, and there can be five hundred
+ * of them. Past it the crowd reads as shapes against the road anyway.
+ */
+export const SHADOW = {
+  range: 55,
+  fade: 0.25,
+  /**
+   * Measured rather than guessed: at 0.34 a blob under a pine on lit grass was
+   * invisible in a 390 px frame, and at 0.6 the roadside read as a row of
+   * holes. 0.45 of `shadow.blob` over this palette's grass and stone is a
+   * contact patch you notice only when it is missing.
+   */
+  alpha: 0.45,
+  /** How much wider than the thing above it a blob is drawn. */
+  spread: 1.3,
+  /** Metres above the road, clear of the lane runes at 0.02. */
+  y: 0.012,
+} as const;
 
 /** Labels cost a 2D canvas redraw, so only near things get one. */
 export const LABEL_RANGE = 45;
@@ -188,7 +269,7 @@ export const BOSS_DRAW_RANGE = 75;
 
 export const BOSS_HEIGHT = 3;
 /** The stand-in box, for a build whose boss model could not be loaded. */
-export const BOSS_COLOR = new Color3(0.58, 0.2, 0.88);
+export const BOSS_COLOR = paletteColor('arcane.base');
 export const BOSS_WIDTH = 2.4;
 export const BOSS_DEPTH = 1.8;
 /**

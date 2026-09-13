@@ -33,6 +33,12 @@ export class CameraRig {
 
   /** The eased pose, before the shake is added on top of it. */
   private poseX = 0;
+  /**
+   * The lateral spring's velocity, in metres per second. Kept because a spring
+   * is a second-order filter: without carrying velocity between frames it is
+   * an exponential ease with extra arithmetic. It also drives the roll.
+   */
+  private lateralVelocity = 0;
   private poseY: number = CAMERA.height;
   private poseZ: number = -CAMERA.behind;
   private ready = false;
@@ -71,7 +77,7 @@ export class CameraRig {
     );
     camera.fov = CAMERA.fov;
     camera.minZ = 0.2;
-    camera.maxZ = 220;
+    camera.maxZ = CAMERA.maxZ;
     // No input: the squad is driven by the sim, and a stray gesture must never
     // move the camera.
     camera.inputs.clear();
@@ -101,6 +107,7 @@ export class CameraRig {
     this.ready = false;
     this.settled = false;
     this.shakeLeft = 0;
+    this.lateralVelocity = 0;
     this.snapPreview();
   }
 
@@ -143,13 +150,23 @@ export class CameraRig {
     // A fresh level snaps; every other frame eases at a rate independent of
     // frame time, so 30 fps and 120 fps feel the same.
     const blend = this.ready ? 1 - Math.exp(-CAMERA.smoothing * dt) : 1;
+    const fresh = !this.ready;
     this.ready = true;
 
     const fromX = this.poseX;
     const fromY = this.poseY;
     const fromZ = this.poseZ;
 
-    let x = fromX + (wantX - fromX) * blend;
+    // The height and the follow distance are a filter on a slow number and stay
+    // an exponential ease; the lateral is the one the thumb drives, so it gets
+    // the spring (`CAMERA.lateralFrequency`).
+    let x: number;
+    if (fresh) {
+      x = wantX;
+      this.lateralVelocity = 0;
+    } else {
+      x = this.spring(fromX, wantX, dt);
+    }
     let y = fromY + (wantY - fromY) * blend;
     let z = fromZ + (wantZ - fromZ) * blend;
 
@@ -166,8 +183,12 @@ export class CameraRig {
       z = wantZ + (z - wantZ) * keep;
     }
 
+    // The spring's velocity counts: a pose that has arrived but is still
+    // carrying speed is about to leave again, and a settled frame is one the
+    // title screen may stop redrawing.
     this.settled =
-      Math.abs(x - fromX) + Math.abs(y - fromY) + Math.abs(z - fromZ) < CAMERA.settleEpsilon;
+      Math.abs(x - fromX) + Math.abs(y - fromY) + Math.abs(z - fromZ) < CAMERA.settleEpsilon &&
+      Math.abs(this.lateralVelocity) * dt < CAMERA.settleEpsilon;
     this.poseX = x;
     this.poseY = y;
     this.poseZ = z;
@@ -200,10 +221,41 @@ export class CameraRig {
     // aim, which at this distance reads as a camera bump.
     this.target.set(lateral + driftX * 0.5, lookHeight, squad.z + lookAhead);
     this.camera.setTarget(this.target);
+    // After `setTarget`, which zeroes the roll every time it is called: it
+    // builds the rotation from a look-at and has no opinion about the third
+    // axis. A hand's worth of tilt into the turn, clamped, and driven by the
+    // spring's velocity rather than the squad's so it cannot flick.
+    this.camera.rotation.z = clamp(
+      -this.lateralVelocity * CAMERA.roll,
+      -CAMERA.rollMax,
+      CAMERA.rollMax,
+    );
   }
 
   dispose(): void {
     this.camera.dispose();
+  }
+
+  /**
+   * One step of a critically damped spring toward `target`, in the implicit
+   * form: unconditionally stable at any frame time, which the explicit form is
+   * not — a 200 ms hitch through an explicit spring is an overshoot the size of
+   * the road.
+   *
+   * Derived from the damped-spring equation with the damping ratio pinned at 1
+   * (`2 * omega`), solved backward for the next position and velocity together,
+   * which is why both fall out of one determinant.
+   */
+  private spring(from: number, target: number, dt: number): number {
+    const omega = CAMERA.lateralFrequency;
+    const f = 1 + 2 * dt * omega;
+    const oo = omega * omega;
+    const hoo = dt * oo;
+    const hhoo = dt * hoo;
+    const detInv = 1 / (f + hhoo);
+    const next = (f * from + dt * this.lateralVelocity + hhoo * target) * detInv;
+    this.lateralVelocity = (this.lateralVelocity + hoo * (target - from)) * detInv;
+    return next;
   }
 
   /** xorshift32: the shake's own noise, deliberately not the sim's RNG. */
@@ -220,4 +272,8 @@ export class CameraRig {
 /** Linear blend; the preview framing is the only thing that needs one. */
 function mix(from: number, to: number, t: number): number {
   return from + (to - from) * t;
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return value < low ? low : value > high ? high : value;
 }

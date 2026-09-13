@@ -28,6 +28,8 @@ import { ProjectileView } from './projectiles';
 import { PropsView } from './props';
 import { RoadView } from './road';
 import { RendererEvents } from './rendererEvents';
+import { ShadowLayer, addPropShadows } from './shadows';
+import { SkyDome } from './sky';
 import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
 import { POOL } from './theme';
@@ -35,8 +37,19 @@ import { WallView } from './walls';
 import { WispView } from './wisp';
 import type { LevelDef } from '@/sim';
 
+/**
+ * Moving blob shadows one frame can hold: every mage, every minion the crowd
+ * pool can draw, every brute and the boss, with a little slack. One `Float32`
+ * matrix each, so the whole buffer is under 70 KB.
+ */
+const SHADOW_CAPACITY = POOL.squad + POOL.grunts + POOL.brutes + 8;
+/** Roadside props a level dresses with; see `PropsView.build`. */
+const PROP_SHADOW_CAPACITY = 192;
+
 export class SceneViews {
   readonly labels: NumberLabels;
+  /** The dome, its clouds and the hills (`./sky.ts`); drawn before everything. */
+  readonly sky: SkyDome;
   readonly road: RoadView;
   readonly props: PropsView;
   readonly squad: SquadView;
@@ -52,16 +65,38 @@ export class SceneViews {
   readonly wisp: WispView;
   /** Ember's burn (D33, tier 2), read off the bodies themselves. */
   readonly burn: BurnView;
+  /**
+   * Blob shadows (D38), shared by every view that puts something on the road.
+   *
+   * Public here rather than reached for through a view, because five owners
+   * write into it — the squad, the enemy blocks and their stream bodies, the
+   * boss and the roadside props — and the one that opens and closes it is the
+   * frame (`Renderer.update`). See `./shadows.ts` for the call order.
+   */
+  readonly shadows: ShadowLayer;
   /** Turns "the sim says this happened" into "start that animation". */
   readonly events: RendererEvents;
+
+  /** Kept for `dressRoadside`, which reads the props back off the scene. */
+  private readonly scene: Scene;
 
   /**
    * `shake` is the renderer's own camera kick, passed in rather than reached
    * for: the rig belongs to the frame and this bundle never sees it.
    */
   constructor(scene: Scene, shake: (strength: number, seconds: number) => void) {
+    this.scene = scene;
     this.labels = new NumberLabels(scene);
+    // First, so its meshes are the first opaque submeshes the scene registers
+    // and the dome is painted before the road that stands in front of it.
+    this.sky = new SkyDome(scene);
     this.road = new RoadView(scene);
+    // After the road, because that is what still owns Milestone 3's dome.
+    this.sky.retireLegacyDome(scene);
+    this.shadows = new ShadowLayer(scene, {
+      capacity: SHADOW_CAPACITY,
+      staticCapacity: PROP_SHADOW_CAPACITY,
+    });
     this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
     this.sprites = new SpriteLayer(scene, POOL.sprites);
@@ -100,10 +135,32 @@ export class SceneViews {
     ]);
   }
 
+  /** Locks the materials that never change, after the first readiness pass. */
+  freeze(): void {
+    this.props.freeze();
+    this.road.freeze();
+    this.sky.freeze();
+    this.shadows.freeze();
+  }
+
+  /**
+   * Dresses a stretch of road with props and puts a blob under each of them.
+   *
+   * The two go together and always have to: the roadside never moves again
+   * inside a level, so its shadows are written once here rather than
+   * re-uploaded sixty times a second with the crowd's, and a `props.build` that
+   * forgot this would leave a level's trees hovering.
+   */
+  dressRoadside(levelIndex: number, startZ: number, endZ: number): void {
+    this.props.build(levelIndex, startZ, endZ);
+    this.shadows.reset();
+    addPropShadows(this.scene, this.shadows);
+  }
+
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef, roadStartZ: number, roadEndZ: number): void {
     this.road.setExtent(roadStartZ, roadEndZ, level.arenaZ);
-    this.props.build(level.index, roadStartZ, roadEndZ);
+    this.dressRoadside(level.index, roadStartZ, roadEndZ);
     // The fences are placed once here and only culled per frame afterwards
     // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that
     // predate D32, and an absent list is simply a level with no walls.
@@ -122,6 +179,8 @@ export class SceneViews {
 
   dispose(): void {
     this.squad.dispose();
+    this.shadows.dispose();
+    this.sky.dispose();
     this.projectiles.dispose();
     this.effects.dispose();
     this.sprites.dispose();

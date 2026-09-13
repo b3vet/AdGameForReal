@@ -1,129 +1,198 @@
 /**
- * The palette: every colour the Babylon layer paints with.
+ * The palette: one colour list for the whole Babylon layer, read from
+ * `src/data/palette.json`.
  *
- * Split out of `./theme.ts` in Milestone 3 Phase D, which had grown past the
- * file-size rule; `theme.ts` re-exports all of it, so nothing imports from here
- * directly and the palette stays one list rather than a set of literals spread
- * through the views.
+ * D36 made that file the single source of colour for render and UI, and this is
+ * the render half of it: code names a *role* (`'spell.ember.body'`), never a
+ * hex string, and the loader hands back a `Color3` for materials or the hex for
+ * anything that paints into a 2D canvas (the sprite sheets, the glyph atlas).
+ * The UI generates its CSS variables from the same file.
  *
- * Bright and casual, per docs/09-milestone-3-plan.md and decision D28: a light
- * blue sky falling to a warm pale horizon, a light warm stone road, green
- * field, and three saturated spell colours — ember orange, storm violet, frost
- * cyan. Gate panels stay the most readable thing in frame.
+ * Milestone 3 and 4 kept the same list as a wall of `new Color3(...)` literals
+ * here; the named exports below are what the views already import, so they stay
+ * — only their *source* changed. A view that wants a role the list has no name
+ * for calls `paletteColor` directly rather than adding a literal.
  *
- * This supersedes Milestone 2's near-black dusk (the dark half of D21). The
- * whole set moves together: lights (`./scene.ts`), sky dome (`./road.ts`) and
- * the emissive lifts in `./models.ts` were all tuned against a scene with no
- * ambient in it, so raising the ambient without dropping the lifts washes every
- * character out to white.
+ * Bright and casual, per docs/09-milestone-3-plan.md and decision D28, now
+ * expressed as roles: a blue sky falling to a pale horizon and a warm haze
+ * band, warm stone road, green field, and three saturated spell colours —
+ * ember orange, storm violet, frost cyan. Gate panels stay the most readable
+ * thing in frame.
+ *
+ * The sky roles moved with Milestone 5: `sky.haze` is the warm band the fog
+ * fades into and the hills are cut out of (`./sky.ts`), and the gradient runs
+ * `sky.top` → `sky.mid` → `sky.horizon`. Milestone 3's names for those
+ * (`SKY_ZENITH`, `SKY_HORIZON`, `SKY_HAZE`) are kept so the road and the biome
+ * still compile while the art track migrates.
  */
 
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 
-/** Sky gradient, bottom to top. The fog fades to `FOG_COLOR`, so there is no seam. */
-export const SKY_HORIZON = new Color3(0.99, 0.93, 0.79);
-export const SKY_HAZE = new Color3(0.82, 0.9, 0.97);
-export const SKY_MID = new Color3(0.45, 0.71, 0.97);
-export const SKY_ZENITH = new Color3(0.25, 0.55, 0.93);
+import paletteJson from '@/data/palette.json';
+
+/**
+ * Every dotted path in the palette that ends at a hex string:
+ * `'arcane.base' | 'sky.top' | 'spell.ember.body' | ...`.
+ *
+ * Derived from the JSON itself rather than written out, so a role added to the
+ * file is immediately spellable and a role removed from it stops compiling
+ * wherever it was named. `$comment` is a string at the top level, so it lands
+ * in the union and is excluded by hand.
+ */
+type RolePaths<T> = {
+  [K in keyof T & string]: T[K] extends string ? K : `${K}.${RolePaths<T[K]>}`;
+}[keyof T & string];
+
+export type PaletteRole = Exclude<RolePaths<typeof paletteJson>, `$${string}`>;
+
+/** The raw file, for the few callers that want to walk it (hex, CSS, tests). */
+export const palette = paletteJson;
+
+/**
+ * Resolved `Color3`s, one per role, built on first use.
+ *
+ * Shared instances: every caller of `paletteColor('gold.base')` gets the same
+ * object, exactly as the named exports below have always been shared. Nothing
+ * may mutate one in place — `scale`, `clone` and `Color3.LerpToRef` all write
+ * somewhere else, which is what the views already do.
+ */
+const colors = new Map<string, Color3>();
+
+/** The hex string a role names, `'#rrggbb'`. Throws on a role the file lacks. */
+export function paletteHex(role: PaletteRole): string {
+  let node: unknown = paletteJson;
+  for (const key of role.split('.')) {
+    if (typeof node !== 'object' || node === null) break;
+    node = (node as Record<string, unknown>)[key];
+  }
+  if (typeof node !== 'string') {
+    // A throw rather than a fallback colour: the role union makes this
+    // unreachable from TypeScript, so reaching it means the JSON and the types
+    // have come apart and a silent magenta would hide it until a playtest.
+    throw new Error(`palette.json has no colour at role "${role}"`);
+  }
+  return node;
+}
+
+/** The `Color3` a role names. Shared and never mutated; see `colors`. */
+export function paletteColor(role: PaletteRole): Color3 {
+  const cached = colors.get(role);
+  if (cached !== undefined) return cached;
+  const color = Color3.FromHexString(paletteHex(role));
+  colors.set(role, color);
+  return color;
+}
+
+/** Sky gradient, bottom to top; the dome is `./sky.ts`. */
+export const SKY_HAZE = paletteColor('sky.haze');
+export const SKY_HORIZON = paletteColor('sky.horizon');
+export const SKY_MID = paletteColor('sky.mid');
+export const SKY_ZENITH = paletteColor('sky.top');
 /** What the canvas clears to: the top of the dome, for the pixels it misses. */
 export const SKY = SKY_ZENITH;
 /**
- * Daylight haze. The road runs into it at `FOG_END`, and the dome carries the
- * same colour in its horizon band, so the far end of the level dissolves
- * instead of stopping in mid-air.
+ * Daylight haze. The road runs into it at `FOG_END` (`./theme.ts`) and the
+ * dome's hill band carries the same colour, so the far end of the level
+ * dissolves into the hills instead of stopping in mid-air.
  */
-export const FOG_COLOR = new Color3(0.89, 0.91, 0.86);
-export const FOG_START = 46;
-export const FOG_END = 130;
+export const FOG_COLOR = SKY_HAZE;
 
-/** Light warm stone, so the road is the bright floor the crowd reads against. */
-export const ROAD_COLOR = new Color3(0.86, 0.79, 0.66);
+/** Warm stone, so the road is the bright floor the crowd reads against. */
+export const ROAD_COLOR = paletteColor('stone.base');
 /** Grass either side, the one large cool-green mass in the frame. */
-export const FIELD_COLOR = new Color3(0.44, 0.67, 0.34);
+export const FIELD_COLOR = paletteColor('grass.base');
 /**
- * Lane runes. Brighter and bluer than Milestone 2's: on a near-black road a dim
- * violet line was already the loudest thing on the ground, and on light stone
- * the same colour disappears. The gate panels still win, because they are two
+ * Lane runes. Arcane violet rather than Milestone 3's blue: `gate.mul` is the
+ * gold arch now and `gate.fireRate` the blue one, which left a cool blue line
+ * on the road meaning nothing. The gate panels still win, because they are two
  * metres tall and these are twelve centimetres wide.
  */
-export const LANE_LINE_COLOR = new Color3(0.36, 0.58, 1);
-export const ARENA_COLOR = new Color3(1, 0.55, 0.16);
+export const LANE_LINE_COLOR = paletteColor('arcane.light');
+export const ARENA_COLOR = paletteColor('gold.base');
 
 /** The three staffs. Everything a weapon touches is one of these three hues. */
-export const EMBER_COLOR = new Color3(1, 0.45, 0.1);
-export const STORM_COLOR = new Color3(0.72, 0.42, 1);
-export const FROST_COLOR = new Color3(0.36, 0.86, 1);
+export const EMBER_COLOR = paletteColor('spell.ember.body');
+export const STORM_COLOR = paletteColor('spell.storm.body');
+export const FROST_COLOR = paletteColor('spell.frost.body');
 
 /** The stand-in colour for a crowd whose model could not be loaded. */
-export const ENEMY_COLOR = new Color3(0.82, 0.18, 0.16);
-export const BOSS_ENRAGE_COLOR = new Color3(1, 0.12, 0.06);
-export const STOMP_COLOR = new Color3(1, 0.5, 0.18);
+export const ENEMY_COLOR = paletteColor('danger.base');
+export const BOSS_ENRAGE_COLOR = paletteColor('danger.light');
+export const STOMP_COLOR = paletteColor('spell.ember.body');
 
-/** Gate tints, per `GateKind`. Keys are checked against the sim's union below. */
+/**
+ * Gate tints, per `GateKind`.
+ *
+ * `mul` is gold and `fireRate` is blue, which is the swap the Milestone 5
+ * palette makes: the arches are built as a gold crown for multipliers and a
+ * blue crystal for fire rate (plan, "Gates too basic"), and the panel tint has
+ * to agree with the arch it sits in.
+ */
 export const GATE_TINTS = {
-  add: new Color3(0.24, 0.95, 0.45),
-  sub: new Color3(1, 0.26, 0.28),
-  mul: new Color3(0.34, 0.62, 1),
-  fireRate: new Color3(1, 0.8, 0.22),
+  add: paletteColor('gate.add'),
+  sub: paletteColor('gate.sub'),
+  mul: paletteColor('gate.mul'),
+  fireRate: paletteColor('gate.fireRate'),
   /**
    * Staff gates. A violet leaning white rather than another saturated hue: this
    * is the only panel that prints a word instead of a number, and the pale tint
-   * keeps the letters legible while the violet still reads apart from `mul`'s
-   * blue at a glance.
+   * keeps the letters legible while the violet still reads apart from the rest.
    */
-  weapon: new Color3(0.85, 0.66, 1),
+  weapon: paletteColor('gate.weapon'),
 } as const;
 
 /**
  * Label ink. The digit atlas paints its glyphs white with a near-black outline
  * and the shader multiplies by these, so a tint only ever darkens the ink and
- * the outline stays the outline (`src/render/labels.ts`).
+ * the outline stays the outline (`src/render/labels.ts`). All four are the
+ * palette's near-whites, which is what keeps them ink rather than colour.
  */
-export const GATE_LABEL_COLOR = new Color3(1, 1, 1);
-export const ENEMY_LABEL_COLOR = new Color3(1, 0.914, 0.902);
-export const BOSS_LABEL_COLOR = new Color3(1, 0.851, 0.824);
+export const GATE_LABEL_COLOR = paletteColor('parchment.panel');
+export const ENEMY_LABEL_COLOR = paletteColor('bone.base');
+export const BOSS_LABEL_COLOR = paletteColor('parchment.base');
 /**
  * The number floating over a stream's head. In the gate numbers' family — white
  * ink with the atlas's own dark outline — so the player reads it as "a number
  * that matters" rather than as another enemy HP tag, but cooled a shade so it
  * is not mistaken for a gate on a lane with no panel in it.
  */
-export const STREAM_LABEL_COLOR = new Color3(0.93, 0.97, 1);
+export const STREAM_LABEL_COLOR = paletteColor('sky.horizon');
 
 /** The ring under a frost-slowed block: the frost staff's own hue. */
 export const SLOW_RING_COLOR = FROST_COLOR;
 
 /**
- * Lane walls (D32). Cool grey stone for the posts and rails, and an amber rune
- * for the top edge.
+ * Lane walls (D32): dark stone for the posts and rails, an amber rune for the
+ * top edge.
  *
- * The stone started in the road's own warm family and vanished into it: a fence
- * at `x = ±1` stands on light stone with green either side, and at twenty
- * metres a warm grey post against a warm stone road is the same pixel. Cooling
- * and darkening it is what gives the posts an edge; the rune then reads as the
- * lit part of a solid thing rather than as a line floating over the road.
+ * The stone has to be the road's own family two steps darker, not a colour of
+ * its own: a fence at `x = ±1` stands on light stone with green either side,
+ * and at twenty metres a stone-coloured post against a stone road is the same
+ * pixel. `stone.deep` is what gives the posts an edge; the rune then reads as
+ * the lit part of a solid thing rather than as a line floating over the road.
  *
- * Amber rather than another of the spell hues: the fence is in frame for ten to
+ * Amber rather than one of the spell hues: the fence is in frame for ten to
  * twenty metres at a time, right next to the gate panels, and every saturated
- * hue in the palette already means something the player has to decide about
- * (green add, red sub, blue mul and the lane runes, yellow fire rate, violet
- * staff). Amber is the one warm accent nothing else claims on the road, and it
- * reads as "carved stone lit from inside" against the light stone it sits on.
+ * hue in the palette already means something the player has to decide about.
+ * Gold is the one warm accent nothing else claims on the road.
  */
-export const WALL_STONE_COLOR = new Color3(0.6, 0.57, 0.53);
-export const WALL_RUNE_COLOR = new Color3(1, 0.66, 0.2);
+export const WALL_STONE_COLOR = paletteColor('stone.deep');
+export const WALL_RUNE_COLOR = paletteColor('gold.base');
 
 /**
- * The wisp (D33). A pale green-white will-o'-the-wisp: the one hue on the road
- * that is neither a staff nor a gate, so a familiar hovering beside the squad
- * is never mistaken for the squad's own fire. The sprite sheet carries a
- * white-hot core, so this only has to say which way the rim leans.
+ * The wisp (D33). A pale green will-o'-the-wisp: the one hue on the road that
+ * is neither a staff nor a gate, so a familiar hovering beside the squad is
+ * never mistaken for the squad's own fire. The sprite sheet carries a white-hot
+ * core, so this only has to say which way the rim leans.
  */
-export const WISP_COLOR = new Color3(0.68, 1, 0.72);
+export const WISP_COLOR = paletteColor('grass.light');
 
 /**
  * Ember's burn (D33). Hotter and yellower than `EMBER_COLOR`: a body alight is
  * lit from inside, and the flame has to read on top of the ember impacts
  * already going off on the same body.
  */
-export const BURN_COLOR = new Color3(1, 0.62, 0.14);
+export const BURN_COLOR = paletteColor('spell.ember.core');
+
+/** Blob shadows (`./shadows.ts`): the one dark the palette carries. */
+export const SHADOW_COLOR = paletteColor('shadow.blob');

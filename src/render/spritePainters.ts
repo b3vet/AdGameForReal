@@ -15,6 +15,8 @@
  */
 
 import { CELL, GRID, SPRITE_CELLS } from './spriteGrid';
+import { paletteColor } from './theme';
+import type { PaletteRole } from './theme';
 
 /**
  * The 2D context the sheet is painted with.
@@ -70,9 +72,27 @@ function glow(
   context.fill();
 }
 
-const EMBER_RIM = 'rgba(255,135,25,ALPHA)';
-const STORM_RIM = 'rgba(140,80,255,ALPHA)';
-const FROST_RIM = 'rgba(90,205,255,ALPHA)';
+/**
+ * A palette role as the `rgba(r,g,b,ALPHA)` template `glow` expects, and the
+ * same with a fixed alpha for a stroke.
+ *
+ * Every hue on this sheet comes through these two (D36). The whites do not:
+ * the sheet is painted white-hot on black and tinted per instance
+ * (`./sprites.ts`), so white and black are structure here, not colour.
+ */
+function rim(role: PaletteRole): string {
+  const color = paletteColor(role);
+  const byte = (channel: number): number => Math.round(channel * 255);
+  return `rgba(${String(byte(color.r))},${String(byte(color.g))},${String(byte(color.b))},ALPHA)`;
+}
+
+function stroke(role: PaletteRole, alpha: number): string {
+  return rim(role).replace('ALPHA', String(alpha));
+}
+
+const EMBER_RIM = rim('spell.ember.body');
+const STORM_RIM = rim('spell.storm.body');
+const FROST_RIM = rim('spell.frost.body');
 
 /**
  * Ember: a round core with a flame licking off the back of it. The lick is
@@ -128,8 +148,8 @@ export function boltCell(context: Context, phase: number, random: () => number):
   context.lineJoin = 'round';
 
   for (const [width, color, alpha] of [
-    [0.3, 'rgba(110,50,255,ALPHA)', 0.55],
-    [0.1, 'rgba(190,150,255,ALPHA)', 0.9],
+    [0.3, rim('spell.storm.edge'), 0.55],
+    [0.1, rim('spell.storm.core'), 0.9],
   ] as const) {
     context.strokeStyle = color.replace('ALPHA', String(alpha));
     context.lineWidth = width;
@@ -150,7 +170,7 @@ export function boltCell(context: Context, phase: number, random: () => number):
   // Two short forks off the shaft, so the bolt crackles rather than bends.
   for (let i = 0; i < 2; i++) {
     const y = -0.4 + i * 0.7;
-    context.strokeStyle = 'rgba(165,110,255,0.8)';
+    context.strokeStyle = stroke('spell.storm.body', 0.8);
     context.lineWidth = 0.05;
     context.beginPath();
     context.moveTo((random() - 0.5) * 0.2, y);
@@ -181,7 +201,7 @@ export function crystal(context: Context, phase: number, random: () => number): 
 
   context.save();
   context.rotate(spin);
-  context.strokeStyle = 'rgba(150,235,255,0.95)';
+  context.strokeStyle = stroke('spell.frost.body', 0.95);
   context.lineCap = 'round';
   for (let arm = 0; arm < 6; arm++) {
     const angle = (arm / 6) * Math.PI * 2;
@@ -265,8 +285,8 @@ export function burst(
  */
 export function sparkle(context: Context, phase: number): void {
   const size = 0.55 + 0.35 * Math.sin(phase * Math.PI * 2);
-  glow(context, 0, 0, 0.45 * size, 'rgba(255,230,180,ALPHA)', 0.8);
-  context.strokeStyle = 'rgba(255,250,235,0.5)';
+  glow(context, 0, 0, 0.45 * size, rim('gold.light'), 0.8);
+  context.strokeStyle = stroke('parchment.base', 0.5);
   context.lineCap = 'round';
   context.lineWidth = 0.06;
   for (const [dx, dy] of [
@@ -281,7 +301,7 @@ export function sparkle(context: Context, phase: number): void {
 }
 
 /** The wisp's own rim. Painted pale, because the tint carries the hue. */
-const WISP_RIM = 'rgba(180,255,200,ALPHA)';
+const WISP_RIM = rim('grass.light');
 
 /**
  * The familiar's four books (D33).

@@ -44,6 +44,41 @@ export const CAMERA = {
   /** The camera tracks the squad's x only partly, so the road stays framed. */
   lateralFollow: 0.35,
   /**
+   * The far plane. It has to hold the sky dome (420 m, `./sky.ts`), which in
+   * turn has to sit outside the fog's 260 m end — clip the dome and the top of
+   * the frame is the clear colour with a hard edge across it. Milestone 3's
+   * 220 was chosen against a fog that ended at 130.
+   *
+   * The near plane stays at 0.2: 0.2 to 520 is a depth ratio of 2600, which a
+   * 24-bit buffer holds without the road's lane runes fighting the stone.
+   */
+  maxZ: 520,
+  /**
+   * Lateral follow, as a critically damped spring (plan, "Movement must be
+   * smoother"). `lateralFrequency` is its angular frequency in radians per
+   * second: the pose reaches about 95 percent of a step in `4.7 / f` seconds,
+   * so 7 settles a drag in two thirds of a second with no overshoot at all.
+   *
+   * A spring rather than the exponential ease the rest of the pose uses,
+   * because the two are asked for different things. The ease is a filter on a
+   * position; the spring is a *mass*, so the camera leaves late and arrives
+   * settled, which is what makes a fast drag read as the shot following the
+   * squad rather than as the world sliding sideways under it. Critically
+   * damped, never under: an overshoot at this distance is a wobble.
+   */
+  lateralFrequency: 7,
+  /**
+   * The roll, in radians per metre per second of the camera's own lateral
+   * speed, and the most it may ever reach.
+   *
+   * Tiny on purpose — 0.035 rad is two degrees, which nobody can see as a tilt
+   * and everybody feels as weight. It is driven by the *camera's* velocity
+   * rather than the squad's, so it is already smoothed by the spring above and
+   * cannot flick when the sim's own lateral clamp bites at the road's edge.
+   */
+  roll: 0.012,
+  rollMax: 0.035,
+  /**
    * Extra distance as the squad grows, so the tail of the crowd stays on
    * screen. The formation is an ellipse whose depth grows with `sqrt(count)`
    * and saturates around 3.5 m, so this reaches its cap at about 70 units
