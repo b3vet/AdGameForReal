@@ -158,7 +158,7 @@ export class Firing {
     if (shots <= 0) return;
     this.shotAccumulator -= shots;
 
-    const offsets = formationOffsets(count);
+    const offsets = formationOffsets(count, squad.formationWidth, this.balance);
     this.laneBatch[0] = 0;
     this.laneBatch[1] = 0;
     this.laneBatch[2] = 0;

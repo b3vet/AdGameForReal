@@ -77,6 +77,12 @@ export interface WallLimits {
  * right stays on the right. A margin keeps the centre off the boundary line
  * itself: `laneOf` puts a point exactly on the line in the *side* lane, so a
  * squad clamped to the line would still count as having crossed it.
+ *
+ * `keep` is how far the centre is held off the line, and it is the margin plus
+ * whatever the crowd reaches from its centre (D37): a line-filling squad is
+ * metres wide, and holding only its centre off the fence is what let a crowd
+ * stand through one all through Milestone 4. Callers that reason about lanes
+ * rather than about bodies — the bots — leave it at the margin.
  */
 export function wallLimits(
   walls: readonly WallDef[],
@@ -85,6 +91,7 @@ export function wallLimits(
   limit: number,
   out: WallLimits,
   laneWidth = balance.road.laneWidth,
+  keep = balance.walls.margin,
 ): WallLimits {
   out.lo = -limit;
   out.hi = limit;
@@ -92,19 +99,18 @@ export function wallLimits(
   if (walls.length === 0) return out;
 
   const approach = balance.walls.approach;
-  const margin = balance.walls.margin;
   const release = balance.walls.gateGap;
   for (let i = 0; i < walls.length; i++) {
     const wall = walls[i];
     if (wall === undefined || !wallHolds(wall, z, approach, release)) continue;
     const line = wallX(wall.boundary, laneWidth);
     if (x < line) {
-      if (line - margin < out.hi) {
-        out.hi = line - margin;
+      if (line - keep < out.hi) {
+        out.hi = line - keep;
         out.wall = i;
       }
-    } else if (line + margin > out.lo) {
-      out.lo = line + margin;
+    } else if (line + keep > out.lo) {
+      out.lo = line + keep;
       out.wall = i;
     }
   }

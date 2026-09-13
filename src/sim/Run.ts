@@ -16,7 +16,7 @@ import type { Burn } from './burn';
 import { EventBuffer } from './events';
 import type { Familiar } from './familiar';
 import type { Firing } from './firing';
-import { halfWidth } from './formation';
+import { availableWidth, clampLimit, openRoadWidth, wallKeep } from './formation';
 import { clampCount, countAfterGate } from './gates';
 import { laneOf } from './lanes';
 import type { LevelDef } from './level';
@@ -36,6 +36,7 @@ import type {
   UnitLossReason,
   WeaponId,
 } from './types';
+import { steer } from './steering';
 import { clampToWalls, wallLimits, wallX } from './walls';
 import type { WallDef, WallLimits } from './walls';
 import { weaponDef, weaponOf } from './weapons';
@@ -108,6 +109,10 @@ export class Run {
       damage: balance.squad.damage * weaponDef(staff).damage * this.mods.damage,
       fireRateBonus: 0,
       weaponId: staff,
+      vx: 0,
+      // Overwritten by the first step; a sensible width before it, so anything
+      // that reads the state before the run starts sees the open road.
+      formationWidth: openRoadWidth(balance),
     };
 
     const world = buildWorld(level, balance);
@@ -153,7 +158,7 @@ export class Run {
     return this.runState;
   }
 
-  /** Clamped to the road; the squad eases toward it at `balance.squad.lateralSpeed`. */
+  /** Clamped to the road; the squad eases toward it through the lateral spring. */
   setTargetX(x: number): void {
     const limit = this.clampLimit();
     this.runState.squad.targetX = Math.min(Math.max(x, -limit), limit);
@@ -162,18 +167,24 @@ export class Run {
   /**
    * How far from the centre line the squad's *centre* may stand.
    *
-   * Tapered by the crowd's own half-width, so a 500-strong squad hugging the
+   * Tapered by the crowd's own half-width, so a line-filling squad hugging the
    * edge still stands on the road instead of overhanging the grass:
    * `road.halfWidth - halfWidth(count)`, never wider than the plan's
    * `road.clampX` and never tighter than `road.clampMin`. That floor is what
    * keeps the side lanes reachable — a lane centre is at `|x| = laneWidth`, and
    * `laneOf` puts everything from `road.clampMin` outward in the side lane, so
    * even the widest squad can still choose a side gate.
+   *
+   * The floor and the formation are two halves of one rule (D37): the crowd is
+   * built for the road less `formation.inset` a side, so at full width the taper
+   * asks for `inset` and the floor answers `clampMin`. The difference is what a
+   * maxed-out squad overhangs the verge by, and it is deliberately small —
+   * Milestone 4's rule was that a few centimetres of overhang beat a squad that
+   * cannot reach a side gate, and a line-filling crowd only makes that sharper.
    */
   private clampLimit(): number {
-    const road = this.balance.road;
-    const tapered = road.halfWidth - halfWidth(this.runState.squad.count);
-    return Math.max(road.clampMin, Math.min(road.clampX, tapered));
+    const squad = this.runState.squad;
+    return clampLimit(squad.count, squad.formationWidth, this.balance);
   }
 
   /**
@@ -207,9 +218,15 @@ export class Run {
 
     state.time += dt;
 
+    // The band the crowd fills, walls included, before anything reads its
+    // width: the formation narrows as the squad arrives at a fence (D37).
+    squad.formationWidth = availableWidth(state, this.balance);
+
     // Re-clamped every step, not only when the player steers: the limit moves
     // as the crowd grows and shrinks (see `clampLimit`), and a wall narrows it
-    // further for as long as the squad is inside one (D32).
+    // further for as long as the squad is inside one (D32). The fence is held
+    // off the crowd's outermost unit rather than off its centre, so a crowd
+    // metres wide never stands through one.
     const limits = wallLimits(
       this.walls,
       squad.z,
@@ -217,15 +234,13 @@ export class Run {
       this.clampLimit(),
       this.limits,
       this.balance.road.laneWidth,
+      wallKeep(squad.count, squad.formationWidth, this.balance),
     );
     const wanted = squad.targetX;
     squad.targetX = clampToWalls(wanted, limits);
     this.noteWall(limits.wall, wanted !== squad.targetX, squad.z);
 
-    const dx = squad.targetX - squad.x;
-    const maxMove = this.balance.squad.lateralSpeed * dt;
-    squad.x += Math.abs(dx) <= maxMove ? dx : Math.sign(dx) * maxMove;
-    squad.x = clampToWalls(squad.x, limits);
+    steer(squad, limits, this.balance, dt);
 
     // The squad stops at the arena to fight the boss.
     if (squad.z < state.arenaZ) {

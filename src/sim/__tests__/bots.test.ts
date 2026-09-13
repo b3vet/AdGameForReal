@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
-import { laneCenter } from '../level';
+import { laneCenter, laneOf } from '../lanes';
 import type { EnemyState, GateState, Lane, RunState, StreamState, WeaponId } from '../types';
 import { balance } from '@/data';
 
@@ -91,30 +91,42 @@ function state(gates: GateState[], enemies: EnemyState[] = [], count = 10): RunS
 
 const ROW = [gate(-1, 'sub', 3), gate(0, 'add', 5), gate(1, 'mul', 2)];
 
+/**
+ * The lane a bot's answer steers into.
+ *
+ * A bot asks for a lane centre and gets back what the crowd's own clamp allows
+ * (D37): a line-filling squad never reaches `|x| = 2`, and what decides which
+ * gate it takes is `laneOf`, not the distance to the middle of the panel. So
+ * these tests read the lane rather than the coordinate.
+ */
+function lane(target: number): Lane {
+  return laneOf(target);
+}
+
 describe('bots', () => {
   it('sends greedy to the lane with the best outcome', () => {
-    expect(createBot('greedy', 1)(state(ROW))).toBe(laneCenter(1));
+    expect(lane(createBot('greedy', 1)(state(ROW)))).toBe(1);
   });
 
   it('sends worst to the lane with the worst outcome', () => {
-    expect(createBot('worst', 1)(state(ROW))).toBe(laneCenter(-1));
+    expect(lane(createBot('worst', 1)(state(ROW)))).toBe(-1);
   });
 
   it('prefers an empty lane to a penalty when the row is short of gates', () => {
     const partial = [gate(-1, 'sub', 4), gate(1, 'add', 6)];
-    expect(createBot('greedy', 1)(state(partial))).toBe(laneCenter(1));
+    expect(lane(createBot('greedy', 1)(state(partial)))).toBe(1);
     // Nothing at all beats losing four units, so the worst bot still avoids -4.
-    expect(createBot('worst', 1)(state(partial))).toBe(laneCenter(-1));
+    expect(lane(createBot('worst', 1)(state(partial)))).toBe(-1);
   });
 
   it('values a fireRate gate by what it prints, not as nothing', () => {
     const row = [gate(-1, 'fireRate', 0.1), gate(0, 'add', 1), null];
     const gates = row.filter((g): g is GateState => g !== null);
     // +10% rate on a hundred units beats a single extra body...
-    expect(createBot('greedy', 1)(state(gates, [], 100))).toBe(laneCenter(-1));
+    expect(lane(createBot('greedy', 1)(state(gates, [], 100)))).toBe(-1);
     // ...and loses to a real handful of them.
     const better = [gate(-1, 'fireRate', 0.1), gate(0, 'add', 20)];
-    expect(createBot('greedy', 1)(state(better, [], 100))).toBe(laneCenter(0));
+    expect(lane(createBot('greedy', 1)(state(better, [], 100)))).toBe(0);
   });
 
   it('takes a staff that suits the road ahead, and the worst bot takes the other', () => {
@@ -122,8 +134,8 @@ describe('bots', () => {
     // enough to chain, so storm is the upgrade and frost the downgrade.
     const strung = [block(0, 12, 4), block(0, 14.5, 4), block(0, 17, 4)];
     const row = [staff(-1, 'storm'), gate(0, 'add', 40), staff(1, 'frost')];
-    expect(createBot('greedy', 1)(state(row, strung, 200))).toBe(laneCenter(-1));
-    expect(createBot('worst', 1)(state(row, strung, 200))).toBe(laneCenter(1));
+    expect(lane(createBot('greedy', 1)(state(row, strung, 200)))).toBe(-1);
+    expect(lane(createBot('worst', 1)(state(row, strung, 200)))).toBe(1);
   });
 
   it('will not swap to a worse staff just because a gate offers one', () => {
@@ -132,7 +144,7 @@ describe('bots', () => {
     const packed = [block(-2, 14, 4), block(0, 14, 4), block(2, 14, 4)];
     const row = [staff(-1, 'frost'), null, null];
     const gates = row.filter((g): g is GateState => g !== null);
-    expect(createBot('greedy', 1)(state(gates, packed, 100))).not.toBe(laneCenter(-1));
+    expect(lane(createBot('greedy', 1)(state(gates, packed, 100)))).not.toBe(-1);
   });
 
   it('makes greedy hold its ground when a block is about to reach it', () => {
@@ -147,7 +159,7 @@ describe('bots', () => {
       z: balance.bots.gateCommitDistance - 1,
     }));
     const blocked = state(close, [block(0, 2)]);
-    expect(createBot('greedy', 1)(blocked)).toBe(laneCenter(1));
+    expect(lane(createBot('greedy', 1)(blocked))).toBe(1);
   });
 
   it('keeps the random bot on one lane for the whole row', () => {
@@ -202,13 +214,15 @@ describe('bots', () => {
   it('goes for the gate once the row is close, stream or no stream', () => {
     const close = [gate(-1, 'sub', 3, 4), gate(0, 'add', 5, 4), gate(1, 'mul', 2, 4)];
     const bodies = [body(10, -1, 6), body(11, -1, 7), body(12, -1, 8)];
-    expect(createBot('greedy', 1)(state(close, bodies, 20))).toBe(laneCenter(1));
+    expect(lane(createBot('greedy', 1)(state(close, bodies, 20)))).toBe(1);
   });
 
   it('holds station once every gate is behind the squad', () => {
     const done = state(ROW.map((g) => ({ ...g, passed: true })));
-    done.squad.x = 1.3;
-    expect(createBot('greedy', 1)(done)).toBe(1.3);
-    expect(createBot('worst', 1)(done)).toBe(1.3);
+    // Inside the clamp a crowd of ten has, so "hold station" is the position
+    // itself and not the clamp answering for it.
+    done.squad.x = 1.1;
+    expect(createBot('greedy', 1)(done)).toBe(1.1);
+    expect(createBot('worst', 1)(done)).toBe(1.1);
   });
 });

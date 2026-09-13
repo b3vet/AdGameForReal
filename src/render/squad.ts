@@ -1,6 +1,6 @@
 /**
  * The squad: a crowd of animated apprentice mages, one baked-animation thin
- * instance per unit, placed at `formationOffsets(count)` around
+ * instance per unit, following the line-filling formation the sim built around
  * `(squad.x, squad.z)`.
  *
  * All three staffs are loaded at init and only the one in hand is drawn, so a
@@ -9,24 +9,29 @@
  * the crowd, the swap keeps every mage exactly where it was.
  *
  * Count changes are read, not told: the view diffs `count` against the previous
- * frame. Because the phyllotaxis offset for index `i` does not depend on the
- * total, a unit keeps its place in the spiral as the squad grows, so growth
- * looks like recruits joining the edge rather than the whole blob reshuffling.
+ * frame; a unit keeps its index, so growth looks like recruits joining the back
+ * of the crowd rather than the whole formation reshuffling.
+ *
+ * Milestone 5 (D37) adds the flock. The sim's formation is exact — every unit
+ * on its slot, the whole sheet sliding sideways together — and a crowd drawn
+ * that way reads as one rigid object. So each unit keeps a *drawn* position
+ * that chases its slot through a spring whose stiffness falls with the unit's
+ * row, and leans into the direction it is sliding. The front line is nearly
+ * pinned, the back rows arrive a beat later, and a turn ripples backward
+ * through the crowd. None of it touches the sim: contact, gates and the boss
+ * still see the formation the sim built.
  */
 
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
 import { loadCrowds } from './models';
+import { UnitFlock } from './squadFlock';
 import {
   ADVANCE_SMOOTHING,
   ADVANCE_START_SPEED,
   ADVANCE_STOP_SPEED,
   CASTING_SHARE,
-  CAST2_CLIP_SPEED,
-  CAST_CLIP_SPEED,
-  CROWD_SCALE_FROM,
-  CROWD_SCALE_MIN,
   DEATH_DURATION,
   EMBER_COLOR,
   FROST_COLOR,
@@ -41,11 +46,22 @@ import {
   POOL,
   POP_DURATION,
   POP_STRETCH,
-  RUN_CLIP_SPEED,
   STORM_COLOR,
+  clipSpeed,
+  crowdScale,
+  popScale,
+  timeOffsetOf,
+  yawOf,
 } from './theme';
-import { formationOffsets, startWeapon, unitSpacing, weaponIds, weaponOf } from '@/sim';
-import type { RunStatus, SquadState, WeaponId } from '@/sim';
+import { formationOffsets, openRoadWidth, startWeapon, weaponIds, weaponOf } from '@/sim';
+import type { FormationOffset, RunStatus, SquadState, WeaponId } from '@/sim';
+
+/**
+ * Re-exported where it has always lived, for the stress scene: the number
+ * itself moved to `./crowdLook.ts` with the rest of how a crowd is drawn.
+ */
+export { crowdScale } from './crowdLook';
+
 
 /** Sentinel in `spawnAge`: this unit finished its pop and needs no animation. */
 const SETTLED = 1e9;
@@ -79,6 +95,9 @@ export class SquadView {
 
   /** Seconds since unit `i` appeared, or `SETTLED`. Indexed by formation slot. */
   private readonly spawnAge = new Float32Array(POOL.squad);
+
+  /** Where each unit is actually drawn: the flock that lags the formation. */
+  private readonly flock = new UnitFlock(POOL.squad);
 
   /** Fixed-size ring of shrinking corpses; a full pool simply drops the extras. */
   private readonly corpses: Corpse[] = [];
@@ -174,14 +193,18 @@ export class SquadView {
 
     const count = Math.min(POOL.squad, Math.max(0, Math.floor(squad.count)));
     const crowdScaleNow = crowdScale(count);
-    this.diffCount(count, squad.x, squad.z, crowdScaleNow);
+    // The band the sim built this frame's formation for: render draws the crowd
+    // the sim is simulating, narrow lane and all.
+    const width = squad.formationWidth ?? openRoadWidth();
+    const offsets = formationOffsets(count, width);
+    this.diffCount(count, squad.x, squad.z, crowdScaleNow, offsets);
     this.trackMotion(squad.z, dt);
 
     this.swayPhase += dt;
     this.bounce = Math.max(0, this.bounce - dt);
 
     const inArena = squad.z >= arenaZ - 0.5;
-    const offsets = formationOffsets(count);
+    this.flock.beginFrame(dt);
     // One hop for the whole crowd, so a row crossing reads as a beat rather
     // than as five hundred units each doing their own thing.
     const hop =
@@ -194,6 +217,8 @@ export class SquadView {
     for (let i = 0; i < count; i++) {
       const offset = offsets[i];
       if (offset === undefined) continue;
+
+      this.flock.follow(i, offset.row, squad.x + offset.x, squad.z + offset.z, dt);
 
       let scale = crowdScaleNow;
       // Squash and stretch: a unit pops in thin and tall, then settles. The
@@ -214,10 +239,10 @@ export class SquadView {
       const animation = this.animationFor(i, inArena);
       crowd.setInstance(
         i,
-        squad.x + offset.x,
+        this.flock.drawnX(i, squad.x + offset.x),
         hop + sway * IDLE_SWAY_LIFT,
-        squad.z + offset.z,
-        yawOf(i) + sway * IDLE_SWAY_YAW,
+        this.flock.drawnZ(i, squad.z + offset.z),
+        yawOf(i) + sway * IDLE_SWAY_YAW + this.flock.leanOf(i),
         scale * MAGE_SCALE,
         animation,
         timeOffsetOf(i),
@@ -293,29 +318,45 @@ export class SquadView {
     this.advancing = this.advanceSpeed > (this.advancing ? ADVANCE_STOP_SPEED : ADVANCE_START_SPEED);
   }
 
-  private diffCount(count: number, x: number, z: number, crowd: number): void {
+  private diffCount(
+    count: number,
+    x: number,
+    z: number,
+    crowd: number,
+    offsets: ReadonlyArray<FormationOffset>,
+  ): void {
     const previous = this.previousCount;
     this.previousCount = count;
 
     if (previous < 0) {
-      // First frame of a level: everyone is already standing.
+      // First frame of a level: everyone is already standing, on their slot.
       this.spawnAge.fill(SETTLED);
+      for (let i = 0; i < count; i++) {
+        const offset = offsets[i];
+        if (offset === undefined) continue;
+        this.flock.place(i, x + offset.x, z + offset.z);
+      }
       return;
     }
 
     if (count > previous) {
-      for (let i = previous; i < count; i++) this.spawnAge[i] = 0;
+      // A recruit pops in *on its slot* rather than springing in from wherever
+      // the last unit to hold that index stood, which would read as a mage
+      // sliding across the road.
+      for (let i = previous; i < count; i++) {
+        this.spawnAge[i] = 0;
+        const offset = offsets[i];
+        if (offset === undefined) continue;
+        this.flock.place(i, x + offset.x, z + offset.z);
+      }
       return;
     }
 
     if (count < previous) {
-      // Offsets for index `i` are the same at any total, so the outgoing units
-      // die exactly where they were standing.
-      const offsets = formationOffsets(previous);
+      // The outgoing units die where they were *drawn*, not where the sim had
+      // them: the crowd the player is watching is the smoothed one.
       for (let i = count; i < previous; i++) {
-        const offset = offsets[i];
-        if (offset === undefined) continue;
-        this.pushCorpse(x + offset.x, z + offset.z, crowd, i);
+        this.pushCorpse(this.flock.drawnX(i, x), this.flock.drawnZ(i, z), crowd, i);
       }
     }
   }
@@ -371,48 +412,4 @@ export class SquadView {
     this.corpseCount = write;
     return write;
   }
-}
-
-/** Casual timing: every clip runs faster than the artist's tempo (D28). */
-function clipSpeed(animation: string): number {
-  if (animation === 'run') return RUN_CLIP_SPEED;
-  if (animation === 'cast') return CAST_CLIP_SPEED;
-  if (animation === 'cast2') return CAST2_CLIP_SPEED;
-  return IDLE_CLIP_SPEED;
-}
-
-/** A little turn per unit, so five hundred mages are not one rigid block. */
-function yawOf(index: number): number {
-  return ((index % 7) - 3) * 0.05;
-}
-
-/** Seconds into the loop, spread over the crowd so nobody marches in lockstep. */
-function timeOffsetOf(index: number): number {
-  return (index % 29) * 0.041;
-}
-
-/**
- * How big a unit is drawn, as a share of `MAGE_HEIGHT`: the room the formation
- * actually gives it, measured against the room it has at `CROWD_SCALE_FROM`.
- *
- * Reading the sim's own `unitSpacing` rather than easing between two guessed
- * counts is the point (see `CROWD_SCALE_FROM` in `theme.ts`): the spacing is
- * what decides whether two mages overlap, it is not linear in the count, and
- * tying the two together means a change to the formation cannot silently make
- * the crowd a slab again.
- *
- * Exported for the stress scene, which has to draw the crowd at the size the
- * game draws it or it is measuring a scene the game never renders.
- */
-export function crowdScale(count: number): number {
-  if (count <= CROWD_SCALE_FROM) return 1;
-  const room = unitSpacing(count) / unitSpacing(CROWD_SCALE_FROM);
-  return Math.max(CROWD_SCALE_MIN, Math.min(1, room));
-}
-
-/** Ease-out-back: overshoots past 1 then settles, which reads as a pop. */
-function popScale(age: number): number {
-  const p = Math.min(1, age / POP_DURATION) - 1;
-  const overshoot = 1.7;
-  return 1 + (overshoot + 1) * p * p * p + overshoot * p * p;
 }

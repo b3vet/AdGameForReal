@@ -4,7 +4,7 @@ import { stompKills } from '../boss';
 import { overlapShare } from '../contact';
 import { halfWidth } from '../formation';
 import type { GateDef } from '../types';
-import { level, play, row, runOf, testBalance } from './fixtures';
+import { level, play, row, runOf, testBalance, wall } from './fixtures';
 
 describe('enemies', () => {
   it('activates a block once the squad is close enough, then walks it in', () => {
@@ -312,33 +312,40 @@ describe('lifecycle', () => {
 
   it('keeps a growing crowd on the road by tapering its clamp', () => {
     const balance = testBalance();
+    // What the widest crowd may hang over the verge: the difference between the
+    // clamp's floor and the room the formation leaves itself (D37). The taper
+    // is exact above the floor and this is all it ever gives away below it.
+    const slack = balance.road.clampMin - balance.formation.inset;
     for (const count of [1, 10, 40, 80]) {
       const run = runOf(level({ startCount: count, rows: [] }), balance);
       run.setTargetX(99);
       play(run, 2);
 
       const x = run.state.squad.x;
-      // Above the taper's floor the rule is exact: the outermost unit stands on
-      // the road's edge, not past it.
       expect(x).toBeLessThanOrEqual(balance.road.clampX + 1e-9);
-      expect(x + halfWidth(count)).toBeLessThanOrEqual(balance.road.halfWidth + 1e-9);
+      expect(x + halfWidth(count)).toBeLessThanOrEqual(balance.road.halfWidth + slack + 1e-9);
     }
   });
 
   it('never clamps the squad tighter than the side lanes', () => {
     const balance = testBalance();
-    // A crowd of 500 is wider than the road can hold, so the taper bottoms out
-    // on its floor instead of pinning the squad to the middle lane: reaching a
-    // side gate matters more than the last few centimetres of overhang.
+    // A crowd of 500 fills the road, so the taper bottoms out on its floor
+    // instead of pinning the squad to the middle lane: reaching a side gate
+    // matters more than the last few centimetres of overhang.
     const run = runOf(level({ startCount: balance.squad.maxCount, rows: [] }), balance);
     run.setTargetX(99);
     play(run, 2);
 
     expect(run.state.squad.x).toBeCloseTo(balance.road.clampMin, 6);
+    // Inside a lane centre, so a side gate is reachable — and outside a lane
+    // *boundary*, or a line-filling crowd could never commit to the far side of
+    // a wall either (D37).
     expect(balance.road.clampMin).toBeLessThanOrEqual(balance.road.laneWidth);
+    expect(balance.road.clampMin).toBeGreaterThan(balance.road.laneWidth / 2);
     const overhang =
       balance.road.clampMin + halfWidth(balance.squad.maxCount) - balance.road.halfWidth;
-    expect(overhang).toBeLessThan(0.4);
+    expect(overhang).toBeLessThanOrEqual(balance.road.clampMin - balance.formation.inset + 1e-9);
+    expect(overhang).toBeLessThanOrEqual(0.4 + 1e-9);
   });
 
   it('lets even the widest squad take a gate in either side lane', () => {
@@ -434,5 +441,93 @@ describe('lifecycle', () => {
     b.tick(8 / 60);
 
     expect(JSON.stringify(a.state)).toBe(JSON.stringify(b.state));
+  });
+});
+
+/**
+ * The lateral spring (D37). Milestone 4 moved the squad at a flat
+ * `lateralSpeed` and stopped it dead on arrival, which is what the playtest
+ * read as jerky; it is now a critically damped spring under an acceleration
+ * cap, which is the cheapest motion that eases in and out and cannot wobble.
+ */
+describe('lateral motion', () => {
+  /** Steps `seconds` at one target and reports the whole path. */
+  function drive(startCount: number, targetX: number, seconds: number): number[] {
+    const run = runOf(level({ startCount, rows: [] }));
+    const path: number[] = [run.state.squad.x];
+    for (let step = 0; step < Math.round(seconds * 60); step++) {
+      run.setTargetX(targetX);
+      run.tick(1 / 60);
+      path.push(run.state.squad.x);
+    }
+    return path;
+  }
+
+  function speeds(path: readonly number[]): number[] {
+    const out: number[] = [];
+    for (let i = 1; i < path.length; i++) out.push(((path[i] ?? 0) - (path[i - 1] ?? 0)) * 60);
+    return out;
+  }
+
+  it('eases in instead of snapping to full speed', () => {
+    const balance = testBalance();
+    const early = speeds(drive(1, balance.road.clampX, 0.1));
+    const first = early[0] ?? 0;
+    // The old mover was at `lateralSpeed` on the first step; the spring needs
+    // the acceleration cap's own time to get there.
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThan(balance.squad.lateralAccel / 60 + 1e-9);
+  });
+
+  it('never overshoots the target it was given', () => {
+    const balance = testBalance();
+    for (const target of [0.2, 1, balance.road.clampX]) {
+      const path = drive(1, target, 3);
+      for (const x of path) expect(x).toBeLessThanOrEqual(target + 1e-12);
+      // And it does arrive, rather than creeping forever.
+      expect(path[path.length - 1]).toBeCloseTo(target, 6);
+    }
+  });
+
+  it('holds the speed and acceleration caps all the way across the road', () => {
+    const balance = testBalance();
+    const path = drive(1, balance.road.clampX, 1.5);
+    const v = speeds(path);
+    let previous = 0;
+    for (const speed of v) {
+      expect(Math.abs(speed)).toBeLessThanOrEqual(balance.squad.lateralSpeed + 1e-9);
+      expect(Math.abs(speed - previous) * 60).toBeLessThanOrEqual(balance.squad.lateralAccel + 1e-6);
+      previous = speed;
+    }
+    // A swipe across the road still runs at the cap for most of the way, so the
+    // campaign's timings are the ones it was balanced with.
+    expect(Math.max(...v)).toBeCloseTo(balance.squad.lateralSpeed, 2);
+  });
+
+  it('reverses without a jerk when the player drags the other way', () => {
+    const balance = testBalance();
+    const run = runOf(level({ startCount: 1, rows: [] }));
+    const path: number[] = [run.state.squad.x];
+    for (let step = 0; step < 60; step++) {
+      run.setTargetX(step < 30 ? balance.road.clampX : -balance.road.clampX);
+      run.tick(1 / 60);
+      path.push(run.state.squad.x);
+    }
+    let previous = 0;
+    for (const speed of speeds(path)) {
+      expect(Math.abs(speed - previous) * 60).toBeLessThanOrEqual(balance.squad.lateralAccel + 1e-6);
+      previous = speed;
+    }
+  });
+
+  it('keeps the velocity on the state, and empties it against a wall', () => {
+    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 4, 40)] }));
+    play(run, 0.3, 2.6);
+    expect(run.state.squad.vx ?? 0).toBeGreaterThan(0);
+    // Held against the fence: the spring must not wind up and fire the squad
+    // sideways the moment the stretch releases it.
+    play(run, 3, 2.6);
+    expect(run.state.squad.z).toBeGreaterThan(4);
+    expect(run.state.squad.vx ?? -1).toBe(0);
   });
 });

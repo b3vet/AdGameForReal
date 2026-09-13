@@ -10,6 +10,8 @@
  * only make sense read together.
  */
 
+import { unitSpacing } from '@/sim';
+
 /**
  * Mage height in metres, and the skeletons' relative to it.
  *
@@ -117,3 +119,88 @@ export const ADVANCE_STOP_SPEED = 0.2;
 export const IDLE_SWAY_RATE = 0.55;
 export const IDLE_SWAY_YAW = 0.11;
 export const IDLE_SWAY_LIFT = 0.012;
+
+/**
+ * Per-unit following (D37).
+ *
+ * The sim places a unit exactly on its formation slot; drawing it there makes
+ * five hundred mages one rigid sheet that slides sideways as a block. Each
+ * drawn unit instead chases its slot through a first-order spring, and the
+ * stiffness falls with the unit's row: the front line is nearly pinned, the
+ * back rows take a moment to catch up, and a turn ripples through the crowd
+ * from front to back. A first-order lag rather than a damped second-order one
+ * because a lag cannot overshoot, and a crowd whose back rows bounce past their
+ * slots reads as a mistake rather than as weight.
+ *
+ * Rates are in inverse seconds; a unit closes `1 - exp(-rate * dt)` of its gap
+ * per frame, which is frame-rate independent.
+ */
+export const UNIT_FOLLOW_FRONT = 26;
+export const UNIT_FOLLOW_BACK = 8;
+/** Rows over which the stiffness falls from front to back. */
+export const UNIT_FOLLOW_ROWS = 10;
+
+/**
+ * The leash. A unit further than this from its slot stops springing and is
+ * simply placed: it is the only thing that keeps `?turbo` honest (the sim runs
+ * eight times faster while the render clock does not, so every slot moves half
+ * a metre a frame and the crowd would trail metres behind), and it doubles as
+ * the teleport guard for a level start or a camera cut. Comfortably above the
+ * quarter-metre a real turn lags by.
+ */
+export const UNIT_SNAP_GAP = 1.2;
+
+/**
+ * Lean. A unit turns a little into the direction it is sliding, which is the
+ * cheapest thing that reads as weight on a crowd with no blendable skeleton;
+ * `VatCrowd` takes a yaw and nothing else, so the lean is a yaw. Radians per
+ * metre a second, a ceiling, and the seconds the lean itself is smoothed over
+ * so a one-frame jitter cannot flick a mage sideways.
+ */
+export const UNIT_LEAN_PER_SPEED = 0.055;
+export const UNIT_LEAN_MAX = 0.32;
+export const UNIT_LEAN_SMOOTHING = 0.09;
+
+/** Casual timing: every clip runs faster than the artist's tempo (D28). */
+export function clipSpeed(animation: string): number {
+  if (animation === 'run') return RUN_CLIP_SPEED;
+  if (animation === 'cast') return CAST_CLIP_SPEED;
+  if (animation === 'cast2') return CAST2_CLIP_SPEED;
+  return IDLE_CLIP_SPEED;
+}
+
+/** A little turn per unit, so five hundred mages are not one rigid block. */
+export function yawOf(index: number): number {
+  return ((index % 7) - 3) * 0.05;
+}
+
+/** Seconds into the loop, spread over the crowd so nobody marches in lockstep. */
+export function timeOffsetOf(index: number): number {
+  return (index % 29) * 0.041;
+}
+
+/**
+ * How big a unit is drawn, as a share of `MAGE_HEIGHT`: the room the formation
+ * actually gives it, measured against the room it has at `CROWD_SCALE_FROM`.
+ *
+ * Reading the sim's own `unitSpacing` rather than easing between two guessed
+ * counts is the point (see `CROWD_SCALE_FROM` in `theme.ts`): the spacing is
+ * what decides whether two mages overlap, it is not linear in the count, and
+ * tying the two together means a change to the formation cannot silently make
+ * the crowd a slab again.
+ *
+ * Exported for the stress scene, which has to draw the crowd at the size the
+ * game draws it or it is measuring a scene the game never renders.
+ */
+export function crowdScale(count: number): number {
+  if (count <= CROWD_SCALE_FROM) return 1;
+  const room = unitSpacing(count) / unitSpacing(CROWD_SCALE_FROM);
+  return Math.max(CROWD_SCALE_MIN, Math.min(1, room));
+}
+
+/** Ease-out-back: overshoots past 1 then settles, which reads as a pop. */
+export function popScale(age: number): number {
+  const p = Math.min(1, age / POP_DURATION) - 1;
+  const overshoot = 1.7;
+  return 1 + (overshoot + 1) * p * p * p + overshoot * p * p;
+}

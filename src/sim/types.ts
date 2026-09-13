@@ -154,6 +154,21 @@ export interface SquadState {
   fireRateBonus: number;
   /** The staff in hand. Optional for the same reason as `EnemyState.slowUntil`. */
   weaponId?: WeaponId;
+  /**
+   * Lateral velocity in m/s: the state of the damped spring `x` follows
+   * `targetX` through (D37). Render reads it for the crowd's lean.
+   *
+   * Optional like `weaponId`, because render's dev fixtures and the stress
+   * scene build a squad by hand; `Run` always writes it.
+   */
+  vx?: number;
+  /**
+   * How wide a band of road the formation was built for this step
+   * (`availableWidth`): the full road between walls, narrower inside one.
+   * Everything that asks for the crowd's width or its offsets passes it, so the
+   * sim, the bots and render all read the same crowd. Optional, like `vx`.
+   */
+  formationWidth?: number;
 }
 
 /**

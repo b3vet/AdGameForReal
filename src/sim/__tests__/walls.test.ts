@@ -44,15 +44,17 @@ describe('the wall clamp', () => {
     expect(run.state.squad.z).toBeGreaterThan(20);
     expect(run.state.squad.z).toBeLessThan(40);
     expect(inside).toBeCloseTo(LINE - TUNING.margin, 6);
-    // Past the far end it is free again.
-    expect(steer(run, 3, 99)).toBeCloseTo(balance.road.clampX, 6);
+    // Past the far end it is free again. The lateral spring eases in and out
+    // (D37), so crossing the whole road takes about a second rather than the
+    // flat 8 m/s of Milestone 4.
+    expect(steer(run, 4, 99)).toBeCloseTo(balance.road.clampX, 6);
   });
 
   it('keeps a squad that entered on the right from crossing to the left', () => {
     const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 20, 40)] }));
     expect(steer(run, 3.8, 99)).toBeCloseTo(balance.road.clampX, 6);
     expect(steer(run, 2, -99)).toBeCloseTo(LINE + TUNING.margin, 6);
-    expect(steer(run, 3, -99)).toBeCloseTo(-balance.road.clampX, 6);
+    expect(steer(run, 4, -99)).toBeCloseTo(-balance.road.clampX, 6);
   });
 
   it('pushes a squad straddling the line off it, two metres before the fence', () => {
@@ -91,8 +93,12 @@ describe('the wall clamp', () => {
   });
 
   it('lets shots and enemies through it', () => {
-    // The squad is held right of the fence; the block walks down the left lane
-    // and is shot at exactly as it would be without one (D32).
+    // The squad is held right of the fence and the block walks down the left
+    // lane: the fence is not a shield, and it does not slow the block down
+    // either (D32). The two runs no longer shoot *identically*, because the
+    // walled crowd narrows into its half of the road (D37) and so fires from a
+    // different set of places; what has to hold is that shots cross the fence
+    // and that the block's walk is untouched by it.
     const rows = [row(30, [null, null, null], [{ kind: 'grunt', lane: -1, units: 40 }])];
     const walled = new Run(level({ startCount: 60, rows, walls: [wall(-1, 0, 60)] }), testBalance());
     const open = runOf(level({ startCount: 60, rows }));
@@ -100,10 +106,11 @@ describe('the wall clamp', () => {
     play(open, 2, 99);
 
     const hp = (run: Run): number => run.state.enemies[0]?.hp ?? -1;
+    expect(walled.state.squad.x).toBeGreaterThan(wallX(-1));
     expect(hp(walled)).toBeLessThan(40 * balance.enemies.grunt.hpPerUnit);
-    expect(hp(walled)).toBe(hp(open));
-    expect(run(walled)).toBe(run(open));
-    function run(r: Run): number {
+    expect(hp(open)).toBeLessThan(40 * balance.enemies.grunt.hpPerUnit);
+    expect(walkedTo(walled)).toBe(walkedTo(open));
+    function walkedTo(r: Run): number {
       return Math.round((r.state.enemies[0]?.z ?? 0) * 1e6);
     }
   });

@@ -73,7 +73,7 @@ export function advanceEnemies(
 ): void {
   const squad = state.squad;
   const contact = balance.enemies.contactDistance;
-  const squadHalf = halfWidth(squad.count);
+  const squadHalf = halfWidth(squad.count, squad.formationWidth, balance);
   const streamHalf = balance.streams.footprint;
 
   for (const enemy of state.enemies) {

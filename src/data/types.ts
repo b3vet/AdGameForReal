@@ -50,6 +50,14 @@ export interface Balance {
   squad: {
     runSpeed: number;
     lateralSpeed: number;
+    /** Ceiling on the lateral spring's acceleration, in m/s² (D37). */
+    lateralAccel: number;
+    /**
+     * The lateral spring's natural frequency in rad/s (D37). Critically damped,
+     * so this is the whole shape of the motion: the squad covers its error in
+     * about `3 / lateralSpring` seconds when neither cap bites.
+     */
+    lateralSpring: number;
     fireRate: number;
     damage: number;
     maxCount: number;
@@ -72,9 +80,39 @@ export interface Balance {
     /**
      * Floor on that clamp once the crowd's own half-width is taken off it
      * (`Run.clampLimit`). It has to stay at or inside a lane centre so the
-     * widest squad can still reach a side lane's gate.
+     * widest squad can still reach a side lane's gate, and *outside* a lane
+     * boundary (`laneWidth / 2`) or a line-filling crowd could neither take a
+     * side gate nor commit to the far side of a wall, which is every choice the
+     * road offers (D37).
      */
     clampMin: number;
+  };
+  /**
+   * The line-filling formation (D37). See `src/sim/formation.ts`: the squad
+   * fills the width the road leaves it in staggered rows and then extends
+   * backward, so a crowd reads as lines rather than as a disc.
+   */
+  formation: {
+    /** Spacing between neighbours, in metres: `max` at a handful, `min` at
+     *  `spacingTo` units. */
+    spacing: { max: number; min: number };
+    /** Squad size the spacing has finished shrinking at. */
+    spacingTo: number;
+    /** Gap between rows as a share of the spacing; under 1, so rows pack
+     *  tighter than columns and the crowd stays shallow. */
+    rowDepth: number;
+    /** Added to the outermost unit's offset for `halfWidth`, so contact feels
+     *  fair rather than pixel-exact. */
+    padding: number;
+    /** Offsets are cached per count and per this much available width. */
+    widthBucket: number;
+    /**
+     * Room the formation leaves itself inside the band it stands in, each side,
+     * so a crowd as wide as its lane can still be steered inside it.
+     */
+    inset: number;
+    /** However narrow the road gets, the formation is at least this wide. */
+    minWidth: number;
   };
   enemies: {
     activationDistance: number;

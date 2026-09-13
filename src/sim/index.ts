@@ -47,7 +47,20 @@ export type {
 /** Lane walls (D32): the fence the squad cannot cross. */
 export { clampToWalls, generateWalls, wallAhead, wallHolds, wallLimits, wallX } from './walls';
 export type { WallBoundary, WallDef, WallLimits } from './walls';
-export { formationOffsets, halfWidth, unitSpacing } from './formation';
+export {
+  availableWidth,
+  clampLimit,
+  formationColumns,
+  formationDepth,
+  formationOffsets,
+  formationRows,
+  halfExtent,
+  halfWidth,
+  openRoadWidth,
+  unitSpacing,
+  wallKeep,
+} from './formation';
+export type { FormationOffset } from './formation';
 export { enemyBalance, enemyFootprint, enemyHalfWidth } from './enemies';
 export { effectiveSpeed, overlapShare } from './contact';
 export { stompKills } from './boss';
@@ -62,7 +75,6 @@ export {
   streamWindow,
 } from './pressure';
 export type { StreamShape } from './pressure';
-export type { FormationOffset } from './formation';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
 export { mulberry32, randomInt, randomRange, weightedIndex } from './rng';

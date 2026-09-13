@@ -10,16 +10,15 @@
  * run is as reproducible as the sim it drives.
  */
 
-import { enemyFootprint, enemyHalfWidth } from './enemies';
-import { halfWidth } from './formation';
-import { countAfterGate } from './gates';
+import { laneRatio, laneScore } from './botScore';
+import { overlapShare } from './contact';
+import { enemyFootprint } from './enemies';
+import { clampLimit, halfWidth, wallKeep } from './formation';
 import { laneCenter, laneOf } from './lanes';
-import { FIRE_RATE_GATE_WORTH } from './level';
 import { mulberry32 } from './rng';
-import type { EnemyState, GateState, Lane, RunState, WeaponId } from './types';
+import type { GateState, Lane, RunState } from './types';
 import { clampToWalls, wallAhead, wallLimits, wallX } from './walls';
-import type { WallLimits } from './walls';
-import { blockGap, expectedDps, weaponOf } from './weapons';
+import type { WallDef, WallLimits } from './walls';
 import { balance } from '@/data';
 
 export type BotKind = 'greedy' | 'random' | 'worst';
@@ -27,26 +26,44 @@ export type BotKind = 'greedy' | 'random' | 'worst';
 const LANES: readonly Lane[] = [-1, 0, 1];
 
 /**
- * Blocks in the window a bot reads when it values a staff gate. Module-level
- * and re-used: a bot is asked for a lane every step, and the sim must not
- * allocate in hot loops (CLAUDE.md).
- */
-const layout: EnemyState[] = [];
-
-/**
  * The x range the squad may steer to right now, walls included (D32). Re-used
  * rather than re-made: a bot is asked for a lane every step.
  */
 const limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
 
+/**
+ * Where the squad could actually steer to this step: the same clamp `Run` uses,
+ * walls included (D32, D37). A bot that read the plain `road.clampX` instead
+ * would believe it could reach a lane centre its own crowd's width keeps it
+ * from, and would sail past a gate row still asking for it.
+ */
 function reachable(state: RunState): WallLimits {
-  return wallLimits(state.walls ?? [], state.squad.z, state.squad.x, balance.road.clampX, limits);
+  const squad = state.squad;
+  return wallLimits(
+    state.walls ?? [],
+    squad.z,
+    squad.x,
+    clampLimit(squad.count, squad.formationWidth),
+    limits,
+    balance.road.laneWidth,
+    wallKeep(squad.count, squad.formationWidth),
+  );
 }
 
-/** True when a lane can still be reached from where the squad stands. */
+/**
+ * True when a lane can still be reached from where the squad stands.
+ *
+ * A *lane*, not its centre: a line-filling crowd is clamped well inside the
+ * road (`road.clampMin`), so no side lane's centre is ever reachable and a
+ * centre test would leave a bot able to choose nothing but the middle. What
+ * decides which gate a squad takes is `laneOf`, so that is what this asks —
+ * whether the range reaches any `x` the lane would claim.
+ */
 function laneOpen(lane: Lane, range: WallLimits): boolean {
-  const center = laneCenter(lane, balance.road.laneWidth);
-  return center >= range.lo - 1e-9 && center <= range.hi + 1e-9;
+  const edge = balance.road.laneWidth / 2;
+  if (lane < 0) return range.lo <= -edge + 1e-9;
+  if (lane > 0) return range.hi >= edge - 1e-9;
+  return range.lo <= edge + 1e-9 && range.hi >= -edge - 1e-9;
 }
 
 /** The same question for the whole road. An index loop, not `some`: a callback
@@ -57,6 +74,30 @@ function anyLaneOpen(range: WallLimits): boolean {
     if (lane !== undefined && laneOpen(lane, range)) return true;
   }
   return false;
+}
+
+/**
+ * The gate row a wall commits the squad for: the first unpassed one at or past
+ * its far end. That is the row the fence is *about* — it stops `walls.gateGap`
+ * short of it and the clamp holds all the way to it — and it is not always the
+ * next row, because a stretch may begin within a metre of the row behind it.
+ *
+ * Milestone 5: a bot that chose its side against the nearer row instead could
+ * take a small `add` on one side and then watch a x3 multiplier go past on the
+ * other, which is exactly how the levels that kept the walls also kept losing
+ * (level 11 seed 2 and its neighbours).
+ */
+function guardedRow(state: RunState, wall: WallDef, fallback: number): number {
+  let best = -1;
+  let bestZ = Infinity;
+  for (const gate of state.gates) {
+    if (gate.passed || gate.z < wall.zEnd) continue;
+    if (gate.z < bestZ) {
+      bestZ = gate.z;
+      best = gate.rowIndex;
+    }
+  }
+  return best < 0 ? fallback : best;
 }
 
 /** Lowest row index that still has an unpassed gate, or -1 once they are gone. */
@@ -75,83 +116,6 @@ function distanceToRow(state: RunState, rowIndex: number): number {
     if (gate.rowIndex === rowIndex) return gate.z - state.squad.z;
   }
   return Infinity;
-}
-
-function fillLayout(state: RunState): void {
-  layout.length = 0;
-  const from = state.squad.z;
-  const rows = balance.bots.weaponLookaheadRows + 1;
-  const to = from + rows * balance.level.rowSpacing;
-  // A stream is hundreds of bodies and a staff is valued against a layout, not a
-  // census: reading the whole river would swamp the blocks the splash and chain
-  // numbers are also about. Every block counts, and the river is sampled — a
-  // couple of dozen bodies already says "this lane is packed".
-  let sampled = 0;
-  const cap = balance.bots.weaponLayoutMax;
-  for (const enemy of state.enemies) {
-    if (!enemy.alive || enemy.z < from || enemy.z > to) continue;
-    if (enemy.streamId !== undefined) {
-      if (sampled >= cap) continue;
-      sampled++;
-    }
-    layout.push(enemy);
-  }
-}
-
-/**
- * How many other blocks the average block in the window has within `radius`,
- * measured the way the sim measures: `edgeToEdge` for a splash, which reaches
- * from the impact to the edge of a block, and centre to centre for a chain,
- * which jumps between blocks.
- */
-function neighboursWithin(radius: number, edgeToEdge: boolean): number {
-  if (layout.length <= 1) return 0;
-  let total = 0;
-  for (let i = 0; i < layout.length; i++) {
-    const a = layout[i];
-    if (a === undefined) continue;
-    const aHalf = edgeToEdge ? enemyFootprint(a.kind, a.units, balance) : 0;
-    for (let j = 0; j < layout.length; j++) {
-      if (i === j) continue;
-      const b = layout[j];
-      if (b === undefined) continue;
-      const bHalf = edgeToEdge ? enemyFootprint(b.kind, b.units, balance) : 0;
-      if (blockGap(a.x, aHalf, b.x, bHalf, a.z - b.z) <= radius) total++;
-    }
-  }
-  return total / layout.length;
-}
-
-/**
- * What swapping to `next` is worth, in units.
- *
- * A staff hands over no units, so it is scored as the squad it makes: expected
- * damage per second against the blocks in the next few rows, relative to the
- * staff in hand, damped by `bots.weaponWorth` because DPS is only worth
- * something where there is something to shoot.
- */
-function weaponScore(next: WeaponId | undefined, state: RunState): number {
-  const count = state.squad.count;
-  if (next === undefined) return count;
-
-  const current = weaponOf(state.squad);
-  if (next === current) return count;
-
-  fillLayout(state);
-  const slowWorth = balance.bots.weaponSlowWorth;
-  const now = expectedDps(current, neighboursWithin, slowWorth);
-  if (now <= 0) return count;
-  const then = expectedDps(next, neighboursWithin, slowWorth);
-  return count * (1 + balance.bots.weaponWorth * (then / now - 1));
-}
-
-/** What the squad is worth after taking this gate. Empty lanes score `count`. */
-function laneScore(gate: GateState | null, state: RunState): number {
-  const count = state.squad.count;
-  if (gate === null) return count;
-  if (gate.kind === 'fireRate') return count * (1 + gate.value * FIRE_RATE_GATE_WORTH);
-  if (gate.kind === 'weapon') return weaponScore(gate.weaponId, state);
-  return Math.min(balance.squad.maxCount, countAfterGate(gate.kind, gate.value, count));
 }
 
 /**
@@ -245,7 +209,9 @@ function bestStreamStand(state: RunState, range: WallLimits): boolean {
   // How far off its centre the crowd can still put a shot into a body: its own
   // half-width plus what the body is worth to a shot.
   const cover =
-    halfWidth(state.squad.count) + balance.streams.footprint + balance.streams.aimAssist;
+    halfWidth(state.squad.count, state.squad.formationWidth) +
+    balance.streams.footprint +
+    balance.streams.aimAssist;
 
   stand.x = clampToWalls(state.squad.x, range);
   stand.bodies = -1;
@@ -269,23 +235,34 @@ function bestStreamStand(state: RunState, range: WallLimits): boolean {
 }
 
 /**
- * True when a block already on its way will run into a squad standing at `x`.
+ * What standing at `x` would cost in soldiers, from the blocks already close
+ * enough to run into the crowd. Priced exactly as `contact.ts` prices it, so
+ * the bot and the sim agree about what a graze is worth.
  *
  * Stream bodies are not blocks and are deliberately not counted: one costs a
  * single soldier, and the squad is standing where it is precisely in order to
  * shoot the lane it came down. A block costs a share of its whole unit count.
  */
-function blockedByEnemy(state: RunState): boolean {
+function contactCost(state: RunState, x: number): number {
   const squad = state.squad;
-  const squadHalf = halfWidth(squad.count);
+  const squadHalf = halfWidth(squad.count, squad.formationWidth);
+  const minShare = balance.enemies.contactMinShare;
+  let cost = 0;
   for (const enemy of state.enemies) {
     if (!enemy.alive || !enemy.active || enemy.streamId !== undefined) continue;
     const gap = enemy.z - squad.z;
     if (gap < 0 || gap > balance.bots.threatLookahead) continue;
-    const half = enemyHalfWidth(enemy, balance);
-    if (Math.abs(enemy.x - squad.x) < half + squadHalf) return true;
+    const half = enemyFootprint(enemy.kind, enemy.units, balance);
+    cost += overlapShare(enemy.x, half, x, squadHalf, minShare) * enemy.units;
   }
-  return false;
+  return cost;
+}
+
+/** True when a block already on its way will run into a squad standing where
+ *  it stands now. Greedy would rather hold and shoot a block than swerve for
+ *  it, and only swerves once the gate row is close. */
+function blockedByEnemy(state: RunState): boolean {
+  return contactCost(state, state.squad.x) > 0;
 }
 
 /** The half of the road on one side of a fence, so each can be scored. */
@@ -311,10 +288,15 @@ const SIDES: readonly number[] = [-1, 1];
 function chooseSide(
   state: RunState,
   row: number,
+  guarded: number,
   sign: number,
   range: WallLimits,
   line: number,
 ): void {
+  // The bare margin, not the crowd's own `wallKeep`: this asks which half of
+  // the road the squad *wants*, and by the time it is inside the stretch its
+  // formation has narrowed into that half, so a crowd that is too wide to sit
+  // beside the fence right now will fit perfectly well once it is committed.
   const margin = balance.walls.margin;
   let best = 0;
   let bestScore = -Infinity;
@@ -326,8 +308,17 @@ function chooseSide(
     // A fence the squad is already inside can leave one half unreachable.
     if (half.lo > half.hi) continue;
 
+    // Both rows the fence speaks for: the one the squad is about to cross — a
+    // stretch may begin on top of it — and the one the stretch guards, which is
+    // the row the commitment is really about. Scoring only one of them loses a
+    // multiplier on the other, whichever one it is (level 9 seed 2 lost a x3 on
+    // the near row, level 11 seed 2 a x3 on the far one).
     const lane = pickLane(state, row, sign, half);
-    let score = sign * laneScore(gateAt(state, row, lane), state);
+    let ratio = laneRatio(gateAt(state, row, lane), state);
+    if (guarded !== row && guarded >= 0) {
+      ratio *= laneRatio(gateAt(state, guarded, pickLane(state, guarded, sign, half)), state);
+    }
+    let score = sign * state.squad.count * ratio;
     // The worst bot is asked for the worst half, so the river it gives up is
     // added rather than subtracted for it: `sign` flips both terms together.
     if (bestStreamStand(state, half)) score += sign * stand.bodies;
@@ -379,7 +370,14 @@ export function createBot(kind: BotKind, seed: number): (state: RunState) => num
       wall !== null &&
       wall.zStart - balance.walls.approach - state.squad.z <= balance.bots.wallCommitDistance
     ) {
-      chooseSide(state, row, sign, range, wallX(wall.boundary, balance.road.laneWidth));
+      chooseSide(
+        state,
+        row,
+        guardedRow(state, wall, row),
+        sign,
+        range,
+        wallX(wall.boundary, balance.road.laneWidth),
+      );
     }
 
     const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;

@@ -2,12 +2,11 @@
  * The no-upgrade invariant (D35).
  *
  * Two halves. First, a state hash through a whole greedy run on levels 1 to 3,
- * against golden values captured from the sim as it stood before Milestone 4:
- * those levels carry no walls (D32 starts them at level 4) and their tuning did
- * not move, so a run there must still be the run the campaign was balanced as,
- * whatever the player layer added around it. Second, the same hash with an
- * explicit empty `PlayerState` against no player at all, on every level of the
- * twenty: a player who has bought nothing has to be the identity, or the bands
+ * against golden values captured from the sim as it stands today: those levels
+ * carry no walls (D32 starts them at level 4), so a run there must still be the
+ * run the campaign was balanced as, whatever the player layer adds around it.
+ * Second, the same hash with an explicit empty `PlayerState` against no player
+ * at all, on every level of the twenty: a player who has bought nothing has to be the identity, or the bands
  * measured without one mean nothing.
  *
  * A golden that moves is either a bug in the player path or a deliberate design
@@ -31,23 +30,34 @@ const MAX_STEPS = Math.round(240 / DT);
 /** Sampled this often, so the hash covers the whole run and not only its end. */
 const SAMPLE_EVERY = 30;
 
-/** Captured from the Milestone 3 sim, levels 1 to 3, greedy, seeds 1 to 5. */
+/**
+ * Levels 1 to 3, greedy, seeds 1 to 5.
+ *
+ * Re-captured in Milestone 5 Phase B. The Milestone 3 values stood through
+ * Milestone 4 because walls start at level 4 and nothing else on these levels
+ * moved; D37 moves all of them by design — the squad now stands in
+ * line-filling rows rather than a spiral, so it is wider and its shots leave
+ * from different places, and `x` follows the player through a damped spring
+ * instead of a flat slide. The run these hashes describe is the same campaign
+ * re-measured, not a different one: the bands in `balance.test.ts` are what
+ * says so.
+ */
 const GOLDEN: Readonly<Record<string, string>> = {
-  '1:1': '2c9a48c8',
-  '1:2': 'dd55acfc',
-  '1:3': '6fc71adf',
-  '1:4': '495bd9ea',
-  '1:5': '3d660be8',
-  '2:1': 'fe99fae1',
-  '2:2': '056029c5',
-  '2:3': 'df8e9538',
-  '2:4': 'b6a9e57b',
-  '2:5': '0f001e60',
-  '3:1': '2cbc07fa',
-  '3:2': '6bfa4137',
-  '3:3': 'cded5559',
-  '3:4': '02e862d1',
-  '3:5': 'f3c5a0ae',
+  '1:1': '49845314',
+  '1:2': '43d12bf9',
+  '1:3': '1815fbe6',
+  '1:4': '4aadc987',
+  '1:5': '5fc06d58',
+  '2:1': 'a54d72f8',
+  '2:2': '9c8bf558',
+  '2:3': 'ce454f4b',
+  '2:4': '5d507bd2',
+  '2:5': '396f04c9',
+  '3:1': '97d6048c',
+  '3:2': '3c82821a',
+  '3:3': '7ca85c35',
+  '3:4': 'bc781de2',
+  '3:5': '6282679d',
 };
 
 /** FNV-1a, 32 bit. Any stable hash would do; this one is short enough to read. */
@@ -111,7 +121,7 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
 }
 
 describe('no-upgrade regression', () => {
-  it('replays the Milestone 3 run on the levels the design did not touch', () => {
+  it('replays the recorded run on the levels the design did not touch', () => {
     for (let level = 1; level <= 3; level++) {
       for (const seed of SEEDS) {
         const key = `${String(level)}:${String(seed)}`;
