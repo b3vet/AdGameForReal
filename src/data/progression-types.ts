@@ -103,11 +103,30 @@ export interface Progression {
   staffs: Record<WeaponId, { unlock: number; evolve: number }>;
   evolutions: Record<WeaponId, EvolutionDef>;
   wisp: WispDef;
+  /**
+   * What a run pays (D46). Coins come from clearing the road, not from the size
+   * of the crowd that walked it, so `perSurvivor` is a token and the two clear
+   * payments are the economy.
+   */
   rewards: {
+    /** Coins per surviving apprentice. Small on purpose. */
     perSurvivor: number;
-    /** Coins per level index on any clear... */
+    /** Coins for any clear, before the level scale... */
     perClear: number;
-    /** ...and again, larger, the first time that level is cleared. */
+    /** ...and this on top of it the first time that level is cleared. */
     firstClear: number;
+    /**
+     * Both clear payments are multiplied by `level ^ levelExponent`. Sub-linear
+     * because the Academy's prices climb with every purchase while a run's pay
+     * climbs with the level: linear scaling here would make each purchase
+     * *quicker* than the last, which is the opposite of the campaign's target
+     * (an upgrade every two runs early, every four by level 10).
+     */
+    levelExponent: number;
+    /**
+     * Share of a repeat clear's coins a loss pays, before it is scaled by how
+     * far up the road the run got.
+     */
+    lossShare: number;
   };
 }

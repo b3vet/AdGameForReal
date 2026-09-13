@@ -186,6 +186,50 @@ export interface FamiliarState {
   side: -1 | 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* The crowd (D43, D44)                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `CrowdState.flags`, one bit each, cleared and rewritten every step. Render
+ * reads them to pick an animation; the sim reads `REJOINING` to give a
+ * straggler its catch-up speed.
+ */
+export const CROWD_SHOVED = 1;
+export const CROWD_ON_FENCE = 2;
+export const CROWD_JUST_SPAWNED = 4;
+export const CROWD_REJOINING = 8;
+
+/** Structure-of-arrays, capacity `squad.maxCount`, never compacted: a unit
+ *  keeps its index for its whole life so render instances never swap. */
+export interface CrowdState {
+  capacity: number;
+  /** 1 while the unit is alive; 0 frees the index for the next spawn. */
+  alive: Uint8Array;
+  x: Float64Array;
+  z: Float64Array;
+  vx: Float64Array;
+  vz: Float64Array;
+  /** 0 is the main column; n > 0 is straggler group n. */
+  group: Uint8Array;
+  /** The unit's slot in its group's formation (row-major, front first). */
+  slot: Uint16Array;
+  /** Bit flags this step: SHOVED 1, ON_FENCE 2, JUST_SPAWNED 4, REJOINING 8. */
+  flags: Uint8Array;
+}
+
+export interface GroupState {
+  id: number;
+  count: number;
+  /** The leader the group's slots hang from. Group 0's leader is the finger. */
+  leaderX: number;
+  z: number;
+  /** The lane the group is confined to while a wall holds it, else null. */
+  lane: Lane | null;
+  /** Sim time the confining wall releases the group, else 0. */
+  rejoinAt: number;
+}
+
 export type RunStatus = 'running' | 'won' | 'lost';
 
 /** `leak` is new in Milestone 3: one stream enemy walked into the squad. */
@@ -220,6 +264,22 @@ export interface RunState {
    * Optional for the same reason as `familiar`; `Run` always writes it.
    */
   walls?: readonly WallDef[];
+  /**
+   * Every unit as an agent (D43), and the groups their slots hang from —
+   * index 0 is the main column, the rest are straggler groups (D44). The
+   * groups array has a fixed length (`crowd.groupCap`); a straggler group is
+   * live exactly while its `count` is above zero.
+   *
+   * `squad.count` stays the total alive across groups and the sim maintains
+   * it, so the plaque, the gates, the balance model and the bots read as
+   * before.
+   *
+   * Optional, like `familiar` and `walls`, and for the same reason: render's
+   * dev fixture and the stress scene build a `RunState` by hand and have no
+   * crowd to put in one. `Run` always writes both.
+   */
+  crowd?: CrowdState;
+  groups?: GroupState[];
 }
 
 /** Returned by `Run.tick`, consumed by render and UI, then discarded. */

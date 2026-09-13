@@ -5,11 +5,22 @@
  *
  * A wall stands on a lane *boundary*, not in a lane: `boundary` is -1 or +1 and
  * the fence itself is at `x = boundary * laneWidth / 2`, so a `+1` wall divides
- * the middle lane from the right one. While the squad is inside the stretch its
- * clamp loses the far side, and the side it keeps is the side its centre was on
- * when it arrived — which is what the two-metre approach zone is for: it starts
- * clamping before the fence proper, so a squad straddling the line is pushed
- * off it rather than cut in half by it.
+ * the middle lane from the right one.
+ *
+ * What it holds changed in Milestone 6. It used to clamp the squad's centre,
+ * and the two-metre approach zone was there to push a straddling squad off the
+ * line before the fence proper. The fence stops the *units* now (D43): the head
+ * is on the finger and goes wherever the finger does, the crowd piles up
+ * against the line behind it, and a column straddling the boundary when the
+ * stretch begins to hold is cut in two rather than pushed off it — the half on
+ * the wrong side fights on as a straggler group and rejoins at the far end
+ * (D44, `src/sim/stragglers.ts`). The approach zone is now *when* that cut is
+ * made.
+ *
+ * `wallLimits` and `wallAhead` are unchanged and are what the bots read: the
+ * range of `x` a squad may sensibly ask for, which is still a question about
+ * lanes. `crossings.ts` reads it too, so a column jammed against a fence takes
+ * the gate on its own side rather than the one the finger is over.
  *
  * The generator half lives here too, because where a wall may stand is the same
  * geometry: a stretch runs up to the gate row it guards and stops half a metre
@@ -49,7 +60,7 @@ export function wallX(boundary: WallBoundary, laneWidth = shipped.road.laneWidth
  * That last stretch is what makes a wall a decision (Milestone 4 Phase C). The
  * fence stops `walls.gateGap` short of the gate row it guards so it does not
  * stand inside the panels, and the clamp runs on to the row — because half a
- * metre of road is 0.8 m of lane at `squad.lateralSpeed` over `squad.runSpeed`,
+ * metre of road is metres of lane at `crowd.leaderSpeed` over `squad.runSpeed`,
  * and the squad is held only `walls.margin` off the boundary, so a released
  * squad crossed it with room to spare and the side it had been held on meant
  * nothing at all.
@@ -187,7 +198,7 @@ function hordeInside(rows: readonly RowDef[], from: number, to: number): boolean
  * the wall that guards it begins, and then the choice is made.
  *
  * The gap used to be the full clearance, and two metres is not a commitment:
- * the squad steers at `squad.lateralSpeed` while the road runs past at
+ * the head steers at `crowd.leaderSpeed` while the road runs past at
  * `squad.runSpeed`, so it covers 1.6 m of lane for every metre of road and
  * could cross the whole width in the clear stretch. Half a metre leaves it
  * 0.8 m, less than the metre it would need to change lanes.

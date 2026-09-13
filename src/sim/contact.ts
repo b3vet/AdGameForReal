@@ -6,16 +6,36 @@
  * unit, whatever the angle — the product owner's rule for Milestone 3 (D29) —
  * and is reported separately as a leak, because a leak is what the stream
  * pressure bands are measured in.
+ *
+ * Milestone 6 changed two things and deliberately not a third. It is asked
+ * once per *group* now (D44), so a straggler column fighting on its own in the
+ * next lane meets the bodies walking down that lane. And the units it takes are
+ * the ones standing nearest the thing that hit them, front or flank, rather
+ * than an anonymous subtraction — which is what `Run` does with the position
+ * this reports.
+ *
+ * What did not change is *how many* die: a contact is still measured against
+ * the group's own leader and formation half-width. That is what lets the enemy
+ * shove (D43) bow the front of the column without changing the arithmetic the
+ * campaign is balanced on — the shove moves where people are standing when they
+ * die, never how many of them do.
  */
 
 import { enemyBalance, enemyFootprint } from './enemies';
 import type { EventBuffer } from './events';
 import { halfWidth } from './formation';
-import type { EnemyState, RunState, UnitLossReason } from './types';
+import type { EnemyState, GroupState, RunState, UnitLossReason } from './types';
 import type { Balance } from '@/data/types';
 
-/** What `advanceEnemies` calls to take units off the squad. */
-export type HitSquad = (amount: number, reason: UnitLossReason) => void;
+/** What `advanceEnemies` calls to take units off the squad. `x` and `z` are
+ *  where the blow landed; `group` is whose crowd took it. */
+export type HitSquad = (
+  amount: number,
+  reason: UnitLossReason,
+  x: number,
+  z: number,
+  group: number,
+) => void;
 
 /** How a block moves right now: frost holds it at a fraction of its speed. */
 export function effectiveSpeed(enemy: EnemyState, time: number): number {
@@ -59,6 +79,25 @@ export function killEnemy(enemy: EnemyState, time: number): void {
 }
 
 /**
+ * The one group a state without a crowd has. Re-used rather than allocated:
+ * render's dev fixtures build a `RunState` by hand and have no crowd in it.
+ */
+const soloGroup: GroupState = { id: 0, count: 0, leaderX: 0, z: 0, lane: null, rejoinAt: 0 };
+const solo: GroupState[] = [soloGroup];
+
+/** Each group's formation half-width this step; sized for the group cap. */
+const halves = new Float64Array(16);
+
+function groupsOf(state: RunState): readonly GroupState[] {
+  const groups = state.groups;
+  if (groups !== undefined) return groups;
+  soloGroup.count = state.squad.count;
+  soloGroup.leaderX = state.squad.x;
+  soloGroup.z = state.squad.z;
+  return solo;
+}
+
+/**
  * Walks every live actor one step and resolves contact. `hitSquad` is `Run`'s
  * own unit removal, passed in so event ordering and the loss check stay in one
  * place; it is bound once per run, not per frame.
@@ -73,8 +112,13 @@ export function advanceEnemies(
 ): void {
   const squad = state.squad;
   const contact = balance.enemies.contactDistance;
-  const squadHalf = halfWidth(squad.count, squad.formationWidth, balance);
   const streamHalf = balance.streams.footprint;
+  const groups = groupsOf(state);
+  const groupCount = Math.min(groups.length, halves.length);
+  for (let g = 0; g < groupCount; g++) {
+    const group = groups[g];
+    halves[g] = group === undefined ? 0 : halfWidth(group.count, squad.formationWidth, balance);
+  }
 
   for (const enemy of state.enemies) {
     if (!enemy.alive) continue;
@@ -87,38 +131,42 @@ export function advanceEnemies(
 
     enemy.z -= effectiveSpeed(enemy, state.time) * dt;
 
-    if (Math.abs(enemy.z - squad.z) <= contact) {
+    let hit = false;
+    for (let g = 0; g < groupCount && !hit; g++) {
+      const group = groups[g];
+      if (group === undefined || group.count <= 0) continue;
+      if (Math.abs(enemy.z - group.z) > contact) continue;
+      const squadHalf = halves[g] ?? 0;
+
       if (enemy.streamId !== undefined) {
         // One body, one soldier (D29). No share, no rounding: the player counts
         // the ones that got through.
-        if (Math.abs(enemy.x - squad.x) < streamHalf + squadHalf) {
-          killEnemy(enemy, state.time);
-          onLeak(enemy);
-          events.enemyLeaked(enemy.id, enemy.streamId, enemy.x, enemy.z);
-          events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z, enemy.streamId);
-          hitSquad(1, 'leak');
-          if (state.status !== 'running') return;
-          continue;
-        }
+        if (Math.abs(enemy.x - group.leaderX) >= streamHalf + squadHalf) continue;
+        killEnemy(enemy, state.time);
+        onLeak(enemy);
+        events.enemyLeaked(enemy.id, enemy.streamId, enemy.x, enemy.z);
+        events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z, enemy.streamId);
+        hitSquad(1, 'leak', enemy.x, enemy.z, group.id);
+        hit = true;
       } else {
         const half = enemyFootprint(enemy.kind, enemy.units, balance);
         const share = overlapShare(
           enemy.x,
           half,
-          squad.x,
+          group.leaderX,
           squadHalf,
           balance.enemies.contactMinShare,
         );
-        if (share > 0) {
-          const taken = Math.max(1, Math.ceil(enemy.units * share));
-          killEnemy(enemy, state.time);
-          events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
-          hitSquad(taken, 'contact');
-          if (state.status !== 'running') return;
-          continue;
-        }
+        if (share <= 0) continue;
+        const taken = Math.max(1, Math.ceil(enemy.units * share));
+        killEnemy(enemy, state.time);
+        events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
+        hitSquad(taken, 'contact', enemy.x, enemy.z, group.id);
+        hit = true;
       }
     }
+    if (state.status !== 'running') return;
+    if (hit) continue;
 
     // Actors that got past the squad run off the back of the level. A stream
     // body goes sooner than a block: there can be hundreds of them, and every

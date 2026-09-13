@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../bots';
 import { enemyFootprint } from '../enemies';
-import { clampLimit, halfWidth, openRoadWidth } from '../formation';
+import { clampLimit, halfWidth, openRoadWidth, wallKeep } from '../formation';
 import { laneCenter, laneOf } from '../lanes';
+import { generateLevel } from '../level';
+import { Run } from '../Run';
 import type { EnemyState, GateState, Lane, RunState, StreamState, WeaponId } from '../types';
-import { balance } from '@/data';
+import { wallHolds, wallX } from '../walls';
+import { level, row as rowOf, wall } from './fixtures';
+import { playLevel } from './harness';
+import { balance, levelConfig } from '@/data';
+import type { Balance } from '@/data/types';
 
 function gate(lane: Lane, kind: GateState['kind'], value: number, z = 20): GateState {
   return { id: lane + 1, rowIndex: 0, lane, z, kind, value, hits: 0, passed: false };
@@ -274,4 +280,255 @@ describe('bots', () => {
     expect(onShipped).toBeCloseTo(Math.min(clampLimit(8, width), laneCenter(1)), 9);
     expect(onTuned).toBeCloseTo(Math.min(clampLimit(8, width, tuned), laneCenter(1)), 9);
   });
+});
+
+/** The shipped tuning with the human's knobs bent, so a test can isolate one. */
+function humanBalance(patch: Partial<Balance['bots']['human']>): Balance {
+  const tuned = structuredClone(balance);
+  Object.assign(tuned.bots.human, patch);
+  return tuned;
+}
+
+/** A row of three gates `z` metres ahead, best on the right, worst on the left. */
+function rowGates(z: number, rowIndex = 0): GateState[] {
+  return [gate(-1, 'sub', 3, z), gate(0, 'add', 5, z), gate(1, 'mul', 2, z)].map((g) => ({
+    ...g,
+    rowIndex,
+  }));
+}
+
+describe('the human bot', () => {
+  it('acts on the board exactly `reactionSteps` after it changes', () => {
+    // The hand alone: no misreads, and a finger fast enough to arrive the step
+    // it is told to, so what is left to measure is the delay itself.
+    const tuned = humanBalance({ swipeSpeed: 1000, laneAccuracy: 1 });
+    const delay = tuned.bots.human.reactionSteps;
+    const bot = createBot('human', 1, tuned);
+
+    const close = balance.bots.gateCommitDistance - 3;
+    const before = state(rowGates(close));
+    for (let i = 0; i < delay + 5; i++) bot(before);
+    const settled = bot(before);
+    expect(lane(settled)).toBe(1);
+
+    // The same row with the multiplier moved to the other side.
+    const swapped = state([
+      { ...gate(-1, 'mul', 2, close) },
+      { ...gate(0, 'add', 5, close) },
+      { ...gate(1, 'sub', 3, close) },
+    ]);
+    let changedAt = -1;
+    for (let i = 0; i < delay * 2; i++) {
+      const out = bot(swapped);
+      if (changedAt < 0 && out !== settled) changedAt = i;
+    }
+    expect(changedAt).toBe(delay);
+  });
+
+  it('moves its finger no faster than `swipeSpeed`', () => {
+    // A thumb, not a jump (D45): the target itself has a speed, on top of
+    // whatever the crowd does to follow it.
+    const tuned = humanBalance({ reactionSteps: 0, laneAccuracy: 1 });
+    const cap = tuned.bots.human.swipeSpeed / 60;
+    const bot = createBot('human', 1, tuned);
+    const wanted = state(rowGates(balance.bots.gateCommitDistance - 3));
+
+    let previous = wanted.squad.x;
+    let biggest = 0;
+    let steps = 0;
+    while (previous !== laneCenter(1) && steps < 600) {
+      const out = bot(wanted);
+      biggest = Math.max(biggest, Math.abs(out - previous));
+      previous = out;
+      steps++;
+    }
+    expect(biggest).toBeLessThanOrEqual(cap + 1e-12);
+    // And it really did take a lane change's worth of steps to get there.
+    expect(previous).toBe(laneCenter(1));
+    expect(steps).toBeGreaterThanOrEqual(Math.floor(laneCenter(1) / cap));
+  });
+
+  it('reads the row right about seven times in ten', () => {
+    // Wrong is the *second* best lane, not the worst one: a player who misreads
+    // a row takes the lesser gate, they do not walk into the curse.
+    const tuned = humanBalance({ reactionSteps: 0, swipeSpeed: 1000 });
+    const bot = createBot('human', 5, tuned);
+    const rows = 400;
+    let best = 0;
+    for (let r = 0; r < rows; r++) {
+      const picked = lane(bot(state(rowGates(balance.bots.gateCommitDistance - 3, r))));
+      expect(picked).not.toBe(-1);
+      if (picked === 1) best++;
+    }
+    const accuracy = best / rows;
+    expect(accuracy).toBeGreaterThan(tuned.bots.human.laneAccuracy - 0.07);
+    expect(accuracy).toBeLessThan(tuned.bots.human.laneAccuracy + 0.07);
+  });
+
+  it('rolls its lane once per row, not once per step', () => {
+    const tuned = humanBalance({ reactionSteps: 0, swipeSpeed: 1000 });
+    const bot = createBot('human', 2, tuned);
+    const here = state(rowGates(balance.bots.gateCommitDistance - 3));
+    const first = bot(here);
+    for (let i = 0; i < 60; i++) expect(bot(here)).toBe(first);
+  });
+
+  it('answers the same board the same way from the same seed', () => {
+    // It carries state now — a ring of past observations, a finger, and one
+    // roll per row — so "reproducible" has to be pinned rather than assumed:
+    // the balance bands are measured on this bot, run after run.
+    const first = createBot('human', 9);
+    const same = createBot('human', 9);
+    const other = createBot('human', 10);
+    let diverged = false;
+    for (let r = 0; r < 40; r++) {
+      const here = state(rowGates(balance.bots.gateCommitDistance - 3, r));
+      for (let step = 0; step < 12; step++) {
+        const answer = first(here);
+        expect(same(here)).toBe(answer);
+        if (other(here) !== answer) diverged = true;
+      }
+    }
+    expect(diverged).toBe(true);
+  });
+
+  it('clears level 1 on every seed', () => {
+    // D31's generous opening, through a thumb: the first level has to be a
+    // level a real player finishes, or the campaign never starts.
+    for (const seed of [1, 2, 3, 4, 5]) {
+      expect(`s${String(seed)} ${playLevel(1, seed, 'human').status}`).toBe(`s${String(seed)} won`);
+    }
+  }, 60_000);
+
+  it('walks away with less of its crowd than greedy on a mid level', () => {
+    // The whole point of D45: greedy is a ceiling, not a player. If the two
+    // were within a hair of each other the bands would be measured on nobody.
+    let human = 0;
+    let greedy = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const h = playLevel(7, seed, 'human');
+      const g = playLevel(7, seed, 'greedy');
+      const hShare = h.survivors / Math.max(1, h.peakCount);
+      const gShare = g.survivors / Math.max(1, g.peakCount);
+      expect(`s${String(seed)} ${String(hShare <= gShare)}`).toBe(`s${String(seed)} true`);
+      human += hShare;
+      greedy += gShare;
+    }
+    expect(human / 5).toBeLessThan(greedy / 5);
+  }, 60_000);
+});
+
+/**
+ * Drives a whole level with one bot and reports, for every stretch of wall it
+ * meets, where its centre stood the step *before* the stretch began to hold it.
+ *
+ * The step before is the whole question (D44). From the moment a wall holds,
+ * the sim's own clamp keeps the centre on one side of the line, so a centre
+ * measured inside the stretch says nothing; what decides how much of the column
+ * is cut off is where the crowd was when the fence arrived.
+ */
+function fenceEntries(def: ReturnType<typeof level>, kind: 'greedy' | 'human', seed = 4242): number[] {
+  const run = new Run(def, balance);
+  const bot = createBot(kind, seed, balance);
+  const walls = def.walls ?? [];
+  const held = walls.map(() => false);
+  const outside: number[] = [];
+  let previous = run.state.squad.x;
+
+  for (let step = 0; step < 60 * 240 && run.state.status === 'running'; step++) {
+    run.setTargetX(bot(run.state));
+    run.tick(1 / 60);
+    const squad = run.state.squad;
+    for (let i = 0; i < walls.length; i++) {
+      const stretch = walls[i];
+      if (stretch === undefined) continue;
+      const holds = wallHolds(stretch, squad.z);
+      if (holds && held[i] !== true) {
+        // How far the column reached past the line, or 0 when it was all
+        // inside. A micron of it is the clamp's own rounding, not a unit.
+        const keep = wallKeep(squad.count, squad.formationWidth, balance);
+        const gap = Math.abs(previous - wallX(stretch.boundary));
+        const past = keep - gap;
+        outside.push(past > 1e-6 ? past : 0);
+      }
+      held[i] = holds;
+    }
+    previous = squad.x;
+  }
+  return outside;
+}
+
+/**
+ * A fence with a multiplier on each side of it: one on the row before the
+ * stretch, one on the row it guards, and only three metres of clear road
+ * between the near row and the approach zone. Whichever half a bot decides it
+ * wants, it has to be there before the stretch starts.
+ */
+function fenceTrap(): ReturnType<typeof level> {
+  return level({
+    startCount: 100,
+    arenaZ: 120,
+    rows: [
+      rowOf(26, [{ kind: 'sub', value: 60 }, { kind: 'add', value: 5 }, { kind: 'mul', value: 3 }]),
+      rowOf(50, [{ kind: 'mul', value: 3 }, null, null]),
+    ],
+    walls: [wall(-1, 30, 49.5)],
+  });
+}
+
+/** Levels and seeds with fences on them, small enough to drive twice in a test. */
+const WALLED_LEVELS = [4, 6, 8, 11, 14];
+const WALLED_SEEDS = [1, 2, 3];
+
+/** Every fence entry of a bot over that sweep: how far its column reached past
+ *  the line the step before the stretch began to hold it. */
+function campaignEntries(kind: 'greedy' | 'human'): number[] {
+  const all: number[] = [];
+  for (const index of WALLED_LEVELS) {
+    for (const seed of WALLED_SEEDS) {
+      const generated = generateLevel(index, levelConfig(index), seed);
+      for (const outside of fenceEntries(generated, kind, seed * 7919 + index)) all.push(outside);
+    }
+  }
+  return all;
+}
+
+describe('bots at a fence', () => {
+  it('has greedy inside the line with its whole column before the stretch holds', () => {
+    // The trap: a multiplier on each side of the fence, and the near one three
+    // metres before the approach zone. Greedy commits to a side at
+    // `bots.wallCommitDistance` with both rows valued and does not revisit it,
+    // so it takes the near multiplier and gives the far one up rather than
+    // setting off across the road with a metre of road left.
+    const entries = fenceEntries(fenceTrap(), 'greedy');
+    expect(entries.length).toBe(1);
+    expect(entries[0]).toBe(0);
+  });
+
+  it('leaves the human astride the line, which is where its stragglers come from', () => {
+    // D44 from the steering side: the bot notices the fence within `wallReach`,
+    // its hand is `reactionSteps` behind that and its finger crosses at
+    // `swipeSpeed`, so a crossing it starts for the river or for a gate is
+    // still happening when the stretch arrives. Phase A turns the units still
+    // on the far side into a straggler group; from here it is simply that the
+    // crowd was not all there yet.
+    const entries = campaignEntries('human');
+    expect(entries.length).toBeGreaterThan(10);
+    const astride = entries.filter((outside) => outside > 0).length;
+    expect(`${String(astride)} of ${String(entries.length)} astride`).not.toBe(
+      `0 of ${String(entries.length)} astride`,
+    );
+    expect(astride / entries.length).toBeGreaterThan(0.25);
+  }, 60_000);
+
+  it('keeps greedy out of every fence in the campaign, not just the fixture', () => {
+    // The regression this pins: through Milestone 5 greedy took a multiplier on
+    // the wrong half of the road and then set off across it with a metre of
+    // road left, entering 29 of the campaign's 102 stretches astride the line.
+    const entries = campaignEntries('greedy');
+    expect(entries.length).toBeGreaterThan(10);
+    for (const outside of entries) {
+      expect(`outside ${outside.toFixed(2)}`).toBe('outside 0.00');
+    }
+  }, 60_000);
 });

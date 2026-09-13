@@ -80,31 +80,72 @@ export function familiarPrice(tier: FamiliarTier): number {
 /** Highest tier the Sanctum sells. */
 export const maxFamiliarTier: FamiliarTier = 3;
 
+/** What a run's own state has to carry for `runRewards` to price it. */
+export interface RunPayable {
+  status: string;
+  survivors: number;
+  /** Where the squad got to; a `RunState` always has it, a fixture may not. */
+  squad?: { z: number };
+  arenaZ?: number;
+}
+
 /**
- * Coins a *finished* run pays: one per survivor, plus a flat share of the level
- * index on a clear, and again — larger — the first time that level is cleared.
- * A lost run leaves no survivors, so it pays nothing.
+ * How far up the road a run got, 0 to 1. The squad stops at `arenaZ` to fight
+ * the boss, so a run that died to the boss reads 1 and one that died at the
+ * second gate row reads a tenth.
  *
- * A run that is still going pays nothing either, and that is deliberate rather
- * than defensive. `survivors` tracks the live squad while a run is under way,
- * so paying on it would make "walk into a fat gate, then leave" worth more than
- * finishing the level. Nothing in the app can leave a run today — the HUD has
- * no way out — but the rule belongs here, with the arithmetic, rather than in
- * whichever screen grows one first.
+ * A state without a position — the hand-made ones in tests and fixtures —
+ * reads 0, which is what keeps `runRewards` paying nothing for a loss that
+ * cannot say how far it got.
+ */
+export function roadProgress(state: RunPayable): number {
+  const z = state.squad?.z;
+  const arenaZ = state.arenaZ;
+  if (z === undefined || arenaZ === undefined || arenaZ <= 0) return 0;
+  return Math.min(1, Math.max(0, z / arenaZ));
+}
+
+/**
+ * Coins a *finished* run pays (D46).
+ *
+ * The road pays for clearing it, not for the size of the crowd that walked it:
+ * `perClear` on any clear and `firstClear` again the first time, both scaled by
+ * the level index through `levelExponent`, plus a token `perSurvivor` so the
+ * count on the result screen still means something. Before D46 the survivors
+ * *were* the payment, which paid a fat gate rather than a finished level.
+ *
+ * A loss pays `lossShare` of what another clear of this level would pay, scaled
+ * by how far up the road it got: dying to the boss is nearly the whole share
+ * and dying in the first ten metres is nearly nothing. That is what makes a
+ * milestone level (D45) a few runs of grinding rather than a wall — and it is
+ * deliberately measured against a *repeat* clear, so that losing over and over
+ * can never out-earn clearing the level and moving on.
+ *
+ * A run that is still going pays nothing, and that is a rule rather than a
+ * guard. `survivors` tracks the live squad while a run is under way, so paying
+ * on it would make "walk into a fat gate, then leave" worth more than finishing
+ * the level. Nothing in the app can leave a run today — the HUD has no way out
+ * — but the rule belongs here, with the arithmetic, rather than in whichever
+ * screen grows one first.
  */
 export function runRewards(
-  state: { status: string; survivors: number },
+  state: RunPayable,
   level: number,
   firstClear: boolean,
 ): { coins: number } {
   if (state.status === 'running') return { coins: 0 };
 
   const rewards = progression.rewards;
-  const cleared = state.status === 'won';
   const index = Math.max(1, Math.floor(level));
-  let coins = Math.max(0, Math.floor(state.survivors)) * rewards.perSurvivor;
-  if (cleared) coins += rewards.perClear * index;
-  if (cleared && firstClear) coins += rewards.firstClear * index;
+  const scale = Math.pow(index, rewards.levelExponent);
+  const clearValue = rewards.perClear * scale;
+
+  if (state.status !== 'won') {
+    return { coins: Math.round(clearValue * rewards.lossShare * roadProgress(state)) };
+  }
+
+  let coins = clearValue + Math.max(0, Math.floor(state.survivors)) * rewards.perSurvivor;
+  if (firstClear) coins += rewards.firstClear * scale;
   return { coins: Math.round(coins) };
 }
 

@@ -1,7 +1,7 @@
 {
   "upgrades": {
-    "baseCost": 50,
-    "costGrowth": 1.35,
+    "baseCost": 900,
+    "costGrowth": 1.6,
     "maxLevel": 10,
     "effects": {
       "damage": 0.08,
@@ -12,9 +12,9 @@
     }
   },
   "staffs": {
-    "ember": { "unlock": 0, "evolve": 1200 },
-    "storm": { "unlock": 450, "evolve": 1500 },
-    "frost": { "unlock": 500, "evolve": 1600 }
+    "ember": { "unlock": 0, "evolve": 3800 },
+    "storm": { "unlock": 400, "evolve": 4200 },
+    "frost": { "unlock": 450, "evolve": 4500 }
   },
   "evolutions": {
     "ember": { "burn": { "share": 0.3, "seconds": 2, "tickSeconds": 0.25 } },
@@ -22,8 +22,8 @@
     "frost": { "shatter": { "radius": 1, "share": 0.5 } }
   },
   "wisp": {
-    "unlock": 1500,
-    "tierPrices": [0, 1500, 3000, 5000],
+    "unlock": 3800,
+    "tierPrices": [0, 3800, 4800, 5600],
     "offsetX": 1.2,
     "offsetZ": -0.5,
     "range": 30,
@@ -33,8 +33,10 @@
     "damage": [0, 12, 22, 36]
   },
   "rewards": {
-    "perSurvivor": 1,
-    "perClear": 25,
-    "firstClear": 100
+    "perSurvivor": 0.1,
+    "perClear": 140,
+    "firstClear": 140,
+    "levelExponent": 0.3,
+    "lossShare": 0.3
   }
 }

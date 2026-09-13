@@ -178,6 +178,11 @@ export class AcademyController {
    * exactly once however the run ended. `RunSession.advanceEnding` has already
    * written the unlock by the time this runs, which is why the save is re-read
    * rather than assumed.
+   *
+   * A lost run pays too since D46 — a share of the clear, scaled by how far up
+   * the road it got — so this is called for every finished run and not only for
+   * a won one. The whole `RunState` goes to `runRewards` rather than a count,
+   * because where the squad stopped is half of what a loss is worth.
    */
   payRun(session: RunSession, level: number): RunPayout {
     const save = loadSave();

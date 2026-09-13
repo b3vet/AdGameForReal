@@ -4,7 +4,7 @@ import { stompKills } from '../boss';
 import { overlapShare } from '../contact';
 import { halfWidth } from '../formation';
 import type { GateDef } from '../types';
-import { level, play, row, runOf, testBalance, wall } from './fixtures';
+import { level, play, row, runOf, testBalance } from './fixtures';
 
 describe('enemies', () => {
   it('activates a block once the squad is close enough, then walks it in', () => {
@@ -465,10 +465,12 @@ describe('lifecycle', () => {
 });
 
 /**
- * The lateral spring (D37). Milestone 4 moved the squad at a flat
- * `lateralSpeed` and stopped it dead on arrival, which is what the playtest
- * read as jerky; it is now a critically damped spring under an acceleration
- * cap, which is the cheapest motion that eases in and out and cannot wobble.
+ * The head on the finger (D43). Milestone 5 eased the squad toward the target
+ * under an acceleration cap (D37) — what a crowd of people can do, and what the
+ * product owner read as unresponsive, because the head is not a crowd. It is a
+ * stiff critically damped spring now with no acceleration cap: a full lane is
+ * over inside 150 ms, and the softness that makes the motion read as people
+ * lives in the crowd behind it (`crowd.test.ts`).
  */
 describe('lateral motion', () => {
   /** Steps `seconds` at one target and reports the whole path. */
@@ -489,14 +491,22 @@ describe('lateral motion', () => {
     return out;
   }
 
-  it('eases in instead of snapping to full speed', () => {
+  it('is on the finger: no ease-in, and a full lane inside 150 ms', () => {
     const balance = testBalance();
-    const early = speeds(drive(1, balance.road.clampX, 0.1));
-    const first = early[0] ?? 0;
-    // The old mover was at `lateralSpeed` on the first step; the spring needs
-    // the acceleration cap's own time to get there.
-    expect(first).toBeGreaterThan(0);
-    expect(first).toBeLessThan(balance.squad.lateralAccel / 60 + 1e-9);
+    const lane = balance.road.laneWidth;
+    // The first step is already at the speed cap. That is the whole change:
+    // the head answers the finger, it does not wind up to it.
+    const early = speeds(drive(1, lane, 0.1));
+    expect(early[0] ?? 0).toBeCloseTo(balance.crowd.leaderSpeed, 6);
+
+    // Three steps and it is inside the lane it was asked for; nine — the
+    // plan's 150 ms — and it is within a tenth of a lane of that lane's
+    // centre. The last centimetres are the spring's own tail, which the game
+    // cannot show and `laneOf` stopped caring about at step three.
+    const path = drive(1, lane, 0.15);
+    expect(path[3] ?? 0).toBeGreaterThan(lane / 2);
+    expect(path[path.length - 1]).toBeGreaterThan(lane * 0.9);
+    expect(drive(1, lane, 1)[60]).toBeCloseTo(lane, 6);
   });
 
   it('never overshoots the target it was given', () => {
@@ -509,22 +519,19 @@ describe('lateral motion', () => {
     }
   });
 
-  it('holds the speed and acceleration caps all the way across the road', () => {
+  it('holds the speed cap all the way across the road', () => {
     const balance = testBalance();
     const path = drive(1, balance.road.clampX, 1.5);
     const v = speeds(path);
-    let previous = 0;
     for (const speed of v) {
-      expect(Math.abs(speed)).toBeLessThanOrEqual(balance.squad.lateralSpeed + 1e-9);
-      expect(Math.abs(speed - previous) * 60).toBeLessThanOrEqual(balance.squad.lateralAccel + 1e-6);
-      previous = speed;
+      expect(Math.abs(speed)).toBeLessThanOrEqual(balance.crowd.leaderSpeed + 1e-9);
     }
-    // A swipe across the road still runs at the cap for most of the way, so the
-    // campaign's timings are the ones it was balanced with.
-    expect(Math.max(...v)).toBeCloseTo(balance.squad.lateralSpeed, 2);
+    // A swipe across the road runs at the cap: the spring asks for far more
+    // than that, and the cap is the only thing holding it.
+    expect(Math.max(...v)).toBeCloseTo(balance.crowd.leaderSpeed, 6);
   });
 
-  it('reverses without a jerk when the player drags the other way', () => {
+  it('reverses cleanly when the player drags the other way', () => {
     const balance = testBalance();
     const run = runOf(level({ startCount: 1, rows: [] }));
     const path: number[] = [run.state.squad.x];
@@ -533,21 +540,25 @@ describe('lateral motion', () => {
       run.tick(1 / 60);
       path.push(run.state.squad.x);
     }
-    let previous = 0;
+    // No cap on how fast it turns around any more, but it still never leaves
+    // the road and it still ends on the target it was last given.
+    for (const x of path) expect(Math.abs(x)).toBeLessThanOrEqual(balance.road.clampX + 1e-9);
     for (const speed of speeds(path)) {
-      expect(Math.abs(speed - previous) * 60).toBeLessThanOrEqual(balance.squad.lateralAccel + 1e-6);
-      previous = speed;
+      expect(Math.abs(speed)).toBeLessThanOrEqual(balance.crowd.leaderSpeed + 1e-9);
     }
+    expect(path[path.length - 1]).toBeCloseTo(-balance.road.clampX, 2);
   });
 
-  it('keeps the velocity on the state, and empties it against a wall', () => {
-    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 4, 40)] }));
-    play(run, 0.3, 2.6);
+  it('keeps the velocity on the state, and empties it on arrival', () => {
+    // Render leans the crowd on this, so it has to be a real velocity and it
+    // has to be exactly zero once the head is standing on its target.
+    const balance = testBalance();
+    const run = runOf(level({ startCount: 1, rows: [] }));
+    run.setTargetX(balance.road.clampX);
+    run.tick(1 / 60);
     expect(run.state.squad.vx ?? 0).toBeGreaterThan(0);
-    // Held against the fence: the spring must not wind up and fire the squad
-    // sideways the moment the stretch releases it.
-    play(run, 3, 2.6);
-    expect(run.state.squad.z).toBeGreaterThan(4);
+    play(run, 1, balance.road.clampX);
+    expect(run.state.squad.x).toBeCloseTo(balance.road.clampX, 6);
     expect(run.state.squad.vx ?? -1).toBe(0);
   });
 });

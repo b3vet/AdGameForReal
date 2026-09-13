@@ -27,16 +27,19 @@ import { balance, levelConfig } from '@/data';
 const EFFECTS = progression.upgrades.effects;
 
 describe('upgrade prices', () => {
-  it('charges 50 coins times 1.35 per level, to a ceiling of ten', () => {
-    expect(progression.upgrades.baseCost).toBe(50);
-    expect(progression.upgrades.costGrowth).toBe(1.35);
+  it('charges the base price times the growth per level, to a ceiling of ten', () => {
+    // The numbers themselves are the campaign simulation's business (D46 and
+    // `economy.test.ts`); what is fixed here is the shape — one price per level
+    // of that upgrade, climbing, and a ceiling the room can print.
+    const { baseCost, costGrowth } = progression.upgrades;
     expect(maxUpgradeLevel).toBe(10);
-    expect(upgradeCost(0)).toBe(50);
-    expect(upgradeCost(1)).toBe(68);
-    expect(upgradeCost(9)).toBe(Math.round(50 * Math.pow(1.35, 9)));
+    expect(costGrowth).toBeGreaterThan(1);
+    expect(upgradeCost(0)).toBe(baseCost);
+    expect(upgradeCost(1)).toBe(Math.round(baseCost * costGrowth));
+    expect(upgradeCost(9)).toBe(Math.round(baseCost * Math.pow(costGrowth, 9)));
 
     const player = emptyPlayer();
-    expect(nextUpgradeCost(player, 'damage')).toBe(50);
+    expect(nextUpgradeCost(player, 'damage')).toBe(baseCost);
     player.upgrades.damage = maxUpgradeLevel;
     expect(nextUpgradeCost(player, 'damage')).toBeNull();
   });
@@ -55,12 +58,22 @@ describe('upgrade prices', () => {
 });
 
 describe('rewards', () => {
-  it('pays a survivor each, plus the level on a clear and again on a first clear', () => {
+  it('pays for the clear, scaled by the level, plus a token per survivor (D46)', () => {
+    const rewards = progression.rewards;
+    const scale = Math.pow(3, rewards.levelExponent);
     const won = { status: 'won', survivors: 120 };
-    expect(runRewards(won, 3, false).coins).toBe(120 + 25 * 3);
-    expect(runRewards(won, 3, true).coins).toBe(120 + 25 * 3 + 100 * 3);
-    // A lost run leaves no survivors, so it pays nothing at all.
+    expect(runRewards(won, 3, false).coins).toBe(
+      Math.round(rewards.perClear * scale + 120 * rewards.perSurvivor),
+    );
+    expect(runRewards(won, 3, true).coins).toBe(
+      Math.round(rewards.perClear * scale + rewards.firstClear * scale + 120 * rewards.perSurvivor),
+    );
+    // A loss that cannot say how far up the road it got pays nothing; the road
+    // fraction is what a loss is paid on, and `economy.test.ts` has the band.
     expect(runRewards({ status: 'lost', survivors: 0 }, 9, true).coins).toBe(0);
+    expect(
+      runRewards({ status: 'lost', survivors: 0, squad: { z: 240 }, arenaZ: 300 }, 9, true).coins,
+    ).toBeGreaterThan(0);
   });
 
   it('pays nothing for a run that is still going', () => {

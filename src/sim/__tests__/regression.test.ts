@@ -33,35 +33,45 @@ const SAMPLE_EVERY = 30;
 /**
  * Levels 1 to 3, greedy, seeds 1 to 5.
  *
- * Re-captured for D42, the lane column, as Phase B re-captured them for D37.
- * Three deliberate changes move every one of them and none of them is subtle:
- * the crowd is one lane wide instead of the road's full 4.4 m, so every unit
- * stands somewhere else and the whole column's fire lands in one lane; the
- * spacing floor and row gap changed with it (0.28 to 0.25, 0.8 to 0.7); and
- * the balance was re-measured against that concentrated fire — `dpsTrim` back
- * to 0.38, `enrageAt` back to 0.3 and the boss's stomp share 0.06 to 0.07,
- * because a column the blocks can be steered around gives the road almost
- * nothing to take and the survivor share is settled at the arena.
+ * Re-captured for Milestone 6 Phase A — the crowd as agents (D43) — as Phase B
+ * re-captured them for D37 and the lane column re-captured them for D42. Every
+ * one of them moves, and none of the reasons is subtle:
  *
- * The run these hashes describe is the same campaign re-measured, not a
- * different one: the bands in `balance.test.ts` are what says so.
+ *   - a shot leaves the unit that fired it rather than the slot the formation
+ *     says that unit should be standing in, so a crowd that is bowing, closing
+ *     a gap or piling against a fence lands its fire somewhere slightly else;
+ *   - the head is on the finger now (a 30 rad/s spring, no acceleration cap)
+ *     instead of easing across the road under one, so the squad arrives at a
+ *     lane in a sixth of a second rather than most of one;
+ *   - a body, a block and a stomp take the people standing nearest to them
+ *     rather than an anonymous slice of the count, and the survivors close the
+ *     gap by walking into it.
+ *
+ * What did *not* change is how many units a contact costs: that is still
+ * measured against the group's leader and its formation half-width
+ * (`contact.ts`), which is what keeps the campaign's pressure model meaning the
+ * same thing. The bands in `balance.test.ts` are what says the run these
+ * hashes describe is the same campaign re-measured.
+ *
+ * Phase C2 re-captures them again once the human bot and the milestone levels
+ * land; these are the sim's own answer with the shipped tuning as it stands.
  */
 const GOLDEN: Readonly<Record<string, string>> = {
-  '1:1': '4640811a',
-  '1:2': '8734c519',
-  '1:3': '8beaecc2',
-  '1:4': 'f2de965e',
-  '1:5': 'db8e3e7a',
-  '2:1': '0e026830',
-  '2:2': '66556d4f',
-  '2:3': 'ee07f21d',
-  '2:4': 'e35dbc77',
-  '2:5': '58eef35b',
-  '3:1': '6ca03efa',
-  '3:2': 'fc58c0c2',
-  '3:3': '7d4ed62e',
-  '3:4': 'bd79d07b',
-  '3:5': 'b6f76ec1',
+  '1:1': '2fcf4225',
+  '1:2': 'c19ce2be',
+  '1:3': '3f7ef421',
+  '1:4': '03dfdae4',
+  '1:5': '50e1f984',
+  '2:1': 'b24e0c86',
+  '2:2': 'b0f0040c',
+  '2:3': '6e23bc22',
+  '2:4': 'b5b6762a',
+  '2:5': '9de4ef99',
+  '3:1': '0e2d7f75',
+  '3:2': '07d0f237',
+  '3:3': 'ead2db98',
+  '3:4': '29ed87a2',
+  '3:5': 'cb8396b1',
 };
 
 /** FNV-1a, 32 bit. Any stable hash would do; this one is short enough to read. */

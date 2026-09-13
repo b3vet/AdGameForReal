@@ -1,6 +1,12 @@
 /**
- * Lane walls (D32): the clamp, the approach push, where the generator may put
- * one, and what the bots do about them.
+ * Lane walls (D32), as Milestone 6 leaves them: a fence stops the *units*, not
+ * the head (D43). The head is on the finger and goes wherever the finger does;
+ * the crowd piles up against the line, whoever is caught on the far side when
+ * the stretch begins to hold is cut off as a straggler (D44, `stragglers.
+ * test.ts`), and the gate a group takes is still the one on its own side of the
+ * fence, because the lane is read off where the people are.
+ *
+ * `wallLimits` itself is unchanged and still the bots' view of the road.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -9,6 +15,7 @@ import { createBot } from '../bots';
 import { generateLevel } from '../level';
 import type { LevelDef } from '../level';
 import { Run } from '../Run';
+import { clampLimit } from '../formation';
 import { clampToWalls, generateWalls, wallHolds, wallLimits, wallX } from '../walls';
 import type { WallDef, WallLimits } from '../walls';
 import { level, play, row, runOf, testBalance, wall } from './fixtures';
@@ -18,10 +25,35 @@ const SEEDS = [1, 2, 3, 4, 5];
 const TUNING = balance.walls;
 const LINE = wallX(1);
 
-/** Where the squad ends up after steering at `targetX` for `seconds`. */
+/** Where the head ends up after steering at `targetX` for `seconds`. */
 function steer(run: Run, seconds: number, targetX: number): number {
   play(run, seconds, targetX);
   return run.state.squad.x;
+}
+
+/** The furthest right any live unit of `group` stands; -1 for any of them. */
+function rightmost(run: Run, group = -1): number {
+  const crowd = run.state.crowd;
+  let most = -Infinity;
+  if (crowd === undefined) return most;
+  for (let i = 0; i < crowd.capacity; i++) {
+    if ((crowd.alive[i] ?? 0) === 0) continue;
+    if (group >= 0 && (crowd.group[i] ?? 0) !== group) continue;
+    most = Math.max(most, crowd.x[i] ?? 0);
+  }
+  return most;
+}
+
+/** The furthest left any live unit stands. */
+function leftmost(run: Run): number {
+  const crowd = run.state.crowd;
+  let least = Infinity;
+  if (crowd === undefined) return least;
+  for (let i = 0; i < crowd.capacity; i++) {
+    if ((crowd.alive[i] ?? 0) === 0) continue;
+    least = Math.min(least, crowd.x[i] ?? 0);
+  }
+  return least;
 }
 
 function limitsAt(walls: readonly WallDef[], z: number, x: number): WallLimits {
@@ -34,39 +66,53 @@ describe('the wall clamp', () => {
     expect(wallX(-1)).toBe(-balance.road.laneWidth / 2);
   });
 
-  it('keeps a squad that entered on the left from crossing to the right', () => {
-    // One unit, so the road clamp rather than the crowd's own taper is what
-    // bounds it and the numbers below are the plan's, not the formation's.
-    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 20, 40)] }));
+  it('keeps a column that entered on the left from crossing to the right', () => {
+    const body = balance.crowd.bodyRadius;
+    const run = runOf(level({ startCount: 40, rows: [], walls: [wall(1, 20, 40)] }));
     // Left of the fence as it enters, then asking to cross while inside it.
-    expect(steer(run, 3.8, -99)).toBeCloseTo(-balance.road.clampX, 6);
+    expect(steer(run, 3.8, -99)).toBeCloseTo(-clampLimit(40), 6);
     const inside = steer(run, 2, 99);
     expect(run.state.squad.z).toBeGreaterThan(20);
     expect(run.state.squad.z).toBeLessThan(40);
-    expect(inside).toBeCloseTo(LINE - TUNING.margin, 6);
-    // Past the far end it is free again. The lateral spring eases in and out
-    // (D37), so crossing the whole road takes about a second rather than the
-    // flat 8 m/s of Milestone 4.
-    expect(steer(run, 4, 99)).toBeCloseTo(balance.road.clampX, 6);
+    // The head goes where the finger goes (D43)...
+    expect(inside).toBeCloseTo(clampLimit(40), 6);
+    // ...and not one unit is through the line: they are piled against it.
+    expect(rightmost(run)).toBeCloseTo(LINE - body, 6);
+    // Past the far end they are free, and they follow.
+    play(run, 4, 99);
+    expect(leftmost(run)).toBeGreaterThan(LINE);
   });
 
-  it('keeps a squad that entered on the right from crossing to the left', () => {
-    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 20, 40)] }));
-    expect(steer(run, 3.8, 99)).toBeCloseTo(balance.road.clampX, 6);
-    expect(steer(run, 2, -99)).toBeCloseTo(LINE + TUNING.margin, 6);
-    expect(steer(run, 4, -99)).toBeCloseTo(-balance.road.clampX, 6);
+  it('keeps a column that entered on the right from crossing to the left', () => {
+    const body = balance.crowd.bodyRadius;
+    const run = runOf(level({ startCount: 40, rows: [], walls: [wall(1, 20, 40)] }));
+    expect(steer(run, 3.8, 99)).toBeCloseTo(clampLimit(40), 6);
+    expect(steer(run, 2, -99)).toBeCloseTo(-clampLimit(40), 6);
+    expect(leftmost(run)).toBeCloseTo(LINE + body, 6);
+    play(run, 4, -99);
+    expect(rightmost(run)).toBeLessThan(LINE);
   });
 
-  it('pushes a squad straddling the line off it, two metres before the fence', () => {
-    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 20, 40)] }));
-    // Dead on the boundary: outside the approach it may stand there...
+  it('cuts a column straddling the line in two, two metres before the fence', () => {
+    // The mechanic D44 is about. A column sitting on the boundary when the
+    // stretch begins to hold does not get pushed off it: the half on the wrong
+    // side is left behind as its own group and fights there.
+    const run = runOf(level({ startCount: 60, rows: [], walls: [wall(1, 20, 40)] }));
+    // Dead on the boundary: outside the approach it may stand there.
     expect(steer(run, 2, LINE)).toBeCloseTo(LINE, 6);
+    expect(run.state.groups?.[1]?.count ?? 0).toBe(0);
+
     const events = play(run, 1.7, LINE);
     const z = run.state.squad.z;
-    // ...and inside the approach zone it is pushed to the side its centre is on.
     expect(z).toBeGreaterThanOrEqual(20 - TUNING.approach);
     expect(z).toBeLessThan(20);
-    expect(run.state.squad.x).toBeCloseTo(LINE + TUNING.margin, 6);
+
+    const straggler = run.state.groups?.[1];
+    expect(straggler?.count ?? 0).toBeGreaterThan(0);
+    expect(straggler?.lane).toBe(1);
+    // Nobody died doing it: the plaque still reads the whole crowd (D44).
+    expect(run.state.squad.count).toBe(60);
+    expect((run.state.groups?.[0]?.count ?? 0) + (straggler?.count ?? 0)).toBe(60);
 
     const blocked = events.filter((e) => e.type === 'wallBlocked');
     expect(blocked.length).toBe(1);
@@ -82,12 +128,17 @@ describe('the wall clamp', () => {
     expect(events.filter((e) => e.type === 'wallBlocked')).toHaveLength(1);
   });
 
-  it('locks the squad into the middle lane when both boundaries are walled', () => {
-    const run = runOf(level({ startCount: 1, rows: [], walls: [wall(1, 20, 40), wall(-1, 20, 40)] }));
+  it('locks the crowd into the middle lane when both boundaries are walled', () => {
+    const body = balance.crowd.bodyRadius;
+    const run = runOf(level({ startCount: 60, rows: [], walls: [wall(1, 20, 40), wall(-1, 20, 40)] }));
     // It arrives down the middle, and the middle is where it stays.
     play(run, 3.8, 0);
-    expect(steer(run, 2, 99)).toBeCloseTo(LINE - TUNING.margin, 6);
-    const limits = limitsAt(run.state.walls ?? [], run.state.squad.z, run.state.squad.x);
+    steer(run, 2, 99);
+    expect(rightmost(run)).toBeCloseTo(LINE - body, 6);
+    expect(leftmost(run)).toBeGreaterThanOrEqual(-LINE + body - 1e-9);
+    // The range the bots read is untouched: it is still about lanes, and it is
+    // read from where the crowd is rather than from where the finger is.
+    const limits = limitsAt(run.state.walls ?? [], run.state.squad.z, 0);
     expect(limits.lo).toBeCloseTo(-LINE + TUNING.margin, 6);
     expect(limits.hi).toBeCloseTo(LINE - TUNING.margin, 6);
   });
@@ -223,18 +274,19 @@ describe('the wall generator', () => {
    * panels undoes the whole choice, which is why the clamp runs to the row and
    * only the fence stops short of it.
    */
-  it('holds the squad on its own side of the fence all the way to the row', () => {
-    const freeLane = TUNING.gateGap * (balance.squad.lateralSpeed / balance.squad.runSpeed);
-    // The gap the clamp covers is worth far more lane than the margin holds:
-    // release the squad there and it is over the line in a sixth of a second.
+  it('holds the crowd on its own side of the fence all the way to the row', () => {
+    const freeLane = TUNING.gateGap * (balance.crowd.leaderSpeed / balance.squad.runSpeed);
+    // The gap the fence leaves is worth far more lane than the margin holds:
+    // release the crowd there and it is over the line in a fraction of a second.
     expect(freeLane).toBeGreaterThan(TUNING.margin);
 
-    // Held left by a fence that stops half a metre short of the row, a squad
-    // leaning on the far lane from the first step is still left of the boundary
-    // when it crosses — so it takes the gate on its own side.
+    // Held left by a fence that stops half a metre short of the row, a column
+    // whose finger is leaning on the far lane from the first step is still left
+    // of the boundary when it crosses — so it takes the gate on its own side,
+    // even though the head itself is over on the right (D43).
     const run = runOf(
       level({
-        startCount: 1,
+        startCount: 40,
         rows: [row(30, [{ kind: 'add', value: 10 }, null, { kind: 'add', value: 10 }])],
         walls: [wall(1, 10, 30 - TUNING.gateGap)],
         arenaZ: 400,
@@ -242,13 +294,26 @@ describe('the wall generator', () => {
     );
     play(run, 1.5, -99);
 
-    let atRow = Number.NaN;
-    for (let step = 0; step < 60 * 10 && Number.isNaN(atRow); step++) {
+    const events: ReturnType<typeof play> = [];
+    let worst = -Infinity;
+    let reached = false;
+    for (let step = 0; step < 60 * 10 && !reached; step++) {
       run.setTargetX(99);
-      run.tick(1 / 60);
-      if (run.state.squad.z >= 30) atRow = run.state.squad.x;
+      for (const event of run.tick(1 / 60)) events.push({ ...event });
+      // From the step the stretch starts to hold to just short of its release:
+      // before it there is no fence, and past it the straggler group the cut
+      // made is rejoining from the right, which is what it is meant to do.
+      const z = run.state.squad.z;
+      if (z >= 10 - TUNING.approach && z < 29.4) worst = Math.max(worst, rightmost(run, 0));
+      reached = run.state.squad.z >= 30;
     }
-    expect(atRow).toBeLessThan(LINE);
+    // Not one of the column crossed, though the head is over on the right.
+    expect(reached).toBe(true);
+    expect(worst).toBeLessThan(LINE);
+    expect(run.state.squad.x).toBeGreaterThan(LINE);
+    // And it took a gate: the lane is read off the people, not the finger.
+    expect(events.some((e) => e.type === 'gatePassed')).toBe(true);
+    expect(run.state.squad.count).toBeGreaterThan(40);
   });
 
   it('walls both boundaries only over a horde, and only late', () => {

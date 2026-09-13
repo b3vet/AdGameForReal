@@ -9,6 +9,7 @@
  */
 
 import { Burn } from './burn';
+import type { CrowdSim } from './crowd';
 import type { EventBuffer } from './events';
 import { Familiar } from './familiar';
 import { Firing } from './firing';
@@ -48,6 +49,7 @@ export function buildLoadout(
   streams: Streams,
   mods: PlayerMods,
   onBossKilled: () => void,
+  crowd: CrowdSim,
 ): Loadout {
   // Bound before `Firing` exists and shared by the burn and the wisp; both only
   // ever call it inside a step, long after this returns.
@@ -58,7 +60,7 @@ export function buildLoadout(
 
   const def = burnDef(mods);
   const burn = def === null ? null : new Burn(def, events, hit);
-  fire = new Firing(balance, events, targets, streams, onBossKilled, mods, burn);
+  fire = new Firing(balance, events, targets, streams, crowd, onBossKilled, mods, burn);
 
   const tier = mods.familiarTier;
   const familiar =

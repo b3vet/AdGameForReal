@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { level, row, runOf, staffRow, testBalance } from './fixtures';
+import { level, row, runOf, staffRow, testBalance, wall } from './fixtures';
 import { emptyPlayer, maxUpgradeLevel, upgradeIds } from '../player';
 import type { RowDef } from '../level';
 import { Run } from '../Run';
@@ -14,6 +14,10 @@ const TICKS = 600;
 
 /** The plan's budget: three hundred bodies plus three hundred units, 8 ms a tick. */
 const TICK_BUDGET_MS = 8;
+
+/** Milestone 6's budget for the crowd itself: five hundred agents, half a
+ *  millisecond a step (docs/18-milestone-6-plan.md, "Definition of done"). */
+const CROWD_BUDGET_MS = 0.5;
 
 /** Rows are 18 m apart now, so the busy level runs longer for the same count. */
 const SPACING = balance.level.rowSpacing;
@@ -82,6 +86,52 @@ function measure(run: Run): number {
   }
   return (performance.now() - started) / TICKS;
 }
+
+describe('the crowd', () => {
+  it('moves five hundred agents inside half a millisecond a step', () => {
+    // The agents and nothing else: no fire, no bodies, no gates. What is being
+    // timed is the seek, the spatial hash, the separation, the body projection
+    // and the fence and arch tests, at the biggest crowd the game allows, with
+    // the head whipping from side to side the whole time so the chain never
+    // settles (D43).
+    const tuning = testBalance();
+    tuning.squad.fireRate = 0;
+    const run = runOf(level({ startCount: 500, rows: [], arenaZ: 40_000 }), tuning);
+    for (let i = 0; i < 120; i++) run.tick(1 / 60);
+    expect(run.state.squad.count).toBe(500);
+
+    const perStep = measure(run);
+    // Reported rather than merely asserted: the number is the milestone's, and
+    // a future change that doubles it should be visible in the run log.
+    console.log(`crowd: 500 agents, ${perStep.toFixed(3)} ms a step`);
+    expect(perStep).toBeLessThan(CROWD_BUDGET_MS);
+  });
+
+  it('holds the budget with a river shoving it and a fence to jam against', () => {
+    // The same crowd with everything that touches it at once: a wall to pile
+    // against, a straggler group of its own, and three hundred bodies in the
+    // shove test.
+    const tuning = saturatedTuning();
+    tuning.squad.maxCount = 500;
+    const run = runOf(
+      level({
+        startCount: 500,
+        rows: saturatedStreams(),
+        arenaZ: 40_000,
+        walls: [wall(1, 20, 30_000)],
+      }),
+      tuning,
+    );
+    for (let i = 0; i < 600; i++) {
+      run.setTargetX(1);
+      run.tick(1 / 60);
+    }
+    expect(run.state.squad.count).toBe(500);
+    const perStep = measure(run);
+    console.log(`crowd under load: 500 agents + 300 bodies, ${perStep.toFixed(3)} ms a tick`);
+    expect(perStep).toBeLessThan(TICK_BUDGET_MS);
+  });
+});
 
 describe('hot loop', () => {
   it('holds 300 bodies and 300 units inside the frame budget', () => {

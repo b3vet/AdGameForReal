@@ -1,12 +1,33 @@
 {
   "squad": {
     "runSpeed": 5,
-    "lateralSpeed": 8,
-    "lateralAccel": 40,
-    "lateralSpring": 12,
     "fireRate": 2,
     "damage": 1,
     "maxCount": 500
+  },
+  "crowd": {
+    "seekRate": 9,
+    "separation": {
+      "radius": 0.2,
+      "force": 4,
+      "maxPush": 2
+    },
+    "bodyRadius": 0.09,
+    "maxSpeed": 3.5,
+    "rejoinSpeed": 8,
+    "leaderSpring": 30,
+    "leaderSpeed": 24,
+    "chainStepsPerRow": 0.45,
+    "shove": {
+      "back": 4,
+      "side": 2.5,
+      "reach": 2
+    },
+    "groupCap": 4,
+    "arch": {
+      "depth": 0.5,
+      "legHalf": 0.12
+    }
   },
   "projectiles": {
     "speed": 24,
@@ -145,7 +166,13 @@
     "weaponSlowWorth": 0.2,
     "streamLookahead": 44,
     "weaponLayoutMax": 24,
-    "wallCommitDistance": 6
+    "wallCommitDistance": 6,
+    "human": {
+      "reactionSteps": 15,
+      "swipeSpeed": 6,
+      "laneAccuracy": 0.7,
+      "wallReach": 3
+    }
   },
   "input": {
     "sensitivity": 6

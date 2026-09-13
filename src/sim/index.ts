@@ -62,6 +62,18 @@ export {
 } from './formation';
 export type { FormationOffset } from './formation';
 export { enemyBalance, enemyFootprint, enemyHalfWidth } from './enemies';
+/**
+ * The crowd (D43, D44). Render draws `state.crowd` directly and reads the flag
+ * bits for its animations; `createCrowdState` is for a caller that builds a
+ * `RunState` by hand and wants the field to exist.
+ */
+export { createCrowdState } from './crowdState';
+export {
+  CROWD_JUST_SPAWNED,
+  CROWD_ON_FENCE,
+  CROWD_REJOINING,
+  CROWD_SHOVED,
+} from './types';
 export { effectiveSpeed, overlapShare } from './contact';
 export { stompKills } from './boss';
 export { applyGateGrowth, clampCount, countAfterGate, gateCap, isShootable } from './gates';
@@ -80,12 +92,14 @@ export type { BotKind } from './bots';
 export { mulberry32, randomInt, randomRange, weightedIndex } from './rng';
 export type { Rng } from './rng';
 export type {
+  CrowdState,
   EnemyKind,
   EnemyState,
   FamiliarState,
   GateDef,
   GateKind,
   GateState,
+  GroupState,
   Lane,
   ProjectileState,
   RunState,

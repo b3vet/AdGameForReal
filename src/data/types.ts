@@ -49,18 +49,74 @@ export interface BossBalance extends EnemyBalance {
 export interface Balance {
   squad: {
     runSpeed: number;
-    lateralSpeed: number;
-    /** Ceiling on the lateral spring's acceleration, in m/s² (D37). */
-    lateralAccel: number;
-    /**
-     * The lateral spring's natural frequency in rad/s (D37). Critically damped,
-     * so this is the whole shape of the motion: the squad covers its error in
-     * about `3 / lateralSpring` seconds when neither cap bites.
-     */
-    lateralSpring: number;
     fireRate: number;
     damage: number;
     maxCount: number;
+  };
+  /**
+   * The crowd (D43): every unit is an agent that seeks its slot, keeps its
+   * distance, slides along fences, funnels through arches and is shoved by
+   * enemies, and the leader those slots hang from. See `src/sim/crowd.ts`.
+   *
+   * Milestone 6 moved the head's own motion here from `squad.lateralSpeed`,
+   * `lateralAccel` and `lateralSpring` (D37): the head is on the finger now,
+   * so it is a stiffer spring with no acceleration cap, and it is the crowd's
+   * own forces rather than the head's easing that make the motion read as
+   * people.
+   */
+  crowd: {
+    /**
+     * How fast a unit closes the gap to its slot, in reciprocal seconds. The
+     * seek is first order — the unit's velocity is its slot's velocity plus
+     * this times the error — so there is no steady-state lag behind a column
+     * running at `squad.runSpeed` and no wind-up to oscillate.
+     */
+    seekRate: number;
+    separation: {
+      /** Neighbours closer than this push each other apart, in metres. */
+      radius: number;
+      /** Push at full overlap, in m/s; it falls linearly to zero at `radius`. */
+      force: number;
+      /** Ceiling on the whole step's separation push, in m/s. */
+      maxPush: number;
+    };
+    /** Half a unit's shoulders: what a fence, an arch leg and a spawn clear. */
+    bodyRadius: number;
+    /** Ceiling on a unit's speed *relative to its slot*, in m/s. */
+    maxSpeed: number;
+    /** The same for a unit flagged `REJOINING`, which has ground to make up. */
+    rejoinSpeed: number;
+    /** The head's spring, in rad/s. Critically damped, no acceleration cap. */
+    leaderSpring: number;
+    /** Ceiling on the head's own speed, in m/s. */
+    leaderSpeed: number;
+    /**
+     * Steps of delay per row of the column: row `r` aims at where the leader
+     * was `r * chainStepsPerRow` steps ago, so a turn travels down the column
+     * and the tail whips (D43).
+     */
+    chainStepsPerRow: number;
+    shove: {
+      /** Metres per second a fully overlapping body pushes a unit backward... */
+      back: number;
+      /** ...and sideways, away from the body's own `x`. */
+      side: number;
+      /**
+       * Metres of `z` a body's shove reaches beyond its own footprint. Contact
+       * resolves at `enemies.contactDistance`, which is far wider than a body
+       * is deep, so without this a body would kill on the step it first touched
+       * anybody and the crowd would never be seen to give ground.
+       */
+      reach: number;
+    };
+    /** Most groups at once, the main column included (D44). */
+    groupCap: number;
+    arch: {
+      /** Metres of `z` an arch's legs block at a gate row. */
+      depth: number;
+      /** Half the width of one leg, in metres. */
+      legHalf: number;
+    };
   };
   projectiles: {
     /** Fallback speed; a staff's own `projectileSpeed` overrides it. */
@@ -173,7 +229,7 @@ export interface Balance {
      *
      * The pair is what makes a wall a decision rather than a nudge (Milestone 4
      * Phase C). The fence used to stop a whole `gateClearance` short with the
-     * clamp ending on it, and at `squad.lateralSpeed` over `squad.runSpeed` the
+     * clamp ending on it, and at `crowd.leaderSpeed` over `squad.runSpeed` the
      * squad buys 1.6 m of lane per metre of road — so it crossed the boundary
      * it had been held behind long before the panels and the wall changed
      * nothing. Now the choice is settled at the row and only the fence's last
@@ -373,6 +429,33 @@ export interface Balance {
      * sideways faster than it runs.
      */
     wallCommitDistance: number;
+    /** The human-like bot the difficulty bands are measured on (D45). */
+    human: {
+      /**
+       * Steps the bot's hand is behind the board. Fifteen at the sim's fixed
+       * 1/60 s step is the 250 ms of the plan: long enough that a gate value
+       * seen at the last moment is acted on after it, short enough that the
+       * player is clearly playing rather than watching.
+       */
+      reactionSteps: number;
+      /**
+       * How fast its finger crosses the road, in metres per second. Below the
+       * speed the head itself can move, so the limit is the thumb rather than
+       * the crowd: a full lane takes about a third of a second to ask for and
+       * a little longer than that to arrive.
+       */
+      swipeSpeed: number;
+      /** How often it reads the row right; the rest of the time it takes the
+       *  second-best lane. Seven in ten is the plan's "decent player". */
+      laneAccuracy: number;
+      /**
+       * How far ahead of a wall's approach zone it notices the fence, in metres
+       * of road. Well inside greedy's `wallCommitDistance`: a player watching
+       * their own crowd starts the crossing late, and the units still outside
+       * the line when the stretch begins to hold are cut off (D44).
+       */
+      wallReach: number;
+    };
   };
   input: {
     /** Road meters travelled for one full screen width of drag. */

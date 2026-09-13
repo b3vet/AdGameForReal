@@ -13,8 +13,8 @@
 
 import type { Burn } from './burn';
 import { killEnemy, unitsOf } from './contact';
+import type { CrowdSim } from './crowd';
 import type { EventBuffer } from './events';
-import { formationOffsets } from './formation';
 import { applyGateGrowth } from './gates';
 import { laneCenter, laneOf } from './lanes';
 import { WeaponEffects } from './effects';
@@ -31,6 +31,8 @@ export class Firing {
   private readonly events: EventBuffer;
   private readonly targets: TargetList;
   private readonly streams: Streams;
+  /** Every unit as an agent: a shot leaves the person who fired it (D43). */
+  private readonly crowd: CrowdSim;
   /** Called when a shot kills the boss, so `Run` can end the run in one place. */
   private readonly onBossKilled: () => void;
 
@@ -64,6 +66,7 @@ export class Firing {
     events: EventBuffer,
     targets: TargetList,
     streams: Streams,
+    crowd: CrowdSim,
     onBossKilled: () => void,
     mods: PlayerMods = NO_MODS,
     burn: Burn | null = null,
@@ -72,6 +75,7 @@ export class Firing {
     this.events = events;
     this.targets = targets;
     this.streams = streams;
+    this.crowd = crowd;
     this.onBossKilled = onBossKilled;
     this.mods = mods;
     this.burn = burn;
@@ -150,26 +154,30 @@ export class Firing {
 
   fire(state: RunState, dt: number): void {
     const squad = state.squad;
-    const count = squad.count;
-    if (count <= 0) return;
+    // The people actually standing on the road, stragglers included: a group
+    // cut off behind a fence goes on firing down its own lane (D44).
+    const live = this.crowd.liveCount;
+    if (live <= 0) return;
 
     this.shotAccumulator += this.shotRate * dt;
     const shots = Math.floor(this.shotAccumulator);
     if (shots <= 0) return;
     this.shotAccumulator -= shots;
 
-    const offsets = formationOffsets(count, squad.formationWidth, this.balance);
+    const agents = this.crowd.crowd;
     this.laneBatch[0] = 0;
     this.laneBatch[1] = 0;
     this.laneBatch[2] = 0;
 
     for (let s = 0; s < shots; s++) {
-      const offset = offsets[this.fireCursor % count];
+      // Round robin over the crowd, so every unit fires in its turn and a shot
+      // leaves the slot its firer is actually standing in, not a slot the
+      // formation says it should be in (D43).
+      const unit = this.crowd.liveAt(this.fireCursor % live);
       this.fireCursor = (this.fireCursor + 1) % 1000003;
-      if (offset === undefined) continue;
 
-      const x = squad.x + offset.x;
-      const z = squad.z + offset.z;
+      const x = agents.x[unit] ?? squad.x;
+      const z = agents.z[unit] ?? squad.z;
       const id = this.free.pop();
       if (id === undefined) {
         // Cap reached: the rest of this step's shots become hitscan, batched per

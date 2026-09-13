@@ -29,7 +29,12 @@ import {
 } from '../player';
 import type { PlayerState } from '../player';
 
-function rich(coins = 100_000): PlayerState {
+/**
+ * A purse nothing on the shelf can outrun. Ten levels of one upgrade is the
+ * dearest thing the Academy sells, and D46 raised the ladder past a hundred
+ * thousand coins, so the default is a million.
+ */
+function rich(coins = 1_000_000): PlayerState {
   const player = defaultPlayer();
   player.coins = coins;
   return player;
@@ -79,7 +84,7 @@ describe('staffs', () => {
     const unlock = staffCost(player, 'storm');
     const unlocked = buyStaff(player, 'storm');
     expect(unlocked?.staffs.storm).toEqual({ unlocked: true, tier: 1 });
-    expect(unlocked?.coins).toBe(100_000 - (unlock ?? 0));
+    expect(unlocked?.coins).toBe(1_000_000 - (unlock ?? 0));
     // Buying a staff is also choosing it.
     expect(unlocked?.selectedStaff).toBe('storm');
     player = unlocked ?? player;

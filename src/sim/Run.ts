@@ -5,20 +5,31 @@
  * `Math.random`, no `Date`. `state` is the live object the sim mutates, not a
  * copy — render reads it every frame and must never write to it.
  *
- * The heavy phases live next door: `firing.ts` owns the shot clock, projectiles
- * and weapon effects, `contact.ts` owns blocks walking in, `boss.ts` owns the
- * arena fight. `Run` is the order they happen in and the one place the run ends.
+ * The heavy phases live next door: `crowd.ts` owns the units as agents,
+ * `firing.ts` owns the shot clock, projectiles and weapon effects, `contact.ts`
+ * owns blocks walking in, `boss.ts` owns the arena fight, and `crossings.ts`
+ * owns which group takes which gate. `Run` is the order they happen in and the
+ * one place the run ends.
+ *
+ * Milestone 6 moved every path that changes the count through the crowd (D43):
+ * a gate spawns people at the back of the group it resolved for or takes them
+ * off its tail, a block or a body kills the people it landed on, and a stomp
+ * kills whoever was standing under the foot. `squad.count` is the total alive
+ * and the crowd maintains it, so the plaque, the bots and the balance model
+ * read exactly what they always did.
  */
 
 import { BossController } from './boss';
 import { advanceEnemies } from './contact';
 import type { Burn } from './burn';
+import { Crossings } from './crossings';
+import type { GateSink } from './crossings';
+import { CrowdSim } from './crowd';
 import { EventBuffer } from './events';
 import type { Familiar } from './familiar';
 import type { Firing } from './firing';
-import { availableWidth, clampLimit, openRoadWidth, wallKeep } from './formation';
-import { clampCount, countAfterGate } from './gates';
-import { laneOf } from './lanes';
+import { availableWidth, clampLimit, openRoadWidth } from './formation';
+import { steerLeader } from './leader';
 import type { LevelDef } from './level';
 import { buildLoadout } from './loadout';
 import { playerMods } from './player';
@@ -28,7 +39,6 @@ import { Streams } from './streams';
 import { TargetList } from './targeting';
 import type {
   EnemyState,
-  GateState,
   RunState,
   RunStatus,
   SimEvent,
@@ -36,9 +46,8 @@ import type {
   UnitLossReason,
   WeaponId,
 } from './types';
-import { steer } from './steering';
-import { clampToWalls, wallLimits, wallX } from './walls';
-import type { WallDef, WallLimits } from './walls';
+import { wallX } from './walls';
+import type { WallDef } from './walls';
 import { weaponDef, weaponOf } from './weapons';
 import type { Balance, PlayerState } from '@/data/types';
 
@@ -47,6 +56,16 @@ const FIXED_DT = 1 / 60;
 
 /** Guards against a huge `dt` after a tab stall turning into a spiral of steps. */
 const MAX_STEPS_PER_TICK = 8;
+
+/**
+ * Steps a fence keeps its `wallBlocked` latch after the last shoulder comes off
+ * it. A crowd leaning on a fence touches it in bursts — a group is cut in two,
+ * both halves settle, and for a step or two nobody is quite against the line —
+ * and without this every burst would be a fresh thud. A quarter of a second is
+ * long enough to bridge the settling and short enough that walking into the
+ * *next* stretch still sounds.
+ */
+const WALL_LATCH_STEPS = 15;
 
 export class Run {
   private readonly level: LevelDef;
@@ -58,30 +77,57 @@ export class Run {
   private readonly burn: Burn | null;
   private readonly streams: Streams;
   private readonly boss = new BossController();
+  private readonly crowd: CrowdSim;
+  private readonly crossings: Crossings;
 
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
   private accumulator = 0;
-  private nextRow = 0;
 
   /** The player's upgrades, resolved once (D35). `NO_MODS` when there is none. */
   private readonly mods: PlayerMods;
   private readonly walls: readonly WallDef[];
   private readonly familiar: Familiar | null;
 
-  /** Re-used by the wall clamp every step: the sim must not allocate per frame. */
-  private readonly limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
-
-  /** Wall currently pushing the squad, so `wallBlocked` fires on the edge only. */
+  /** Wall currently holding units, so `wallBlocked` fires on the edge only. */
   private blockedWall = -1;
 
+  /** Steps since a unit was last held by `blockedWall`. See `WALL_LATCH_STEPS`. */
+  private blockedIdle = 0;
+
   /** Bound once, not per frame: `contact.ts` calls back into the loss check. */
-  private readonly hitSquad = (amount: number, reason: UnitLossReason): void => {
-    this.removeUnits(amount, reason);
+  private readonly hitSquad = (
+    amount: number,
+    reason: UnitLossReason,
+    x: number,
+    z: number,
+    group: number,
+  ): void => {
+    this.loseUnits(amount, reason, x, z, group);
   };
 
   /** The same, for the stream a leaked body belonged to. */
   private readonly onLeak = (enemy: EnemyState): void => {
     this.streams.noteLeaked(enemy);
+  };
+
+  /**
+   * What a gate does once `Crossings` has decided whose it was. Built once,
+   * not per frame: the sim must not allocate a closure in a step (CLAUDE.md).
+   */
+  private readonly sink: GateSink = {
+    resize: (group: number, wanted: number): void => {
+      const held = this.crowd.groups[group]?.count ?? 0;
+      const target = Math.max(0, Math.floor(wanted));
+      if (target > held) this.crowd.spawn(group, target - held);
+      else if (target < held) this.crowd.killBack(group, held - target);
+      this.runState.squad.count = this.crowd.total;
+    },
+    swapWeapon: (id: WeaponId | undefined): void => {
+      this.swapWeapon(id);
+    },
+    wiped: (): void => {
+      this.finish('lost');
+    },
   };
 
   /**
@@ -101,7 +147,7 @@ export class Run {
 
     const staff = this.mods.staff;
     const squad: SquadState = {
-      count: level.startCount,
+      count: 0,
       x: 0,
       targetX: 0,
       z: 0,
@@ -116,6 +162,9 @@ export class Run {
     };
 
     const world = buildWorld(level, balance);
+    this.crowd = new CrowdSim(balance, this.walls);
+    this.crossings = new Crossings(level, balance, this.crowd.groups.length, this.sink);
+    squad.count = this.crowd.spawn(0, level.startCount);
 
     this.runState = {
       levelIndex: level.index,
@@ -128,11 +177,13 @@ export class Run {
       streams: [],
       projectiles: [],
       boss: world.boss,
-      peakCount: level.startCount,
-      survivors: level.startCount,
+      peakCount: squad.count,
+      survivors: squad.count,
       arenaZ: level.arenaZ,
       familiar: null,
       walls: this.walls,
+      crowd: this.crowd.crowd,
+      groups: this.crowd.groups,
     };
 
     this.streams = new Streams(balance, this.events, this.targets, level.seed, world.nextId);
@@ -142,9 +193,17 @@ export class Run {
     this.streams.countStanding(world.enemies);
     this.targets.build(this.runState, balance);
 
-    const loadout = buildLoadout(balance, this.events, this.targets, this.streams, this.mods, () => {
-      this.finish('won');
-    });
+    const loadout = buildLoadout(
+      balance,
+      this.events,
+      this.targets,
+      this.streams,
+      this.mods,
+      () => {
+        this.finish('won');
+      },
+      this.crowd,
+    );
     this.firing = loadout.firing;
     this.burn = loadout.burn;
     this.familiar = loadout.familiar;
@@ -158,27 +217,21 @@ export class Run {
     return this.runState;
   }
 
-  /** Clamped to the road; the squad eases toward it through the lateral spring. */
+  /** Clamped to the road; the head eases onto it through the leader spring. */
   setTargetX(x: number): void {
     const limit = this.clampLimit();
     this.runState.squad.targetX = Math.min(Math.max(x, -limit), limit);
   }
 
   /**
-   * How far from the centre line the squad's *centre* may stand.
+   * How far from the centre line the head may stand: the road less the crowd's
+   * own half-width, never wider than `road.clampX` and never tighter than
+   * `road.clampMin` (D37, D42).
    *
-   * Tapered by the crowd's own half-width, so a squad hugging the edge still
-   * stands on the road instead of overhanging the grass:
-   * `road.halfWidth - halfWidth(count)`, never wider than the plan's
-   * `road.clampX` and never tighter than `road.clampMin`.
-   *
-   * With the lane column (D42) the taper and the floor stopped fighting. The
-   * crowd is at most half a lane wide, so the taper bottoms out at 2.2 m: the
-   * centre reaches either side lane's *centre* at every count, the outermost
-   * unit stops exactly on the verge, and the floor never bites. Through
-   * Milestone 5 Phase B the crowd was the whole road wide, the taper asked for
-   * 0.8 m and the floor had to answer 1.2 m to keep a side gate reachable at
-   * all — which is the 0.4 m of overhang that entry recorded.
+   * The road is the *only* thing that bounds it now (D43). A wall used to clamp
+   * it as well, which is what made a fence a rail the finger slid along; the
+   * fence stops the units instead, and whoever is on the wrong side of it when
+   * it starts to hold is cut off as a straggler (D44).
    */
   private clampLimit(): number {
     const squad = this.runState.squad;
@@ -216,38 +269,28 @@ export class Run {
 
     state.time += dt;
 
-    // The band the crowd fills, walls included, before anything reads its
-    // width: the formation narrows as the squad arrives at a fence (D37).
+    // The band the crowd fills before anything reads its width.
     squad.formationWidth = availableWidth(state, this.balance);
 
     // Re-clamped every step, not only when the player steers: the limit moves
-    // as the crowd grows and shrinks (see `clampLimit`), and a wall narrows it
-    // further for as long as the squad is inside one (D32). The fence is held
-    // off the crowd's outermost unit rather than off its centre, so a crowd
-    // metres wide never stands through one.
-    const limits = wallLimits(
-      this.walls,
-      squad.z,
-      squad.x,
-      this.clampLimit(),
-      this.limits,
-      this.balance,
-      wallKeep(squad.count, squad.formationWidth, this.balance),
-    );
-    const wanted = squad.targetX;
-    squad.targetX = clampToWalls(wanted, limits);
-    this.noteWall(limits.wall, wanted !== squad.targetX, squad.z);
-
-    steer(squad, limits, this.balance, dt);
+    // as the crowd grows and shrinks (see `clampLimit`).
+    const limit = this.clampLimit();
+    squad.targetX = Math.min(Math.max(squad.targetX, -limit), limit);
+    steerLeader(squad, this.balance, dt);
 
     // The squad stops at the arena to fight the boss.
     if (squad.z < state.arenaZ) {
       squad.z = Math.min(state.arenaZ, squad.z + this.level.runSpeed * dt);
     }
 
+    // Leaders, stragglers, forces: every unit moves here and nowhere else.
+    this.crowd.step(state, dt);
+    squad.count = this.crowd.total;
+    this.noteWall(this.crowd.fenceWall, squad.z);
+
     // Every phase can end the run, and `runEnded` is the last event of its
     // tick: nothing may fire, walk or stomp after the run is over.
-    this.applyCrossedRows();
+    this.crossings.update(state, this.crowd, this.events);
     if (state.status !== 'running') return;
 
     // Spawn before the lists are refreshed, so a body born this step is sorted
@@ -284,18 +327,19 @@ export class Run {
   }
 
   /**
-   * `wallBlocked` on the edge only: the clamp bites on every step the player
-   * holds a finger against a fence, and a sound per step is a buzz.
+   * `wallBlocked` on the edge only: a fence holds units on every step the
+   * player leans the column against it, and a sound per step is a buzz.
+   *
+   * It is the *crowd* that reports this now rather than the head's own clamp
+   * (D43): the head is never blocked, so the event is exactly what it says —
+   * somebody's shoulder is against a fence.
    */
-  private noteWall(wall: number, pushed: boolean, z: number): void {
-    // Both ways out arm the edge again. A push with no wall behind it is the
-    // crowd's own taper biting — the clamp narrows as the squad grows — and
-    // leaving the latch set there would swallow the *next* bump against the
-    // fence the squad was last held by.
-    if (!pushed || wall < 0) {
-      this.blockedWall = -1;
+  private noteWall(wall: number, z: number): void {
+    if (wall < 0) {
+      if (++this.blockedIdle >= WALL_LATCH_STEPS) this.blockedWall = -1;
       return;
     }
+    this.blockedIdle = 0;
     if (this.blockedWall === wall) return;
     this.blockedWall = wall;
     const def = this.walls[wall];
@@ -303,56 +347,6 @@ export class Run {
     // The event carries the fence's own x, not the squad's: that is where the
     // push is seen and where a sound should come from.
     this.events.wallBlocked(def.boundary, wallX(def.boundary, this.balance.road.laneWidth), z);
-  }
-
-  /** Exactly one gate applies per row: the one whose lane holds the squad now. */
-  private applyCrossedRows(): void {
-    const state = this.runState;
-    const rows = this.level.rows;
-
-    while (this.nextRow < rows.length) {
-      const row = rows[this.nextRow];
-      if (row === undefined || state.squad.z < row.z) break;
-
-      const lane = laneOf(state.squad.x, this.balance.road.laneWidth);
-      const rowIndex = this.nextRow;
-      this.nextRow++;
-
-      for (const gate of state.gates) {
-        if (gate.rowIndex !== rowIndex || gate.passed) continue;
-        gate.passed = true;
-        if (gate.lane === lane) this.applyGate(gate);
-      }
-      if (state.status !== 'running') return;
-    }
-  }
-
-  private applyGate(gate: GateState): void {
-    const squad = this.runState.squad;
-    const before = squad.count;
-
-    if (gate.kind === 'fireRate') {
-      squad.fireRateBonus += gate.value;
-      this.events.gatePassed(gate.id, gate.kind, gate.value, before, before);
-      return;
-    }
-
-    if (gate.kind === 'weapon') {
-      this.swapWeapon(gate.weaponId);
-      this.events.gatePassed(gate.id, gate.kind, gate.value, before, before);
-      return;
-    }
-
-    const after = clampCount(countAfterGate(gate.kind, gate.value, before), this.balance);
-    squad.count = after;
-    // Recorded here rather than only at the end of the step: a row that grows
-    // the squad and a row that wipes it can land in the same step, and the peak
-    // the player reached is part of their result either way.
-    if (after > this.runState.peakCount) this.runState.peakCount = after;
-    this.events.gatePassed(gate.id, gate.kind, gate.value, before, after);
-    if (after > before) this.events.unitsGained(after - before);
-    else if (after < before) this.events.unitsLost(before - after, 'gate');
-    if (after <= 0) this.finish('lost');
   }
 
   /** A staff gate swaps the squad's staff for the rest of the run. */
@@ -381,24 +375,33 @@ export class Run {
     );
     if (step.activated) this.events.bossActivated(boss.id);
     if (step.enraged) this.events.bossEnraged(boss.id);
+    // Whoever is standing nearest the boss, whichever group they are in: its
+    // reach and its foot do not know about fences.
     if (step.contactKills > 0) {
-      this.removeUnits(step.contactKills, 'contact');
+      this.loseUnits(step.contactKills, 'contact', boss.x, boss.z, -1);
       if (state.status !== 'running') return;
     }
     if (step.stomped) {
       this.events.bossStomp(boss.x, boss.z);
-      this.removeUnits(step.stompKills, 'stomp');
+      this.loseUnits(step.stompKills, 'stomp', boss.x, boss.z, -1);
     }
   }
 
-  private removeUnits(amount: number, reason: UnitLossReason): void {
+  /** Takes the units standing nearest `(x, z)`, in `group` or in any of them. */
+  private loseUnits(
+    amount: number,
+    reason: UnitLossReason,
+    x: number,
+    z: number,
+    group: number,
+  ): void {
     const squad = this.runState.squad;
     const before = squad.count;
-    const after = clampCount(before - amount, this.balance);
-    if (after === before) return;
-    squad.count = after;
-    this.events.unitsLost(before - after, reason);
-    if (after <= 0) this.finish('lost');
+    const killed = this.crowd.killNearest(group, amount, x, z);
+    if (killed <= 0) return;
+    squad.count = this.crowd.total;
+    this.events.unitsLost(before - squad.count, reason);
+    if (squad.count <= 0) this.finish('lost');
   }
 
   private finish(status: RunStatus): void {
