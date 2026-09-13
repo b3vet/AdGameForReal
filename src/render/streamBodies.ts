@@ -24,11 +24,13 @@ import { usesRagdoll } from './deathStyle';
 import { gateCoversLabel } from './labelClearance';
 import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
+import { ShadowLayer } from './shadows';
 import {
   GRUNT_SCALE,
   LABEL_BEHIND,
   LABEL_RANGE,
   POOL,
+  SHADOW,
   STREAM_LABEL_COLOR,
   STREAM_LABEL_HEIGHT,
   STREAM_LABEL_MIN,
@@ -102,8 +104,18 @@ export class StreamBodies {
    * at quality 0 there is no Havok, so the bodies the ragdoll rule would have
    * thrown have to fall over here instead or a tenth of every stream simply
    * blinks out.
+   *
+   * `shadows` is the scene's blob layer: a live body gets a contact patch, a
+   * dying one does not — it is falling over, and the disc under it would be the
+   * one thing in the frame still standing still.
    */
-  write(crowd: Crowd, base: number, state: RunState, physicsQuality: number): number {
+  write(
+    crowd: Crowd,
+    base: number,
+    state: RunState,
+    physicsQuality: number,
+    shadows: ShadowLayer | null,
+  ): number {
     const time = state.time;
     const squadZ = state.squad.z;
     const ragdolls = physicsQuality > 0;
@@ -118,6 +130,10 @@ export class StreamBodies {
 
       if (enemy.alive) {
         this.writeWalking(crowd, base + written, enemy);
+        if (shadows !== null) {
+          const fade = ShadowLayer.fade(enemy.z - squadZ);
+          if (fade > 0) shadows.add(enemy.x, enemy.z, SHADOW.grunt, fade);
+        }
         written++;
         continue;
       }

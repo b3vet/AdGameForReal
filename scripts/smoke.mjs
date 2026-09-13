@@ -2,10 +2,11 @@
  * Smoke test: build, serve, drive the game in headless Chromium, screenshot.
  *
  * This file is the plan: which runs are played and what each frame is waiting
- * for. Three files sit behind it — `./smoke-browser.mjs` is the plumbing (the
+ * for. Four files sit behind it — `./smoke-browser.mjs` is the plumbing (the
  * static server, Chromium, the page, the blank-frame check), `./smoke-run.mjs`
- * drives one scripted run and asserts what a run owes, and `./smoke-stress.mjs`
- * drives the performance scene and its render-cost tripwire.
+ * drives one scripted run and asserts what a run owes, `./smoke-stress.mjs`
+ * drives the performance scene and its render-cost tripwire, and
+ * `./smoke-hero.mjs` takes the hero set at the phone's own pixel ratios.
  *
  * Proves the whole pipeline end to end — that the bundle loads, that Babylon
  * gets a WebGL context under SwiftShader, and that the frames are not blank.
@@ -22,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
 import { launchBrowser, openPage, serveDist } from './smoke-browser.mjs';
+import { driveHeroSet } from './smoke-hero.mjs';
 import { driveRun } from './smoke-run.mjs';
 import { driveStress } from './smoke-stress.mjs';
 
@@ -165,6 +167,13 @@ async function main() {
     } finally {
       await stressPage.context().close();
     }
+
+    // Last, and in its own file: the frames the milestone is *judged* on, at
+    // the pixel ratios a phone renders at (`./smoke-hero.mjs`). Everything
+    // above is an assertion with a picture attached; this is the picture.
+    written.push(
+      ...(await driveHeroSet(browser, `http://127.0.0.1:${String(port)}/`, OUT_DIR, failures, openPage)),
+    );
   } finally {
     await browser.close();
     await new Promise((resolve) => {

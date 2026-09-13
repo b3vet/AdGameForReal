@@ -26,6 +26,7 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
 import { loadCrowds } from './models';
+import type { ShadowLayer } from './shadows';
 import { UnitFlock } from './squadFlock';
 import {
   ADVANCE_SMOOTHING,
@@ -46,6 +47,7 @@ import {
   POOL,
   POP_DURATION,
   POP_STRETCH,
+  SHADOW,
   STORM_COLOR,
   clipSpeed,
   crowdScale,
@@ -186,7 +188,13 @@ export class SquadView {
     this.bounce = GATE_BOUNCE_DURATION;
   }
 
-  update(squad: SquadState, arenaZ: number, dt: number): void {
+  /**
+   * `shadows` is the scene's one blob layer (`./shadows.ts`), opened by the
+   * frame before this is called. The crowd takes a block of slots up front and
+   * writes `base + i` as it places each unit, so five hundred contact patches
+   * cost one reservation and no allocation at all.
+   */
+  update(squad: SquadState, arenaZ: number, dt: number, shadows: ShadowLayer | null): void {
     this.setWeapon(weaponOf(squad));
     const crowd = this.crowds.get(this.active);
     if (crowd === undefined) return;
@@ -213,6 +221,12 @@ export class SquadView {
         : Math.sin((1 - this.bounce / GATE_BOUNCE_DURATION) * Math.PI) * GATE_BOUNCE_HEIGHT;
     // The idle crowd sways; a running one is already in motion.
     const swaying = !this.advancing && !this.cheering && !inArena;
+    // One block for the whole crowd, claimed before the loop: a shared buffer
+    // with several writers needs an allocator, and this is it (`./shadows.ts`).
+    // -1 means the buffer is full, and a crowd with no blobs is the one thing
+    // here that may quietly not happen.
+    const shadowBase = shadows === null ? -1 : shadows.reserve(count);
+    const shadowRadius = SHADOW.mage * crowdScaleNow;
 
     for (let i = 0; i < count; i++) {
       const offset = offsets[i];
@@ -237,11 +251,21 @@ export class SquadView {
 
       const sway = swaying ? Math.sin(this.swayPhase * IDLE_SWAY_RATE * 6.283 + i * 0.7) : 0;
       const animation = this.animationFor(i, inArena);
+      const drawnX = this.flock.drawnX(i, squad.x + offset.x);
+      const drawnZ = this.flock.drawnZ(i, squad.z + offset.z);
+      // Under the *drawn* position, never the slot: the blob is the contact
+      // patch of the mage the player is watching, and the flock lags the
+      // formation by up to a quarter of a metre on a turn. The pop's own scale
+      // rides in it too, so a recruit's shadow grows with it.
+      if (shadows !== null && shadowBase >= 0) {
+        const grown = crowdScaleNow > 0 ? scale / crowdScaleNow : 1;
+        shadows.setInstance(shadowBase + i, drawnX, drawnZ, shadowRadius * grown, 1);
+      }
       crowd.setInstance(
         i,
-        this.flock.drawnX(i, squad.x + offset.x),
+        drawnX,
         hop + sway * IDLE_SWAY_LIFT,
-        this.flock.drawnZ(i, squad.z + offset.z),
+        drawnZ,
         yawOf(i) + sway * IDLE_SWAY_YAW + this.flock.leanOf(i),
         scale * MAGE_SCALE,
         animation,

@@ -28,6 +28,7 @@ import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
 import { loadCrowd } from './models';
 import { RingPool } from './rings';
+import { ShadowLayer } from './shadows';
 import { StreamBodies } from './streamBodies';
 import {
   ENEMY_COLOR,
@@ -219,14 +220,20 @@ export class EnemyView {
     return false;
   }
 
-  update(state: RunState, dt: number): void {
+  /**
+   * `shadows` is the scene's blob layer, already opened by the frame. Every
+   * skeleton on the road gets a contact patch: the blocks' through
+   * `writeCluster`, the rivers' through `StreamBodies.write` (D38, wired here
+   * in Phase E).
+   */
+  update(state: RunState, dt: number, shadows: ShadowLayer | null): void {
     this.frame++;
     this.lastState = state;
     const squadZ = state.squad.z;
     // Where the camera sits this frame, which is what turns metres of road into
     // pixels for `gateCrowdsLabel`. Hoisted out of the loop and written into one
     // re-used object: one rig serves every block and every stream on screen.
-    const view = setLabelView(this.view, squadZ, state.squad.count);
+    const view = setLabelView(this.view, squadZ, state.squad.count, state.squad.formationWidth);
 
     const grunts = this.grunts;
     const brutes = this.brutes;
@@ -251,7 +258,7 @@ export class EnemyView {
       const crowd = enemy.kind === 'brute' ? brutes : grunts;
       if (crowd === null) continue;
       const base = enemy.kind === 'brute' ? bruteCount : gruntCount;
-      const written = writeCluster(crowd, base, slot, enemy.active, -1);
+      const written = writeCluster(crowd, base, slot, enemy.active, -1, shadows, ShadowLayer.fade(ahead));
       if (enemy.kind === 'brute') bruteCount += written;
       else gruntCount += written;
     }
@@ -269,7 +276,9 @@ export class EnemyView {
         const crowd = slot.kind === 'brute' ? brutes : grunts;
         if (crowd === null) continue;
         const base = slot.kind === 'brute' ? bruteCount : gruntCount;
-        const written = writeCluster(crowd, base, slot, true, slot.dying);
+        // A dying block's blob goes with it: the bodies are falling over, and a
+        // full-strength disc under a corpse outlives the corpse.
+        const written = writeCluster(crowd, base, slot, true, slot.dying, shadows, 0);
         if (slot.kind === 'brute') bruteCount += written;
         else gruntCount += written;
       } else if (slot.seen !== this.frame) {
@@ -281,7 +290,7 @@ export class EnemyView {
     // The streams go into the minion crowd after every block, so both are one
     // draw call, and their floating counts into the shared glyph atlas.
     if (grunts !== null) {
-      gruntCount += this.streams.write(grunts, gruntCount, state, this.physicsQuality);
+      gruntCount += this.streams.write(grunts, gruntCount, state, this.physicsQuality, shadows);
     }
     this.streams.writeLabels(state.streams, squadZ, state.gates, view);
 

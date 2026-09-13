@@ -175,8 +175,10 @@ export function createPlaqueTexture(scene: Scene): DynamicTexture {
  * sideways through the pattern, so the axis it scrolls along has to wrap, while
  * the axis it does not scroll along is where the veil has to end — a shimmer
  * with a hard top edge is a lit rectangle hanging in an arch, which is exactly
- * what the first build of this looked like. The left and right edges need no
- * fade of their own: the arch's legs stand in front of them.
+ * what the first build of this looked like. The left and right edges are faded
+ * in the quad instead of here (`SHIMMER_EDGE_FADE`): a mask painted into a
+ * texture that scrolls travels with the pattern, and what has to disappear is
+ * the quad's own edge.
  */
 export function createShimmerTexture(scene: Scene): DynamicTexture {
   const size = 256;

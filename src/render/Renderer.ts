@@ -322,14 +322,14 @@ export class Renderer {
     // the buffer and this rewinds to just past them (`./shadows.ts`).
     views.shadows.begin();
 
-    views.squad.update(state.squad, state.arenaZ, dt);
+    views.squad.update(state.squad, state.arenaZ, dt, views.shadows);
     // The sprite batch is opened before anything writes into it and closed
     // after everything has: projectiles, their trails, impacts and flashes all
     // land in the same buffer and the same draw call.
     views.sprites.begin();
     views.projectiles.update(state.projectiles, weaponOf(state.squad), dt);
     views.gates.update(state, dt);
-    views.enemies.update(state, dt);
+    views.enemies.update(state, dt, views.shadows);
     views.boss.update(state.boss, state.squad.z, dt, this.timeScale(dt));
     views.effects.update(dt);
     // After the enemies, because both read positions the enemy view has just

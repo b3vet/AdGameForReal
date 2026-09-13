@@ -119,3 +119,39 @@
   `walls.load()` into the views' load so a slow load cannot miss the
   warm-up; label clearance should use the plaque height; unused theme
   constants; blob shadows for squad, streams and blocks.
+
+## 2026-09-13 — Phase E: integration, hero shots, builds (verified and committed)
+
+- Wiring: `SceneViews.load()` now awaits `road.load()` and `walls.load()`
+  so a slow texture or model load can no longer miss the shader warm-up;
+  blob shadows under the squad, the enemy streams and the blocks (one
+  thin-instanced disc for all of them); label clearance measures against
+  the plaque height instead of the old panel; the dead theme constants
+  from Milestone 3 are gone; the prop cap is derived from the road length
+  so a 440 m road stays dressed; `query.ts` describes the six rungs.
+- Camera: a depth-driven pull-back (back 1.15 × crowd depth capped at 8.4 m,
+  lift 0.38 × depth capped at 2.8 m) so the rear rows of a 500-unit crowd
+  stay inside the frame instead of running off the bottom.
+- Look: the cobble albedo was reading olive against the grass; it is cooled
+  in the fetch step (saturation 0.72, hue −14°). Tone mapping moved from
+  ACES to KHR PBR Neutral at exposure 1.185, the constant Phase A measured:
+  palette fidelity rms 11 of 255 (was 17). The gate shimmer fades at the
+  opening's edge instead of clipping. `scripts/swatch-check.mjs` keeps the
+  fidelity measurement runnable.
+- Hero set: `scripts/smoke-hero.mjs` runs last in the smoke and photographs
+  title, mid-run, a gate row close-up, boss, result, academy and yard at
+  pixel ratio 2 and 3 (14 frames in `artifacts/smoke/hero/`). The gate
+  close-up needs the sim slowed as the row comes into reach, so the debug
+  handle gained `setTurbo`.
+- Verified: typecheck 0 errors, lint clean, 316 tests, smoke PASS in
+  5 min 57 s (draw peaks 40 to 42, 0 shader compiles during play), hosted
+  11.0 MB and artifact 14.5 MB both PASS.
+- Tech lead frame review against the plan checklist: one palette (the
+  cobble, grass, gold frames and arcane blues read as one family now);
+  numbers readable on the plaques and blocks at both ratios; the road and
+  the arch gates have craft; the crowd stands in lines and is fully framed
+  at the boss; the long view shows the ridge and clouds; the HUD, Academy
+  and result read as game UI. Left for review: the stress scene still uses
+  the old camera rig, the widest crowd touches the frame edge at the
+  bottom on 360-wide portrait, and the smoke sits close to its 7 min
+  ceiling.

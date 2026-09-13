@@ -67,23 +67,34 @@ const KEY_INTENSITY = 0.6;
  * wisp are additive quads with emissive above 1 (`BOLT_GLOW_BOOST` and friends)
  * over a light stone road, and without a curve everything above 1 is the same
  * flat white — which is why Milestone 3 had to keep the boosts small and the
- * storm bolts still read as steam. A filmic curve rolls those off instead of
+ * storm bolts still read as steam. A tone curve rolls those off instead of
  * cutting them, so a hot core stays hot *and* keeps its hue.
  *
- * `EXPOSURE` is the calibration, not a brightness knob. ACES is a curve, so it
- * does not return what it is given: run the palette through it at exposure 1
- * and every role comes back 25 to 49 counts dark. 1.45 is the exposure that
- * minimises the error over all 43 roles (`./swatch.ts` measures it in a real
- * frame): mid-tones land within a few counts, the near-whites compress by up
- * to about 40, and the saturated cyan loses the most because the ACES matrix
- * desaturates — which is the curve doing its job, not a mistuning.
+ * ## Which curve (Milestone 5 Phase E)
+ *
+ * KHR PBR Neutral, not ACES. Both roll the highlights off; the difference is
+ * what they do to everything *below* them. ACES is a film emulation with a
+ * desaturating matrix in front of it, so a palette put through it comes back
+ * shifted — measured against `src/data/palette.json` through the real shader
+ * (`scripts/swatch-check.mjs`) it scores rms 17 of 255 with a worst channel of
+ * 40, and the error is concentrated exactly where this game lives: the saturated
+ * greens and cyans of the gate kinds and the near-white parchment of the UI.
+ * Neutral is built for the other errand — keep the colour, compress only what
+ * cannot be shown — and the same measurement gives rms 11 with a worst of 26.
+ * Side by side (`t6.png`, `academy.png`) the daylight is the same shot: the same
+ * sky, the same grass, the same haze on the horizon. The palette is simply the
+ * palette, which is what this milestone is about (plan, "Colors random").
+ *
+ * `EXPOSURE` is the calibration, not a brightness knob. A curve does not return
+ * what it is given: at exposure 1 every role comes back dark. 1.185 is what
+ * minimises the error over all 43 roles under Neutral, where ACES needed 1.45.
  *
  * `CONTRAST` at 1.1 is a gentle S applied after the gamma step, so it darkens
  * the road's shaded side and lifts the lit one without touching the middle.
  * The vignette is deliberately almost invisible: it is there to keep the eye
  * off the corners of a portrait frame, and anything stronger reads as a filter.
  */
-const EXPOSURE = 1.45;
+const EXPOSURE = 1.185;
 const CONTRAST = 1.1;
 const VIGNETTE_WEIGHT = 1.1;
 /** How far the vignette reaches in from the corners; higher is tighter. */
@@ -168,7 +179,7 @@ function applyToneMapping(scene: Scene): void {
   const image = scene.imageProcessingConfiguration;
   image.applyByPostProcess = false;
   image.toneMappingEnabled = true;
-  image.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+  image.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
   image.exposure = EXPOSURE;
   image.contrast = CONTRAST;
   image.vignetteEnabled = true;

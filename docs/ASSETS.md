@@ -229,6 +229,7 @@ stone with a toon ramp over it, and nothing in the scene would otherwise cast it
 |---|---|---|---|
 | `road_cobble.jpg` | 250 KB | ambientCG `PavingStones131`, 1K JPG, colour × AO, re-encoded to 1024 px at quality 0.75 | The road surface, one repeat every 2.2 m |
 | `field_grass.jpg` | 64 KB | ambientCG `Grass004`, 1K JPG, re-encoded to 512 px at quality 0.72 | The field either side, and the grass fringe that blends over the kerbs |
+| `road_cobble.jpg` — Milestone 5 Phase E colour grade | 249 KB | Same source and pipeline, with `saturate(0.72) hue-rotate(-14deg)` applied to the albedo before the occlusion is multiplied in (`AMBIENTCG_TEXTURES[].tint` in `scripts/fetch-assets.mjs`) | The paving is photographed with moss in its joints and averaged hue 53 at saturation 0.13, which read as olive once it covered the whole road (Phase C frame review). Graded it averages hue 40 at 0.11, beside `stone.base`'s 37, and keeps every bit of its photographic variation — a tint on the material would have multiplied the joints and the highlights by the same number |
 
 Everything else the road, the gates and the motes are painted with is drawn in
 code at boot (`src/render/artTextures.ts`): the plaque face, the gate shimmer,

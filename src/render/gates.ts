@@ -30,6 +30,7 @@ import {
   SHIMMER_ALPHA,
   SHIMMER_BURST_ALPHA,
   SHIMMER_BURST_SCALE,
+  SHIMMER_EDGE_FADE,
   SHIMMER_HEIGHT,
   SHIMMER_HIT_BOOST,
   SHIMMER_SCROLL,
@@ -140,6 +141,7 @@ export class GateView {
       'gateShimmer',
       createShimmerTexture(scene),
       GATE_DRAW_CAPACITY,
+      SHIMMER_EDGE_FADE,
     );
 
     const ornaments = createOrnaments(scene);

@@ -36,7 +36,7 @@ import { MenuStage } from './menus';
 import type { RoomId } from './player';
 import { QualityLadder } from './quality';
 import type { QualityRung } from './quality';
-import { clampLevel, parseQuery } from './query';
+import { MAX_TURBO, clampLevel, parseQuery } from './query';
 import type { QueryOptions } from './query';
 import { loadSave, setDebug, setMuted } from './save';
 import { RunSession } from './session';
@@ -168,6 +168,15 @@ export class App implements FrameHost, AppCommands {
   /** `'title' | 'playing' | 'result'` — the state machine's current node. */
   status(): AppPhase {
     return this.currentPhase;
+  }
+
+  /**
+   * Sim seconds per real second, changed after boot. Only the debug handle
+   * calls it (`ArcaneDebugHandle.setTurbo`); the game itself never does.
+   */
+  setTurbo(value: number): void {
+    if (!Number.isFinite(value)) return;
+    this.options.turbo = Math.min(MAX_TURBO, Math.max(1, value));
   }
 
   /** Jumps straight into a level, ignoring the save's unlock state. */
@@ -399,6 +408,9 @@ export class App implements FrameHost, AppCommands {
       setPlayer: (patch: unknown) => {
         this.academy.setPlayer(patch);
         this.repaintMenu();
+      },
+      setTurbo: (value: number) => {
+        this.setTurbo(value);
       },
     };
     globalThis.__arcane = handle;

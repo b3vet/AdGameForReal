@@ -16,7 +16,7 @@
  *      Milestone 4 Phase C, where the near row's `+6` had a stream's `9` printed
  *      across it — the count rides the head of the river at
  *      `STREAM_LABEL_HEIGHT` rather than on a body, so a head level with a gate
- *      row lands in the middle of the panel.
+ *      row lands in the middle of the plaque.
  *   2. A share of the camera's distance to the gate, `gateCrowdsLabel`, on top
  *      of the box. The same stretch of road is fewer pixels the further out it
  *      is, so a fixed window in metres either hides everything up close or
@@ -29,12 +29,13 @@
  *
  * The projection is the analytic camera, not the rig: `CameraRig` eases toward
  * exactly this pose and trails it by under a metre (`CAMERA.smoothing`), the
- * panel band is three metres of road deep, and reading the live rig would mean
+ * plaque band is a metre of road deep, and reading the live rig would mean
  * threading it through two views for a fraction of a band. The Academy's
  * backdrop camera stands elsewhere (`PREVIEW_BEHIND`), so the test is a shade
  * off there; nothing is streaming behind a menu.
  */
 
+import { GATE_PLAQUE_HEIGHT } from './gateLook';
 import {
   BLOCK_LABEL_CLEARANCE_BEHIND,
   BLOCK_LABEL_CLEARANCE_FRONT,
@@ -42,11 +43,25 @@ import {
   CAMERA,
   GATE_CENTER_Y,
   GATE_DRAW_RANGE,
-  GATE_HEIGHT,
   LABEL_BEHIND,
+  cameraBack,
+  cameraLift,
 } from './theme';
-import { laneCenter } from '@/sim';
+import { formationDepth, laneCenter, openRoadWidth } from '@/sim';
 import type { GateState } from '@/sim';
+
+/**
+ * How tall the thing a number can hide behind actually is.
+ *
+ * Milestone 4 measured this against the translucent panel that used to carry
+ * the value — 2.2 m of it, most of the arch's opening — and Milestone 5 replaced
+ * that panel with a rune plaque a third as tall (`./gateLook.ts`). Keeping the
+ * old band meant a block's HP number was blanked for the two metres of screen
+ * above and below a plaque that was never in front of it: the plaque hangs at
+ * `GATE_CENTER_Y` and is 0.8 m tall, and *that* is the box a number can be lost
+ * in. The clearance share below still opens a margin around it.
+ */
+const GATE_LABEL_BAND = GATE_PLAQUE_HEIGHT;
 
 /**
  * Where the camera stands this frame. One per frame, re-used: the sim must not
@@ -68,17 +83,30 @@ export function createLabelView(): LabelView {
 /**
  * The camera pose for a squad of `count` at `squadZ`, written into `out`.
  *
- * `CameraRig.update` is the source: it stands `behind + pullback` back and
- * `height + pullback` up, and aims at `lookHeight` over the road `lookAhead`
- * in front of the squad. The pitch is the angle between those two points.
+ * `CameraRig.update` is the source: it stands `behind + cameraBack(depth)` back
+ * and `height + cameraLift(depth)` up, and aims at `lookHeight` over the road
+ * `lookAhead` in front of the squad. The pitch is the angle between those two
+ * points. `width` is the band the formation was laid out in, so a crowd pinched
+ * into a lane is measured against the pose that crowd actually gets.
  */
-export function setLabelView(out: LabelView, squadZ: number, count: number): LabelView {
-  const pullback = Math.min(CAMERA.pullbackMax, count * CAMERA.pullbackPerUnit);
+export function setLabelView(
+  out: LabelView,
+  squadZ: number,
+  count: number,
+  width: number = openRoadWidth(),
+): LabelView {
+  // The same pair the rig derives its pose from, off the same formation depth
+  // (`cameraBack`). The rig eases toward this over about half a second while
+  // the crowd is growing; the panel band is a metre of road deep and a label
+  // that flickers for one frame of a `mul` gate is not worth threading the live
+  // pose through two views for.
+  const depth = formationDepth(count, width);
+  const back = cameraBack(depth);
+  const lift = cameraLift(depth);
   out.squadZ = squadZ;
-  out.eyeY = CAMERA.height + pullback;
-  out.eyeZ = squadZ - CAMERA.behind - pullback;
-  out.pitch =
-    (out.eyeY - CAMERA.lookHeight) / (CAMERA.lookAhead + CAMERA.behind + pullback);
+  out.eyeY = CAMERA.height + lift;
+  out.eyeZ = squadZ - CAMERA.behind - back;
+  out.pitch = (out.eyeY - CAMERA.lookHeight) / (CAMERA.lookAhead + CAMERA.behind + back);
   return out;
 }
 
@@ -159,8 +187,8 @@ function crowded(
     // the number to stand on (`GateView.paintIdle` disables it there).
     const ahead = gate.z - view.squadZ;
     if (ahead >= GATE_DRAW_RANGE || ahead <= -LABEL_BEHIND * 2) continue;
-    const top = screenY(view, GATE_CENTER_Y + GATE_HEIGHT / 2, gate.z);
-    const bottom = screenY(view, GATE_CENTER_Y - GATE_HEIGHT / 2, gate.z);
+    const top = screenY(view, GATE_CENTER_Y + GATE_LABEL_BAND / 2, gate.z);
+    const bottom = screenY(view, GATE_CENTER_Y - GATE_LABEL_BAND / 2, gate.z);
     if (here <= top && here >= bottom) return true;
   }
 

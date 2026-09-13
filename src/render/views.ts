@@ -124,6 +124,13 @@ export class SceneViews {
   /**
    * The models, in parallel. Each loader is fail-soft: a missing `/assets/`
    * costs the art, never the boot.
+   *
+   * The road's arena markers and the wall piece are in here for the warm-up's
+   * sake rather than for the art's: both views kick their own load off in their
+   * constructor and would arrive on their own, but a slow one would arrive
+   * *after* `Renderer.init` had compiled the scene — and a material that misses
+   * the pass compiles inside the first frame that draws it, which is the frame
+   * the squad reaches a fence or the arena.
    */
   async load(): Promise<void> {
     await Promise.all([
@@ -132,6 +139,8 @@ export class SceneViews {
       this.boss.load(),
       this.gates.load(),
       this.props.load(),
+      this.road.load(),
+      this.walls.load(),
     ]);
   }
 

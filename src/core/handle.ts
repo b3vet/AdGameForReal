@@ -48,6 +48,17 @@ export interface ArcaneDebugHandle {
    * smoke test uses it to photograph an Academy with coins in it.
    */
   setPlayer: (patch: unknown) => void;
+  /**
+   * Sim seconds per real second, live: `?turbo` after the page has booted,
+   * clamped to the same 1 to `MAX_TURBO` the query parameter is.
+   *
+   * The hero shots are why it exists (`scripts/smoke-hero.mjs`). A scripted run
+   * reaches the boss at turbo 60, where one frame is three seconds of sim and
+   * fifteen metres of road — and a frame that has to be taken with a gate row
+   * *ten metres* ahead cannot be found at that step size. So the driver runs
+   * fast down the road and slows the sim as the row it wants comes into reach.
+   */
+  setTurbo: (value: number) => void;
 }
 
 declare global {

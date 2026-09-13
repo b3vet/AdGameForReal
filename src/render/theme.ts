@@ -138,6 +138,20 @@ export const SHADOW = {
   spread: 1.3,
   /** Metres above the road, clear of the lane runes at 0.02. */
   y: 0.012,
+  /**
+   * What a body is worth on the ground, in metres of half-width at full scale
+   * (D38, wired in Phase E).
+   *
+   * A KayKit character is about 0.4 m across the shoulders at the heights in
+   * `./crowdLook.ts`, so the contact patch is half that and the blob is drawn
+   * `spread` wider again. The squad's own is a shade smaller than the
+   * skeletons': the crowd packs to 0.28 m between units at 500, and a blob per
+   * mage at the skeleton's size merges into one grey sheet under the whole
+   * formation rather than reading as five hundred bodies standing on a road.
+   */
+  mage: 0.17,
+  grunt: 0.2,
+  brute: 0.26,
 } as const;
 
 /** Labels cost a 2D canvas redraw, so only near things get one. */
@@ -234,21 +248,21 @@ export const GATE_BOUNCE_HEIGHT = 0.16;
 /** Share of the squad casting rather than running while the crowd advances. */
 export const CASTING_SHARE = 3;
 
-/** A panel spans its lane exactly, so what the player aims at is what they hit. */
-export const GATE_WIDTH = LANE_WIDTH;
-export const GATE_HEIGHT = 2.2;
+/**
+ * Where a gate's number hangs, in metres over the road.
+ *
+ * The one number of the old translucent panel that survived Milestone 5's
+ * arches: the plaque is built around it (`./gateLook.ts`), the label API prints
+ * there, and the clearance rules measure against it. The panel's own width,
+ * height and opacity went with the panel — the arch is `ARCH_CLEAR_WIDTH` wide
+ * and the plaque `GATE_PLAQUE_HEIGHT` tall, both in `./gateLook.ts`.
+ */
 export const GATE_CENTER_Y = 1.15;
 export const GATE_PULSE_DURATION = 0.2;
 export const GATE_EXIT_DURATION = 0.3;
-/**
- * Panel opacity. Raised from Milestone 2's 0.46: a translucent slab read as a
- * solid colour against a near-black road and washes out against a light stone
- * one, and the panels have to stay the most readable thing in frame (D28).
- */
-export const GATE_BASE_ALPHA = 0.62;
-/** The staff a `weapon` gate offers, floating above its panel. */
+/** The staff a `weapon` gate offers, floating above its plaque. */
 export const GATE_PROP_HEIGHT = 0.8;
-export const GATE_PROP_Y = GATE_CENTER_Y + GATE_HEIGHT / 2 + 0.45;
+export const GATE_PROP_Y = GATE_CENTER_Y + 1.55;
 export const GATE_PROP_SPIN = 1.1;
 
 /** Skeletons drawn for one block, however many units it is worth. */

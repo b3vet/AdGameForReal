@@ -11,7 +11,7 @@
  *   ?debug          show the debug panel
  *   ?turbo=8        run the sim this many times faster than the wall clock
  *   ?physics=0|1|2  physics quality: 0 skips Havok entirely
- *   ?quality=3      pin a rung of the degrade ladder (0 best, 4 worst)
+ *   ?quality=3      pin a rung of the degrade ladder (0 best, 5 worst)
  *   ?screenshot=1   keep the drawing buffer readable, for the smoke's frames
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  */
@@ -37,8 +37,17 @@ export interface QueryOptions {
   /**
    * A pinned rung of the degrade ladder (`src/core/quality.ts`), or null for
    * the automatic ladder. Pinning is how a phone's worst case is looked at on
-   * a desktop; a pinned ladder never steps on its own. The ladder is five
-   * rungs, 0 to 4, and `clampRung` is what says so.
+   * a desktop; a pinned ladder never steps on its own.
+   *
+   * The ladder is six rungs, 0 to 5, and `clampRung` is what says so. Milestone
+   * 5 (D38) put the native pixel ratio on top of it and moved the ragdolls to
+   * the bottom, so the table is now
+   *
+   *   0  ratio 3, physics 2      3  ratio 1,   physics 2
+   *   1  ratio 2, physics 2      4  ratio 1,   physics 1
+   *   2  ratio 1.5, physics 2    5  ratio 1,   physics 0
+   *
+   * where the ratio is a *ceiling*: rung 0 on a 2x screen renders at 2.
    */
   qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */

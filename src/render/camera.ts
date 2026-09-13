@@ -13,6 +13,8 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import {
   CAMERA,
+  cameraBack,
+  cameraLift,
   PREVIEW_BLEND_RATE,
   PREVIEW_DRIFT_PERIOD,
   PREVIEW_DRIFT_PERIOD_Y,
@@ -23,6 +25,7 @@ import {
   PREVIEW_LOOK_AHEAD,
   PREVIEW_LOOK_HEIGHT,
 } from './theme';
+import { formationDepth, openRoadWidth } from '@/sim';
 import type { SquadState } from '@/sim';
 
 export class CameraRig {
@@ -66,6 +69,14 @@ export class CameraRig {
    */
   private drifting = false;
   private driftPhase = 0;
+  /**
+   * The formation depth the pull-back is currently drawn from, in metres, eased
+   * toward the crowd's own (`CAMERA.depthSmoothing`). `NaN` until the first
+   * frame of a level, which snaps rather than easing in from the last one's.
+   */
+  private depth = Number.NaN;
+  /** Where the squad stood last frame, for the depth ease's distance term. */
+  private lastSquadZ = Number.NaN;
   /** 0 while playing, 1 on the Academy; everything preview eases on it. */
   private previewBlend = 0;
 
@@ -108,6 +119,8 @@ export class CameraRig {
     this.settled = false;
     this.shakeLeft = 0;
     this.lateralVelocity = 0;
+    this.depth = Number.NaN;
+    this.lastSquadZ = Number.NaN;
     this.snapPreview();
   }
 
@@ -130,7 +143,25 @@ export class CameraRig {
    * grows so a 500-unit crowd still fits in frame.
    */
   update(squad: SquadState, dt: number): void {
-    const pullback = Math.min(CAMERA.pullbackMax, squad.count * CAMERA.pullbackPerUnit);
+    // How deep the crowd stands right now, eased: the shot pulls back and lifts
+    // with the *formation*, not with the count (`CAMERA.backPerDepth`). The
+    // width is the band the sim laid this frame's crowd out in, so a squad
+    // pinched into a lane by a wall — which is deeper for the same count — gets
+    // the same treatment.
+    const wantDepth = formationDepth(squad.count, squad.formationWidth ?? openRoadWidth());
+    const travelled = Number.isNaN(this.lastSquadZ) ? 0 : Math.abs(squad.z - this.lastSquadZ);
+    this.lastSquadZ = squad.z;
+    if (Number.isNaN(this.depth)) {
+      this.depth = wantDepth;
+    } else {
+      // Time *and* distance (`CAMERA.depthPerMetre`): the crowd grows on the
+      // sim's clock and this ease runs on the frame's, and a turbo frame is
+      // fifteen metres of road in one of them.
+      const rate = CAMERA.depthSmoothing * dt + CAMERA.depthPerMetre * travelled;
+      this.depth += (wantDepth - this.depth) * (1 - Math.exp(-rate));
+    }
+    const back = cameraBack(this.depth);
+    const lift = cameraLift(this.depth);
     const lateral = squad.x * CAMERA.lateralFollow;
 
     // The backdrop stands further back and lower than the game does, so the
@@ -144,8 +175,8 @@ export class CameraRig {
     const lookHeight = mix(CAMERA.lookHeight, PREVIEW_LOOK_HEIGHT, this.previewBlend);
 
     const wantX = lateral;
-    const wantY = height + pullback;
-    const wantZ = squad.z - behind - pullback;
+    const wantY = height + lift;
+    const wantZ = squad.z - behind - back;
 
     // A fresh level snaps; every other frame eases at a rate independent of
     // frame time, so 30 fps and 120 fps feel the same.

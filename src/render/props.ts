@@ -127,8 +127,18 @@ const KINDS: readonly PropKind[] = [
 /** Metres between one roadside prop and the next, per side. */
 const GAP_MIN = 6;
 const GAP_MAX = 10;
-/** Props of one kind per level. Long levels simply stop dressing past this. */
-const PER_KIND = 56;
+/**
+ * Slack over a kind's expected share of a road's placements.
+ *
+ * The layout is a weighted roll per slot, so a kind's count is a binomial
+ * around its share and lands above it about half the time. Twenty percent
+ * covers that spread on the longest road the game builds; a kind that still
+ * runs out only loses the odd tree at the very end of a level, which is the
+ * same fail-soft the cap has always had.
+ */
+const CAP_SLACK = 1.2;
+/** Floor under any kind's cap, so a rare kind is never one instance. */
+const CAP_MIN = 8;
 /** Flames the roadside can carry at once, whichever kind is lighting it. */
 const FLAME_CAP = 24;
 /**
@@ -140,10 +150,38 @@ const PROP_LIFT = 0.05;
 /** The flame mesh's own diameter; a kind's `flame.size` scales this. */
 const FLAME_SIZE = 0.34;
 
+/**
+ * How many props of one kind a stretch of road can hold: its share of the
+ * placements the road has room for, with slack for the roll's own variance.
+ *
+ * Derived rather than fixed (Milestone 5 Phase E). The road runs from
+ * `ROAD_START_Z` to eighty metres past the arena — 416 m on level 1 and 470 m
+ * from level 9 on — and the old flat 56 was measured against a much shorter
+ * Milestone 2 level. Replaying the layout's own seeded roll, level 10 places 52
+ * orange pines on its 470 m: four short of the ceiling, which is not a margin,
+ * it is a coincidence. One roll further and the last stretch of the longest
+ * levels dresses itself with whatever kinds are left.
+ *
+ * The cap is a *buffer* size, not a design decision: it only has to be past
+ * what the road can ask for. So it is the road's own placement count — both
+ * verges at the tightest spacing the roll can produce — times this kind's share
+ * of the weights, times `CAP_SLACK`. On that same 470 m road the pines get 62
+ * and the gravestones 12, and a 416 m level asks for proportionally less.
+ */
+function capFor(weight: number, total: number, length: number): number {
+  if (weight <= 0 || total <= 0) return CAP_MIN;
+  // Both verges, at the tightest spacing the roll can produce: the most slots a
+  // road of this length can ever offer.
+  const placements = (2 * Math.max(0, length)) / GAP_MIN;
+  return Math.max(CAP_MIN, Math.ceil(((placements * weight) / total) * CAP_SLACK));
+}
+
 interface PropSlot {
   kind: PropKind;
   mesh: Mesh;
   matrices: Float32Array;
+  /** Instances `matrices` has room for; grown by `build` for a longer road. */
+  capacity: number;
   count: number;
   scale: number;
   /** The model's own height, before scaling; the lantern hangs its flame off it. */
@@ -192,7 +230,10 @@ export class PropsView {
       this.slots.push({
         kind,
         mesh,
-        matrices: createMatrixBuffer(mesh, PER_KIND),
+        // One slot's worth until the first level says how long its road is;
+        // `build` grows it to that road's own cap before it places anything.
+        matrices: createMatrixBuffer(mesh, CAP_MIN),
+        capacity: CAP_MIN,
         count: 0,
         scale: unit * (kind.size ?? 1),
         height: meshExtent(mesh).y,
@@ -214,13 +255,22 @@ export class PropsView {
     // keeps the layout from leaving a gap where the other one would have gone.
     const lit = this.slots.filter((slot) => dressedOn(slot.kind, levelIndex));
     const total = lit.reduce((sum, slot) => sum + slot.kind.weight, 0);
+    // What this road can hold, per kind. Buffers only ever grow, and only at a
+    // level load: a later level with a longer road pays one allocation for the
+    // extra trees and every level after it re-uses it.
+    for (const slot of lit) {
+      const cap = capFor(slot.kind.weight, total, endZ - startZ);
+      if (cap <= slot.capacity) continue;
+      slot.matrices = createMatrixBuffer(slot.mesh, cap);
+      slot.capacity = cap;
+    }
 
     for (const side of [-1, 1]) {
       let z = startZ + random() * GAP_MIN;
       while (z < endZ) {
         z += GAP_MIN + random() * (GAP_MAX - GAP_MIN);
         const slot = pick(lit, random() * total);
-        if (slot === undefined || slot.count >= PER_KIND) continue;
+        if (slot === undefined || slot.count >= slot.capacity) continue;
 
         const out = slot.kind.near + random() * (slot.kind.far - slot.kind.near);
         const x = side * (ROAD_HALF_WIDTH + out);

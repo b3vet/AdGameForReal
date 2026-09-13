@@ -96,6 +96,18 @@ export const ORNAMENT_RANGE = balance.level.rowSpacing * 1.9;
 export const SHIMMER_WIDTH = ARCH_CLEAR_WIDTH * 1.1;
 export const SHIMMER_HEIGHT = ARCH_SOFFIT - 0.1;
 export const SHIMMER_Y = SHIMMER_HEIGHT / 2 + 0.02;
+/**
+ * How much of the shimmer quad's own width the light ramps up over at each
+ * side (`./tintedQuads.ts`).
+ *
+ * The veil tiles horizontally so that the drift can wrap, which leaves the
+ * quad's left and right edges as two hard vertical lines. Up close the arch's
+ * legs stand in front of them; at two rows out a leg is a couple of pixels wide
+ * and the seams read as bright bars inside the opening. A sixth of the width at
+ * each side is enough to lose them and still leaves two thirds of the veil at
+ * full strength.
+ */
+export const SHIMMER_EDGE_FADE = 0.17;
 /** Base brightness, what a hit adds, and how fast the pattern drifts upward. */
 export const SHIMMER_ALPHA = 0.75;
 export const SHIMMER_HIT_BOOST = 0.8;

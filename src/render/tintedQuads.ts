@@ -39,11 +39,15 @@ attribute vec2 quadScroll;
 #include<instancesDeclaration>
 uniform mat4 viewProjection;
 varying vec2 vUv;
+varying vec2 vQuad;
 varying vec4 vTint;
 void main(void) {
   #include<instancesVertex>
   gl_Position = viewProjection * finalWorld * vec4(position, 1.0);
   vUv = uv + quadScroll;
+  // The quad's own coordinates, before the scroll: the edge fade has to live in
+  // the *quad*, not in the pattern drifting through it.
+  vQuad = uv;
   vTint = quadTint;
 }
 `;
@@ -52,15 +56,26 @@ void main(void) {
  * Painted white on black and tinted here, like the spell sheet. Alpha is folded
  * into the colour rather than into `gl_FragColor.a`: under additive blending the
  * blender never sees alpha, so fading is darkening.
+ *
+ * `edgeFade` is how much of the quad's own width the light is ramped up over at
+ * each side, 0 for a batch that wants none. It is a uniform rather than a mask
+ * baked into the sheet because the sheet *scrolls*: the gate shimmer tiles
+ * horizontally and drifts along u, so anything painted into the texture travels
+ * with the pattern, while the edge that has to disappear is the quad's.
  */
 const FRAGMENT_SHADER = `
 precision highp float;
 uniform sampler2D sheet;
+uniform float edgeFade;
 varying vec2 vUv;
+varying vec2 vQuad;
 varying vec4 vTint;
 void main(void) {
   vec4 texel = texture2D(sheet, vUv);
-  gl_FragColor = vec4(texel.rgb * texel.a * vTint.rgb * vTint.a, 1.0);
+  // Never exactly zero, so a batch with no fade takes the same branch-free path.
+  float ramp = max(edgeFade, 0.0001);
+  float edge = smoothstep(0.0, ramp, vQuad.x) * smoothstep(0.0, ramp, 1.0 - vQuad.x);
+  gl_FragColor = vec4(texel.rgb * texel.a * vTint.rgb * vTint.a * edge, 1.0);
 }
 `;
 
@@ -82,11 +97,19 @@ export class TintedQuads {
 
   private live = 0;
 
+  /**
+   * `edgeFade` is the share of the quad's own width the light ramps up over at
+   * each side. The gate shimmer needs it — the veil tiles horizontally, so
+   * without it the quad ends in two hard vertical lines, which the arch's legs
+   * only hide from close up; at two rows out the legs are two pixels wide and
+   * the seams are the brightest thing in the opening. The motes pass 0.
+   */
   constructor(
     private readonly scene: Scene,
     name: string,
     texture: BaseTexture,
     readonly capacity: number,
+    edgeFade = 0,
   ) {
     this.material = new ShaderMaterial(
       name,
@@ -94,12 +117,13 @@ export class TintedQuads {
       { vertexSource: VERTEX_SHADER, fragmentSource: FRAGMENT_SHADER },
       {
         attributes: ['position', 'uv', 'quadTint', 'quadScroll'],
-        uniforms: ['world', 'viewProjection'],
+        uniforms: ['world', 'viewProjection', 'edgeFade'],
         samplers: ['sheet'],
         needAlphaBlending: true,
       },
     );
     this.material.setTexture('sheet', texture);
+    this.material.setFloat('edgeFade', Math.max(0, edgeFade));
     this.material.alphaMode = Constants.ALPHA_ADD;
     this.material.backFaceCulling = false;
     this.material.disableDepthWrite = true;

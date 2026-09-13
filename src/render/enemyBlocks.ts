@@ -10,11 +10,13 @@
  */
 
 import type { Crowd } from './characters';
+import type { ShadowLayer } from './shadows';
 import {
   BRUTE_SCALE,
   ENEMY_CLUSTER_DEPTH,
   ENEMY_MAX_INSTANCES,
   GRUNT_SCALE,
+  SHADOW,
 } from './theme';
 import type { EnemyKind } from '@/sim';
 
@@ -49,6 +51,12 @@ export function commitCrowd(crowd: Crowd | null, count: number, dt: number): voi
  * clock is per-instance, and at speed zero the offset *is* the time into the
  * range, so passing the age plays the one-shot exactly once instead of looping
  * it forever (`docs/ASSETS.md`, open issue 4).
+ *
+ * The blobs go in here rather than in `./enemies.ts` because this is the only
+ * place a skeleton's own position exists: the cluster is scattered inside the
+ * block's footprint from a hash, so a shadow written off `slot.x` would be one
+ * disc under eighteen bodies. `shadowAlpha` is the block's distance fade, which
+ * the caller has already worked out for the whole cluster (`ShadowLayer.fade`).
  */
 export function writeCluster(
   crowd: Crowd,
@@ -56,6 +64,8 @@ export function writeCluster(
   slot: ClusterSource,
   active: boolean,
   dying: number,
+  shadows: ShadowLayer | null,
+  shadowAlpha: number,
 ): number {
   const scale = slot.kind === 'brute' ? BRUTE_SCALE : GRUNT_SCALE;
   const wanted = dying >= 0 ? DEATH_INSTANCES : ENEMY_MAX_INSTANCES;
@@ -63,6 +73,10 @@ export function writeCluster(
   // Skeletons stand a body-width apart inside the block's own footprint, so
   // what the player sees is exactly what the sim will collide with.
   const spread = Math.max(0.25, slot.footprint - 0.2);
+  const shadowRadius = slot.kind === 'brute' ? SHADOW.brute : SHADOW.grunt;
+  // Null when the block is out of the blob layer's range, so the inner loop is
+  // one null check rather than two comparisons per skeleton.
+  const blobs = shadowAlpha > 0 ? shadows : null;
 
   for (let i = 0; i < count; i++) {
     const across = hash(slot.enemyId * 131 + i * 17);
@@ -70,6 +84,8 @@ export function writeCluster(
     const x = slot.x + (across * 2 - 1) * spread;
     const z = slot.z + (along - 0.5) * ENEMY_CLUSTER_DEPTH;
     const phase = hash(slot.enemyId * 31 + i * 7);
+
+    if (blobs !== null) blobs.add(x, z, shadowRadius, shadowAlpha);
 
     if (dying >= 0) {
       crowd.setInstance(base + i, x, 0, z, FACING, scale, 'death', dying, 0);

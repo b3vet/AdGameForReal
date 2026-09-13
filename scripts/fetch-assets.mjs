@@ -17,7 +17,12 @@
  *      so the runtime fetches one file per model and the single-file build has
  *      one thing to base64.
  *
- *   node scripts/fetch-assets.mjs
+ *   node scripts/fetch-assets.mjs            every step
+ *   node scripts/fetch-assets.mjs textures   one of them, by name
+ *
+ * The step names are the keys of `STEPS` at the bottom. Re-running one step is
+ * what a re-encode is: the road albedo's colour grade (`tint` below) was tuned
+ * by running `textures` against the cached zips and looking at the frames.
  *
  * Sources and licences are recorded in docs/ASSETS.md.
  */
@@ -121,6 +126,25 @@ const AMBIENTCG_TEXTURES = [
     size: 1024,
     quality: 0.75,
     ao: true,
+    /**
+     * The colour grade, as a canvas filter on the albedo before the occlusion
+     * is multiplied in (Milestone 5 Phase E).
+     *
+     * PavingStones131 is photographed with moss in its joints and averages
+     * hue 53 at saturation 0.13 — a yellow-green that reads as olive once the
+     * whole road is covered in it, which is what the Phase C frame review
+     * called out. The palette's own stone is hue 37: warm grey-brown. Fourteen
+     * degrees of rotation with a quarter of the saturation taken out lands the
+     * mean at hue 40 and 0.11, which reads as weathered granite, and because it
+     * is a *filter on the source pixels* rather than a tint on the material the
+     * stones keep every bit of their photographic variation — a material tint
+     * would have multiplied the joints and the highlights by the same number.
+     *
+     * Ten degrees was tried first and measured hue 43.5: still olive in a
+     * frame, because the road material multiplies the albedo by `stone.light`
+     * and the key light is warm, both of which push it back the other way.
+     */
+    tint: 'saturate(0.72) hue-rotate(-14deg)',
     use: 'the road surface',
   },
   {
@@ -307,6 +331,7 @@ async function encodeTextures(maps) {
       ao: entry.ao === null ? null : entry.ao.toString('base64'),
       size: entry.texture.size,
       quality: entry.texture.quality,
+      tint: entry.texture.tint ?? null,
     }));
     const dataUris = await page.evaluate(async (list) => {
       const load = (base64) =>
@@ -329,7 +354,11 @@ async function encodeTextures(maps) {
         canvas.width = job.size;
         canvas.height = job.size;
         const context = canvas.getContext('2d');
+        // The grade applies to the albedo only: filtering the occlusion pass
+        // too would rotate the hue of the shadow it is multiplying in.
+        if (job.tint !== null) context.filter = job.tint;
         context.drawImage(await load(job.color), 0, 0, job.size, job.size);
+        context.filter = 'none';
         if (job.ao !== null) {
           // Multiply, so the occlusion darkens the joints without touching the
           // hue of the stone itself.
@@ -430,40 +459,51 @@ function readZipLocal(zip, offset) {
   return inflateRawSync(body);
 }
 
+/** Every step this script can run, in order, by the name the CLI takes. */
+const STEPS = {
+  characters: [
+    'KayKit characters (animations trimmed)',
+    async () => {
+      let total = 0;
+      total += await character('mage', ADVENTURERS, 'Mage.glb', 'kaykit/Mage.glb');
+      total += await character(
+        'skeleton_minion',
+        SKELETONS,
+        'Skeleton_Minion.glb',
+        'kaykit/Skeleton_Minion.glb',
+      );
+      total += await character(
+        'skeleton_warrior',
+        SKELETONS,
+        'Skeleton_Warrior.glb',
+        'kaykit/Skeleton_Warrior.glb',
+      );
+      return total;
+    },
+  ],
+  boss: ['Quaternius boss', boss],
+  props: ['KayKit Halloween Bits props', props],
+  dungeon: ['KayKit Dungeon Remastered pieces', dungeon],
+  textures: ['ambientCG road and field albedos', ambientcg],
+  licenses: [
+    'licences',
+    async () => (await licenses()) + (await kenney()),
+  ],
+};
+
 async function main() {
+  const only = process.argv[2];
+  if (only !== undefined && !(only in STEPS)) {
+    throw new Error(`unknown step "${only}"; try one of ${Object.keys(STEPS).join(', ')}`);
+  }
   console.log('[assets] cache:', path.relative(ROOT, CACHE));
   let total = 0;
 
-  console.log('[assets] KayKit characters (animations trimmed)');
-  total += await character('mage', ADVENTURERS, 'Mage.glb', 'kaykit/Mage.glb');
-  total += await character(
-    'skeleton_minion',
-    SKELETONS,
-    'Skeleton_Minion.glb',
-    'kaykit/Skeleton_Minion.glb',
-  );
-  total += await character(
-    'skeleton_warrior',
-    SKELETONS,
-    'Skeleton_Warrior.glb',
-    'kaykit/Skeleton_Warrior.glb',
-  );
-
-  console.log('[assets] Quaternius boss');
-  total += await boss();
-
-  console.log('[assets] KayKit Halloween Bits props');
-  total += await props();
-
-  console.log('[assets] KayKit Dungeon Remastered pieces');
-  total += await dungeon();
-
-  console.log('[assets] ambientCG road and field albedos');
-  total += await ambientcg();
-
-  console.log('[assets] licences');
-  total += await licenses();
-  total += await kenney();
+  for (const [name, [label, step]] of Object.entries(STEPS)) {
+    if (only !== undefined && only !== name) continue;
+    console.log(`[assets] ${label}`);
+    total += await step();
+  }
 
   console.log(`[assets] wrote ${kb(total)} into assets/ (audio is added by audio-convert.mjs)`);
 }
