@@ -19,6 +19,19 @@ export const FENCE_STRIDE = 4;
 /** Floats per shover: x, z, half along x, half along z, and how hard it pushes. */
 export const SHOVE_STRIDE = 5;
 
+/** Floats per pulse: a shover's five, plus the sim time it stops pushing. */
+const PULSE_STRIDE = 6;
+
+/**
+ * Pushes from something that is not a body, live at once (D54).
+ *
+ * Four, because the only thing that makes one is a meteor every nine seconds
+ * and they last a third of a second: the buffer is a ring rather than a
+ * failure, so a tuning that made them overlap drops the oldest instead of
+ * losing the newest.
+ */
+const MAX_PULSES = 4;
+
 /**
  * Most bodies that may shove in one step. A body only qualifies while it
  * overlaps the crowd's own box, which is the front line and the few that are
@@ -43,10 +56,40 @@ export class Obstacles {
   readonly shovers: Float64Array;
   shoveCount = 0;
 
+  /** `(x, z, halfX, halfZ, strength, until)` per live pulse. See `push`. */
+  private readonly pulses = new Float64Array(PULSE_STRIDE * MAX_PULSES);
+  private pulseCount = 0;
+
   constructor(walls: number) {
     this.fences = new Float64Array(FENCE_STRIDE * Math.max(4, walls));
     this.arches = new Float64Array(MAX_ARCHES);
-    this.shovers = new Float64Array(SHOVE_STRIDE * MAX_SHOVERS);
+    this.shovers = new Float64Array(SHOVE_STRIDE * (MAX_SHOVERS + MAX_PULSES));
+  }
+
+  /**
+   * A push from something that is not a body: the meteor's impact (D54).
+   *
+   * It goes into the same field a brute standing in the column pushes with,
+   * rather than into a force of its own, because that field is already the
+   * answer to "something is in the way and the crowd bows around it" — and
+   * because a crater the crowd walked straight through would read as a decal
+   * rather than as an impact. It keeps pushing until `until`, so the bow has a
+   * shape over time instead of being one step's teleport.
+   */
+  push(x: number, z: number, radius: number, strength: number, until: number): void {
+    // Full: the oldest goes, which is the one nearest its own expiry.
+    if (this.pulseCount >= MAX_PULSES) {
+      this.pulses.copyWithin(0, PULSE_STRIDE);
+      this.pulseCount = MAX_PULSES - 1;
+    }
+    const at = this.pulseCount * PULSE_STRIDE;
+    this.pulses[at] = x;
+    this.pulses[at + 1] = z;
+    this.pulses[at + 2] = radius;
+    this.pulses[at + 3] = radius;
+    this.pulses[at + 4] = strength;
+    this.pulses[at + 5] = until;
+    this.pulseCount++;
   }
 
   /** The fences, arch legs and bodies that touch the crowd's own box now. */
@@ -58,6 +101,7 @@ export class Obstacles {
     boss: EnemyState | null,
     balance: Balance,
     anchorZ: number,
+    time: number,
   ): void {
     let xLo = Infinity;
     let xHi = -Infinity;
@@ -86,7 +130,7 @@ export class Obstacles {
     // between the two in which somebody could walk through the line.
     this.gatherFences(walls, balance, zLo, Math.max(zHi, anchorZ));
     this.gatherArches(gates, balance, zLo, zHi);
-    this.gatherShovers(enemies, boss, balance, xLo, xHi, zLo, zHi);
+    this.gatherShovers(enemies, boss, balance, xLo, xHi, zLo, zHi, time);
   }
 
   private gatherFences(
@@ -160,16 +204,21 @@ export class Obstacles {
     xHi: number,
     zLo: number,
     zHi: number,
+    time: number,
   ): void {
     const body = balance.crowd.bodyRadius;
     const reach = balance.crowd.shove.reach;
-    let count = 0;
+    // The pulses go in first and keep slots of their own above `MAX_SHOVERS`,
+    // so a meteor landing in a river still pushes: a crater crowded out by the
+    // bodies it just threw would be the one step it must not miss.
+    let count = this.writePulses(time);
     // The boss shoves like anything else it stands in. It is not in
     // `state.enemies` — it is the one actor `Run` keeps beside them — so it is
     // offered to the same loop rather than given a rule of its own: the arena
     // fight then bows the front of the column exactly as a block on the road
     // does, which is what Phase A left undone.
-    for (let i = -1; i < enemies.length && count < MAX_SHOVERS; i++) {
+    const capacity = MAX_SHOVERS + MAX_PULSES;
+    for (let i = -1; i < enemies.length && count < capacity; i++) {
       const enemy = i < 0 ? boss : enemies[i];
       if (enemy === undefined || enemy === null || !enemy.alive || !enemy.active) continue;
       const halfX = enemyHalfWidth(enemy, balance) + body;
@@ -191,6 +240,26 @@ export class Obstacles {
       count++;
     }
     this.shoveCount = count;
+  }
+
+  /** Live pulses into the shove list, dropping the ones that have expired. */
+  private writePulses(time: number): number {
+    let write = 0;
+    for (let read = 0; read < this.pulseCount; read++) {
+      const from = read * PULSE_STRIDE;
+      if ((this.pulses[from + 5] ?? 0) <= time) continue;
+      const to = write * PULSE_STRIDE;
+      if (to !== from) this.pulses.copyWithin(to, from, from + PULSE_STRIDE);
+      const at = write * SHOVE_STRIDE;
+      this.shovers[at] = this.pulses[to] ?? 0;
+      this.shovers[at + 1] = this.pulses[to + 1] ?? 0;
+      this.shovers[at + 2] = this.pulses[to + 2] ?? 1;
+      this.shovers[at + 3] = this.pulses[to + 3] ?? 1;
+      this.shovers[at + 4] = this.pulses[to + 4] ?? 1;
+      write++;
+    }
+    this.pulseCount = write;
+    return write;
   }
 }
 

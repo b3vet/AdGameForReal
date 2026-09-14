@@ -25,7 +25,9 @@ export function runsPerPurchase(result: CampaignResult, from: number, to: number
 
 function loadoutLine(held: Loadout): string {
   const levels = upgradeIds.map((id) => String(held.upgrades[id])).join('');
-  const extras = [...held.staffs, ...held.evolved.map((id) => `${id}+`)];
+  // `ember+3` rather than `ember+`: there are three rungs now (D54), and which
+  // one a player is standing on is the whole point of the readout.
+  const extras = [...held.staffs, ...held.evolved.map((id) => `${id}+${String(held.tiers[id])}`)];
   if (held.wispTier > 0) extras.push(`wisp${String(held.wispTier)}`);
   return `${levels}${extras.length > 0 ? ` ${extras.join(' ')}` : ''}`;
 }

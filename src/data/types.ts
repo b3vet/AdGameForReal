@@ -51,6 +51,94 @@ import type { ValueRange } from './level-types';
 
 export type { LevelGenConfig, ValueRange } from './level-types';
 
+/**
+ * Ember tier 3: a burning body passes the fire to what it is touching, once.
+ *
+ * `share` is of the source's own per-tick damage rather than of the shot that
+ * lit it: the new fire is the old fire spreading, so it cannot be hotter than
+ * what it came from, and a river cannot be set alight at full strength by one
+ * body at the front of it.
+ */
+export interface WildfireBalance {
+  /** Metres, centre to centre. "Touching" at a body's own scale. */
+  radius: number;
+  share: number;
+  /** Most bodies one source may light. The hop budget, per source, for ever. */
+  maxTargets: number;
+}
+
+/** Ember tier 4: a charged shot on the crowd's aim point every N seconds. */
+export interface MeteorBalance {
+  intervalSeconds: number;
+  /** Metres ahead of the squad it lands when the lane holds nothing to aim at. */
+  ahead: number;
+  radius: number;
+  /** Share of the damage lost at the rim, as `WeaponSplash.falloff`. */
+  falloff: number;
+  /**
+   * What the meteor is worth, in seconds of the squad's *own* fire.
+   *
+   * Every other number in this block is a distance or a clock, and this one is
+   * deliberately the same shape: a flat damage figure would be a wipe at level
+   * 1 and a spark at level 40, because the squad's output is two orders of
+   * magnitude apart across the campaign. Read against the shot rate and the
+   * damage the squad actually has, a meteor is worth the same *share* of a run
+   * whatever the player is carrying, which is the only way a tier price can be
+   * right on every level (D54: never mandatory below 40).
+   */
+  secondsOfFire: number;
+  /** What the impact does to the crowd, through the same push field a body uses. */
+  shoveStrength: number;
+  shoveSeconds: number;
+}
+
+/** Storm tier 4: every Nth volley arcs to everything in range at once. */
+export interface OverchargeBalance {
+  everyVolleys: number;
+  /** Metres from the squad's own position. */
+  radius: number;
+  /** What one arc is worth, in seconds of the squad's fire (`MeteorBalance`). */
+  secondsOfFire: number;
+  maxTargets: number;
+  /**
+   * Floor on the gap between two overcharges, in seconds. A volley is a step
+   * that fired at all, which at any real squad size is every step, so the
+   * count alone would arc twelve times a second — a buzz rather than a beat.
+   * The count is what governs a squad too small to fire every step.
+   */
+  minSeconds: number;
+}
+
+/** Frost tier 3: a slowed body that dies chills whatever is standing around it. */
+export interface FreezePulseBalance {
+  radius: number;
+  seconds: number;
+  /** Speed multiplier the chill applies, like `WeaponSlow.factor`. */
+  factor: number;
+  maxTargets: number;
+}
+
+/** Frost tier 4: a wall of ice holds one lane's river where it stands. */
+export interface GlacierBalance {
+  intervalSeconds: number;
+  holdSeconds: number;
+  /** Metres in front of the squad the wall goes up. */
+  ahead: number;
+  /** Bodies that have to be in the lane before it is worth a wall. */
+  minBodies: number;
+}
+
+/**
+ * What the six Milestone 8 evolutions are worth (D54). Which tier switches each
+ * one on is `progression.json` — that is what a player *buys* — and this is how
+ * far it reaches and how hard it hits, which is what gets tuned.
+ */
+export interface EvolutionBalance {
+  ember: { wildfire: WildfireBalance; meteor: MeteorBalance };
+  storm: { overcharge: OverchargeBalance };
+  frost: { freezePulse: FreezePulseBalance; glacier: GlacierBalance };
+}
+
 export interface Balance {
   squad: {
     runSpeed: number;
@@ -556,6 +644,8 @@ export interface Balance {
       wallReach: number;
     };
   };
+  /** The six evolution mechanics D54 adds, by staff. See `EvolutionBalance`. */
+  evolutions: EvolutionBalance;
   input: {
     /** Road meters travelled for one full screen width of drag. */
     sensitivity: number;
@@ -589,6 +679,8 @@ export interface Balance {
 export type {
   BurnDef,
   EvolutionDef,
+  EvolutionMechanic,
+  EvolutionTier,
   FamiliarTier,
   PlayerState,
   Progression,
@@ -597,3 +689,21 @@ export type {
   UpgradeId,
   WispDef,
 } from './progression-types';
+export { maxStaffTier } from './progression-types';
+
+/**
+ * The meta layer Milestone 8 adds (D51 to D53) and Endless (D52), re-exported
+ * here for the same reason as everything above: `@/data/types` is the one
+ * import site for the schema.
+ */
+export type {
+  CosmeticSlot,
+  CosmeticsState,
+  EndlessState,
+  KillKind,
+  LevelBest,
+  MissionState,
+  MissionsState,
+  StreakState,
+} from './meta-types';
+export type { EndlessConfig, EndlessDial, EndlessMix } from './endless-types';

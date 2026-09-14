@@ -20,11 +20,24 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BotKind } from '../bots';
-import { runCampaign } from '../campaign';
+import { bestOffer, runCampaign } from '../campaign';
 import { formatCampaign, runsPerPurchase } from '../campaignReport';
 import type { CampaignResult } from '../campaign';
-import { progression, runRewards } from '../player';
+import {
+  buyStaff,
+  emptyPlayer,
+  maxFamiliarTier,
+  maxStaffTier,
+  maxUpgradeLevel,
+  progression,
+  staffCost,
+  staffPrices,
+  upgradeIds,
+} from '../player';
+import { runRewards } from '../rewards';
+import { weaponIds } from '../weapons';
 import { levelCount } from '@/data';
+import type { PlayerState } from '@/data/types';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
@@ -154,13 +167,85 @@ describe('the campaign', () => {
   it('prices the staff evolutions and the wisp as goals, not as pocket change', () => {
     // "Multi-run goals" (docs/18): six to ten runs of a level-10 clear each.
     const clear = runRewards(ended('won', 150, 1), 10, true).coins;
+    // The first rung of each staff, and every wisp tier. The two rungs above
+    // it are dearer still by construction (D54, provisionally 1.6x and 2.2x),
+    // and what *they* have to be worth is the tier bands in `balance.test.ts`
+    // rather than a runs-per-purchase figure: nothing above the first rung is
+    // meant to be bought before level 15.
     const goals = [
-      ...Object.values(progression.staffs).map((staff) => staff.evolve),
+      ...Object.values(progression.staffs).map((staff) => staff.evolve[0] ?? 0),
       ...progression.wisp.tierPrices.slice(1),
     ];
     for (const price of goals) {
       const runs = price / clear;
       expectTrue(`${String(price)} coins is ${runs.toFixed(1)} runs`, runs >= 5 && runs <= 12);
+    }
+  });
+});
+
+describe('the evolution ladder (D54)', () => {
+  /**
+   * A player with nothing left to buy but ember's ladder: the yard bought out,
+   * the wisp at its last tier, the other two staffs maxed. What the Academy
+   * offers such a player is the next rung and nothing else, which is the rule
+   * under test rather than the shelf's price order.
+   */
+  function maxed(coins: number): PlayerState {
+    const player = emptyPlayer();
+    for (const id of upgradeIds) player.upgrades[id] = maxUpgradeLevel;
+    for (const id of weaponIds) {
+      player.staffs[id] = { unlocked: true, tier: id === 'ember' ? 1 : maxStaffTier };
+    }
+    player.familiar = { unlocked: true, tier: maxFamiliarTier };
+    player.unlockedLevel = levelCount;
+    player.coins = coins;
+    return player;
+  }
+
+  it('is climbed a rung at a time, in price order, after the yard', () => {
+    // With the yard maxed there is nothing cheaper on the shelf, so the next
+    // thing the Academy sells is the first evolution of the cheapest staff —
+    // and taking it offers the second, then the third, and then nothing.
+    let player = maxed(100_000);
+    const bought: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const offer = bestOffer(player, 20, 0.25);
+      if (offer === null || offer.kind !== 'evolution') break;
+      bought.push(`${offer.label}@${String(offer.cost)}`);
+      const next = buyStaff(player, 'ember');
+      if (next === null) break;
+      player = next;
+    }
+    const prices = staffPrices('ember').evolve;
+    expect(bought).toEqual([
+      `ember+2@${String(prices[0])}`,
+      `ember+3@${String(prices[1])}`,
+      `ember+4@${String(prices[2])}`,
+    ]);
+    // The top of the ladder: the Workbench has nothing left to sell for ember.
+    expect(staffCost(player, 'ember')).toBeNull();
+    expect(player.staffs.ember.tier).toBe(maxStaffTier);
+  });
+
+  it('never sells a rung the purse cannot cover', () => {
+    // A purse one coin short of the first rung buys nothing at all, which is
+    // what makes a tier a goal rather than a tick (D54).
+    const short = maxed((staffPrices('ember').evolve[0] ?? 0) - 1);
+    expect(bestOffer(short, 20, 0.25)).toBeNull();
+    expect(buyStaff(short, 'ember')).toBeNull();
+  });
+
+  it('prices the rungs above the first as the multi-run goals they are', () => {
+    // Provisional, for the balance pass (D54): 1.6x and 2.2x the first rung.
+    // What has to be true here is only the shape — each dearer than the last,
+    // and the whole ladder worth more than the staff that carries it.
+    const clear = runRewards(ended('won', 150, 1), 10, true).coins;
+    for (const id of weaponIds) {
+      const ladder = staffPrices(id).evolve;
+      const runs = ladder.reduce((total, price) => total + price, 0) / clear;
+      expectTrue(`${id} ladder is ${runs.toFixed(1)} clears of L10`, runs >= 15 && runs <= 40);
+      expect(ladder[1]).toBeGreaterThan(ladder[0]);
+      expect(ladder[2]).toBeGreaterThan(ladder[1]);
     }
   });
 });

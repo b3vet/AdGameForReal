@@ -10,11 +10,31 @@
  * Keep the shape stable, and add rather than rename.
  */
 
+import type { KillKind } from '@/data';
 import type { PhysicsLayer } from '@/physics';
 import type { Run, RunState } from '@/sim';
 
 import type { App } from './App';
+import type { RunPayout } from './academy';
+import type { MissionView } from './missions';
 import type { PlayerState } from './player';
+import type { StreakView } from './streak';
+
+/**
+ * The meta layer as the smoke test reads it (D51 to D53): the streak on the
+ * title, the board, the kill counters and what the last run paid. Views rather
+ * than the raw save, because these are exactly the numbers a screenshot has to
+ * be checked against.
+ */
+export interface ArcaneMetaView {
+  streak: StreakView;
+  missions: readonly MissionView[];
+  kills: Readonly<Record<KillKind, number>>;
+  /** Cosmetic ids the player owns (`cosmetics.json`). */
+  owned: readonly string[];
+  /** What the last finished run paid, or null before the first one. */
+  payout: RunPayout | null;
+}
 
 /** The handle `scripts/smoke.mjs` and manual debugging use. Keep it stable. */
 export interface ArcaneDebugHandle {
@@ -50,6 +70,8 @@ export interface ArcaneDebugHandle {
   };
   /** The player's meta state: coins, upgrades, staffs, wisp, bestiary. */
   player: () => Readonly<PlayerState>;
+  /** The Milestone 8 meta layer, as views (D51 to D53). See `ArcaneMetaView`. */
+  meta: () => ArcaneMetaView;
   /**
    * Writes a hand-made player over the saved one and re-paints whatever menu
    * is up. Every field is validated on the way in (`src/core/save.ts`), so a

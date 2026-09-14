@@ -1,7 +1,7 @@
 /**
- * The save is the only thing in the game a player can lose, so the two things
- * tested here are the two ways it can be lost: a v1 save that is not carried
- * over, and a v2 save that does not come back the way it went in.
+ * The save is the only thing in the game a player can lose, so what is tested
+ * here is every way it can be lost: a v1 or v2 save that is not carried over,
+ * and a v3 save that does not come back the way it went in.
  *
  * `localStorage` does not exist in the Vitest node environment, which is also
  * the browser case the loader has to survive (private browsing throws on the
@@ -67,8 +67,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('save v2 migration', () => {
-  it('carries a v1 save over and defaults everything the Academy added', () => {
+describe('the v1 chain', () => {
+  it('carries a v1 save over and defaults everything added since', () => {
     storage.setItem(
       SAVE_KEY_V1,
       JSON.stringify({ unlockedLevel: 7, muted: true, debug: true }),
@@ -100,7 +100,7 @@ describe('save v2 migration', () => {
     expect(save.player.unlockedLevel).toBe(7);
   });
 
-  it('writes the migrated save under the v2 key and leaves v1 alone', () => {
+  it('writes the migrated save under the current key and leaves v1 alone', () => {
     storage.setItem(SAVE_KEY_V1, JSON.stringify({ unlockedLevel: 4 }));
 
     loadSave();
@@ -129,7 +129,7 @@ describe('save v2 migration', () => {
   });
 });
 
-describe('save v2 round trip', () => {
+describe('save v3 round trip', () => {
   it('returns every field it was given', () => {
     const player = defaultPlayer();
     player.coins = 1234;

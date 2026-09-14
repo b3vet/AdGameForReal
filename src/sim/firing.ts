@@ -15,17 +15,19 @@ import type { Burn } from './burn';
 import { killEnemy, unitsOf } from './contact';
 import type { CrowdSim } from './crowd';
 import type { EventBuffer } from './events';
+import { evolutionOf } from './evolutions';
+import type { HeldEvolutions } from './evolutions';
 import { applyCurseCreep, applyGateGrowth } from './gates';
 import { laneCenter, laneOf } from './lanes';
-import { WeaponEffects } from './effects';
-import { evolutionOf, NO_MODS } from './player';
+import type { WeaponEffects } from './effects';
+import { NO_MODS } from './player';
 import type { PlayerMods } from './player';
 import { hitShield } from './shields';
 import type { Streams } from './streams';
 import type { TargetList, Target } from './targeting';
-import { weaponDef, weaponIds, weaponOf } from './weapons';
+import { weaponDef, weaponOf } from './weapons';
 import type { EnemyState, Lane, ProjectileState, RunState, WeaponId } from './types';
-import type { Balance, ShatterDef, WeaponSlow } from '@/data/types';
+import type { Balance, WeaponSlow } from '@/data/types';
 
 export class Firing {
   private readonly balance: Balance;
@@ -47,7 +49,7 @@ export class Firing {
   private fireCursor = 0;
   private readonly laneBatch = [0, 0, 0];
 
-  /** Splash, chain and shatter: everything that happens around the body hit. */
+  /** Splash, chain, shatter and the two evolutions that ride on them. */
   private readonly effects: WeaponEffects;
 
   /** The squad's whole output this step, in shots per second. */
@@ -62,6 +64,9 @@ export class Firing {
   /** Extra chain links per staff, from the tier its owner has it at. */
   private readonly extraChains: Record<WeaponId, number>;
 
+  /** Per staff: whether the arc keeps its full damage at every hop (D54). */
+  private readonly fullChains: Record<WeaponId, boolean>;
+
   constructor(
     balance: Balance,
     events: EventBuffer,
@@ -69,6 +74,10 @@ export class Firing {
     streams: Streams,
     crowd: CrowdSim,
     onBossKilled: () => void,
+    // Built by `buildLoadout` rather than here: the meteor blasts through the
+    // same object, and neither it nor this class may own the other (D54).
+    effects: WeaponEffects,
+    held: HeldEvolutions,
     mods: PlayerMods = NO_MODS,
     burn: Burn | null = null,
   ) {
@@ -78,30 +87,11 @@ export class Firing {
     this.streams = streams;
     this.crowd = crowd;
     this.onBossKilled = onBossKilled;
+    this.effects = effects;
     this.mods = mods;
     this.burn = burn;
-
-    let shatter: ShatterDef | null = null;
-    const chains: Record<WeaponId, number> = { ember: 0, storm: 0, frost: 0 };
-    for (const id of weaponIds) {
-      const evolution = evolutionOf(id, mods.tiers[id]);
-      if (evolution === undefined) continue;
-      chains[id] = evolution.extraChains ?? 0;
-      if (evolution.shatter !== undefined) shatter = evolution.shatter;
-    }
-    this.extraChains = chains;
-    // Frost's evolution is resolved from the *player* rather than the staff in
-    // hand: a body only shatters because frost froze it, and which staff the
-    // squad happens to be carrying when it dies is beside the point.
-    this.effects = new WeaponEffects(
-      balance,
-      events,
-      targets,
-      (hitState, enemy, amount, slow) => {
-        this.damage(hitState, enemy, amount, null, slow);
-      },
-      shatter,
-    );
+    this.extraChains = held.extraChains;
+    this.fullChains = held.fullChains;
 
     const max = Math.max(1, Math.floor(balance.projectiles.max));
     this.spawnZ = new Float64Array(max);
@@ -223,6 +213,11 @@ export class Firing {
       this.volley(state, lane, x, squad.z, squad.z + this.balance.projectiles.range, batched);
       if (state.status !== 'running') return;
     }
+
+    // Storm tier 4 (D54). Counted here because this is what a volley *is* — a
+    // step the squad fired on — and resolved after the shots have landed, so an
+    // overcharge finishes the row the volley started rather than racing it.
+    this.effects.overcharge(state, this.shotRate * squad.damage);
   }
 
   /**
@@ -292,6 +287,7 @@ export class Firing {
     if (enemy === null) return;
 
     const weapon = weaponDef(weaponId);
+    const tiers = this.mods.tiers;
     const damage = hits * squad.damage;
     this.events.projectileHit(weaponId, x, enemy.z);
     this.damage(state, enemy, damage, target, weapon.slow);
@@ -305,10 +301,12 @@ export class Firing {
 
     const chain = weapon.chain;
     if (chain !== undefined) {
-      // Storm's evolution is one more target, so it is the same arc with a
-      // longer budget rather than a second mechanic.
+      // Storm's evolutions are both the same arc with a better budget rather
+      // than a second mechanic: tier 2 is one more target, and tier 3 is every
+      // link taking the whole shot instead of `damageMul` of it.
       const count = chain.count + this.extraChains[weaponId];
-      this.effects.chain(state, enemy, damage * chain.damageMul, count, chain.range, weapon.slow);
+      const mul = this.fullChains[weaponId] ? 1 : chain.damageMul;
+      this.effects.chain(state, enemy, damage * mul, count, chain.range, weapon.slow);
       if (state.status !== 'running') return;
     }
 
@@ -317,7 +315,10 @@ export class Firing {
     // whole blast radius would make the burn a second splash rather than a
     // burn. `enemy.alive` is false if the shot killed it, and a corpse does
     // not burn.
-    if (this.burn !== null && enemy.alive && this.hasBurn(weaponId)) {
+    // `evolutionOf` rather than a flag off `held`: the burn belongs to the staff
+    // in hand, so a squad that walked through a storm gate stops lighting fires
+    // even though the player still owns an evolved ember.
+    if (this.burn !== null && enemy.alive && evolutionOf(weaponId, tiers[weaponId])?.burn !== undefined) {
       this.burn.ignite(enemy, damage, state.time);
     }
   }
@@ -328,8 +329,18 @@ export class Firing {
     this.damage(state, enemy, amount, null, undefined);
   }
 
-  private hasBurn(id: WeaponId): boolean {
-    return evolutionOf(id, this.mods.tiers[id])?.burn !== undefined;
+  /**
+   * Damage from one of the weapon effects — a splash, an arc, a shatter, a
+   * meteor — with the staff's slow carried along.
+   *
+   * The one door `WeaponEffects` damages through, so a body killed by any of
+   * them books its stream, its events and its corpse exactly as one killed by
+   * a shot does. Unlike `hit` it takes whatever it is given: the effects have
+   * already decided there is damage to deal, and a zero guard here would be a
+   * second opinion about arithmetic that happened next door.
+   */
+  spill(state: RunState, enemy: EnemyState, amount: number, slow: WeaponSlow | undefined): void {
+    this.damage(state, enemy, amount, null, slow);
   }
 
   /**
@@ -398,6 +409,11 @@ export class Firing {
       this.effects.shatter(state, enemy, dealt);
       if (state.status !== 'running') return;
     }
+    // Frost tier 3 (D54): a body that was *already* frozen when it died leaves
+    // the chill behind it. Strictly the body that was slowed before this hit,
+    // not any body a frost shot killed, so the pulse is the second hit on a
+    // held body rather than something every frost kill does for free.
+    if (wasSlowed) this.effects.freezePulse(state, enemy);
     if (enemy.kind === 'boss') {
       this.events.bossKilled();
       this.onBossKilled();

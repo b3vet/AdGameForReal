@@ -33,19 +33,27 @@ import {
   buyUpgrade,
   emptyPlayer,
   familiarCost,
+  maxStaffTier,
   nextUpgradeCost,
   progression,
-  roadProgress,
   roomOpen,
-  runRewards,
   staffCost,
   staffPrices,
+  staffTierOf,
   upgradeIds,
 } from './player';
-import type { RunPayable } from './player';
+import { roadProgress, runRewards } from './rewards';
+import type { RunPayable } from './rewards';
 import { weaponIds } from './weapons';
 import { balance, levelConfig, levelCount } from '@/data';
-import type { Balance, FamiliarTier, PlayerState, UpgradeId, WeaponId } from '@/data/types';
+import type {
+  Balance,
+  FamiliarTier,
+  PlayerState,
+  StaffTier,
+  UpgradeId,
+  WeaponId,
+} from '@/data/types';
 
 const DT = 1 / 60;
 
@@ -85,7 +93,10 @@ export interface Loadout {
   upgrades: Record<UpgradeId, number>;
   /** Staffs owned beyond the starting ember. */
   staffs: WeaponId[];
+  /** Staffs evolved at all: staff tier 2 or better. */
   evolved: WeaponId[];
+  /** Every staff's tier, 0 to 4, for the readout (D54). */
+  tiers: Record<WeaponId, StaffTier>;
   wispTier: FamiliarTier;
   /** Purchases made so far, and what they cost in total. */
   purchases: number;
@@ -191,8 +202,14 @@ function upgradeWorth(id: UpgradeId, startCount: number, bossShare: number): num
  * second staff, then the big-ticket evolutions and wisp tiers. Null when
  * nothing on the shelf is affordable — which is what makes a runs-per-purchase
  * figure bigger than one possible.
+ *
+ * Exported for the economy tests, which ask it what a given purse would be
+ * sold next. The campaign as it stands never reaches the evolutions — the yard
+ * has fifty rungs and a forty-level campaign earns about thirty thousand coins,
+ * so there is always something cheaper on the shelf (see the Milestone 8 log) —
+ * and a rule nothing exercises is a rule nobody has checked.
  */
-function bestOffer(player: PlayerState, startCount: number, bossShare: number): Purchase | null {
+export function bestOffer(player: PlayerState, startCount: number, bossShare: number): Purchase | null {
   let best: Purchase | null = null;
   let bestValue = 0;
   for (const id of upgradeIds) {
@@ -216,14 +233,17 @@ function bestOffer(player: PlayerState, startCount: number, bossShare: number): 
     }
     if (best !== null) return best;
 
+    // The evolution ladder (D54): tier 2, then 3, then 4, one rung per
+    // purchase. It is reached only when the yard has nothing affordable left,
+    // which is the order a player climbs in — the rungs are cheap and
+    // compounding, and an evolution is a multi-run goal.
     for (const id of weaponIds) {
-      const staff = player.staffs[id];
-      if (!staff.unlocked || staff.tier >= 2) continue;
-      // The same price the Workbench would show for this staff's next step,
-      // which at tier 1 is its evolution.
+      const tier = staffTierOf(player, id);
+      if (tier === 0 || tier >= maxStaffTier) continue;
+      // The same price the Workbench would show for this staff's next step.
       const cost = staffCost(player, id);
       if (cost !== null && cost <= player.coins && (best === null || cost < best.cost)) {
-        best = { kind: 'evolution', label: `${id}+`, cost };
+        best = { kind: 'evolution', label: `${id}+${String(tier + 1)}`, cost };
       }
     }
   }
@@ -261,7 +281,12 @@ function loadoutOf(player: PlayerState, purchases: number, spent: number): Loado
   return {
     upgrades: { ...player.upgrades },
     staffs: weaponIds.filter((id) => player.staffs[id].unlocked && id !== 'ember'),
-    evolved: weaponIds.filter((id) => player.staffs[id].unlocked && player.staffs[id].tier >= 2),
+    evolved: weaponIds.filter((id) => staffTierOf(player, id) >= 2),
+    tiers: {
+      ember: staffTierOf(player, 'ember'),
+      storm: staffTierOf(player, 'storm'),
+      frost: staffTierOf(player, 'frost'),
+    },
     wispTier: player.familiar.unlocked ? player.familiar.tier : 0,
     purchases,
     spent,

@@ -5,14 +5,21 @@
 
 import audioJson from './audio.json';
 import balanceJson from './balance.json';
+import endlessJson from './endless.json';
 import levelsJson from './levels.json';
 import type { AudioMix } from './audio-types';
-import type { Balance, LevelGenConfig } from './types';
+import type { Balance, EndlessConfig, LevelGenConfig } from './types';
 
-export type { Balance, LevelGenConfig, ValueRange, EnemyBalance, BossBalance } from './types';
+export type { Balance, EndlessConfig, LevelGenConfig, ValueRange, EnemyBalance, BossBalance } from './types';
 export type { AudioMix } from './audio-types';
 
 export const balance: Balance = balanceJson;
+
+/**
+ * The endless road's dials (D52). Cast for the same reason `levels` below is:
+ * `biomes` is a string-literal union and a JSON module's strings widen.
+ */
+export const endless: EndlessConfig = endlessJson as EndlessConfig;
 
 /** Mix and throttles for `src/audio`; see `audio-types.ts`. */
 export const audioMix: AudioMix = audioJson;
@@ -40,3 +47,41 @@ export function levelConfig(index: number): LevelGenConfig {
 }
 
 export const levelCount = levels.length;
+
+/**
+ * The Milestone 8 meta layer, re-exported so `@/data` stays the one import site
+ * (D51, D53). The pool, the Wardrobe's tints and the shapes the save carries
+ * are *data with copy in them*, so each keeps its own `*-types.ts` beside its
+ * JSON; this file is the door onto all of them.
+ */
+export { missionDef, missions } from './missions-types';
+export type {
+  MissionDef,
+  MissionKind,
+  MissionsData,
+  StreakTuning,
+} from './missions-types';
+
+export {
+  NO_COSMETIC,
+  cosmeticDef,
+  cosmetics,
+  cosmeticsForSlot,
+  tintRole,
+  tintTriple,
+} from './cosmetics-types';
+export type { CosmeticDef, CosmeticTier, CosmeticsData, SlotCopy } from './cosmetics-types';
+
+export { killKinds } from './meta-types';
+export type {
+  CosmeticSlot,
+  CosmeticsState,
+  EndlessState,
+  KillKind,
+  LevelBest,
+  MissionState,
+  MissionsState,
+  StreakState,
+} from './meta-types';
+
+export type { BestiaryCopy, BestiaryTier } from './academy-types';

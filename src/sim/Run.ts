@@ -25,6 +25,7 @@ import type { Burn } from './burn';
 import { Crossings } from './crossings';
 import type { GateSink } from './crossings';
 import { CrowdSim } from './crowd';
+import type { Evolutions } from './evolutions';
 import { EventBuffer } from './events';
 import type { Familiar } from './familiar';
 import type { Firing } from './firing';
@@ -79,6 +80,8 @@ export class Run {
   private readonly boss = new BossController();
   private readonly crowd: CrowdSim;
   private readonly crossings: Crossings;
+  /** The two evolutions that run on a clock of their own (D54). */
+  private readonly evolutions: Evolutions;
 
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
   private accumulator = 0;
@@ -184,7 +187,12 @@ export class Run {
       walls: this.walls,
       crowd: this.crowd.crowd,
       groups: this.crowd.groups,
+      ice: null,
     };
+    // Written only on the endless road, and its presence is what tells the two
+    // roads apart everywhere outside the generator (D52) — the HUD's chip, the
+    // result sheet and `runRewards`, which pays by distance when it is there.
+    if (level.endless === true) this.runState.endless = { metres: 0 };
 
     this.streams = new Streams(balance, this.events, this.targets, level.seed, world.nextId);
     for (const row of level.rows) {
@@ -207,6 +215,7 @@ export class Run {
     this.firing = loadout.firing;
     this.burn = loadout.burn;
     this.familiar = loadout.familiar;
+    this.evolutions = loadout.evolutions;
     if (this.familiar !== null) {
       this.runState.familiar = this.familiar.create(squad, this.mods.familiarTier);
     }
@@ -278,10 +287,12 @@ export class Run {
     squad.targetX = Math.min(Math.max(squad.targetX, -limit), limit);
     steerLeader(squad, this.balance, dt);
 
-    // The squad stops at the arena to fight the boss.
+    // The squad stops at the arena to fight the boss. On the endless road there
+    // is no boss and the same line is the finish (D52).
     if (squad.z < state.arenaZ) {
       squad.z = Math.min(state.arenaZ, squad.z + this.level.runSpeed * dt);
     }
+    if (state.endless !== undefined) state.endless.metres = squad.z;
 
     // Leaders, stragglers, forces: every unit moves here and nowhere else.
     this.crowd.step(state, dt);
@@ -313,6 +324,12 @@ export class Run {
       this.familiar.update(state, dt);
       if (state.status !== 'running') return;
     }
+    // The meteor and the glacier, on the same seam as the burn and the wisp:
+    // after the squad's own fire and before anything walks, so a body the
+    // meteor kills does not also get a step of walking, and a wall of ice is
+    // standing before the bodies it holds take their step (D54).
+    this.evolutions.update(state, dt);
+    if (state.status !== 'running') return;
     advanceEnemies(state, this.balance, this.events, dt, this.hitSquad, this.onLeak);
     if (state.status !== 'running') return;
     // After everything has moved: heads, counts, the `streamCleared` edge and
@@ -324,6 +341,9 @@ export class Run {
     if (squad.count > state.peakCount) state.peakCount = squad.count;
     state.survivors = squad.count;
     if (squad.count <= 0) this.finish('lost');
+    // An endless run ends on the wipe above or on the end of the road (D52).
+    // Checked last, so the step that reaches the line still resolves in full.
+    else if (state.endless !== undefined && squad.z >= state.arenaZ) this.finish('won');
   }
 
   /**

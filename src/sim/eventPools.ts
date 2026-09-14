@@ -35,6 +35,21 @@ export function createEventPools() {
     splashes: new Pool<EventOf<'splash'>>(() => ({ type: 'splash', x: 0, z: 0, radius: 0 })),
     chains: new Pool<EventOf<'chain'>>(() => ({ type: 'chain', from: 0, to: 0 })),
     slows: new Pool<EventOf<'enemySlowed'>>(() => ({ type: 'enemySlowed', enemyId: 0, seconds: 0 })),
+    meteors: new Pool<EventOf<'meteor'>>(() => ({ type: 'meteor', x: 0, z: 0, radius: 0 })),
+    overcharges: new Pool<EventOf<'overcharge'>>(() => ({
+      type: 'overcharge',
+      x: 0,
+      z: 0,
+      radius: 0,
+      targets: 0,
+    })),
+    freezePulses: new Pool<EventOf<'freezePulse'>>(() => ({
+      type: 'freezePulse',
+      x: 0,
+      z: 0,
+      radius: 0,
+    })),
+    glaciers: new Pool<EventOf<'glacier'>>(() => ({ type: 'glacier', lane: 0, z: 0, until: 0 })),
     shieldBreaks: new Pool<EventOf<'shieldBreak'>>(() => ({
       type: 'shieldBreak',
       enemyId: 0,

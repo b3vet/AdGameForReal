@@ -263,5 +263,46 @@
     "gateClearance": 4,
     "zJitter": 5,
     "dpsTrim": 0.38
+  },
+  "evolutions": {
+    "ember": {
+      "wildfire": {
+        "radius": 1.1,
+        "share": 0.55,
+        "maxTargets": 3
+      },
+      "meteor": {
+        "intervalSeconds": 9,
+        "ahead": 16,
+        "radius": 3.2,
+        "falloff": 0.7,
+        "secondsOfFire": 1.8,
+        "shoveStrength": 3,
+        "shoveSeconds": 0.35
+      }
+    },
+    "storm": {
+      "overcharge": {
+        "everyVolleys": 5,
+        "radius": 7,
+        "secondsOfFire": 0.3,
+        "maxTargets": 24,
+        "minSeconds": 1.2
+      }
+    },
+    "frost": {
+      "freezePulse": {
+        "radius": 2.2,
+        "seconds": 1.2,
+        "factor": 0.5,
+        "maxTargets": 12
+      },
+      "glacier": {
+        "intervalSeconds": 14,
+        "holdSeconds": 3,
+        "ahead": 12,
+        "minBodies": 6
+      }
+    }
   }
 }

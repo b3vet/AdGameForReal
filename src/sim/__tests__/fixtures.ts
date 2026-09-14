@@ -125,6 +125,12 @@ export function playerHolding(held: Held): PlayerState {
   for (const id of held.evolved ?? []) {
     player.staffs[id] = { unlocked: true, tier: 2 };
   }
+  // The rungs above the first (D54), named outright. `evolved` stays what it
+  // always was — "this staff is evolved", which is tier 2 — so the balance set
+  // and the tuning readout read exactly as they did.
+  for (const [id, tier] of Object.entries(held.tiers ?? {})) {
+    player.staffs[id as WeaponId] = { unlocked: true, tier: tier ?? 1 };
+  }
   const last = held.staffs?.[held.staffs.length - 1];
   if (last !== undefined) player.selectedStaff = last;
   if (held.wispTier !== undefined && held.wispTier > 0) {
@@ -140,6 +146,8 @@ export interface Held {
   /** Staffs owned beyond the starting ember; the last is the one in hand. */
   staffs?: WeaponId[];
   evolved?: WeaponId[];
+  /** Staff tiers outright, for the rungs `evolved` cannot say (D54). */
+  tiers?: Partial<Record<WeaponId, StaffTier>>;
   wispTier?: FamiliarTier;
   unlockedLevel?: number;
 }

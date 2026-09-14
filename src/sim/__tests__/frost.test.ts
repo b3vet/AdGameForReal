@@ -36,10 +36,19 @@ function hashOf(text: string): string {
  * `levels.json` entries 1 to 20, hashed one by one so a failure names the level
  * that moved rather than saying "the file changed".
  *
- * Recorded at the end of Milestone 6 and not re-recorded since. Milestone 7
- * adds `biome`, `chargerRows`, `shieldRows` and `boss.kind` to the schema, and
- * all four are optional for exactly this reason: an absent field is the old
- * behaviour, so the twenty recipes that predate Frostfell are untouched.
+ * Recorded at the end of Milestone 6. Milestone 7 added `biome`, `chargerRows`,
+ * `shieldRows` and `boss.kind` to the schema, and all four are optional for
+ * exactly this reason: an absent field is the old behaviour, so the twenty
+ * recipes that predate Frostfell were untouched by it.
+ *
+ * One has moved since, deliberately: **level 7**, re-recorded in Milestone 8
+ * for D55. It loses its `milestone` flag and plays as an ordinary-hard level,
+ * so the first upgrade gate is level 10 — the Milestone 7 finding behind it is
+ * that the set the economy affords by level 7 is worth a few percent of the
+ * squad's output, which is the same reason level 5 came off the list in D48.
+ * The flag is the only field that changed: `genDials` reads it and nothing
+ * else does, so level 7's curses, blocks and third lanes are the ordinary
+ * ones and every other level's recipe is the byte it was.
  */
 const BIOME_1_CONFIGS: readonly string[] = [
   'e52737ba',
@@ -48,7 +57,8 @@ const BIOME_1_CONFIGS: readonly string[] = [
   '2ee5b0a1',
   'eb077311',
   'e72ee4ad',
-  '734a9391',
+  // L7, re-recorded for D55: the `milestone` flag dropped (see above).
+  '40841a43',
   'fffe58a5',
   '649955a5',
   'b28d8df5',

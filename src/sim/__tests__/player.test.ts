@@ -13,14 +13,14 @@ import {
   nextUpgradeCost,
   playerMods,
   progression,
-  runRewards,
   staffPrices,
   upgradeCost,
   upgradeIds,
   NO_MODS,
 } from '../player';
+import { runRewards } from '../rewards';
 import { Run } from '../Run';
-import { weaponDef } from '../weapons';
+import { weaponDef, weaponIds } from '../weapons';
 import { level, play, row, runOf, testBalance, withFamiliar, withStaff, withUpgrade } from './fixtures';
 import { balance, levelConfig } from '@/data';
 
@@ -44,11 +44,18 @@ describe('upgrade prices', () => {
     expect(nextUpgradeCost(player, 'damage')).toBeNull();
   });
 
-  it('prices every staff and every wisp tier', () => {
+  it('prices every staff, every evolution tier and every wisp tier', () => {
     expect(staffPrices('ember').unlock).toBe(0);
     for (const id of ['storm', 'frost'] as const) {
       expect(staffPrices(id).unlock).toBeGreaterThan(0);
-      expect(staffPrices(id).evolve).toBeGreaterThan(staffPrices(id).unlock);
+      expect(staffPrices(id).evolve[0]).toBeGreaterThan(staffPrices(id).unlock);
+    }
+    // Three rungs per staff, each dearer than the one below it (D54).
+    for (const id of weaponIds) {
+      const ladder = staffPrices(id).evolve;
+      expect(ladder).toHaveLength(3);
+      expect(ladder[1]).toBeGreaterThan(ladder[0]);
+      expect(ladder[2]).toBeGreaterThan(ladder[1]);
     }
     expect(familiarPrice(0)).toBe(0);
     expect(familiarPrice(1)).toBe(progression.wisp.unlock);

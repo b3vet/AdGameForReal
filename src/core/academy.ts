@@ -13,14 +13,27 @@
  */
 
 import type { GameAudio } from '@/audio';
+import type { CosmeticSlot } from '@/data';
 import type { WeaponId } from '@/sim';
 import type { AcademyView, Overlay } from '@/ui';
 
+import { bestiaryView } from './bestiary';
+import type { BestiaryEntryView, TierAward } from './bestiary';
+import { systemClock, today } from './clock';
+import type { Clock } from './clock';
+import { selectCosmetic, wardrobeView } from './cosmetics';
+import type { WardrobeView } from './cosmetics';
+import { applyRunMeta } from './meta';
+import { missionBoard, rollMissions } from './missions';
+import type { MissionView } from './missions';
+import { streakView } from './streak';
+import type { StreakView } from './streak';
 import {
   addCoins,
   buyFamiliar,
   buyStaff,
   buyUpgrade,
+  clonePlayer,
   rememberSeen,
   roomIds,
   roomUnlockLevel,
@@ -49,22 +62,51 @@ export interface AcademyDeps {
   levelCount: number;
   /** The player's coins or upgrades changed, so the backdrop is stale. */
   onPlayerChanged: () => void;
+  /**
+   * The device clock, for the daily streak and nothing else (D51). Injectable
+   * so a test can pin the day: the whole of the streak's behaviour is about
+   * which calendar day a run finished on, and a test that cannot say what day
+   * it is cannot test it.
+   */
+  now?: Clock;
 }
 
 /** What a finished run paid, for the result sheet. */
 export interface RunPayout {
+  /** The road's own reward (D46). */
   coins: number;
+  /** What the meta layer paid on top: the streak, missions and kill tiers. */
+  bonusCoins: number;
   totalCoins: number;
   firstClear: boolean;
+  /** The streak after this run, and whether it advanced or reset (D51). */
+  streak: StreakView;
+  streakCoins: number;
+  /** Missions completed by this run, already paid. */
+  completed: MissionView[];
+  missionCoins: number;
+  /** Bestiary rungs crossed, and the tints they handed over (D53). */
+  awards: TierAward[];
+  tierCoins: number;
+  unlocked: string[];
+  /** The level's best walk after this run, and whether this run set it. */
+  best: { survivors: number; peak: number } | null;
+  bestImproved: boolean;
+  /** True when an endless run went further than any before it (D52). */
+  endlessBest: boolean;
+  /** The seed of the road just walked, for "same road again". */
+  seed: number;
 }
 
 export class AcademyController {
   private readonly deps: AcademyDeps;
+  private readonly clock: Clock;
   private state: PlayerState;
   private screen: MenuScreen = 'home';
 
   constructor(deps: AcademyDeps) {
     this.deps = deps;
+    this.clock = deps.now ?? systemClock;
     this.state = loadSave().player;
   }
 
@@ -73,8 +115,60 @@ export class AcademyController {
     return this.state;
   }
 
+  /** Today, on the device clock. The one place the meta layer reads it (D51). */
+  get day(): string {
+    return today(this.clock);
+  }
+
   get menu(): MenuScreen {
     return this.screen;
+  }
+
+  /**
+   * The start of a play session: the board drops whatever was finished and
+   * draws replacements (D51).
+   *
+   * Here rather than in the constructor because it *writes* — a board that
+   * rolled would otherwise roll every time anything constructed a controller,
+   * including a test that only wanted to read a price.
+   */
+  beginSession(): void {
+    const rolled = rollMissions(this.state.missions);
+    if (rolled === null) return;
+    const next = clonePlayer(this.state);
+    next.missions = rolled;
+    this.commit(next);
+  }
+
+  // --- The meta layer's views ----------------------------------------------
+
+  /** The streak, for the title screen (D51). */
+  streakView(): StreakView {
+    return streakView(this.state.streak, this.day);
+  }
+
+  /** The three missions, for the board in the Academy (D51). */
+  missionsView(): MissionView[] {
+    return missionBoard(this.state.missions);
+  }
+
+  /** The Bestiary's cards, with their kill ladders (D53). */
+  bestiaryView(): readonly BestiaryEntryView[] {
+    return bestiaryView(this.state.kills, this.state.bestiary);
+  }
+
+  /** The Wardrobe: four slots of tints, owned and locked (D53). */
+  wardrobeView(): WardrobeView {
+    return wardrobeView(this.state);
+  }
+
+  /** A tint chip was tapped. Unowned ids and unknown slots do nothing. */
+  selectCosmetic(slot: CosmeticSlot, id: string): void {
+    const next = selectCosmetic(this.state, slot, id);
+    if (next === null) return;
+    this.commit(next);
+    this.deps.audio.playPurchase();
+    this.deps.overlay.showRoom('wardrobe', this.state);
   }
 
   /**
@@ -192,10 +286,32 @@ export class AcademyController {
     let player = addCoins(save.player, coins);
     const remembered = rememberSeen(player, session.seen);
     if (remembered !== null) player = remembered;
-    this.commit(player);
+
+    // The meta layer, on the same finished run and in the same commit: the
+    // streak for the day, the missions it moved, the bestiary rungs it crossed
+    // and the level's best walk (D51 to D53). It is paid *after* the road so
+    // that a mission reward can never change what clearing a level is worth.
+    const meta = applyRunMeta(player, { level, tally: session.tally() }, this.day);
+    this.commit(meta.player);
     if (session.won) markFirstClear(level);
 
-    return { coins, totalCoins: this.state.coins, firstClear };
+    return {
+      coins,
+      bonusCoins: meta.coins,
+      totalCoins: this.state.coins,
+      firstClear,
+      streak: this.streakView(),
+      streakCoins: meta.streakCoins,
+      completed: meta.completed,
+      missionCoins: meta.missionCoins,
+      awards: meta.awards,
+      tierCoins: meta.tierCoins,
+      unlocked: meta.unlocked,
+      best: meta.levelBest,
+      bestImproved: meta.bestImproved,
+      endlessBest: meta.endlessBest,
+      seed: session.seed,
+    };
   }
 
   /** The debug handle's writable player; every field is validated on the way in. */

@@ -25,6 +25,7 @@ import { chargerKills, startCharge, steerCharger } from './chargers';
 import { activationRange, enemyBalance, enemyFootprint } from './enemies';
 import type { EventBuffer } from './events';
 import { halfWidth } from './formation';
+import { laneOf } from './lanes';
 import type { EnemyState, GroupState, RunState, UnitLossReason } from './types';
 import type { Balance } from '@/data/types';
 
@@ -146,7 +147,22 @@ export function advanceEnemies(
       if (enemy.kind === 'charger') startCharge(enemy, state, balance, events);
     }
 
+    const wasAt = enemy.z;
     enemy.z -= effectiveSpeed(enemy, state.time) * dt;
+    // Frost tier 4 (D54): a wall of ice across one lane holds that lane's
+    // bodies at the line. Only a body that was in *front* of it — a body that
+    // spawned inside walks on, and one the wall went up behind is not dragged
+    // backward — and only the things that walk: the boss is `Run`'s and is
+    // nowhere near this list, so the arena is never frozen out.
+    const ice = state.ice;
+    if (
+      ice != null &&
+      wasAt >= ice.z &&
+      enemy.z < ice.z &&
+      laneOf(enemy.x, balance.road.laneWidth) === ice.lane
+    ) {
+      enemy.z = ice.z;
+    }
     if (enemy.kind === 'charger') steerCharger(enemy, balance, dt);
 
     let hit = false;

@@ -24,6 +24,13 @@ export interface AppCommands {
   readonly academy: AcademyController;
   /** Play, or Again: start the selected level. */
   startRun(): void;
+  /**
+   * "Same road again" on the result sheet (Milestone 8): the level just
+   * played, on the seed it was played on. Not wired to a callback here yet —
+   * `OverlayCallbacks` gains the button in Phase C — but the command exists so
+   * the screen has something to call.
+   */
+  replayRun(): void;
   /** Ascend: the level after this one. */
   nextLevel(): void;
   selectLevel(level: number): void;

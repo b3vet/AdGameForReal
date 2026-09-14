@@ -83,9 +83,15 @@ export class CrowdScene {
     boss: EnemyState | null,
     balance: Balance,
     anchorZ: number,
+    time: number,
   ): void {
     this.fenceWall = -1;
-    this.obstacles.gather(crowd, walls, gates, enemies, boss, balance, anchorZ);
+    this.obstacles.gather(crowd, walls, gates, enemies, boss, balance, anchorZ, time);
+  }
+
+  /** A push from something that is not a body: the meteor (D54). See `Obstacles.push`. */
+  shove(x: number, z: number, radius: number, strength: number, until: number): void {
+    this.obstacles.push(x, z, radius, strength, until);
   }
 
   /**

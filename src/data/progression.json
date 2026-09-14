@@ -15,25 +15,80 @@
     }
   },
   "staffs": {
-    "ember": { "unlock": 0, "evolve": 3800 },
-    "storm": { "unlock": 400, "evolve": 4200 },
-    "frost": { "unlock": 450, "evolve": 4500 }
+    "ember": {
+      "unlock": 0,
+      "evolve": [
+        3800,
+        6080,
+        8360
+      ]
+    },
+    "storm": {
+      "unlock": 400,
+      "evolve": [
+        4200,
+        6720,
+        9240
+      ]
+    },
+    "frost": {
+      "unlock": 450,
+      "evolve": [
+        4500,
+        7200,
+        9900
+      ]
+    }
   },
   "evolutions": {
-    "ember": { "burn": { "share": 0.3, "seconds": 2, "tickSeconds": 0.25 } },
-    "storm": { "extraChains": 1 },
-    "frost": { "shatter": { "radius": 1, "share": 0.5 } }
+    "ember": {
+      "burn": {
+        "share": 0.3,
+        "seconds": 2,
+        "tickSeconds": 0.25
+      },
+      "wildfire": 3,
+      "meteor": 4
+    },
+    "storm": {
+      "extraChains": 1,
+      "fullChains": 3,
+      "overcharge": 4
+    },
+    "frost": {
+      "shatter": {
+        "radius": 1,
+        "share": 0.5
+      },
+      "freezePulse": 3,
+      "glacier": 4
+    }
   },
   "wisp": {
     "unlock": 3800,
-    "tierPrices": [0, 3800, 4800, 5600],
+    "tierPrices": [
+      0,
+      3800,
+      4800,
+      5600
+    ],
     "offsetX": 1.2,
     "offsetZ": -0.5,
     "range": 30,
     "sparkSpeed": 26,
     "maxSparks": 32,
-    "fireRate": [0, 1.5, 2.0, 2.6],
-    "damage": [0, 12, 22, 36]
+    "fireRate": [
+      0,
+      1.5,
+      2.0,
+      2.6
+    ],
+    "damage": [
+      0,
+      12,
+      22,
+      36
+    ]
   },
   "rewards": {
     "perSurvivor": 0.1,

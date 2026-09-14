@@ -258,6 +258,21 @@ export interface GroupState {
   rejoinAt: number;
 }
 
+/**
+ * Frost's tier-4 wall (D54): one lane held where it stands until `until`.
+ *
+ * On the state rather than in the evolution's own object because two things
+ * outside it read it — `contact.ts`, which is what actually stops the bodies,
+ * and render, which draws the wall — and because it is part of what a run *is*
+ * at any instant, so a snapshot of the state replays with the wall in it.
+ */
+export interface IceWall {
+  lane: Lane;
+  z: number;
+  /** Sim time the ice lets go. */
+  until: number;
+}
+
 export type RunStatus = 'running' | 'won' | 'lost';
 
 /** `leak` is new in Milestone 3: one stream enemy walked into the squad. */
@@ -308,73 +323,22 @@ export interface RunState {
    */
   crowd?: CrowdState;
   groups?: GroupState[];
+  /**
+   * Set on an endless run and on nothing else (D52): how far up the road the
+   * squad has walked, in metres, written every step.
+   *
+   * Its presence is also what tells the two roads apart everywhere outside the
+   * generator — the HUD's metres chip, the result sheet, and `runRewards`,
+   * which pays an endless run by distance rather than by the level it cleared.
+   * A campaign run never carries it, so it can never be paid the wrong way.
+   */
+  endless?: { metres: number };
+  /**
+   * Frost tier 4: the ice wall currently holding a lane, or null (D54).
+   * Optional like `familiar` and `walls`; `Run` always writes it.
+   */
+  ice?: IceWall | null;
 }
 
 /** Returned by `Run.tick`, consumed by render and UI, then discarded. */
-export type SimEvent =
-  | { type: 'projectileFired'; x: number; z: number }
-  | { type: 'projectileHit'; weaponId: WeaponId; x: number; z: number }
-  | { type: 'gateHit'; gateId: number; kind: GateKind; value: number }
-  | {
-      type: 'gatePassed';
-      gateId: number;
-      kind: GateKind;
-      value: number;
-      countBefore: number;
-      countAfter: number;
-    }
-  | { type: 'enemyActivated'; enemyId: number }
-  | { type: 'enemyHit'; enemyId: number; damage: number; hp: number; x: number; z: number }
-  | {
-      type: 'enemyKilled';
-      enemyId: number;
-      kind: EnemyKind;
-      x: number;
-      z: number;
-      /** Set when this body belonged to a stream; absent for a block or the boss. */
-      streamId?: number;
-    }
-  | { type: 'enemyLeaked'; enemyId: number; streamId: number; x: number; z: number }
-  | { type: 'streamStarted'; streamId: number; lane: Lane; count: number }
-  | { type: 'streamCleared'; streamId: number; lane: Lane; leaked: number }
-  | {
-      type: 'enemyShattered';
-      enemyId: number;
-      x: number;
-      z: number;
-      /**
-       * Set when this body belonged to a stream, exactly as on `enemyKilled`.
-       * A stream is hundreds of single bodies (D29) and the physics layer
-       * throws no debris for them, so it has to be able to tell one apart from
-       * a block without holding the kill event that came just before.
-       */
-      streamId?: number;
-    }
-  | { type: 'enemySlowed'; enemyId: number; seconds: number }
-  /** A shielded brute's shield reached zero. Fires once per body (D49). */
-  | { type: 'shieldBreak'; enemyId: number; x: number; z: number }
-  /**
-   * A charger set off, or the Rime Fiend started a charge (D49). `kind` is
-   * which of the two, since they look and sound nothing like each other.
-   */
-  | { type: 'charge'; enemyId: number; kind: EnemyKind; lane: Lane }
-  /**
-   * A body was set alight by an evolved ember staff. Emitted when the burn
-   * *starts*, not on every tick: a tick is four a second on every burning body
-   * and a river is hundreds of them, so the ticks are ordinary `enemyHit`s and
-   * this is the one render needs to attach a flame for `seconds`.
-   */
-  | { type: 'enemyBurning'; enemyId: number; x: number; z: number; seconds: number }
-  | { type: 'familiarShot'; x: number; z: number; targetId: number }
-  /** The wall clamp pushed the squad this step; `boundary` is which side. */
-  | { type: 'wallBlocked'; boundary: -1 | 1; x: number; z: number }
-  | { type: 'splash'; x: number; z: number; radius: number }
-  | { type: 'chain'; from: number; to: number }
-  | { type: 'weaponChanged'; from: WeaponId; to: WeaponId }
-  | { type: 'unitsGained'; amount: number; reason: 'gate' }
-  | { type: 'unitsLost'; amount: number; reason: UnitLossReason }
-  | { type: 'bossActivated'; enemyId: number }
-  | { type: 'bossStomp'; x: number; z: number }
-  | { type: 'bossEnraged'; enemyId: number }
-  | { type: 'bossKilled' }
-  | { type: 'runEnded'; status: RunStatus; survivors: number; peakCount: number };
+export type { SimEvent } from './eventTypes';

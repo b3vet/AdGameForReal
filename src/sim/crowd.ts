@@ -147,6 +147,11 @@ export class CrowdSim {
     return this.scene.fenceWall;
   }
 
+  /** A push on the crowd from something that is not a body: the meteor (D54). */
+  shove(x: number, z: number, radius: number, strength: number, until: number): void {
+    this.scene.shove(x, z, radius, strength, until);
+  }
+
   /* ---------------------------------------------------------------- */
   /* Spawning and dying                                                */
   /* ---------------------------------------------------------------- */
@@ -372,6 +377,7 @@ export class CrowdSim {
       state.boss,
       this.balance,
       state.squad.z,
+      state.time,
     );
     // The cell is the longer of the two neighbour reaches: the soft separation
     // radius and the two shoulders the body projection keeps apart.

@@ -14,7 +14,7 @@
  */
 
 import { balance } from '@/data';
-import type { LevelGenConfig } from '@/data/types';
+import type { LevelGenConfig, ValueRange } from '@/data/types';
 
 /** How big the squad is expected to be at row `i`. */
 export function squadCurve(config: LevelGenConfig, rowIndex: number): number {
@@ -55,10 +55,37 @@ export function gateRowShare(config: LevelGenConfig): number {
  * and one that grows 12 into 400 with half its rows full of enemies.
  */
 export function addValueAt(config: LevelGenConfig, estimate: number): number {
+  return addValueFor(
+    estimate,
+    curveGrowth(config),
+    gateRowShare(config),
+    config.index,
+    config.gateValues.mul,
+  );
+}
+
+/**
+ * The same arithmetic, asked directly.
+ *
+ * The endless road (D52) has the growth and the gate-row share of a *road*
+ * rather than of a level — its curve is a per-row dial and its rows are dealt
+ * from shares, so there is no `LevelGenConfig` whose `curveGrowth` is the
+ * number wanted — and it must size its `add` gates by exactly the rule the
+ * campaign sizes its own by, or the two roads are two economies. So the rule
+ * lives here, in terms of what it actually needs, and `addValueAt` is the
+ * level's way of asking it.
+ */
+export function addValueFor(
+  estimate: number,
+  growth: number,
+  gateShare: number,
+  index: number,
+  mul: ValueRange,
+): number {
   const gen = balance.gen;
-  const perGateRow = Math.log(curveGrowth(config)) / gateRowShare(config);
-  const mulMean = (config.gateValues.mul.min + config.gateValues.mul.max) / 2;
-  const mulChance = config.index >= gen.mulFromLevel ? Math.min(0.9, Math.max(0, gen.mulChance)) : 0;
+  const perGateRow = Math.log(growth) / gateShare;
+  const mulMean = (mul.min + mul.max) / 2;
+  const mulChance = index >= gen.mulFromLevel ? Math.min(0.9, Math.max(0, gen.mulChance)) : 0;
   const fromAdds = (perGateRow - mulChance * Math.log(Math.max(1, mulMean))) / (1 - mulChance);
   const frac = Math.max(gen.addFracFloor, (Math.exp(fromAdds) - 1) / (1 + gen.addShotBonus));
   return estimate * frac * gen.addValueShare;

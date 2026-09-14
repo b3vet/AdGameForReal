@@ -6,6 +6,7 @@
 export { Run } from './Run';
 export {
   addValueAt,
+  biomeAt,
   generateLevel,
   laneCenter,
   laneOf,
@@ -15,6 +16,12 @@ export {
   FIRE_RATE_GATE_WORTH,
 } from './level';
 export type { BossId, LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
+/**
+ * The endless road (D52): the same `LevelDef` a campaign level is, built from
+ * `endless.json`'s dials instead of a level recipe. `dialAt` is exported for
+ * the picker, which prints what the road is doing at a given distance.
+ */
+export { dialAt, generateEndless } from './endless';
 /**
  * The meta layer (D33, D35). The app owns a `PlayerState` and spends into it;
  * everything it needs to price a purchase and to pay a run out is here, so no
@@ -27,31 +34,43 @@ export {
   buyUpgrade,
   clonePlayer,
   emptyPlayer,
-  evolutionOf,
+  evolutionTierOf,
   familiarCost,
   familiarPrice,
   familiarUnlocked,
   maxFamiliarTier,
+  maxStaffTier,
   maxUpgradeLevel,
   nextUpgradeCost,
   playerMods,
   progression,
   roomOpen,
   roomUnlockLevel,
-  runRewards,
   selectStaff,
   staffCost,
   staffPrices,
+  staffTierOf,
   upgradeCost,
   upgradeCostFor,
   upgradeIds,
   upgradeLevel,
   NO_MODS,
 } from './player';
-export type { PlayerMods } from './player';
+export type { PlayerMods, StaffPrices } from './player';
+/** The three evolution tiers per staff (D54) and what each one switches on. */
+export { evolutionOf, hasEvolution } from './evolutions';
+/**
+ * What a finished run pays (D46, D52). `endlessCap` and `repeatClearValue` are
+ * exported beside it so a screen can show the ceiling an endless run is being
+ * paid under rather than a number that stops rising for no visible reason.
+ */
+export { endlessCap, repeatClearValue, roadProgress, runRewards } from './rewards';
+export type { RewardContext, RunPayable } from './rewards';
 export type {
   BiomeId,
   BossKind,
+  EvolutionMechanic,
+  EvolutionTier,
   FamiliarTier,
   PlayerState,
   Progression,
@@ -125,6 +144,7 @@ export type {
   GateKind,
   GateState,
   GroupState,
+  IceWall,
   Lane,
   ProjectileState,
   RunState,

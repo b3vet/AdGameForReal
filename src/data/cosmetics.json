@@ -1,0 +1,141 @@
+{
+  "wardrobe": {
+    "heading": "Wardrobe",
+    "noneName": "Plain",
+    "lockedHint": "{kills} {kind}"
+  },
+  "slots": [
+    { "id": "hat", "name": "Hats" },
+    { "id": "cape", "name": "Capes" },
+    { "id": "wisp", "name": "Wisp" },
+    { "id": "staffGlow", "name": "Staff glow" }
+  ],
+  "entries": [
+    {
+      "id": "hatBone",
+      "slot": "hat",
+      "name": "Bonecap",
+      "tint": "bone.base",
+      "unlockedBy": { "kind": "grunt", "tier": 1 }
+    },
+    {
+      "id": "capeBone",
+      "slot": "cape",
+      "name": "Bonewrap",
+      "tint": "bone.deep",
+      "unlockedBy": { "kind": "grunt", "tier": 2 }
+    },
+    {
+      "id": "wispBone",
+      "slot": "wisp",
+      "name": "Bonelight",
+      "tint": [1.15, 1.1, 0.85],
+      "unlockedBy": { "kind": "grunt", "tier": 3 }
+    },
+    {
+      "id": "hatStone",
+      "slot": "hat",
+      "name": "Stonecap",
+      "tint": "stone.base",
+      "unlockedBy": { "kind": "brute", "tier": 1 }
+    },
+    {
+      "id": "capeQuarry",
+      "slot": "cape",
+      "name": "Quarry Cloak",
+      "tint": "stone.deep",
+      "unlockedBy": { "kind": "brute", "tier": 2 }
+    },
+    {
+      "id": "glowQuarry",
+      "slot": "staffGlow",
+      "name": "Quarry Glow",
+      "tint": [0.95, 0.9, 0.78],
+      "unlockedBy": { "kind": "brute", "tier": 3 }
+    },
+    {
+      "id": "hatHound",
+      "slot": "hat",
+      "name": "Houndcrest",
+      "tint": "spell.frost.body",
+      "unlockedBy": { "kind": "charger", "tier": 1 }
+    },
+    {
+      "id": "wispHound",
+      "slot": "wisp",
+      "name": "Hound Spark",
+      "tint": "spell.frost.core",
+      "unlockedBy": { "kind": "charger", "tier": 2 }
+    },
+    {
+      "id": "capeHound",
+      "slot": "cape",
+      "name": "Hound Pelt",
+      "tint": [0.75, 0.9, 1.15],
+      "unlockedBy": { "kind": "charger", "tier": 3 }
+    },
+    {
+      "id": "glowBulwark",
+      "slot": "staffGlow",
+      "name": "Bulwark Glow",
+      "tint": "spell.frost.edge",
+      "unlockedBy": { "kind": "shieldBrute", "tier": 1 }
+    },
+    {
+      "id": "hatSlab",
+      "slot": "hat",
+      "name": "Slab Crown",
+      "tint": "stone.light",
+      "unlockedBy": { "kind": "shieldBrute", "tier": 2 }
+    },
+    {
+      "id": "capeSlab",
+      "slot": "cape",
+      "name": "Slab Mantle",
+      "tint": [0.8, 0.95, 1.2],
+      "unlockedBy": { "kind": "shieldBrute", "tier": 3 }
+    },
+    {
+      "id": "glowEmber",
+      "slot": "staffGlow",
+      "name": "Emberglow",
+      "tint": "spell.ember.core",
+      "unlockedBy": { "kind": "demon", "tier": 1 }
+    },
+    {
+      "id": "capeDemon",
+      "slot": "cape",
+      "name": "Demon Mantle",
+      "tint": "danger.deep",
+      "unlockedBy": { "kind": "demon", "tier": 2 }
+    },
+    {
+      "id": "wispEmber",
+      "slot": "wisp",
+      "name": "Emberspark",
+      "tint": "spell.ember.body",
+      "unlockedBy": { "kind": "demon", "tier": 3 }
+    },
+    {
+      "id": "hatFiend",
+      "slot": "hat",
+      "name": "Fiend Crown",
+      "tint": "sky.horizon",
+      "unlockedBy": { "kind": "rime", "tier": 1 }
+    },
+    {
+      "id": "glowRime",
+      "slot": "staffGlow",
+      "name": "Rime Glow",
+      "tint": "spell.frost.core",
+      "unlockedBy": { "kind": "rime", "tier": 2 }
+    },
+    {
+      "id": "wispRime",
+      "slot": "wisp",
+      "name": "Rimespark",
+      "tint": [0.7, 1.0, 1.25],
+      "unlockedBy": { "kind": "rime", "tier": 3 }
+    }
+  ]
+}

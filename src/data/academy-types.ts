@@ -51,11 +51,29 @@ export interface StaffCopy {
   tier2: string;
 }
 
+/**
+ * One rung of a bestiary entry's kill ladder (D53). Crossing `kills` of that
+ * kind pays `coins` once and hands over `cosmetic` — an id in
+ * `cosmetics.json`. Three rungs per entry, rising; `src/core/bestiary.ts` is
+ * what counts the kills and what guarantees a rung is paid exactly once.
+ */
+export interface BestiaryTier {
+  kills: number;
+  coins: number;
+  cosmetic: string;
+}
+
 export interface BestiaryCopy {
   /** An `EnemyKind` or a `LevelDef.bossId`. */
   id: string;
   name: string;
   blurb: string;
+  /**
+   * The three kill tiers, in rising order. Optional in the schema so an entry
+   * added without a ladder is data rather than a type error; every shipped
+   * entry has one.
+   */
+  tiers?: readonly BestiaryTier[];
 }
 
 export interface AcademyCopy {
@@ -94,6 +112,12 @@ export interface AcademyCopy {
     /** Shown in place of the blurb on an entry that has not been met. */
     unknown: string;
     entries: readonly BestiaryCopy[];
+    /** `{count}` — how many of this kind the player has killed (D53). */
+    tierLabel: string;
+    /** `{remaining}` more kills for `{name}`, the next tint on the ladder. */
+    nextLabel: string;
+    /** In place of `nextLabel` once all three tiers are taken. */
+    maxedLabel: string;
   };
   /**
    * The in-run HUD's two words (D49). The boss bar's title is the *bestiary's*

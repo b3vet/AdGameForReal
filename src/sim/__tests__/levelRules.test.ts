@@ -25,11 +25,17 @@ import { balance, levelConfig, levelCount } from '@/data';
 const SEEDS = [1, 2, 3, 4, 5];
 
 /**
- * The four of biome 1 (D45, C2 follow-up) and the four Frostfell adds (D49).
- * The flag in `levels.json` is what the generator reads, not a list of indices
- * in code; this is the list the data is checked against.
+ * The three of biome 1 (D45, C2 follow-up, narrowed by D55) and the four
+ * Frostfell adds (D49). The flag in `levels.json` is what the generator reads,
+ * not a list of indices in code; this is the list the data is checked against.
+ *
+ * Level 7 came off the list in Milestone 8 (D55) and plays as an ordinary-hard
+ * level, so the first upgrade gate is level 10. The reason is the one that took
+ * level 5 off it in D48: the set the economy affords by then is worth a few
+ * percent of the squad's output, so a level the upgrades are supposed to open
+ * is opened by nothing a player can actually have bought.
  */
-const MILESTONES = [7, 10, 15, 20, 25, 30, 35, 40];
+const MILESTONES = [10, 15, 20, 25, 30, 35, 40];
 
 function everyLevel(body: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
@@ -42,7 +48,7 @@ function hasGates(gates: ReadonlyArray<GateDef | null>): boolean {
 }
 
 describe('milestone levels', () => {
-  it('marks exactly the eight the plans name, in the data and not in code', () => {
+  it('marks exactly the seven the plans name, in the data and not in code', () => {
     const flagged: number[] = [];
     for (let index = 1; index <= levelCount; index++) {
       if (levelConfig(index).milestone === true) flagged.push(index);

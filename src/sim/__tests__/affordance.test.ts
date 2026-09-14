@@ -24,10 +24,10 @@ import {
   maxFamiliarTier,
   maxUpgradeLevel,
   nextUpgradeCost,
-  runRewards,
   staffPrices,
   upgradeIds,
 } from '../player';
+import { runRewards } from '../rewards';
 import { Run } from '../Run';
 import { weaponIds } from '../weapons';
 import { balance, levelConfig } from '@/data';
@@ -87,9 +87,12 @@ function offers(player: PlayerState): Purchase[] {
 
   for (const id of weaponIds) {
     const staff = player.staffs[id];
-    if (!staff.unlocked || staff.tier === 2) continue;
+    // The first rung of the ladder only (D54): this model is about what the
+    // road can pay for by a given level, and the rungs above it are goals a
+    // player reaches well after the affordance question is settled.
+    if (!staff.unlocked || staff.tier >= 2) continue;
     list.push({
-      cost: staffPrices(id).evolve,
+      cost: staffPrices(id).evolve[0],
       buy: () => {
         player.staffs[id] = { unlocked: true, tier: 2 };
       },

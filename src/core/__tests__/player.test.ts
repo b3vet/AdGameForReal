@@ -20,6 +20,7 @@ import {
   clonePlayer,
   defaultPlayer,
   familiarCost,
+  maxStaffTier,
   maxUpgradeLevel,
   rememberSeen,
   roomUnlockLevel,
@@ -83,7 +84,11 @@ describe('upgrades', () => {
 });
 
 describe('staffs', () => {
-  it('unlocks, then evolves, then has nothing left to sell', () => {
+  /**
+   * D33 sold a staff and then one evolution; D54 sells three, so the ladder is
+   * unlock, then tiers 2, 3 and 4, and only the top of it has nothing left.
+   */
+  it('unlocks, then climbs three evolutions, then has nothing left to sell', () => {
     let player = rich();
 
     const unlock = staffCost(player, 'storm');
@@ -94,11 +99,14 @@ describe('staffs', () => {
     expect(unlocked?.selectedStaff).toBe('storm');
     player = unlocked ?? player;
 
-    const evolve = staffCost(player, 'storm');
-    expect(evolve).not.toBeNull();
-    const evolved = buyStaff(player, 'storm');
-    expect(evolved?.staffs.storm).toEqual({ unlocked: true, tier: 2 });
-    player = evolved ?? player;
+    for (let tier = 2; tier <= maxStaffTier; tier++) {
+      const price = staffCost(player, 'storm');
+      expect(price).not.toBeNull();
+      const evolved = buyStaff(player, 'storm');
+      expect(evolved?.staffs.storm).toEqual({ unlocked: true, tier });
+      expect(evolved?.coins).toBe((player.coins) - (price ?? 0));
+      player = evolved ?? player;
+    }
 
     expect(staffCost(player, 'storm')).toBeNull();
     expect(buyStaff(player, 'storm')).toBeNull();
@@ -109,6 +117,18 @@ describe('staffs', () => {
     expect(player.staffs.ember.unlocked).toBe(true);
     expect(staffCost(player, 'ember')).toBeGreaterThan(0);
     expect(buyStaff(player, 'ember')?.staffs.ember.tier).toBe(2);
+  });
+
+  /** Every rung is dearer than the one below it, so the ladder is a ladder. */
+  it('prices the three evolutions in rising order', () => {
+    let player = rich();
+    let last = 0;
+    for (let tier = 1; tier <= maxStaffTier; tier++) {
+      const price = staffCost(player, 'frost') ?? 0;
+      expect(price).toBeGreaterThan(tier === 1 ? -1 : last);
+      last = price;
+      player = buyStaff(player, 'frost') ?? player;
+    }
   });
 
   it('only an owned staff can be put in hand', () => {

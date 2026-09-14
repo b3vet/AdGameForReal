@@ -14,7 +14,8 @@ import type { Balance } from '@/data/types';
 export interface World {
   gates: GateState[];
   enemies: EnemyState[];
-  boss: EnemyState;
+  /** Null on the endless road, which has no arena and no boss to stand in it (D52). */
+  boss: EnemyState | null;
   /** Where stream bodies carry on numbering from, so every id stays unique. */
   nextId: number;
 }
@@ -74,6 +75,8 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
       enemies.push(enemy);
     }
   }
+
+  if (level.endless === true) return { gates, enemies, boss: null, nextId };
 
   const boss: EnemyState = {
     id: nextId,

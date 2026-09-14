@@ -74,8 +74,22 @@ export interface LevelDef {
   /**
    * Which biome the road runs through (D49). Optional for the same reason;
    * absent means `meadow`, which is every level of the first twenty.
+   *
+   * On the endless road it is the *first* biome, and the road walks through
+   * `biomes` in order, `biomeSpan` metres at a time; `biomeAt` is what answers
+   * the question for both roads at once.
    */
   biome?: BiomeId;
+  /**
+   * The endless road (D52): no level number, no boss, and it ends at `arenaZ`
+   * rather than standing anything in it. Absent on every campaign level, and
+   * its presence is what `buildWorld` and `Run` switch on.
+   */
+  endless?: boolean;
+  /** Metres of road each biome holds before the next one, on a road that alternates. */
+  biomeSpan?: number;
+  /** The biomes the road cycles through, in order. One-biome roads omit it. */
+  biomes?: readonly BiomeId[];
   /**
    * Lane walls (D32). Empty below `balance.walls.fromLevel`; optional for the
    * same reason as `bossId`, and `generateLevel` always writes it.
@@ -177,8 +191,16 @@ function convert(
  * spent, a lane that is already empty (`emptyLane`), which costs the row
  * nothing at all.
  */
-function placeWeaponGates(rows: RowDef[], index: number, seed: number): void {
-  const budget = weaponBudget(index);
+export function placeWeaponGates(
+  rows: RowDef[],
+  index: number,
+  seed: number,
+  // Named by the endless road, which is one road of 160 rows rather than a
+  // level and would otherwise be offered the one or two staff gates a *level*
+  // carries (`weaponBudget`).
+  wanted?: number,
+): void {
+  const budget = wanted ?? weaponBudget(index);
   if (budget <= 0) return;
 
   // A separate stream, salted, so the level's own sequence is untouched.
@@ -189,7 +211,8 @@ function placeWeaponGates(rows: RowDef[], index: number, seed: number): void {
   convert(rows, staffCandidates(rows, rng, emptyLane), rng, budget - placed);
 }
 
-function buildRow(
+/** The row builder each dealt kind maps to. Shared with the endless road (D52). */
+export function buildRow(
   kind: number,
   rng: Rng,
   config: LevelGenConfig,
@@ -225,7 +248,7 @@ function buildRow(
  * upgrade at zero multiplies by exactly one and this returns without touching a
  * thing, which is what keeps a no-upgrade run byte-identical.
  */
-function applyGateBonus(rows: readonly RowDef[], bonus: number): void {
+export function applyGateBonus(rows: readonly RowDef[], bonus: number): void {
   if (bonus === 1) return;
   for (const row of rows) {
     for (let slot = 0; slot < row.gates.length; slot++) {
@@ -322,6 +345,25 @@ export function generateLevel(
       kind: bossKind,
     },
   };
+}
+
+/**
+ * Which biome the road is in at `z`.
+ *
+ * One function for both roads: a campaign level names one biome and every
+ * metre of it answers that (D49), and the endless road cycles through
+ * `biomes` a `biomeSpan` at a time (D52). Render asks it per row and the
+ * biome switch asks it as the squad runs, so it is arithmetic rather than a
+ * table: a 160-row road would otherwise carry 160 copies of two strings.
+ */
+export function biomeAt(level: LevelDef, z: number): BiomeId {
+  const span = level.biomeSpan;
+  const biomes = level.biomes;
+  if (span === undefined || biomes === undefined || biomes.length === 0 || span <= 0) {
+    return level.biome ?? 'meadow';
+  }
+  const index = Math.floor(Math.max(0, z) / span) % biomes.length;
+  return biomes[index] ?? level.biome ?? 'meadow';
 }
 
 /** True when a row hands the player some way to come out of it bigger. */

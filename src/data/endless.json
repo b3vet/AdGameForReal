@@ -1,0 +1,34 @@
+{
+  "seed": 90210,
+  "rows": 160,
+  "rowsPerBiome": 12,
+  "rowsPerVirtualLevel": 6,
+  "milestoneEveryRows": 20,
+  "staffGateEveryRows": 24,
+  "startCount": 8,
+  "dials": {
+    "peakTarget": { "start": 12, "growth": 1.055, "cap": 500 },
+    "hpScale": { "start": 0.25, "growth": 1.014, "cap": 1.35 },
+    "pressure": { "start": 0.45, "growth": 1.007, "cap": 1 },
+    "density": { "start": 0.8, "growth": 1.004, "cap": 1.25 }
+  },
+  "mix": {
+    "gateRows": 0.58,
+    "mixedRows": 0.22,
+    "hordeRows": 0.1,
+    "bruteRows": 0.1,
+    "chargerRows": 0.06,
+    "shieldRows": 0.06,
+    "wallRows": 0.06
+  },
+  "biomes": ["meadow", "frost"],
+  "gateValues": {
+    "subShare": { "min": 0.05, "max": 0.25 },
+    "subFloor": 2,
+    "addMax": 400,
+    "fireRate": { "min": 0.03, "max": 0.1 }
+  },
+  "wallLevel": 21,
+  "coinsPerMetre": 0.12,
+  "capShare": 0.7
+}

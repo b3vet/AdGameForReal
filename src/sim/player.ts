@@ -21,23 +21,26 @@
  * through the same functions.
  */
 
+import { progression } from './progression';
 import { startWeapon, weaponIds } from './weapons';
 // The Academy's room cards, for the one thing a purchase rule needs from them:
 // the level that opens the Sanctum, which is what gates a wisp. Card *copy* is
 // still the app's (`src/core/player.ts`); this reads one number out of the same
 // file rather than letting the rule exist twice.
 import { academy } from '@/data/academy-types';
-import progressionJson from '@/data/progression.json';
+import { maxStaffTier } from '@/data/progression-types';
+import type { LevelBest } from '@/data/meta-types';
 import type {
+  EvolutionTier,
   FamiliarTier,
   PlayerState,
-  Progression,
   StaffTier,
   UpgradeId,
   WeaponId,
 } from '@/data/types';
 
-export const progression: Progression = progressionJson;
+export { progression } from './progression';
+export { maxStaffTier };
 
 export const upgradeIds: readonly UpgradeId[] = [
   'damage',
@@ -61,6 +64,15 @@ export function emptyPlayer(): PlayerState {
     familiar: { unlocked: false, tier: 0 },
     bestiary: [],
     unlockedLevel: 1,
+    // The Milestone 8 meta layer (D51 to D53). The sim reads none of it —
+    // `playerMods` resolves nothing out of these — but the save is one object,
+    // so a fresh player has to carry an empty one of each.
+    streak: { days: 0, lastDay: '' },
+    missions: { active: [], rolled: 0 },
+    kills: { grunt: 0, brute: 0, charger: 0, shieldBrute: 0, demon: 0, rime: 0 },
+    cosmetics: { owned: [], selected: {} },
+    endless: { bestMetres: 0, runs: 0 },
+    levelBest: {},
   };
 }
 
@@ -101,9 +113,28 @@ export function nextUpgradeCost(player: PlayerState, id: UpgradeId): number | nu
   return level >= maxUpgradeLevel ? null : upgradeCostFor(id, level);
 }
 
-/** Price of owning `id` at all, and of its one evolution (D33). */
-export function staffPrices(id: WeaponId): { unlock: number; evolve: number } {
-  return progression.staffs[id];
+/** What a staff costs to own and then to evolve, one tier at a time (D54). */
+export interface StaffPrices {
+  unlock: number;
+  /** Staff tier 2, then 3, then 4 — the three evolutions, in the order sold. */
+  evolve: readonly [number, number, number];
+}
+
+/**
+ * Price of owning `id` at all, and of each of its three evolutions (D33, D54).
+ *
+ * The ladder is narrowed to a triple here rather than in the schema because it
+ * is read out of a JSON module, whose array literals widen: a tuple in
+ * `progression-types.ts` would need a cast at the one place that exists to
+ * remove casts. A short ladder pads with its last price rather than throwing,
+ * so a half-edited tuning file still boots a shop.
+ */
+export function staffPrices(id: WeaponId): StaffPrices {
+  const prices = progression.staffs[id];
+  const ladder = prices.evolve;
+  const first = ladder[0] ?? 0;
+  const second = ladder[1] ?? first;
+  return { unlock: prices.unlock, evolve: [first, second, ladder[2] ?? second] };
 }
 
 /** Price of reaching wisp tier `tier`; 0 for tier 0, which is "no wisp". */
@@ -128,13 +159,30 @@ export function roomOpen(room: string, player: PlayerState): boolean {
   return player.unlockedLevel >= roomUnlockLevel(room);
 }
 
-/** The price of the next thing a staff can sell: itself, then its evolution. */
-export function staffCost(player: PlayerState, id: WeaponId): number | null {
+/**
+ * What tier the player actually holds `id` at: 0 when the Workbench has not
+ * sold it, and otherwise the tier on the save, held inside 1 to `maxStaffTier`.
+ * A save that carries a tier on a staff nobody bought is worth nothing here,
+ * which is the same rule `src/core/save.ts` repairs a file with.
+ */
+export function staffTierOf(player: PlayerState, id: WeaponId): StaffTier {
   const staff = player.staffs[id];
+  if (!staff.unlocked) return 0;
+  return Math.min(maxStaffTier, Math.max(1, Math.floor(staff.tier))) as StaffTier;
+}
+
+/**
+ * The price of the next thing a staff can sell: itself, then each evolution in
+ * turn (D54). Null at the top of the ladder, which is what makes the Workbench
+ * row read "owned" rather than print a price nobody can pay.
+ */
+export function staffCost(player: PlayerState, id: WeaponId): number | null {
+  const tier = staffTierOf(player, id);
   const prices = staffPrices(id);
-  if (!staff.unlocked) return prices.unlock;
-  if (staff.tier < 2) return prices.evolve;
-  return null;
+  if (tier === 0) return prices.unlock;
+  if (tier >= maxStaffTier) return null;
+  // Tier 1 buys `evolve[0]` (staff tier 2), tier 2 buys `evolve[1]`, and so on.
+  return prices.evolve[tier - 1] ?? null;
 }
 
 /** Null when the wisp is at its last tier. */
@@ -163,7 +211,31 @@ export function clonePlayer(player: PlayerState): PlayerState {
     familiar: { ...player.familiar },
     bestiary: [...player.bestiary],
     unlockedLevel: player.unlockedLevel,
+    // Deep, like `bestiary` above: a purchase must not hand the caller back a
+    // board whose missions it can still write through.
+    streak: { ...player.streak },
+    missions: {
+      active: player.missions.active.map((mission) => ({ ...mission })),
+      rolled: player.missions.rolled,
+    },
+    kills: { ...player.kills },
+    cosmetics: {
+      owned: [...player.cosmetics.owned],
+      selected: { ...player.cosmetics.selected },
+    },
+    endless: { ...player.endless },
+    levelBest: cloneLevelBest(player.levelBest),
   };
+}
+
+/** `Object.entries` and back, so each `LevelBest` is a copy and not a share. */
+function cloneLevelBest(source: Record<string, LevelBest>): Record<string, LevelBest> {
+  const copy: Record<string, LevelBest> = {};
+  for (const key of Object.keys(source)) {
+    const best = source[key];
+    if (best !== undefined) copy[key] = { ...best };
+  }
+  return copy;
 }
 
 /**
@@ -181,7 +253,14 @@ export function buyUpgrade(player: PlayerState, id: UpgradeId): PlayerState | nu
   return next;
 }
 
-/** Unlocks a locked staff, or evolves an unlocked one to tier 2. */
+/**
+ * Unlocks a locked staff, or evolves an unlocked one by exactly one tier (D54).
+ *
+ * One tier at a time, never "as far as the purse reaches": each rung is a
+ * separate purchase with a price of its own, and a player who can afford tier 4
+ * outright still walks up through 3 — which is what makes the Workbench row a
+ * ladder the player climbs rather than a number they clear.
+ */
 export function buyStaff(player: PlayerState, id: WeaponId): PlayerState | null {
   const cost = staffCost(player, id);
   if (cost === null || player.coins < cost) return null;
@@ -190,11 +269,12 @@ export function buyStaff(player: PlayerState, id: WeaponId): PlayerState | null 
   const staff = next.staffs[id];
   if (!staff.unlocked) {
     staff.unlocked = true;
+    staff.tier = 1;
     // Buying a staff is also choosing it: nobody unlocks Storm to keep firing
     // Ember, and one tap is one tap.
     next.selectedStaff = id;
   } else {
-    staff.tier = 2;
+    staff.tier = Math.min(maxStaffTier, staffTierOf(player, id) + 1) as StaffTier;
   }
   return next;
 }
@@ -228,75 +308,6 @@ export function addCoins(player: PlayerState, coins: number): PlayerState {
   return next;
 }
 
-/** What a run's own state has to carry for `runRewards` to price it. */
-export interface RunPayable {
-  status: string;
-  survivors: number;
-  /** Where the squad got to; a `RunState` always has it, a fixture may not. */
-  squad?: { z: number };
-  arenaZ?: number;
-}
-
-/**
- * How far up the road a run got, 0 to 1. The squad stops at `arenaZ` to fight
- * the boss, so a run that died to the boss reads 1 and one that died at the
- * second gate row reads a tenth.
- *
- * A state without a position — the hand-made ones in tests and fixtures —
- * reads 0, which is what keeps `runRewards` paying nothing for a loss that
- * cannot say how far it got.
- */
-export function roadProgress(state: RunPayable): number {
-  const z = state.squad?.z;
-  const arenaZ = state.arenaZ;
-  if (z === undefined || arenaZ === undefined || arenaZ <= 0) return 0;
-  return Math.min(1, Math.max(0, z / arenaZ));
-}
-
-/**
- * Coins a *finished* run pays (D46).
- *
- * The road pays for clearing it, not for the size of the crowd that walked it:
- * `perClear` on any clear and `firstClear` again the first time, both scaled by
- * the level index through `levelExponent`, plus a token `perSurvivor` so the
- * count on the result screen still means something. Before D46 the survivors
- * *were* the payment, which paid a fat gate rather than a finished level.
- *
- * A loss pays `lossShare` of what another clear of this level would pay, scaled
- * by how far up the road it got: dying to the boss is nearly the whole share
- * and dying in the first ten metres is nearly nothing. That is what makes a
- * milestone level (D45) a few runs of grinding rather than a wall — and it is
- * deliberately measured against a *repeat* clear, so that losing over and over
- * can never out-earn clearing the level and moving on.
- *
- * A run that is still going pays nothing, and that is a rule rather than a
- * guard. `survivors` tracks the live squad while a run is under way, so paying
- * on it would make "walk into a fat gate, then leave" worth more than finishing
- * the level. Nothing in the app can leave a run today — the HUD has no way out
- * — but the rule belongs here, with the arithmetic, rather than in whichever
- * screen grows one first.
- */
-export function runRewards(
-  state: RunPayable,
-  level: number,
-  firstClear: boolean,
-): { coins: number } {
-  if (state.status === 'running') return { coins: 0 };
-
-  const rewards = progression.rewards;
-  const index = Math.max(1, Math.floor(level));
-  const scale = Math.pow(index, rewards.levelExponent);
-  const clearValue = rewards.perClear * scale;
-
-  if (state.status !== 'won') {
-    return { coins: Math.round(clearValue * rewards.lossShare * roadProgress(state)) };
-  }
-
-  let coins = clearValue + Math.max(0, Math.floor(state.survivors)) * rewards.perSurvivor;
-  if (firstClear) coins += rewards.firstClear * scale;
-  return { coins: Math.round(coins) };
-}
-
 /**
  * Everything the sim needs from a player, resolved once.
  *
@@ -317,7 +328,17 @@ export interface PlayerMods {
   bossDamage: number;
   /** The staff the run starts with. */
   staff: WeaponId;
-  tiers: Record<WeaponId, StaffTier>;
+  /**
+   * Evolutions *held* per staff, which is `max(0, staffTier - 1)` (D54): an
+   * owned but unevolved staff is 0 and a maxed one is 3.
+   *
+   * Counted in evolutions rather than in staff tiers because that is the
+   * question every mechanic asks — "how many rungs of this staff does the
+   * player own" — and because it makes "nothing bought" a record of zeroes
+   * rather than of ones, so a run with no player resolves to the identity the
+   * way every other field of `NO_MODS` does.
+   */
+  tiers: Record<WeaponId, EvolutionTier>;
   familiarTier: FamiliarTier;
 }
 
@@ -329,13 +350,13 @@ export const NO_MODS: PlayerMods = Object.freeze({
   gateBonus: 1,
   bossDamage: 1,
   staff: startWeapon,
-  tiers: Object.freeze({ ember: 1, storm: 1, frost: 1 }) as Record<WeaponId, StaffTier>,
+  tiers: Object.freeze({ ember: 0, storm: 0, frost: 0 }) as Record<WeaponId, EvolutionTier>,
   familiarTier: 0,
 });
 
-function tierOf(player: PlayerState, id: WeaponId): StaffTier {
-  const staff = player.staffs[id];
-  return staff.unlocked && staff.tier === 2 ? 2 : 1;
+/** Evolutions held on `id`: staff tier 1 is none, tier 4 is all three. */
+export function evolutionTierOf(player: PlayerState, id: WeaponId): EvolutionTier {
+  return Math.max(0, staffTierOf(player, id) - 1) as EvolutionTier;
 }
 
 /** The staff in hand at the start: the chosen one if it is owned, else ember. */
@@ -359,15 +380,10 @@ export function playerMods(player?: PlayerState): PlayerMods {
     bossDamage: 1 + effects.bossDamage * level('bossDamage'),
     staff: staffOf(player),
     tiers: {
-      ember: tierOf(player, 'ember'),
-      storm: tierOf(player, 'storm'),
-      frost: tierOf(player, 'frost'),
+      ember: evolutionTierOf(player, 'ember'),
+      storm: evolutionTierOf(player, 'storm'),
+      frost: evolutionTierOf(player, 'frost'),
     },
     familiarTier: player.familiar.unlocked ? player.familiar.tier : 0,
   };
-}
-
-/** The evolution a staff has at this tier, or undefined at tier 1. */
-export function evolutionOf(id: WeaponId, tier: StaffTier): Progression['evolutions'][WeaponId] | undefined {
-  return tier === 2 ? progression.evolutions[id] : undefined;
 }

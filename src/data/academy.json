@@ -33,6 +33,12 @@
       "title": "Bestiary",
       "blurb": "Name the horde",
       "unlockLevel": 3
+    },
+    {
+      "id": "wardrobe",
+      "title": "Wardrobe",
+      "blurb": "Wear the hunt",
+      "unlockLevel": 3
     }
   ],
   "yard": {
@@ -114,34 +120,139 @@
       {
         "id": "grunt",
         "name": "Grunt",
-        "blurb": "One skeleton of the river. Hundreds follow it."
+        "blurb": "One skeleton of the river. Hundreds follow it.",
+        "tiers": [
+          {
+            "kills": 250,
+            "coins": 150,
+            "cosmetic": "hatBone"
+          },
+          {
+            "kills": 1500,
+            "coins": 450,
+            "cosmetic": "capeBone"
+          },
+          {
+            "kills": 6000,
+            "coins": 1200,
+            "cosmetic": "wispBone"
+          }
+        ]
       },
       {
         "id": "brute",
         "name": "Brute",
-        "blurb": "A block that walks. Break it before it arrives."
+        "blurb": "A block that walks. Break it before it arrives.",
+        "tiers": [
+          {
+            "kills": 40,
+            "coins": 180,
+            "cosmetic": "hatStone"
+          },
+          {
+            "kills": 200,
+            "coins": 500,
+            "cosmetic": "capeQuarry"
+          },
+          {
+            "kills": 800,
+            "coins": 1400,
+            "cosmetic": "glowQuarry"
+          }
+        ]
       },
       {
         "id": "demon",
         "name": "Demon",
-        "blurb": "The horned thing at the road's end. It stomps."
+        "blurb": "The horned thing at the road's end. It stomps.",
+        "tiers": [
+          {
+            "kills": 5,
+            "coins": 250,
+            "cosmetic": "glowEmber"
+          },
+          {
+            "kills": 20,
+            "coins": 700,
+            "cosmetic": "capeDemon"
+          },
+          {
+            "kills": 60,
+            "coins": 1800,
+            "cosmetic": "wispEmber"
+          }
+        ]
       },
       {
         "id": "charger",
         "name": "Rimehound",
-        "blurb": "It waits in its lane, then runs it down. Shoot it, or be in another lane."
+        "blurb": "It waits in its lane, then runs it down. Shoot it, or be in another lane.",
+        "tiers": [
+          {
+            "kills": 15,
+            "coins": 200,
+            "cosmetic": "hatHound"
+          },
+          {
+            "kills": 80,
+            "coins": 550,
+            "cosmetic": "wispHound"
+          },
+          {
+            "kills": 300,
+            "coins": 1500,
+            "cosmetic": "capeHound"
+          }
+        ]
       },
       {
         "id": "shieldBrute",
         "name": "Bulwark",
-        "blurb": "A brute behind a slab of ice. Its number will not move until the shield does."
+        "blurb": "A brute behind a slab of ice. Its number will not move until the shield does.",
+        "tiers": [
+          {
+            "kills": 12,
+            "coins": 220,
+            "cosmetic": "glowBulwark"
+          },
+          {
+            "kills": 60,
+            "coins": 600,
+            "cosmetic": "hatSlab"
+          },
+          {
+            "kills": 240,
+            "coins": 1600,
+            "cosmetic": "capeSlab"
+          }
+        ]
       },
       {
         "id": "rime",
         "name": "Rime Fiend",
-        "blurb": "The white giant at the far end of Frostfell. It stomps, and then it charges."
+        "blurb": "The white giant at the far end of Frostfell. It stomps, and then it charges.",
+        "tiers": [
+          {
+            "kills": 3,
+            "coins": 300,
+            "cosmetic": "hatFiend"
+          },
+          {
+            "kills": 12,
+            "coins": 800,
+            "cosmetic": "glowRime"
+          },
+          {
+            "kills": 40,
+            "coins": 2000,
+            "cosmetic": "wispRime"
+          }
+        ]
       }
-    ]
+    ],
+    "tierLabel": "{count} felled",
+    "nextLabel": "{remaining} more for {name}",
+    "maxedLabel": "Every tint taken"
   },
   "hud": {
     "bossFallback": "Boss",

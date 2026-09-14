@@ -1,16 +1,25 @@
 /**
- * Persistent player data, version 2 (decision D33).
+ * Persistent player data, version 3 (D33, extended by D51 to D53).
  *
  * Milestone 1 remembered one number — the unlocked level — under
  * `arcane-rush.save.v1`, and Milestones 2 and 3 added `muted` and `debug` to
  * the same object without a version bump, because a missing boolean reads as
- * `false` and nothing was lost. The Academy is not that kind of change: a v1
- * save has no coins, no upgrades and no bestiary, so v2 is a new key with an
- * explicit migration rather than another defensive field.
+ * `false` and nothing was lost. The Academy was not that kind of change: a v1
+ * save has no coins, no upgrades and no bestiary, so v2 took a new key with an
+ * explicit migration. Milestone 8 is the same kind of change again — a streak,
+ * a mission board, kill counters, a Wardrobe, an endless record and the level
+ * bests — so this is v3, on its own key, with v2 and the v1 chain behind it.
+ *
+ * The chain is read newest first and written back at the newest key: v3, then
+ * v2, then v1, then a fresh save. Nothing is deleted on the way past, so a
+ * build rolled back to Milestone 4 still finds its v2 exactly as it left it.
+ * Migrating *from* v2 needs no code of its own, because every reader below is
+ * written against the defaults: a v2 blob is simply one where the six new
+ * fields are absent (`./saveMeta.ts`).
  *
  * What is stored:
  *
- *   version         2, so a v3 can tell what it is reading.
+ *   version         3, so a v4 can tell what it is reading.
  *   player          the `PlayerState` the sim is handed (`./player.ts`).
  *   unlockedLevel   how far up the road the player has been. Mirrored into
  *                   `player.unlockedLevel` on every read and write, so the two
@@ -27,14 +36,23 @@
 
 import { weaponIds } from '@/sim';
 
-import { defaultPlayer, maxUpgradeLevel, roomIds, toWeaponId, upgradeIds } from './player';
+import {
+  defaultPlayer,
+  maxStaffTier,
+  maxUpgradeLevel,
+  roomIds,
+  toWeaponId,
+  upgradeIds,
+} from './player';
 import type { FamiliarTier, PlayerState, RoomId, StaffTier, UpgradeId } from './player';
+import { readMeta } from './saveMeta';
 
-const SAVE_KEY = 'arcane-rush.save.v2';
-/** Read once, on the first load after the update, and then left alone. */
+const SAVE_KEY = 'arcane-rush.save.v3';
+/** Both read once, on the first load after the update, and then left alone. */
+const SAVE_KEY_V2 = 'arcane-rush.save.v2';
 const SAVE_KEY_V1 = 'arcane-rush.save.v1';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface SaveData {
   version: number;
@@ -67,14 +85,14 @@ function defaultSave(): SaveData {
 }
 
 /**
- * Never throws: a missing, unreadable or corrupt save is a fresh one. A v1
- * save is migrated on the spot and written back under the new key; the old key
- * is left where it is, so a build rolled back to Milestone 3 still finds it.
+ * Never throws: a missing, unreadable or corrupt save is a fresh one. An older
+ * save is migrated on the spot and written back under the new key; the old keys
+ * are left where they are, so a rolled-back build still finds one.
  */
 export function loadSave(): SaveData {
   try {
     const raw = globalThis.localStorage?.getItem(SAVE_KEY);
-    if (raw === null || raw === undefined) return migrateFromV1();
+    if (raw === null || raw === undefined) return migrateOld();
     return normalise(readObject(raw));
   } catch {
     return defaultSave();
@@ -161,35 +179,50 @@ export function mergePlayer(base: PlayerState, patch: unknown): PlayerState {
 }
 
 /**
- * v1 carried three fields and only two of them still exist as written
- * (`unlockedLevel`, `muted`, `debug`). Everything the Academy adds starts at
- * its default: no coins, no upgrades, ember unlocked at tier 1 and selected,
- * the other staffs and the familiar locked, an empty bestiary. A player who
- * had reached level 7 keeps level 7 — the alternative is telling them their
- * progress was the price of the update.
+ * No v3 on the device: try v2, then v1, then a fresh save.
+ *
+ * A v2 blob goes through the ordinary reader, because a v2 *is* a v3 with six
+ * fields missing and every one of those reads as its default. v1 carried three
+ * fields and only those three are carried over (`unlockedLevel`, `muted`,
+ * `debug`); everything the Academy and the meta layer add starts at its
+ * default. A player who had reached level 7 keeps level 7 either way — the
+ * alternative is telling them their progress was the price of the update.
  */
-function migrateFromV1(): SaveData {
-  const fresh = defaultSave();
-  let raw: string | null | undefined;
-  try {
-    raw = globalThis.localStorage?.getItem(SAVE_KEY_V1);
-  } catch {
-    return fresh;
-  }
-  if (raw === null || raw === undefined) return fresh;
+function migrateOld(): SaveData {
+  const v2 = readKey(SAVE_KEY_V2);
+  if (v2 !== null) return writeBack(readObject(v2));
 
-  const parsed = parse(raw);
+  const fresh = defaultSave();
+  const v1 = readKey(SAVE_KEY_V1);
+  if (v1 === null) return fresh;
+
+  const parsed = parse(v1);
   if (parsed === null) return fresh;
 
-  const migrated: SaveData = {
+  return writeBack({
     ...fresh,
     unlockedLevel: positiveInt(parsed['unlockedLevel'], 1),
     muted: parsed['muted'] === true,
     debug: parsed['debug'] === true,
-  };
-  const normalised = normalise(migrated);
-  // Written back straight away so the next load is a plain v2 read; a storage
-  // that refuses the write simply migrates again next time.
+  });
+}
+
+/** A key's contents, or null for absent, unreadable or a storage that threw. */
+function readKey(key: string): string | null {
+  try {
+    return globalThis.localStorage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Writes a migrated save under the current key straight away, so the next load
+ * is a plain v3 read; a storage that refuses the write simply migrates again
+ * next time.
+ */
+function writeBack(data: SaveData): SaveData {
+  const normalised = normalise(data);
   saveSave(normalised);
   return normalised;
 }
@@ -236,7 +269,9 @@ function readPlayer(raw: unknown, fallback: PlayerState): PlayerState {
       unlocked,
       // A tier on a locked staff would light the "evolved" badge on a card
       // that cannot be used, so it is held at 1 until the staff is owned.
-      tier: (unlocked && number(staff['tier'], 1) >= 2 ? 2 : 1) as StaffTier,
+      // The ceiling is the Workbench's, which D54 moved from 2 to 4 — a v2
+      // save's tier 2 still means the evolution it always meant.
+      tier: (unlocked ? clampStaffTier(number(staff['tier'], 1)) : 1) as StaffTier,
     };
   }
 
@@ -254,6 +289,15 @@ function readPlayer(raw: unknown, fallback: PlayerState): PlayerState {
 
   const selected = toWeaponId(fields['selectedStaff']);
   player.selectedStaff = selected !== null && player.staffs[selected].unlocked ? selected : 'ember';
+
+  // The Milestone 8 block, which a v2 save simply does not have (`./saveMeta.ts`).
+  const meta = readMeta(fields);
+  player.streak = meta.streak;
+  player.missions = meta.missions;
+  player.kills = meta.kills;
+  player.cosmetics = meta.cosmetics;
+  player.endless = meta.endless;
+  player.levelBest = meta.levelBest;
 
   return player;
 }
@@ -295,6 +339,11 @@ function clampUpgrade(value: number): number {
   return Math.min(maxUpgradeLevel, Math.max(0, Math.floor(value)));
 }
 
+/** 1 to the Workbench's ceiling; an owned staff is never below tier 1 (D54). */
+function clampStaffTier(value: number): number {
+  return Math.min(maxStaffTier, Math.max(1, Math.floor(value)));
+}
+
 function readLevels(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
   const levels: number[] = [];
@@ -320,5 +369,5 @@ function ascending(a: number, b: number): number {
   return a - b;
 }
 
-export { SAVE_KEY, SAVE_KEY_V1 };
+export { SAVE_KEY, SAVE_KEY_V1, SAVE_KEY_V2 };
 export type { PlayerState, RoomId, UpgradeId };

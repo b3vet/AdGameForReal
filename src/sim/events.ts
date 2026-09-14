@@ -54,6 +54,43 @@ export class EventBuffer {
     this.list.push(e);
   }
 
+  /** Ember tier 4: a charged shot landed at `(x, z)` (D54). */
+  meteor(x: number, z: number, radius: number): void {
+    const e = this.pools.meteors.take();
+    e.x = x;
+    e.z = z;
+    e.radius = radius;
+    this.list.push(e);
+  }
+
+  /** Storm tier 4: the volley arced to `targets` bodies around `(x, z)` (D54). */
+  overcharge(x: number, z: number, radius: number, targets: number): void {
+    const e = this.pools.overcharges.take();
+    e.x = x;
+    e.z = z;
+    e.radius = radius;
+    e.targets = targets;
+    this.list.push(e);
+  }
+
+  /** Frost tier 3: a body that died frozen chilled its neighbours (D54). */
+  freezePulse(x: number, z: number, radius: number): void {
+    const e = this.pools.freezePulses.take();
+    e.x = x;
+    e.z = z;
+    e.radius = radius;
+    this.list.push(e);
+  }
+
+  /** Frost tier 4: a wall of ice went up across `lane` until `until` (D54). */
+  glacier(lane: Lane, z: number, until: number): void {
+    const e = this.pools.glaciers.take();
+    e.lane = lane;
+    e.z = z;
+    e.until = until;
+    this.list.push(e);
+  }
+
   enemySlowed(enemyId: number, seconds: number): void {
     const e = this.pools.slows.take();
     e.enemyId = enemyId;

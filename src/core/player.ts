@@ -41,12 +41,13 @@ import {
   upgradeIds,
   weaponIds,
 } from '@/sim';
+import { maxStaffTier } from '@/data/types';
 import type { Balance } from '@/data';
 import type { FamiliarTier, PlayerState, StaffTier, UpgradeId } from '@/data/types';
 import type { LevelDef, WeaponId } from '@/sim';
 
 export type { FamiliarTier, PlayerState, StaffTier, UpgradeId };
-export { maxFamiliarTier, maxUpgradeLevel, runRewards, upgradeIds };
+export { maxFamiliarTier, maxStaffTier, maxUpgradeLevel, runRewards, upgradeIds };
 
 /**
  * The purchase rules, re-exported where the screens have always read them.
@@ -65,10 +66,24 @@ export {
   staffCost,
 };
 
-/** The Academy's five cards. `play` is a room only in the sense of a door. */
-export type RoomId = 'play' | 'yard' | 'workbench' | 'sanctum' | 'bestiary';
+/**
+ * The Academy's cards. `play` is a room only in the sense of a door, and
+ * `wardrobe` is Milestone 8's (D53): the tints the bestiary's kill ladders pay
+ * out have to be worn somewhere.
+ *
+ * The order is the order `academy.json` lists them in, because that is the
+ * order the home screen builds its cards in and the order a reveal is owed in.
+ */
+export type RoomId = 'play' | 'yard' | 'workbench' | 'sanctum' | 'bestiary' | 'wardrobe';
 
-export const roomIds: readonly RoomId[] = ['play', 'yard', 'workbench', 'sanctum', 'bestiary'];
+export const roomIds: readonly RoomId[] = [
+  'play',
+  'yard',
+  'workbench',
+  'sanctum',
+  'bestiary',
+  'wardrobe',
+];
 
 /**
  * The level that opens a room, from the Academy's own card data.

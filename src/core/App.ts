@@ -24,6 +24,7 @@ import { weaponOf } from '@/sim';
 import { fontsReady, Overlay } from '@/ui';
 
 import { AcademyController } from './academy';
+import type { RunPayout } from './academy';
 import { overlayCallbacks } from './controls';
 import type { AppCommands } from './controls';
 import { FrameDriver } from './frame';
@@ -70,6 +71,15 @@ export class App implements FrameHost, AppCommands {
 
   private currentPhase: AppPhase = 'title';
   private session: RunSession | null = null;
+  /** The seed the next run is pinned to, or null for the level's own. */
+  private replaySeed: number | null = null;
+  /** The seed of the last road walked, for `replayRun`. */
+  private lastSeed: number | null = null;
+  /**
+   * What the last finished run paid, meta layer included (`./academy.ts`).
+   * Read by the result sheet and by the debug handle; null until a run ends.
+   */
+  private payout: RunPayout | null = null;
   private detachInput: DetachInput | null = null;
   private muted: boolean;
 
@@ -155,6 +165,9 @@ export class App implements FrameHost, AppCommands {
       return;
     }
 
+    // The board drops whatever was finished last time and draws replacements
+    // (D51). Before the home screen, so the cards paint the new board.
+    this.academy.beginSession();
     this.showHome();
     this.publishHandle();
 
@@ -174,6 +187,14 @@ export class App implements FrameHost, AppCommands {
   }
 
   /**
+   * What the last finished run paid, meta layer included, or null before the
+   * first one. The result sheet's Milestone 8 rows read it (Phase C).
+   */
+  get runPayout(): RunPayout | null {
+    return this.payout;
+  }
+
+  /**
    * Sim seconds per real second, changed after boot. Only the debug handle
    * calls it (`ArcaneDebugHandle.setTurbo`); the game itself never does.
    */
@@ -182,10 +203,25 @@ export class App implements FrameHost, AppCommands {
     this.options.turbo = Math.min(MAX_TURBO, Math.max(1, value));
   }
 
-  /** Jumps straight into a level, ignoring the save's unlock state. */
-  startLevel(level: number): void {
+  /**
+   * Jumps straight into a level, ignoring the save's unlock state.
+   *
+   * `seed` walks the *same road* again rather than the level's own: every
+   * campaign level has a fixed seed in `levels.json`, but an endless run (D52)
+   * and anything that re-rolls a road do not, so the result sheet's "same road
+   * again" hands back the seed the finished run reported (`RunSession.seed`).
+   * It applies to the one run that follows and is then forgotten, so the next
+   * Play is an ordinary one.
+   */
+  startLevel(level: number, seed: number | null = null): void {
     this.options.level = clampLevel(level, levelCount);
+    this.replaySeed = seed;
     this.startRun();
+  }
+
+  /** "Same road again": the level just played, on the seed it was played on. */
+  replayRun(): void {
+    this.startLevel(this.options.level, this.lastSeed);
   }
 
   stop(): void {
@@ -303,7 +339,15 @@ export class App implements FrameHost, AppCommands {
     this.ladder.beginLevel();
     // The player is read once, here: the level is generated with their
     // upgrades and the run starts with the staff they chose (D35).
-    const session = new RunSession(this.options.level, this.options, this.academy.player);
+    const session = new RunSession(
+      this.options.level,
+      this.options,
+      this.academy.player,
+      this.replaySeed,
+    );
+    // The pin is for one run: the next Play walks whatever road the level says.
+    this.replaySeed = null;
+    this.lastSeed = session.seed;
     this.session = session;
     this.juice.reset();
     this.audio.beginRun();
@@ -328,6 +372,7 @@ export class App implements FrameHost, AppCommands {
 
     const level = this.options.level;
     const payout = this.academy.payRun(session, level);
+    this.payout = payout;
 
     this.overlay.showResult({
       levelIndex: level,
@@ -415,6 +460,13 @@ export class App implements FrameHost, AppCommands {
       }),
       shaders: () => this.renderer.shaderStats,
       player: () => this.academy.player,
+      meta: () => ({
+        streak: this.academy.streakView(),
+        missions: this.academy.missionsView(),
+        kills: this.academy.player.kills,
+        owned: this.academy.player.cosmetics.owned,
+        payout: this.payout,
+      }),
       setPlayer: (patch: unknown) => {
         this.academy.setPlayer(patch);
         this.repaintMenu();

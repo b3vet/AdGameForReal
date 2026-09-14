@@ -13,6 +13,8 @@ import { balance, levelCount } from '@/data';
 import { createBot } from '@/sim';
 import type { EnemyKind, LevelDef, Run, RunState, SimEvent } from '@/sim';
 
+import { RunTracker } from './missions';
+import type { RunTally } from './missions';
 import { bossIdOf, buildLevel, buildRun } from './player';
 import type { PlayerState } from './player';
 import type { QueryOptions } from './query';
@@ -46,6 +48,17 @@ export class RunSession {
 
   private readonly bossId: string;
 
+  /**
+   * What this run is worth to the meta layer (D51, D53): missions, kill
+   * counters, the boss clock, whether the column ever broke.
+   *
+   * It lives on the session rather than beside it because the session is
+   * already the one thing walking every event (`absorb`), and a second walk of
+   * the same list every sim chunk is the kind of per-frame waste CLAUDE.md
+   * rules out. Nothing in the sim knows it exists.
+   */
+  private readonly tracker: RunTracker;
+
   /** Seconds left of the beat before the result screen, or null. */
   private countdown: number | null = null;
 
@@ -57,17 +70,33 @@ export class RunSession {
    */
   private readonly sawKind = new Set<EnemyKind>();
 
-  constructor(levelIndex: number, options: QueryOptions, player: PlayerState) {
-    this.level = buildLevel(levelIndex, options.seed, player);
+  /**
+   * `seed` overrides the level's own (`levels.json`) and the query's, which is
+   * what makes "same road again" a thing the result sheet can offer: the run's
+   * seed comes back off `RunSession.seed` and goes straight into the next one.
+   */
+  constructor(
+    levelIndex: number,
+    options: QueryOptions,
+    player: PlayerState,
+    seed: number | null = null,
+  ) {
+    this.level = buildLevel(levelIndex, seed ?? options.seed, player);
     this.run = buildRun(this.level, balance, player);
     // The same tuning object the run was built on: a bot steers by the crowd's
     // own width and the clamp it leaves, and both come out of the balance.
     this.policy = options.bot === null ? null : createBot(options.bot, this.level.seed, balance);
     this.bossId = bossIdOf(this.level);
+    this.tracker = new RunTracker(this.bossId === 'rime' ? 'rime' : 'demon');
   }
 
   get state(): RunState {
     return this.run.state;
+  }
+
+  /** The seed this road was generated from. Replay it and you get this road. */
+  get seed(): number {
+    return this.level.seed;
   }
 
   get won(): boolean {
@@ -116,6 +145,9 @@ export class RunSession {
    * boss costs nothing at all — `bossActivated` is one event per run.
    */
   absorb(events: readonly SimEvent[]): void {
+    // The meta layer's counters, off the same list and in the same pass.
+    this.tracker.absorb(events, this.run.state);
+
     for (const event of events) {
       if (event.type === 'bossActivated') {
         this.seen.add(this.bossId);
@@ -156,6 +188,20 @@ export class RunSession {
     if (this.countdown > 0) return false;
     this.countdown = null;
     return true;
+  }
+
+  /**
+   * What this run was worth to the meta layer. Called once, by `payRun`, after
+   * the run has finished.
+   *
+   * An endless run is measured in metres and a campaign run is not (D52), which
+   * is why the distance is read off the state here rather than assumed: the
+   * field is written by the endless generator's own run semantics and is absent
+   * on every campaign road.
+   */
+  tally(): RunTally {
+    const endless = this.run.state.endless;
+    return this.tracker.tally(this.run.state, endless === undefined ? null : endless.metres);
   }
 
   /** Backwards: a body that has just activated is near the end of the array. */
