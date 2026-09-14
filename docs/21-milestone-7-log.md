@@ -200,3 +200,34 @@
 - Review verification: typecheck 0 errors, lint clean, 414 tests, build
   OK, hosted 11.82 MB, smoke PASS twice at about 15 min 10 s. The tech
   lead re-ran the smoke once on the final tree before publishing.
+
+## 2026-09-14 — Close: final verification and the hosted build
+
+- Final tree (review fixes at b9050d2): typecheck 0 errors, lint clean,
+  414 tests, build OK; smoke PASS in 15 min 5 s on this container (runs
+  482 s, stress 39 s, hero 382 s; draw peaks 40 / 42 / 41 / 43 / 43 of
+  52; 43 shader programs warmed, 0 compiled during play in all five runs;
+  squad ragdolls on; chargers drawn asserted; stress 500 mages, 40
+  skeletons, 292 bodies in 35 draws). Tech lead frame review of the final
+  hero set: Frostfell reads as one family with the meadow and the UI
+  (frozen flagstones, snow verge, dusted pines, crystals, cool arches),
+  the Rimehound mid-lane in the alarm ink, the Bulwark's number standing
+  without its glyph after the break, the Rime Fiend over the column with
+  mages thrown clear, the meadow set unchanged.
+
+## Milestone 7 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Frostfell reads as one family; hero set on both biomes | Done: run, gate close-up, boss, charger, broken shield on Frostfell at 2x; title on the meadow |
+| 2. Charger, shielded brute, Rime Fiend in the sim with tests; the crowd bows under a charge | Done: monsters, rime and frost tests; the charge frame shows the bow |
+| 3. Levels 21 to 40 on the biome; bands on the human bot; milestones separating; greedy 100 of 100; economy to 40; goldens | Done on the armed human: 0.72 ordinary clears, 0.39 survivors, bosses 20 to 30 s; milestones 25/30/35/40 absolute gates bare and 0.3 to 0.6 armed; greedy armed 100 of 100; economy in band to 40 |
+| 4. Bestiary, 40-level picker, audio for the new monsters | Done |
+| 5. All checks, smoke with a Frostfell run, hero set, hosted build republished, log, ledger, ASSETS.md rows | Done: D49 and D50, hosted build Version 16 |
+
+Open for the product owner: from level 21 the game assumes a player who
+has shopped (greedy with nothing bought clears 37 of 100 there); Yard
+prices are 28 percent dearer to pay for the stronger gate-bonus rung;
+level 7 is not an upgrade gate at any gate-bonus size; the Fiend's wake
+reads as a scuffed band rather than a gouge under the volley; the smoke
+takes 15 minutes on this container.
