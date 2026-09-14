@@ -23,6 +23,7 @@ import { BurnView } from './burn';
 import { EffectsView } from './effects';
 import { EnemyView } from './enemies';
 import { GateView } from './gates';
+import { GroundDecals } from './groundDecals';
 import { NumberLabels } from './labels';
 import { ProjectileView } from './projectiles';
 import { PropsView } from './props';
@@ -32,7 +33,7 @@ import { ShadowLayer, addPropShadows } from './shadows';
 import { SkyDome } from './sky';
 import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
-import { POOL } from './theme';
+import { POOL, SPRAY_DECAL_POOL, SPRAY_Y } from './theme';
 import { WallView } from './walls';
 import { WispView } from './wisp';
 import type { BiomeId } from '@/data/biome-types';
@@ -56,6 +57,12 @@ export class SceneViews {
   readonly squad: SquadView;
   /** Every spell quad in the scene, in one batch; see `./sprites.ts`. */
   readonly sprites: SpriteLayer;
+  /**
+   * Every mark on the road, in one batch; see `./groundDecals.ts`. The
+   * charger's dust and the Rime Fiend's wake are the only things that draw
+   * into it, and it draws nothing at all on a frame neither of them is running.
+   */
+  readonly decals: GroundDecals;
   readonly projectiles: ProjectileView;
   readonly effects: EffectsView;
   readonly gates: GateView;
@@ -99,13 +106,14 @@ export class SceneViews {
     this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
     this.sprites = new SpriteLayer(scene, POOL.sprites);
+    this.decals = new GroundDecals(scene, SPRAY_DECAL_POOL, SPRAY_Y);
     this.projectiles = new ProjectileView(this.sprites);
     this.effects = new EffectsView(scene, this.sprites);
     this.gates = new GateView(scene, this.labels);
-    // Both take the sprite batch: a charger's dust and the Rime Fiend's frost
+    // Both take the decal batch: a charger's dust and the Rime Fiend's frost
     // wake (D49) land in it, so neither costs a draw call of its own.
-    this.enemies = new EnemyView(scene, this.labels, this.sprites);
-    this.boss = new BossView(scene, this.labels, this.sprites);
+    this.enemies = new EnemyView(scene, this.labels, this.decals);
+    this.boss = new BossView(scene, this.labels, this.decals);
     this.walls = new WallView(scene, this.sprites);
     this.wisp = new WispView(this.sprites);
     this.burn = new BurnView(this.sprites);
@@ -161,6 +169,9 @@ export class SceneViews {
     this.road.setBiome(id);
     this.sky.setBiome();
     this.props.setBiome(id);
+    // The arches' stone is tinted from a role rather than referenced, so unlike
+    // a material handed a shared `Color3` it has to be repainted by hand.
+    this.gates.setBiome();
   }
 
   /** Locks the materials that never change, after the first readiness pass. */
@@ -199,6 +210,7 @@ export class SceneViews {
     this.walls.setWalls(level.walls);
     this.squad.reset();
     this.sprites.reset();
+    this.decals.reset();
     this.projectiles.reset();
     this.effects.reset();
     this.gates.reset();
@@ -216,6 +228,7 @@ export class SceneViews {
     this.projectiles.dispose();
     this.effects.dispose();
     this.sprites.dispose();
+    this.decals.dispose();
     this.gates.dispose();
     this.enemies.dispose();
     this.boss.dispose();

@@ -36,12 +36,12 @@ import { ChargerBodies } from './chargers';
 import { BlockCrowds, writeCluster } from './enemyBlocks';
 import { EnemySlotBook } from './enemySlots';
 import type { EnemySlot } from './enemySlots';
+import type { GroundDecals } from './groundDecals';
 import { createLabelView, setLabelView } from './labelClearance';
 import type { LabelView } from './labelClearance';
 import type { NumberLabels } from './labels';
 import { RingPool } from './rings';
 import { ShadowLayer } from './shadows';
-import type { SpriteLayer } from './sprites';
 import { StreamBodies } from './streamBodies';
 import {
   CHARGER_ATTACK_RANGE,
@@ -63,7 +63,7 @@ export class EnemyView {
   private readonly crowds = new BlockCrowds();
   /** The chargers, which are bodies rather than blocks (`./chargers.ts`). */
   private readonly chargers = new ChargerBodies();
-  private readonly sprites: SpriteLayer;
+  private readonly decals: GroundDecals;
 
   private physicsQuality = 0;
   private frame = 0;
@@ -74,13 +74,13 @@ export class EnemyView {
   private readonly view: LabelView = createLabelView();
 
   /**
-   * `sprites` is the frame's shared quad batch, opened around this view's
+   * `decals` is the frame's shared ground-mark batch, opened around this view's
    * `update` by `Renderer`: a charger's dust goes into it, so the trail behind
    * a running body costs no draw call of its own.
    */
-  constructor(scene: Scene, labels: NumberLabels, sprites: SpriteLayer) {
+  constructor(scene: Scene, labels: NumberLabels, decals: GroundDecals) {
     this.scene = scene;
-    this.sprites = sprites;
+    this.decals = decals;
     this.book = new EnemySlotBook(labels, POOL.enemies);
     this.streams = new StreamBodies(labels);
     this.rings = new RingPool(scene, 'frostRing', SLOW_RING_COLOR, POOL.slowRings, {
@@ -251,7 +251,7 @@ export class EnemyView {
 
     this.rings.end();
     this.crowds.commit(dt);
-    this.chargers.commit(this.sprites, dt);
+    this.chargers.commit(this.decals, dt);
   }
 
   /** Stream bodies drawn last frame, for the debug panel and the dev harness. */

@@ -251,15 +251,35 @@ const AMBIENTCG_TEXTURES = [
     quality: 0.68,
     ao: false,
     /**
-     * The grade. The source averages rgb 125,141,140 — a dark sea-green, which
-     * is what lake ice actually looks like and what a whole road of it must not
-     * be: at that value the road is darker than the crowd standing on it and
-     * the frame loses its floor. Brightness takes it to the low 180s (the
-     * meadow's graded cobble averages 178), the desaturation takes the green
-     * out, and the small positive rotation lands the residue on the blue side
-     * of neutral so it sits beside `spell.frost` rather than fighting it.
+     * The grade, in the order it is read: tame the range, lift it, cool it.
+     *
+     * The source averages rgb 125,141,140 — a dark sea-green, which is what
+     * lake ice actually looks like and what a whole road of it must not be: at
+     * that value the road is darker than the crowd standing on it and the
+     * frame loses its floor. The desaturation takes the green out and the small
+     * positive rotation lands the residue on the blue side of neutral, so it
+     * sits beside `spell.frost` rather than fighting it.
+     *
+     * `contrast` is Milestone 7 Phase E's correction and the reason the pair of
+     * numbers moved. `brightness(1.45)` alone measured mean 190 with a standard
+     * deviation of 49 and *21 percent of the tile clipped to white* — the
+     * fracture veins blew out and the cells went slate, so the road read busier
+     * and darker than the meadow's cobble (mean 137, deviation 29) and pulled
+     * the eye off the crowd and the plaques standing on it. A road is the
+     * frame's floor, not its subject. Compressing the range about its middle
+     * first and lifting the result keeps the mean and lands the cobble's own
+     * deviation: 183, deviation 30, 6 percent clipped. The veins still read as
+     * joints at the far end of the road; they have stopped being the brightest
+     * thing in the frame.
+     *
+     * Derived rather than dialled. The grade is affine in the source, so
+     * `contrast` c and `brightness` b give slope `b*c` and offset
+     * `b*127.5*(1-c)`; solving those for the cobble's deviation at this tile's
+     * own mean is where 0.49 and 1.39 come from. `scripts/` has no image
+     * dependency to check it with, so the check is the tile itself — 1024 px of
+     * it in `assets/textures/` — and the numbers above were measured off it.
      */
-    tint: 'brightness(1.45) saturate(0.5) hue-rotate(14deg)',
+    tint: 'contrast(0.49) brightness(1.39) saturate(0.5) hue-rotate(14deg)',
     use: 'the Frostfell road surface',
   },
   {

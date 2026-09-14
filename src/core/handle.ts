@@ -29,6 +29,15 @@ export interface ArcaneDebugHandle {
   /** Draw calls: the last frame's, and the worst since the run started. */
   draws: () => { current: number; peak: number };
   /**
+   * Chargers drawn (D49): the last frame's, and the worst since the run
+   * started. The same shape as `draws` and for the same reason — the peak is
+   * the only one of the two a test can assert on, because a charger is on the
+   * road for two seconds of a ninety-second run and any single frame is
+   * overwhelmingly likely to have none. The Frostfell smoke run asserts it went
+   * above zero, which is what says its charger frame photographed a charger.
+   */
+  chargers: () => { current: number; peak: number };
+  /**
    * Shader programs compiled so far and what the warm-up pass did. The smoke
    * asserts `programs` does not move across a whole level of play.
    */

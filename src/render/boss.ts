@@ -17,9 +17,9 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { BossRig, FACING, FACING_HOME } from './bossModels';
 import { FrostSpray } from './frostSpray';
+import type { GroundDecals } from './groundDecals';
 import { labelPixels, type NumberLabels } from './labels';
 import { RingPool } from './rings';
-import type { SpriteLayer } from './sprites';
 import {
   BOSS_CHARGE_OVERRUN,
   BOSS_DRAW_RANGE,
@@ -66,7 +66,7 @@ export class BossView {
   private readonly ringState: Ring[] = [];
   /** The frost the Fiend tears off the road while it charges (D49). */
   private readonly wake = new FrostSpray(BOSS_WAKE_SIZE, BOSS_WAKE_COLOR, BOSS_WAKE_SPREAD);
-  private readonly sprites: SpriteLayer;
+  private readonly decals: GroundDecals;
 
   private current = '';
   /** Seconds left of a one-shot clip that owns the boss until it ends. */
@@ -86,13 +86,13 @@ export class BossView {
   private lastZ = 0;
 
   /**
-   * `sprites` is the frame's shared quad batch, opened around this view's
+   * `decals` is the frame's shared ground-mark batch, opened around this view's
    * `update`: the charge wake goes into it, so it costs no draw call.
    */
-  constructor(scene: Scene, labels: NumberLabels, sprites: SpriteLayer) {
+  constructor(scene: Scene, labels: NumberLabels, decals: GroundDecals) {
     this.scene = scene;
     this.labels = labels;
-    this.sprites = sprites;
+    this.decals = decals;
     this.label = labels.claim();
     this.rig = new BossRig(scene);
 
@@ -211,7 +211,7 @@ export class BossView {
     time: number,
   ): void {
     this.updateRings(dt);
-    this.wake.draw(this.sprites, dt);
+    this.wake.draw(this.decals, dt);
     this.hitCooldown = Math.max(0, this.hitCooldown - dt);
 
     if (this.dying >= 0) {

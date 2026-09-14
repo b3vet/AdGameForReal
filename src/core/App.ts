@@ -409,6 +409,10 @@ export class App implements FrameHost, AppCommands {
       physics: () => this.physicsLayer,
       quality: () => this.ladder.rung,
       draws: () => ({ current: this.renderer.drawCalls, peak: this.driver.peakDrawCalls }),
+      chargers: () => ({
+        current: this.renderer.chargerBodies,
+        peak: this.driver.peakChargerBodies,
+      }),
       shaders: () => this.renderer.shaderStats,
       player: () => this.academy.player,
       setPlayer: (patch: unknown) => {

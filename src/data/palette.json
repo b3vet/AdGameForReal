@@ -4,7 +4,7 @@
   "gold":     { "base": "#f2b33d", "light": "#ffd97a", "deep": "#b5741c" },
   "sky":      { "top": "#4f9de6", "mid": "#8fc6f2", "horizon": "#e2f1fb", "haze": "#f6e7cf" },
   "grass":    { "base": "#7cc35a", "deep": "#4f9a3c", "light": "#a6dd7f" },
-  "stone":    { "base": "#c9b79a", "deep": "#8f7f66", "light": "#e6d9c2", "kerb": "#a89a80" },
+  "stone":    { "base": "#c9b79a", "deep": "#8f7f66", "light": "#e6d9c2", "kerb": "#a89a80", "arch": "#ffd6a2" },
   "ink":      { "base": "#1e1633", "soft": "#4a3f66", "muted": "#8a80a3" },
   "parchment":{ "base": "#f7efe2", "panel": "#fbf6ec", "shade": "#e8dcc6" },
   "bone":     { "base": "#e9dcc4", "deep": "#b8a88b" },
@@ -24,7 +24,7 @@
     "frost": {
       "sky":    { "top": "#5f92c8", "mid": "#9dc4e4", "horizon": "#eaf3fa", "haze": "#dfe9f2" },
       "grass":  { "base": "#e2edf7", "deep": "#b9cde0", "light": "#f2f7fc" },
-      "stone":  { "base": "#b9cfe0", "deep": "#6f8aa3", "light": "#cfe0ec", "kerb": "#a8bfd2" },
+      "stone":  { "base": "#b9cfe0", "deep": "#6f8aa3", "light": "#cfe0ec", "kerb": "#a8bfd2", "arch": "#cfe4ff" },
       "shadow": { "blob": "#1f2c3d" }
     }
   }

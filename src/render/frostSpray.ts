@@ -3,9 +3,9 @@
  * the Rime Fiend's frost wake.
  *
  * One class, two instances, because they are the same effect at two sizes and
- * two hues — a puff left behind a moving body, drifting out and up as it fades.
- * Both go into the shared sprite batch (`./sprites.ts`), so neither costs a
- * draw call of its own and neither needs a material.
+ * two hues — a mark left behind a moving body, spreading and fading where it
+ * fell. Both go into the shared ground-decal batch (`./groundDecals.ts`), so
+ * neither costs a draw call of its own and neither needs a material.
  *
  * Doubly capped, exactly as the squad's fence dust is (`./squadDust.ts`): a
  * ring of `SPRAY_POOL` and at most one new puff every `SPRAY_EVERY` seconds. A
@@ -15,16 +15,15 @@
  * Preallocated in full and written in place: this is on the frame path.
  */
 
-import { bookCell } from './spriteSheets';
-import type { SpriteLayer } from './sprites';
+import type { GroundDecals } from './groundDecals';
 import {
   SPRAY_ALPHA,
   SPRAY_DRIFT,
   SPRAY_DURATION,
   SPRAY_EVERY,
   SPRAY_POOL,
-  SPRAY_RISE,
-  SPRAY_Y,
+  SPRAY_SIZE_END,
+  SPRAY_SIZE_START,
 } from './theme';
 
 export class FrostSpray {
@@ -45,7 +44,7 @@ export class FrostSpray {
    * running. The colour is read every frame rather than copied, so a biome
    * switch moves it with the rest of the palette.
    *
-   * `spread` is how far either side of the body a puff is thrown, and it is a
+   * `spread` is how far either side of the body a mark is thrown, and it is a
    * framing number rather than a physical one: the camera looks *up* the road,
    * so a trail left directly behind a body running at it is hidden by that
    * body. Thrown out from under alternate feet it reads as spray and stays in
@@ -83,10 +82,10 @@ export class FrostSpray {
   }
 
   /**
-   * Ages every puff and draws the live ones, compacting the ring as it goes.
-   * Called between the sprite layer's `begin` and `end`.
+   * Ages every mark and draws the live ones, compacting the ring as it goes.
+   * Called between the decal layer's `begin` and `end`.
    */
-  draw(sprites: SpriteLayer, dt: number): void {
+  draw(decals: GroundDecals, dt: number): void {
     let write = 0;
     for (let i = 0; i < this.count; i++) {
       const age = (this.age[i] ?? 0) + dt;
@@ -95,16 +94,18 @@ export class FrostSpray {
       const x = this.x[i] ?? 0;
       const z = this.z[i] ?? 0;
       const away = this.drift[i] ?? 1;
-      sprites.add(
-        bookCell('sparkle', phase),
+      decals.add(
         x + away * phase * SPRAY_DRIFT,
-        SPRAY_Y + phase * SPRAY_RISE,
         z,
-        this.size * (0.6 + phase * 0.9),
+        this.size * (SPRAY_SIZE_START + phase * (SPRAY_SIZE_END - SPRAY_SIZE_START)),
         this.color.r,
         this.color.g,
         this.color.b,
-        (1 - phase) * SPRAY_ALPHA,
+        // Squared rather than linear, so a mark holds most of its opacity for
+        // the first half of its life and then goes quickly: a linear fade left
+        // everything but the newest puff too faint to see on an ice road, which
+        // is a trail that is only ever one disc long.
+        (1 - phase * phase) * SPRAY_ALPHA,
       );
 
       if (write !== i) {

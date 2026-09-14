@@ -49,6 +49,18 @@ export const ARCH_APEX = ARCH_SPRING_Y + ARCH_RING_RADIUS;
 export const ARCH_SOFFIT = ARCH_APEX - ARCH_RING_THICKNESS / 2;
 /** A low parapet across the top, which is what the crown ornament stands on. */
 export const ARCH_CROWN_HEIGHT = 0.3;
+
+/**
+ * How hard the arch's stone tint is driven (`./gateArch.ts`).
+ *
+ * The tint is a multiplier on the dungeon atlas, so it has to be able to go
+ * *above* one — the pack is painted for torchlight and goes cold grey outdoors,
+ * and nothing under 1 would ever lift it. A palette role is a colour in 0..1,
+ * so the role says which way the stone leans and this says how far: role times
+ * gain is the albedo multiplier. 1.26 is what the warm meadow tint has always
+ * been worth, and `stone.arch` is that tint normalised.
+ */
+export const ARCH_TINT_GAIN = 1.26;
 export const ARCH_HEIGHT = ARCH_APEX + ARCH_RING_THICKNESS / 2 + ARCH_CROWN_HEIGHT;
 
 /**

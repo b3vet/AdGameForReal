@@ -48,12 +48,32 @@ const TURBO = 60;
 /**
  * Scripted runs driven at once. One by default — see below.
  *
- * The smoke sits at about 5 min 57 s against a 7 min ceiling and the four runs
- * are half of it (runs 182 s, stress 44 s, hero 122 s, build and boot 9 s,
- * measured off the frame timestamps). The runs are independent — their own
- * context, their own save, their own screenshots — and every assertion a run
- * carries is a *count*: draw calls, shader programs, coins, a phase. None is a
- * wall-clock measurement, so running two at once cannot change an answer.
+ * ## The budget, and where it went
+ *
+ * The smoke measured 18 min 6 s in Milestone 7 Phase E — runs 532 s, stress
+ * 39 s, hero 512 s — against the 7 min ceiling of docs/06-milestone-2-plan.md,
+ * which it had already passed at 5 min 57 s before this milestone. Two things
+ * account for nearly all of the difference, and both are content rather than
+ * waste:
+ *
+ *   - the Frostfell run is 306 s of the 532 on its own. It walks 360 m of a
+ *     level that stands at the 500-unit cap, and it stops the sim clock down
+ *     three times on the way (`PACE` in `./smoke-run.mjs`) because the three
+ *     moments it photographs are a second long each.
+ *   - the hero set drives three pages instead of two, and the third walks that
+ *     same Frostfell level at pixel ratio 2.
+ *
+ * The levers, in the order they give the most back: `SMOKE_HERO_SCALES=2`
+ * drops the 3x half of the meadow set, `SMOKE_HERO_FROST_SCALES=` cannot go
+ * below one scale but the page can be dropped by pointing it at the 3x list
+ * the run is not judged on, and `SMOKE_RUN_CONCURRENCY=2` overlaps the runs
+ * (see below). None of them is the default: a smoke that is not run is not a
+ * test, and every frame here is in a definition of done.
+ *
+ * The runs are independent — their own context, their own save, their own
+ * screenshots — and every assertion a run carries is a *count*: draw calls,
+ * shader programs, coins, a phase. None is a wall-clock measurement, so
+ * running two at once cannot change an answer.
  *
  * It cannot be the default anyway. Measured at 2 in Milestone 5 Phase F: the
  * run phase dropped from 182 s to about 105 s, and both attempts *failed* in
@@ -77,11 +97,13 @@ function since(start) {
 /**
  * The runs this smoke drives, in order. The first is the definition-of-done
  * run: a greedy clear of level 1, photographed early, mid and late down the
- * road and then in the boss fight. The others exist to prove a loss screen and
- * a big level-10 squad also render.
+ * road and then in the boss fight. The others exist to prove a loss screen, a
+ * Frostfell level with both new kinds and its own boss (D49), and a big
+ * level-10 squad all render.
  *
- * A shot is keyed to a point on the road (`z`, in metres) or to an event, never
- * to the wall clock. The frame loop is stopped on the first frame that
+ * A shot is keyed to a point on the road (`z`, in metres) or to a moment in the
+ * sim — a gate row, a shield breaking, a body charging — never to the wall
+ * clock. The frame loop is stopped on the first frame that
  * satisfies each step and started again once the picture is taken, so the same
  * frames come out of a fast machine and a slow one — and a turbo frame, which
  * is three seconds of sim, cannot carry the run past the moment being
@@ -151,6 +173,57 @@ const RUNS = [
     menuShots: [{ open: '#academy-yard', name: 'yard.png', back: '#room-back' }],
     shots: [],
     endShot: 'result-coins.png',
+  },
+  {
+    /**
+     * Frostfell (D49), and the one run keyed to *moments* rather than to places:
+     * a charger running its lane, a shielded brute before and after its shield
+     * breaks, and the Rime Fiend's charge. `scripts/smoke-run.mjs` paces the sim
+     * down as each comes into reach, because at turbo 60 a frame is three
+     * seconds of sim and none of those windows is a second long.
+     *
+     * Level 23 because it is the first that carries both new kinds — one
+     * charger row and one shield row (`src/data/levels.json`) — and seed 1 puts
+     * the shielded brute at z 215 and the charger at z 342, so the road offers
+     * them in the order the shot list asks for.
+     *
+     * Armed, because from level 21 the game is balanced for a player who has
+     * shopped (Milestone 7 Phase D): the save below is what the campaign says
+     * the human is holding when it first reaches level 23, read off
+     * `runCampaign` rather than invented. Bare, the greedy bot clears 37 of 100
+     * up here and this run would be a coin flip.
+     *
+     * Scale 1 like every other run: the boss's volley is additive fill, and
+     * Phase C measured a fraction of a frame per second at 2x on this
+     * rasteriser. The 2x pictures of all of this are the hero set's job.
+     */
+    label: 'greedy frost level 23',
+    query: `?bot=greedy&level=23&seed=1&turbo=${TURBO}&screenshot=1`,
+    save: {
+      coins: 0,
+      upgrades: { damage: 2, fireRate: 2, startCount: 2, gateBonus: 2, bossDamage: 1 },
+      staffs: {
+        ember: { unlocked: true, tier: 1 },
+        storm: { unlocked: true, tier: 1 },
+        frost: { unlocked: true, tier: 1 },
+      },
+      selectedStaff: 'frost',
+      familiar: { unlocked: false, tier: 0 },
+      unlockedLevel: 23,
+    },
+    shots: [
+      { at: 'shield', name: 'frost-shield.png' },
+      { at: 'shieldBroken', name: 'frost-shield-broken.png' },
+      { at: 'charge', name: 'frost-charger.png' },
+      { at: 'bossCharge', name: 'frost-boss-charge.png' },
+    ],
+    endShot: 'end-frost.png',
+    // The Frostfell road, the crowd and the plaques in one frame: the biome has
+    // to be able to fail this check too, not only the meadow.
+    assertNotBlank: 'frost-charger.png',
+    // A level with a charger row that drew none is a level whose charger frame
+    // is a picture of an empty lane; see `smoke-run.mjs`.
+    expectChargers: true,
   },
   {
     label: 'greedy level 10',

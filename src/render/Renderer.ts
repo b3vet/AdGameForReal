@@ -7,29 +7,43 @@
  *   - Every mesh, material and label is allocated in `init`; `loadLevel` hands
  *     them out and `update` only writes transforms. Nothing is created per frame.
  *
+ * This file is the object the app holds: its lifecycle, its public API and the
+ * quality rung. What it used to carry inline is four files around it —
+ * `./views.ts` is every view, `./rendererBoot.ts` the order they are built in,
+ * `./rendererLevel.ts` what a level load and a biome switch do to them,
+ * `./rendererFrame.ts` the order they are written in every frame, and
+ * `./rendererStats.ts` what is measured off the result.
+ *
  * Deep imports (`@babylonjs/core/...`) rather than the package root, so the
  * single-file artifact build stays small.
  */
 
 import type { Engine } from '@babylonjs/core/Engines/engine';
-import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Scene } from '@babylonjs/core/scene';
 
 import { biomeOfLevel } from './biome';
-import { CameraRig } from './camera';
-import { loadDisplayFont } from './glyphAtlas';
+import type { CameraRig } from './camera';
 import { PreviewBackdrop } from './preview';
 import { setBiome as setPaletteBiome } from './palette';
-import { applyBiomeToScene, createEngine, createScene } from './scene';
-import { writeBossShadow } from './shadows';
-import { buildPaletteSwatches, swatchesWanted } from './swatch';
-import { DEFAULT_ROAD_END_Z, ROAD_PAST_ARENA, ROAD_START_Z } from './theme';
+import { bootScene } from './rendererBoot';
+import { drawFrame, drawSquadOnly } from './rendererFrame';
+import {
+  chargerBodiesOf,
+  drawCallsOf,
+  featureStatsOf,
+  labelStatsOf,
+  pixelRatioOf,
+  screenPixelRatio,
+  streamBodiesOf,
+} from './rendererStats';
+import type { FeatureReadout, LabelReadout } from './rendererStats';
+import { loadLevelInto, repaintBiome } from './rendererLevel';
 import { applyToonRampToScene } from './toonRamp';
-import { SceneViews } from './views';
+import type { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
 import type { BiomeId } from '@/data/biome-types';
-import { weaponOf } from '@/sim';
 import type { LevelDef, PlayerState, RunState, SimEvent, SquadState } from '@/sim';
 
 export interface RendererOptions {
@@ -116,62 +130,20 @@ export class Renderer {
     this.biome = this.forcedBiome ?? 'meadow';
     setPaletteBiome(this.biome);
 
-    const engine = createEngine(this.canvas, {
+    const context = await bootScene({
+      canvas: this.canvas,
       preserveDrawingBuffer: this.preserveDrawingBuffer,
       effectivePixelRatio: this.effectivePixelRatio(),
+      biome: this.biome,
+      shake: (strength, seconds) => {
+        this.shake(strength, seconds);
+      },
     });
-    this.engine = engine;
-    this.applyPixelRatio();
-
-    const scene = createScene(engine);
-    this.sceneRef = scene;
-    this.instrumentation = new SceneInstrumentation(scene);
-
-    this.rig = new CameraRig(scene);
-
-    // Sixty gate materials, three crowds and the biome are all built in the
-    // next few lines. Each `new StandardMaterial` would otherwise re-dirty every
-    // material in the scene; blocking the mechanism makes it one pass at the end.
-    scene.blockMaterialDirtyMechanism = true;
-
-    // The glyph sheet is rasterised from whatever face is installed *now*, so
-    // the font has to be asked for before the atlas is built. Fail-soft and
-    // time-boxed: a missing Cinzel is a fallback serif, never a delayed boot.
-    await loadDisplayFont();
-    const views = new SceneViews(scene, (strength, seconds) => {
-      this.shake(strength, seconds);
-    });
-    this.views = views;
-
-    // A default stretch of road, so the very first frame — which the app draws
-    // behind the title screen before any level exists — is not empty sky.
-    views.road.setExtent(ROAD_START_Z, DEFAULT_ROAD_END_Z, 168);
-
-    await views.load();
-    // Every view's first reading of the biome, once its meshes and materials
-    // exist. `setBiome` above is for *changes*, and there is none to make here:
-    // the palette was switched before the scene was built.
-    views.setBiome(this.biome);
-    views.dressRoadside(1, ROAD_START_Z, DEFAULT_ROAD_END_Z);
-
-    scene.blockMaterialDirtyMechanism = false;
-
-    // Compiles shaders and uploads buffers, so the first `update` is not a
-    // blank frame that the smoke test would screenshot. The labels join in with
-    // one invisible glyph, or their shader would compile on the frame the first
-    // gate comes into range — a stall exactly where the player is deciding.
-    views.labels.warmUp();
-    // `?swatch=1` only: a row of palette chips in front of the camera, which is
-    // how the tone mapping's exposure was measured (`./swatch.ts`).
-    if (swatchesWanted()) buildPaletteSwatches(scene, this.rig.camera);
-    await scene.whenReadyAsync();
-    views.labels.commit();
-
-    // After the first readiness pass, never before: a material frozen while its
-    // effect is still compiling never draws. None of these views ever changes
-    // what its materials are made of, so re-checking them every frame is pure
-    // cost (`SceneViews.freeze`).
-    views.freeze();
+    this.engine = context.engine;
+    this.sceneRef = context.scene;
+    this.instrumentation = context.instrumentation;
+    this.rig = context.rig;
+    this.views = context.views;
 
     // Last: every pooled material compiled while the title screen is still
     // being put together, so the first bolt, the first gate and the first
@@ -220,44 +192,26 @@ export class Renderer {
     return scene;
   }
 
-  /** Draw calls in the last rendered frame; the budget is 40 at 500 units. */
+  /** The readouts the debug panel and the smoke take off the scene; see
+   *  `./rendererStats.ts` for what each one is and who reads it. */
   get drawCalls(): number {
-    return this.instrumentation?.drawCallsCounter.current ?? 0;
+    return drawCallsOf(this.instrumentation);
   }
 
-  /**
-   * Stream bodies written into the crowd last frame, and the world labels drawn
-   * over them. Both are what the horde costs the renderer and both have a
-   * ceiling a level can quietly run into — `POOL.grunts` and the glyph budget —
-   * so the debug panel prints them next to the draw calls.
-   */
   get streamBodies(): number {
-    return this.views?.enemies.streamBodies ?? 0;
+    return streamBodiesOf(this.views);
   }
 
-  /** Chargers drawn last frame (D49); the debug panel prints them beside the
-   *  stream bodies, because both have a pool a level can run into. */
   get chargerBodies(): number {
-    return this.views?.enemies.chargerBodies ?? 0;
+    return chargerBodiesOf(this.views);
   }
 
-  get labelStats(): { labels: number; glyphs: number; dropped: number } {
-    return this.views?.labels.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
+  get labelStats(): LabelReadout {
+    return labelStatsOf(this.views);
   }
 
-  /**
-   * Fence pieces, wisp sparks and burning bodies drawn last frame: what
-   * Milestone 4 added to the road, and all three have a pool a level can run
-   * into. The debug panel and the dev harness print them beside the draw calls.
-   */
-  get featureStats(): { walls: number; wisp: boolean; sparks: number; burning: number } {
-    const views = this.views;
-    return {
-      walls: views?.walls.drawn ?? 0,
-      wisp: views?.wisp.drawn ?? false,
-      sparks: views?.wisp.sparksInFlight ?? 0,
-      burning: views?.burn.drawn ?? 0,
-    };
+  get featureStats(): FeatureReadout {
+    return featureStatsOf(this.views);
   }
 
   /** Shader programs compiled so far, and what the warm-up pass did (`./warmup.ts`). */
@@ -284,21 +238,12 @@ export class Renderer {
     await this.warmUpTracker.run(scene);
   }
 
-  /**
-   * Backing-store pixels per CSS pixel, and what the screen offers. The pair,
-   * because on the product owner's phone the two together are what say whether
-   * a frame-rate reading came from a degraded rung or a full-resolution one
-   * (docs/06-milestone-2-plan.md, definition of done 9).
-   */
   get pixelRatio(): number {
-    const engine = this.engine;
-    if (engine === null) return 0;
-    const scaling = engine.getHardwareScalingLevel();
-    return scaling > 0 ? 1 / scaling : 0;
+    return pixelRatioOf(this.engine);
   }
 
   get devicePixelRatio(): number {
-    return typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    return screenPixelRatio();
   }
 
   /** Kicks the camera; see `CameraRig.shake`. */
@@ -319,26 +264,12 @@ export class Renderer {
     this.rig?.update(squad, dt);
   }
 
-  /**
-   * Draws the crowd and its blob shadows and nothing else, for a caller that
-   * renders the scene itself: the stress scene (`src/core/stress.ts`), whose
-   * whole job is to measure the frame the game draws at five hundred units.
-   *
-   * It opens and closes both shared buffers around the one view that writes
-   * into them here, exactly as `update` does, so the scene measures the real
-   * path — the interpolation, the flags, the five hundred instance writes and
-   * the five hundred contact patches — rather than a crowd written once at
-   * startup and left there.
-   */
+  /** The stress scene's cut-down frame; see `drawSquadOnly`. */
   drawSquad(state: RunState, dt: number): void {
     if (this.disposed) return;
     const views = this.views;
     if (views === null) return;
-    views.shadows.begin();
-    views.sprites.begin();
-    views.squad.update(state, dt, views.shadows, views.sprites);
-    views.sprites.end();
-    views.shadows.commit();
+    drawSquadOnly(views, state, dt);
   }
 
   /**
@@ -387,21 +318,8 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
-  /**
-   * Repaints the scene in a biome (D49), and answers whether it had to.
-   *
-   * The palette switches first and the views re-read their roles after, which
-   * is the whole order: `src/render/palette.ts` rewrites every `Color3` a role
-   * has handed out *in place*, so a material or a module constant holding one
-   * follows on its own, and everything baked from a role — a vertex buffer, a
-   * painted texture, a copied material colour — is repainted by the views.
-   *
-   * Nothing is allocated: every biome's ground albedo and every biome's prop
-   * meshes are built at boot precisely so that this is a swap. The warm-up pass
-   * that follows is therefore a no-op in the normal case, and the guarantee
-   * that it stays one — a material that somehow did arrive late is compiled
-   * here, during the level's load, rather than inside the frame that draws it.
-   */
+  /** Repaints the scene in a biome (D49), and answers whether it had to; the
+   *  sequence itself is `repaintBiome` in `./rendererLevel.ts`. */
   setBiome(id: BiomeId): boolean {
     if (this.disposed) return false;
     // The renderer's own record, not the palette's answer: `init` switches the
@@ -409,10 +327,7 @@ export class Renderer {
     // find the palette already there and skip the fan-out the views still need.
     if (id === this.biome) return false;
     this.biome = id;
-    setPaletteBiome(id);
-    const scene = this.sceneRef;
-    if (scene !== null) applyBiomeToScene(scene);
-    this.views?.setBiome(id);
+    repaintBiome(this.sceneRef, this.views, id);
     void this.warmUp();
     return true;
   }
@@ -429,8 +344,7 @@ export class Renderer {
     // layout and the arena all land inside `loadLevel`, and they have to land
     // on the biome this level is set in (`./biome.ts`).
     this.setBiome(biomeOfLevel(level, this.forcedBiome));
-    this.views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA);
-    this.rig?.reset();
+    loadLevelInto(this.views, this.rig, level);
   }
 
   /**
@@ -439,59 +353,17 @@ export class Renderer {
    * position comes from `state`. Safe to call before `loadLevel`.
    *
    * `dt` is sim time, which the app scales for hit-stop and slow-mo, so every
-   * animation here is driven by it rather than by the frame clock.
+   * animation here is driven by it rather than by the frame clock. The draw
+   * order itself is `./rendererFrame.ts`.
    */
   update(state: RunState, events: readonly SimEvent[], dt: number): void {
     if (this.disposed) return;
     const scene = this.sceneRef;
     const views = this.views;
-    if (scene === null || views === null) return;
+    const rig = this.rig;
+    if (scene === null || views === null || rig === null) return;
 
-    views.events.observe(state.boss?.id, weaponOf(state.squad));
-    views.events.apply(events);
-
-    // Before any view writes into it: the roadside's own blobs are already in
-    // the buffer and this rewinds to just past them (`./shadows.ts`).
-    views.shadows.begin();
-
-    // The sprite batch is opened before anything writes into it and closed
-    // after everything has: projectiles, their trails, impacts and flashes all
-    // land in the same buffer and the same draw call. The squad is inside it
-    // rather than before it because the dust its units kick up at a fence goes
-    // into the same batch (`./squadDust.ts`).
-    views.sprites.begin();
-    views.squad.update(state, dt, views.shadows, views.sprites);
-    views.projectiles.update(state.projectiles, weaponOf(state.squad), dt);
-    views.gates.update(state, dt);
-    views.enemies.update(state, dt, views.shadows);
-    // The sim's clock as well as the frame's: `EnemyState.charge.until` is an
-    // absolute sim time, and it is what tells the Rime Fiend's run in from its
-    // walk home (D49).
-    views.boss.update(state.boss, state.squad.z, dt, this.timeScale(dt), state.time);
-    views.effects.update(dt);
-    // After the enemies, because both read positions the enemy view has just
-    // refreshed: the wall's flare sprite and the wisp's spark, which homes on
-    // its target through `EnemyView.positionOf`.
-    views.walls.update(state.squad.z, dt);
-    views.wisp.update(this.preview.familiarFor(state), views.events.targetLookup, dt);
-    views.burn.update(state, dt);
-    views.sprites.end();
-
-    // The boss's own blob, and the frame's one upload of the whole buffer.
-    writeBossShadow(views.shadows, state);
-
-    this.rig?.update(state.squad, dt);
-    // After the rig, because the sky rides on the camera: a dome that follows a
-    // frame late shears against the fog on a fast lateral drag.
-    const camera = this.rig?.camera;
-    if (camera !== undefined) {
-      views.road.update(camera.position.x, camera.position.z, dt);
-      views.sky.update(camera.position.x, camera.position.z, dt);
-    }
-
-    // Last, and after the rig: every label is billboarded against the camera's
-    // final pose for this frame, so a number never lags the thing it names.
-    views.labels.commit();
+    drawFrame({ views, rig, preview: this.preview, timeScale: this.timeScale(dt) }, state, events, dt);
 
     scene.render();
   }
@@ -543,8 +415,7 @@ export class Renderer {
 
   /** What the scene actually renders at: the screen's ratio under our cap. */
   private effectivePixelRatio(): number {
-    const deviceRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
-    return Math.min(deviceRatio, this.maxPixelRatio);
+    return Math.min(screenPixelRatio(), this.maxPixelRatio);
   }
 
   /**
@@ -563,4 +434,3 @@ export class Renderer {
     engine.setHardwareScalingLevel(level);
   }
 }
-

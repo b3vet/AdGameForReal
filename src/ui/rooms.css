@@ -57,6 +57,33 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
+  /*
+   * A scrollbar that is always there, rather than the overlay one iOS and
+   * Chrome fade in only while a finger is moving.
+   *
+   * The Bestiary is what asked for it (Milestone 7 Phase E): six cards at
+   * 390x844 overflow the panel by about 50 px, and with an overlay scrollbar a
+   * standing screen gives the player nothing at all to say the list continues —
+   * the sixth card is simply cut. The cards below are tightened enough that six
+   * fit, so this is the backstop for the seventh, which Milestone 8's monsters
+   * will bring. Styling `::-webkit-scrollbar` at all is what turns WebKit's
+   * overlay bar into a classic one, which is the whole trick.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--c-stone-deep) 70%, transparent) transparent;
+}
+
+.room__panel::-webkit-scrollbar {
+  width: 0.35rem;
+}
+
+.room__panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-stone-deep) 70%, transparent);
+}
+
+.room__panel::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--c-ink-base) 12%, transparent);
 }
 
 .rows,
@@ -198,11 +225,42 @@
 
 /* --- Bestiary ------------------------------------------------------------- */
 
+/*
+ * Tighter than a Yard row, because there are more of them and they are read
+ * rather than decided on.
+ *
+ * Measured at 390x844, the shortest screen the game ships on: the room's panel
+ * gets 460 px of scrolling box between the coin bar and the Back button, and
+ * six cards at the Yard's own metrics stack to 511 — the Rime Fiend's card was
+ * cut by a third with nothing on screen to say so (Milestone 7 Phase E). A
+ * beast card is an icon, a name and two sentences of flavour, so the two
+ * sentences can take the body font a step down; at 0.72rem the longest of them
+ * (the Bulwark's) wraps to two lines instead of three, and the six stack to
+ * about 430. The panel scrolls visibly for the seventh (see `.room__panel`).
+ */
+.beasts {
+  gap: 0.25rem;
+}
+
+.beast {
+  gap: 0.15rem;
+  padding: 0.2rem 0.45rem 0.2rem;
+}
+
+.beast__icon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.beast__name {
+  font-size: 0.92rem;
+}
+
 .beast__blurb {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 0.76rem;
-  line-height: 1.3;
+  font-size: 0.72rem;
+  line-height: 1.25;
   color: var(--ink-soft);
 }
 

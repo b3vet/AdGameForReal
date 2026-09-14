@@ -23,7 +23,7 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
 import { createShimmerTexture } from './artTextures';
-import { createBoxArch, createPlaque, loadArch } from './gateArch';
+import { createBoxArch, createPlaque, loadArch, tintArch } from './gateArch';
 import { createOrnaments, ORNAMENT_KINDS, ornamentIndex } from './gateOrnaments';
 import {
   GATE_PLAQUE_Z,
@@ -142,6 +142,18 @@ export class GateView {
     this.arch.dispose();
     this.arch = arch;
     this.archMatrices = createMatrixBuffer(arch, GATE_DRAW_CAPACITY);
+  }
+
+  /**
+   * Repaints the stonework for the biome now in force (D49).
+   *
+   * The box stand-in needs nothing — its material holds one of the palette's
+   * shared `Color3`s, which `setBiome` has already rewritten in place — and the
+   * real arch needs this, because its tint was copied into an albedo colour
+   * (`tintArch`). Called from `SceneViews.setBiome`, after the palette moved.
+   */
+  setBiome(): void {
+    tintArch(this.arch.material);
   }
 
   /** Hands every arch back to the pool. Called from `loadLevel`. */

@@ -87,20 +87,53 @@ export const SHIELD_BREAK_COLOR = paletteColor('spell.frost.body');
  * The spray a running body kicks up: the charger's dust and the Rime Fiend's
  * wake are the same effect at two sizes (`./frostSpray.ts`).
  *
- * Both land in the shared sprite batch, so neither costs a draw call, and both
- * are doubly capped — a ring this long, and at most one new puff every
+ * Both are marks on the road rather than puffs of light (`./groundDecals.ts`).
+ * They were additive quads in the spell batch through wave two and the first
+ * Frostfell hero set showed why that cannot work: additive light only ever
+ * reads against something darker than itself, and the Frostfell road is
+ * `stone.light` — the brightest surface in the frame. Every puff was
+ * arithmetically invisible. A blended disc *darker* than the ground reads on
+ * ice and on warm stone alike, and it is also what a heavy thing running
+ * through snow actually leaves behind.
+ *
+ * Both are doubly capped — a ring this long, and at most one new puff every
  * `SPRAY_EVERY` seconds per emitter — because a charge is two seconds of a
- * body moving at 9 m/s and a puff per frame is a fog bank down the lane.
+ * body moving at 9 m/s and a puff per frame is a smear down the lane.
  */
 export const SPRAY_POOL = 24;
+/** The decal batch holds both emitters at once, and nothing else draws into it. */
+export const SPRAY_DECAL_POOL = SPRAY_POOL * 2;
 export const SPRAY_EVERY = 0.055;
-export const SPRAY_DURATION = 0.42;
-export const SPRAY_RISE = 0.35;
+/**
+ * How long one mark lasts. Longer than the additive puff's 0.42 s: a mark on
+ * the ground is a track, and a track that vanishes as fast as a puff of light
+ * reads as flicker rather than as a trail.
+ */
+export const SPRAY_DURATION = 0.55;
 export const SPRAY_DRIFT = 0.3;
-export const SPRAY_Y = 0.12;
+/**
+ * How far over the road the discs lie: above the lane runes at 0.02 and above
+ * the blob shadows at 0.026, so a track is drawn over both rather than
+ * z-fighting with either.
+ */
+export const SPRAY_Y = 0.03;
+/**
+ * Share of a disc's radius that is solid before the rim ramps out to nothing.
+ *
+ * Half, not a quarter. The rim is a `smoothstep` over what is left, so at 0.25
+ * three quarters of every mark was a ramp and the *average* opacity of a puff
+ * was a fraction of the alpha it was written with — which is most of why the
+ * first two attempts at this effect could not be seen on the road at all. Half
+ * a disc solid is a mark with a body; it is still soft enough at the edge that
+ * two overlapping puffs read as one track rather than as two coins.
+ */
+export const DECAL_SOFT_EDGE = 0.5;
+/** What a mark is at birth and at death, as a share of the emitter's size. */
+export const SPRAY_SIZE_START = 0.7;
+export const SPRAY_SIZE_END = 1.6;
 /** How big one puff starts, for the charger and for the boss. */
-export const CHARGER_SPRAY_SIZE = 0.42;
-export const BOSS_WAKE_SIZE = 0.95;
+export const CHARGER_SPRAY_SIZE = 0.9;
+export const BOSS_WAKE_SIZE = 1.6;
 /** How far behind the body the puff is left, in metres. */
 export const CHARGER_SPRAY_BEHIND = 0.35;
 export const BOSS_WAKE_BEHIND = 0.9;
@@ -111,16 +144,42 @@ export const BOSS_WAKE_BEHIND = 0.9;
  * and its wake would otherwise be entirely behind it from a camera that looks
  * up the road — which is what the first Frostfell probe frame showed.
  */
-export const CHARGER_SPRAY_SPREAD = 0.35;
+export const CHARGER_SPRAY_SPREAD = 0.5;
 export const BOSS_WAKE_SPREAD = 0.85;
-/** How hard a puff is drawn at birth; it fades to nothing from there. */
-export const SPRAY_ALPHA = 0.75;
 /**
- * What the two sprays are made of: the road the charger is tearing up, and the
- * frost the Rime Fiend leaves behind it.
+ * How hard a mark is drawn at birth; it fades linearly to nothing from there.
+ *
+ * Blended, not added, so this is opacity, and it is high on purpose. Measured
+ * on the Frostfell road (Milestone 7 Phase E): the road is about luminance 144
+ * on screen and the mark is 43, so at 0.8 the core of a fresh puff is a little
+ * over half way down on the road under it. That is what it takes for a 0.6 m
+ * disc twenty metres up an ice road to be seen at all — 0.45 and 0.6 were both
+ * measured and both vanished into the tile's own mottling. It still reads as a
+ * scuff rather than as paint, because every puff is fading from the frame it is
+ * born in and the whole track is gone in half a second.
  */
-export const CHARGER_SPRAY_COLOR = paletteColor('stone.light');
-export const BOSS_WAKE_COLOR = paletteColor('spell.frost.core');
+export const SPRAY_ALPHA = 0.8;
+/**
+ * What the two sprays are made of, and why neither is a stone role.
+ *
+ * `stone.deep` was the obvious answer for a body tearing the road open and it
+ * is the wrong one: on Frostfell it is #6f8aa3, which is *lighter in luminance
+ * than the graded ice road under it* once the road's albedo has been through
+ * `stone.light` and the tone mapper. A mark in it changed the road's hue by a
+ * few percent and nothing else, which is how a first pass at this shipped a
+ * track nobody could see (twice — the additive version had the same answer for
+ * a different reason).
+ *
+ * So the charger's dust is `shadow.blob`, the one role the palette keeps for
+ * "darker than the ground it lies on", and the one that already carries a
+ * Frostfell override — a churned track and a contact shadow are the same value
+ * family, and the mark is a *hole* in the snow rather than snow in the air. The
+ * Rime Fiend's wake stays `spell.frost.edge`: it is no darker than the road,
+ * but it is the one saturated cold hue in the palette and it reads as frost on
+ * a near-neutral surface where a grey would not read at all.
+ */
+export const CHARGER_SPRAY_COLOR = paletteColor('shadow.blob');
+export const BOSS_WAKE_COLOR = paletteColor('spell.frost.edge');
 
 /**
  * The kick the Rime Fiend's charge gives the camera.

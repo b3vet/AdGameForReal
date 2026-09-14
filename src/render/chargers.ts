@@ -13,8 +13,8 @@
  * (`EnemyState.charge`), and — because the sim kills a charger the moment it
  * reaches the crowd — `attack` into `death` when it died at the squad's feet,
  * or `death` alone when it was shot out of the lane on the way in. The dust it
- * tears off the road is a pooled emitter in the shared sprite batch, so the
- * trail costs no draw call either.
+ * tears off the road is a pooled emitter in the shared ground-decal batch, so
+ * the trail costs no draw call either.
  *
  * Split out of `./enemies.ts`, which is about binding bodies to slots and
  * painting their numbers; this is one kind's geometry and clips.
@@ -24,9 +24,9 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
 import { FrostSpray } from './frostSpray';
+import type { GroundDecals } from './groundDecals';
 import { loadCrowd } from './models';
 import type { ShadowLayer } from './shadows';
-import type { SpriteLayer } from './sprites';
 import {
   CHARGER_LEAN_MAX,
   CHARGER_LEAN_PER_METRE,
@@ -183,14 +183,14 @@ export class ChargerBodies {
   }
 
   /** Uploads the frame's bodies and draws the dust. Once a frame, after both. */
-  commit(sprites: SpriteLayer | null, dt: number): void {
+  commit(decals: GroundDecals | null, dt: number): void {
     const crowd = this.crowd;
     if (crowd !== null) {
       crowd.setCount(this.written);
       crowd.commit();
       crowd.update(dt);
     }
-    if (sprites !== null) this.dust.draw(sprites, dt);
+    if (decals !== null) this.dust.draw(decals, dt);
   }
 
   /** Bodies drawn last frame, for the debug panel and the dev harness. */

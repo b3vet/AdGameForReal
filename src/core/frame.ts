@@ -153,6 +153,15 @@ export class FrameDriver {
    */
   private peak = 0;
 
+  /**
+   * Worst charger count since the last `resetPeak`, tracked exactly like the
+   * draw calls beside it and for one reader: the Frostfell smoke run asserts a
+   * charger was actually drawn (D49). A single-frame sample cannot say that — a
+   * charger is on the road for two seconds of a ninety-second run — and a peak
+   * can, for one getter read per frame.
+   */
+  private peakChargers = 0;
+
   /** Heap watch, `?debug` only: the last sample and how often it has fallen. */
   private lastHeap = 0;
   private heapDrops = 0;
@@ -196,8 +205,14 @@ export class FrameDriver {
     return this.peak;
   }
 
+  /** Most chargers drawn in one frame since `resetPeak` (D49). */
+  get peakChargerBodies(): number {
+    return this.peakChargers;
+  }
+
   resetPeak(): void {
     this.peak = 0;
+    this.peakChargers = 0;
   }
 
   private readonly frame = (time: number): void => {
@@ -255,6 +270,8 @@ export class FrameDriver {
 
     const draws = host.renderer.drawCalls;
     if (draws > this.peak) this.peak = draws;
+    const chargers = host.renderer.chargerBodies;
+    if (chargers > this.peakChargers) this.peakChargers = chargers;
 
     host.juice.apply();
     this.stats.timeScale = host.juice.scale;

@@ -33,6 +33,7 @@ import {
   ARCH_RING_THICKNESS,
   ARCH_SOFFIT,
   ARCH_SPRING_Y,
+  ARCH_TINT_GAIN,
   ARCH_VOUSSOIRS,
   GATE_PLAQUE_HEIGHT,
   GATE_PLAQUE_WIDTH,
@@ -62,12 +63,29 @@ const PARAPET_HEIGHT = 1.1;
 const PARAPET_DEPTH = 0.5;
 
 /**
- * The daylight tint for the dungeon stone (D36 roles, not literals). The pack
- * is painted for torchlight and goes cold grey outdoors; this warms it into the
- * same family as the road's kerbs, which is what makes an arch read as part of
- * the road rather than as scaffolding standing on it.
+ * Paints the arch's stone in the biome in force (D36 roles, not literals).
+ *
+ * The pack is painted for torchlight and goes cold grey outdoors, so the stone
+ * is multiplied by a tint: `stone.arch` times `ARCH_TINT_GAIN`. On the meadow
+ * the role is the warm sand the road's kerbs are cut from, which is what makes
+ * an arch read as part of the road rather than as scaffolding standing on it;
+ * on Frostfell it is the same value swung cold, so the same arch stands in a
+ * snowfield without dragging a warm evening into it (D49).
+ *
+ * Called again on every biome switch (`GateView.setBiome`), because
+ * `tintMaterial` *copies* into the material's `albedoColor` — unlike a material
+ * handed one of the palette's shared `Color3`s, this one cannot follow the
+ * switch on its own.
  */
-const ARCH_TINT: readonly [number, number, number] = [1.26, 1.06, 0.8];
+export function tintArch(material: unknown): void {
+  const tint = paletteColor('stone.arch');
+  tintMaterial(
+    material,
+    tint.r * ARCH_TINT_GAIN,
+    tint.g * ARCH_TINT_GAIN,
+    tint.b * ARCH_TINT_GAIN,
+  );
+}
 
 /**
  * The arch: two legs, a ring of voussoirs over the opening, and a low parapet
@@ -156,7 +174,7 @@ export async function loadArch(scene: Scene): Promise<Mesh | null> {
   const arch = assemble('gateArch', parts);
   for (const piece of pieces.values()) piece.dispose();
   if (arch === null) return null;
-  tintMaterial(arch.material, ARCH_TINT[0], ARCH_TINT[1], ARCH_TINT[2]);
+  tintArch(arch.material);
   applyToonRamp(arch.material);
   return arch;
 }

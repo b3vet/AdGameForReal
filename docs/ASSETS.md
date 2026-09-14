@@ -103,13 +103,14 @@ the game's about screen when there is one.
 
 ## Files
 
-Sizes are the shipped file, after trimming. `assets/` totals **5.0 MB**, against
+Sizes are the shipped file, after trimming. `assets/` totals **4.8 MB**, against
 a 12 MB budget (it was 3.0 MB before the Milestone 3 re-bake added a clip to
 each character, 3.4 MB before Milestone 5's UI kit added 10 KB of SVG, 3.6 MB
 before Milestone 5's art track added the dungeon pieces and the two albedos —
 435 KB in all — and 3.9 MB before Milestone 7 added Frostfell and the two new
 monsters: 748 KB of models, 138 KB of baked animation, 97 KB of props and
-159 KB of textures, 1.14 MB in all).
+159 KB of textures, 1.14 MB in all; Milestone 7 Phase E's softer ice grade then
+gave 33 KB of that back).
 
 ### Models — `assets/models/`
 
@@ -243,7 +244,7 @@ stone with a toon ramp over it, and nothing in the scene would otherwise cast it
 |---|---|---|---|
 | `road_cobble.jpg` | 250 KB | ambientCG `PavingStones131`, 1K JPG, colour × AO, re-encoded to 1024 px at quality 0.75 | The road surface, one repeat every 2.2 m |
 | `field_grass.jpg` | 64 KB | ambientCG `Grass004`, 1K JPG, re-encoded to 512 px at quality 0.72 | The field either side, and the grass fringe that blends over the kerbs |
-| `road_frost.jpg` | 134 KB | ambientCG `Ice004`, 1K JPG, re-encoded to 1024 px at quality 0.75, graded `brightness(1.45) saturate(0.5) hue-rotate(14deg)` | The Frostfell road surface, one repeat every 3 m. A frozen lake from above: cells of ice with white fracture veins between them, which carry the same information the paving's joints do. The source averages rgb 125,141,140 — a dark sea-green, and a whole road of that is darker than the crowd standing on it; graded it averages 182,191,193, beside the meadow road's 178 and a shade to the blue. It is the one albedo here with no `AmbientOcclusion.jpg` in its zip, so nothing is multiplied in: the veins are the shading, and the road mesh's own vertex colours still carry the gutter and the lane wear |
+| `road_frost.jpg` | 85 KB | ambientCG `Ice004`, 1K JPG, re-encoded to 1024 px at quality 0.68, graded `contrast(0.49) brightness(1.39) saturate(0.5) hue-rotate(14deg)` | The Frostfell road surface, one repeat every 3 m. A frozen lake from above: cells of ice with white fracture veins between them, which carry the same information the paving's joints do. The source averages rgb 125,141,140 — a dark sea-green, and a whole road of that is darker than the crowd standing on it; graded it averages 179,184,185, beside the meadow road's 145,137,119 and a shade to the blue. Milestone 7 Phase E added the `contrast` step: `brightness(1.45)` alone measured luminance mean 190 with deviation 49 and 21 percent of the tile clipped to white, which read busier and darker than the cobble (137, deviation 29) and pulled the eye off the crowd; the pair now measures 183, deviation 30, 6 percent clipped, and the file is 33 KB smaller for it. It is the one albedo here with no `AmbientOcclusion.jpg` in its zip, so nothing is multiplied in: the veins are the shading, and the road mesh's own vertex colours still carry the gutter and the lane wear |
 | `field_snow.jpg` | 25 KB | ambientCG `Snow006`, 1K JPG, colour × ambient occlusion, re-encoded to 512 px at quality 0.72 | The Frostfell verge and the snow fringe over the kerbs. Trodden snow rather than one of the pack's fresh ones: `Snow005` averages 147,148,149 with almost no local variation and reads as a blank sheet at a 4 m tile, while this one ships an occlusion map, so the composite has the dimples of a walked-on drift in it |
 | `road_cobble.jpg` — Milestone 5 Phase E colour grade | 249 KB | Same source and pipeline, with `saturate(0.72) hue-rotate(-14deg)` applied to the albedo before the occlusion is multiplied in (`AMBIENTCG_TEXTURES[].tint` in `scripts/fetch-assets.mjs`) | The paving is photographed with moss in its joints and averaged hue 53 at saturation 0.13, which read as olive once it covered the whole road (Phase C frame review). Graded it averages hue 40 at 0.11, beside `stone.base`'s 37, and keeps every bit of its photographic variation — a tint on the material would have multiplied the joints and the highlights by the same number |
 

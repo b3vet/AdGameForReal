@@ -114,3 +114,41 @@
   `shield` and the boss's `charge`, at scale 1 if the volley's fill makes
   2x too slow); the bestiary's sixth card below the fold on an 844 px
   screen; `Renderer.ts` 566 lines.
+
+## 2026-09-14 — Phase E: integration (verified and committed)
+
+- Smoke: a fifth run on level 23 with greedy armed with the kit the
+  campaign holds there, at scale 1, with frames keyed to moments (a
+  shielded brute before and after the break, a charger running, the Rime
+  Fiend mid-charge) through a pace table that slows the sim clock as each
+  subject comes into reach and hands it back after; a chargers-drawn peak
+  in the debug stats asserted non-zero. Hero set gains a Frostfell page
+  at 2x (run, gate close-up, boss, charger, broken shield) driven beside
+  the meadow pages; the Frostfell 3x set is off by default because the
+  smoke now runs 18 min on this container (`SMOKE_HERO_FROST_SCALES`).
+  Two driver bugs cost a third smoke run: a paced step that never handed
+  the clock back, and a blank check that threw on a frame never taken.
+- Looks: the wake and dust were additive near-white on a white road, so
+  they were arithmetically invisible; a new blended ground-decal batch
+  (one draw call, disc in the fragment shader, per-instance tint) carries
+  the charger's dust in the shadow role and the Fiend's wake in the frost
+  edge role; the ice albedo re-graded to half its contrast (deviation 49 →
+  30 against the cobble's 29, clipped white 21 → 6 percent, 118 → 85 KB)
+  with the meadow textures byte-identical; the arch's warm literal tint is
+  now a `stone.arch` role with a cold frost override, re-applied on the
+  biome switch; the bestiary's six cards fit at 844 px with a visible
+  scrollbar for a seventh. `Renderer.ts` 566 → 436 with boot, level-load,
+  frame and stats modules.
+- Verified: typecheck 0 errors, lint clean, 414 tests, build OK, hosted
+  11.82 MB, artifact 15.17 MB; smoke PASS in 18 min 6 s (runs 532 s,
+  stress 39 s, hero 512 s), draw peaks 40 / 42 / 41 / 43 / 43, 0 shader
+  compiles during play in all five runs, ragdolls on, stress 35 draws
+  with medians 7.2 / 9.9 / 7.3 ms. Frames judged: frozen flagstones with
+  soft joints, cool arches in the snow, plaques the brightest thing;
+  Rimehound mid-lane in the alarm ink; Bulwark broken at 26 m; the Fiend
+  over the column with two mages thrown clear; the meadow set unchanged.
+- Carried to review: the charger's dust is emitted on frame time so a
+  turbo capture shows fewer marks than play; the Fiend's wake does not
+  read under the volley; `smoke-hero.mjs` 901 and `smoke-run.mjs` 599
+  lines; grazing-angle banding at the far end of the ice road; the smoke's
+  wall clock.
