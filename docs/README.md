@@ -37,5 +37,7 @@ Index:
 | `20-milestone-7-plan.md` | Milestone 7 plan, approved: Frostfell biome, charger and shielded brute, the Rime Fiend, levels 21 to 40 |
 | `21-milestone-7-log.md` | Milestone 7 process log (append-only) |
 | `22-milestone-8-plan-draft.md` | Milestone 8 draft plan v1: missions, streaks, bestiary rewards and cosmetics, endless, deeper evolutions; awaiting the owner's play and answers |
+| `23-milestone-8-plan.md` | Milestone 8 plan, approved: streak on the device clock, rotating missions, tint cosmetics from bestiary tiers, Endless as a separate mode, three evolution tiers per staff |
+| `24-milestone-8-log.md` | Milestone 8 process log (append-only) |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |

@@ -52,3 +52,8 @@
 | D48 | 2026-09-13 | Milestone levels are 7, 10, 15 and 20 (level 5 is ordinary): the upgrade set the economy affords by level 5 cannot gate a level. The boss closes to contact within its fight so the crowd thins after the last gate. Supersedes the level list in D45. | 19 (wave two) |
 | D49 | 2026-09-14 | Biome 2 is Frostfell: palette overrides by role, snow and ice textures, tinted props; new kinds charger and shielded brute; boss 2 is the Rime Fiend with a lane charge; levels 21 to 40 with milestones 25, 30, 35, 40. | 20 |
 | D50 | 2026-09-14 | The Yard's first gate-bonus rung is cheap so a milestone level can be gated by an upgrade the economy affords (closes the Milestone 6 finding on levels 7 and 10). | 20 |
+| D51 | 2026-09-14 | Retention through the game's own systems: a daily streak on the device clock (read in core, never in the sim) and three missions rotating from a pool, paid in coins. | 23 |
+| D52 | 2026-09-14 | Endless is a separate mode beside the campaign, seeded and replayable, paid by distance under the campaign's rate so level progress stays the earner. | 23 |
+| D53 | 2026-09-14 | Cosmetics are tints only (hats, capes, wisp, staff glow) unlocked by bestiary kill tiers; meshes may follow later. | 23 |
+| D54 | 2026-09-14 | Three evolution tiers per staff, each a distinct mechanic, priced as multi-run goals and never mandatory below level 40. | 23 |
+| D55 | 2026-09-14 | Level 7 loses its milestone flag and plays as an ordinary-hard level; the first upgrade gate is level 10. Supersedes the level list in D48. | 23 |
