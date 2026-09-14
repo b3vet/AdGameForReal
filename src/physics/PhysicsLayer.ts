@@ -28,7 +28,7 @@ import HavokPhysics from '@babylonjs/havok';
 // The one rule this layer shares with the renderer: which stream bodies fall
 // over for real. `deathStyle.ts` has no imports of its own precisely so both
 // sides can reach the same answer from an enemy id alone.
-import { usesRagdoll } from '@/render/deathStyle';
+import { MAX_FALLEN_PER_FRAME, usesRagdoll } from '@/render/deathStyle';
 import { laneCenter } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
 
@@ -48,6 +48,8 @@ import {
   STOMP_IMPULSE,
   STOMP_RADIUS,
   STOMP_UP,
+  UNIT_RAGDOLL_CAPACITY,
+  UNIT_RAGDOLL_LIVE_CAP,
 } from './tuning';
 
 export type PhysicsQuality = 0 | 1 | 2;
@@ -57,9 +59,12 @@ export interface PhysicsLayerOptions {
   quality?: PhysicsQuality;
   /** Which model the corpses are made of. Defaults to the grunt skeleton. */
   ragdollModelId?: string;
+  /** Which model the squad's own dead are made of. Defaults to the mage. */
+  unitModelId?: string;
 }
 
 export interface PhysicsStats {
+  /** Corpses on the ground, both pools: enemies and the squad's own. */
   ragdolls: number;
   shards: number;
   bodies: number;
@@ -80,9 +85,14 @@ export class PhysicsLayer {
 
   private readonly scene: Scene;
   private readonly ragdollModelId: string;
+  private readonly unitModelId: string;
 
   private quality: PhysicsQuality;
   private ragdolls: RagdollPool | null = null;
+  /** The squad's own dead (D43); null when the mage rig could not be built. */
+  private units: RagdollPool | null = null;
+  /** Fallen units taken this frame, against `MAX_FALLEN_PER_FRAME`. */
+  private unitFalls = 0;
   private shards: ShardPool | null = null;
   /** What a burst looks like (`./bursts.ts`); built with the pools in `init`. */
   private bursts: DebrisBursts | null = null;
@@ -105,7 +115,17 @@ export class PhysicsLayer {
     this.scene = scene;
     this.quality = options.quality ?? 2;
     this.ragdollModelId = options.ragdollModelId ?? 'skeleton_minion';
+    this.unitModelId = options.unitModelId ?? 'mage';
     this.stats.quality = this.quality;
+  }
+
+  /**
+   * Whether a fallen unit handed to `unitFell` will actually be thrown. The
+   * renderer asks, because it owns the other half of the rule: if this is false
+   * every squad death keeps its drawn corpse, or one in ten blinks out.
+   */
+  get throwsUnits(): boolean {
+    return this.ready && this.quality > 0 && this.units !== null;
   }
 
   /**
@@ -135,18 +155,52 @@ export class PhysicsLayer {
     this.shards = new ShardPool(this.scene, SHARD_CAPACITY);
     this.ragdolls = await RagdollPool.create(this.scene, RAGDOLL_CAPACITY, this.ragdollModelId);
     this.ragdolls.setLiveCap(RAGDOLL_LIVE_CAP[this.quality] ?? 0);
+    // In a try of its own: a mage rig that will not build must not cost the
+    // game its enemy corpses, its shards and its stomps, and the renderer draws
+    // every squad death itself when this stays null.
+    try {
+      const units = await RagdollPool.create(
+        this.scene,
+        UNIT_RAGDOLL_CAPACITY,
+        this.unitModelId,
+        // The mage rig has no walk clip: it idles, runs and casts.
+        'run',
+      );
+      units.setLiveCap(UNIT_RAGDOLL_LIVE_CAP[this.quality] ?? 0);
+      this.units = units;
+    } catch (error: unknown) {
+      console.warn('[physics] no squad ragdolls; the crowd keeps its drawn corpses', error);
+    }
     if (this.disposed) {
       this.shards.dispose();
       this.ragdolls.dispose();
+      this.units?.dispose();
       this.shards = null;
       this.ragdolls = null;
+      this.units = null;
       return;
     }
-    this.bursts = new DebrisBursts(this.ragdolls, this.shards);
+    this.bursts = new DebrisBursts(this.ragdolls, this.shards, this.units);
     this.ready = true;
   }
 
-  /** Builds the road collider for this level and empties both pools. */
+  /**
+   * One of the squad's own fell at `(x, z)` carrying `(vx, vz)`.
+   *
+   * The one entry point here that is not an event: a squad death is not a
+   * `SimEvent` — the sim frees a crowd index and says nothing — so the view
+   * that draws the crowd is the one that notices, and it hands over the
+   * position and velocity it drew that unit at (`src/render/squad.ts`, drained
+   * once a frame by `src/core/frame.ts`). Presentation only, like the rest of
+   * this layer (D18), and capped per frame: see `MAX_FALLEN_PER_FRAME`.
+   */
+  unitFell(x: number, z: number, vx: number, vz: number): void {
+    if (!this.ready || this.quality === 0 || this.unitFalls >= MAX_FALLEN_PER_FRAME) return;
+    this.unitFalls++;
+    this.bursts?.unitFall(x, z, vx, vz);
+  }
+
+  /** Builds the road collider for this level and empties every pool. */
   loadLevel(level: LevelDef): void {
     if (this.disposed || !this.ready) return;
     this.ground?.dispose();
@@ -156,6 +210,7 @@ export class PhysicsLayer {
       level.arenaZ + GROUND_PAST_ARENA,
     );
     this.ragdolls?.reset();
+    this.units?.reset();
     this.shards?.reset();
   }
 
@@ -220,28 +275,35 @@ export class PhysicsLayer {
           break;
         }
         case 'bossStomp':
+          // The squad's own dead too: a stomp lands on the crowd, and the
+          // mages it just killed are lying exactly where it hit.
           this.ragdolls?.push(event.x, event.z, STOMP_RADIUS, STOMP_IMPULSE, STOMP_UP);
+          this.units?.push(event.x, event.z, STOMP_RADIUS, STOMP_IMPULSE, STOMP_UP);
           this.shards?.push(event.x, event.z, STOMP_RADIUS, STOMP_IMPULSE, STOMP_UP);
           break;
         default:
           // Everything else is the renderer's, the UI's or nobody's.
-          // `enemyActivated` in particular: it fires once per stream body, about
-          // twenty a second, and there is no debris in it.
+          // `enemyActivated` in particular: it fires once per stream body,
+          // about twenty a second, and there is no debris in it.
           break;
       }
     }
   }
 
-  /** Ages both pools. Call before `scene.render`. */
+  /** Ages every pool. Call before `scene.render`. */
   update(dt: number): void {
     if (this.disposed) return;
+    // The frame is over as far as the fallen-unit budget is concerned: this
+    // runs after the render that noticed them (`src/core/frame.ts`).
+    this.unitFalls = 0;
 
     // Nothing is live, so there is nothing to age, sink or upload — and the
     // frame that parked the last body already committed both instance buffers
     // to zero. Worth the check because this is called on every frame of the
     // title screen and every frame of a run with no debris in the air, which is
     // most of them: 8 ragdoll slots, 64 shard slots and three buffer commits.
-    if ((this.ragdolls?.count ?? 0) === 0 && (this.shards?.count ?? 0) === 0) {
+    const live = (this.ragdolls?.count ?? 0) + (this.units?.count ?? 0);
+    if (live === 0 && (this.shards?.count ?? 0) === 0) {
       this.stats.ragdolls = 0;
       this.stats.shards = 0;
       this.stats.bodies = 0;
@@ -250,11 +312,13 @@ export class PhysicsLayer {
     }
 
     this.ragdolls?.update(dt);
+    this.units?.update(dt);
     this.shards?.update(dt);
 
-    this.stats.ragdolls = this.ragdolls?.count ?? 0;
+    const corpses = (this.ragdolls?.bodyCount ?? 0) + (this.units?.bodyCount ?? 0);
+    this.stats.ragdolls = (this.ragdolls?.count ?? 0) + (this.units?.count ?? 0);
     this.stats.shards = this.shards?.count ?? 0;
-    this.stats.bodies = (this.ragdolls?.bodyCount ?? 0) + (this.shards?.bodyCount ?? 0);
+    this.stats.bodies = corpses + (this.shards?.bodyCount ?? 0);
     this.stats.quality = this.quality;
   }
 
@@ -272,8 +336,10 @@ export class PhysicsLayer {
     this.quality = wanted;
     this.stats.quality = wanted;
     this.ragdolls?.setLiveCap(RAGDOLL_LIVE_CAP[wanted] ?? 0);
+    this.units?.setLiveCap(UNIT_RAGDOLL_LIVE_CAP[wanted] ?? 0);
     if (wanted === 0) {
       this.ragdolls?.reset();
+      this.units?.reset();
       this.shards?.reset();
     }
   }
@@ -284,9 +350,11 @@ export class PhysicsLayer {
     this.ready = false;
     this.ground?.dispose();
     this.ragdolls?.dispose();
+    this.units?.dispose();
     this.shards?.dispose();
     this.ground = null;
     this.ragdolls = null;
+    this.units = null;
     this.shards = null;
     this.bursts = null;
     // Only if this layer is the one that turned physics on.

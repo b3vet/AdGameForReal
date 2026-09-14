@@ -21,16 +21,40 @@
 
 import {
   BUMP_DURATION,
+  BUMP_SQUASH,
+  BUMP_YAW,
   POP_DURATION,
+  POP_STRETCH,
+  REJOIN_CROUCH,
+  REJOIN_WIDEN,
   STUMBLE_CLIP_KICK,
+  STUMBLE_DIP,
   STUMBLE_DURATION,
+  STUMBLE_SQUASH,
+  STUMBLE_YAW,
   UNIT_LEAN_MAX,
   UNIT_LEAN_PER_SPEED,
   UNIT_LEAN_SMOOTHING,
+  popScale,
 } from './crowdLook';
 
 /** Sentinel in `pop`: this unit has finished popping in and needs no scale. */
 const SETTLED = -1;
+
+/**
+ * What one unit's reactions do to the transform it would otherwise have been
+ * drawn with: metres of lift, radians of yaw, a multiplier on the crowd's
+ * scale, and one on its y scale on top of that.
+ *
+ * A scratch struct the caller reads immediately and never keeps: the draw loop
+ * asks for this five hundred times a frame and may not allocate (CLAUDE.md).
+ */
+export interface ReactionPose {
+  lift: number;
+  yaw: number;
+  scale: number;
+  stretch: number;
+}
 
 export class AgentLook {
   /** Yaw a unit carries from sliding sideways, smoothed. */
@@ -48,6 +72,9 @@ export class AgentLook {
 
   /** Share of the lean's gap this frame closes; one `exp` a frame, not 500. */
   private ease = 1;
+
+  /** The one `ReactionPose` every unit's answer is written into; see `advance`. */
+  private readonly out: ReactionPose = { lift: 0, yaw: 0, scale: 1, stretch: 1 };
 
   constructor(capacity: number) {
     const size = Math.max(0, Math.floor(capacity));
@@ -103,28 +130,74 @@ export class AgentLook {
   }
 
   /**
-   * Ages one unit's timers and answers its lean for this frame.
+   * Ages one unit's timers and answers what they do to its transform.
    *
    * Called once per live unit per frame, which is the only reason the timers
    * are aged here rather than in a pass of their own: a second walk of five
    * hundred entries to subtract `dt` from three floats is a second cache sweep
-   * for nothing.
+   * for nothing. `rejoining` is the one input that is not a timer — the flag is
+   * true for as long as the sim says so and has nothing to count down.
    */
-  advance(index: number, lateralSpeed: number, dt: number): number {
-    const stumble = this.stumble[index] ?? 0;
-    if (stumble > 0) this.stumble[index] = stumble > dt ? stumble - dt : 0;
-    const bump = this.bump[index] ?? 0;
-    if (bump > 0) this.bump[index] = bump > dt ? bump - dt : 0;
-    const pop = this.pop[index] ?? SETTLED;
-    if (pop >= 0) this.pop[index] = pop + dt >= POP_DURATION ? SETTLED : pop + dt;
+  advance(index: number, lateralSpeed: number, dt: number, rejoining: boolean): ReactionPose {
+    // Aged first, then posed from the aged values: a reaction that ran out this
+    // frame is over, and the frame it ran out on is not a frame it still shows.
+    let stumble = this.stumble[index] ?? 0;
+    if (stumble > 0) {
+      stumble = stumble > dt ? stumble - dt : 0;
+      this.stumble[index] = stumble;
+    }
+    let bump = this.bump[index] ?? 0;
+    if (bump > 0) {
+      bump = bump > dt ? bump - dt : 0;
+      this.bump[index] = bump;
+    }
+    let pop = this.pop[index] ?? SETTLED;
+    if (pop >= 0) {
+      pop = pop + dt >= POP_DURATION ? SETTLED : pop + dt;
+      this.pop[index] = pop;
+    }
 
     const want =
       lateralSpeed > 0
         ? Math.min(UNIT_LEAN_MAX, lateralSpeed * UNIT_LEAN_PER_SPEED)
         : Math.max(-UNIT_LEAN_MAX, lateralSpeed * UNIT_LEAN_PER_SPEED);
     const was = this.lean[index] ?? 0;
-    const now = was + (want - was) * this.ease;
-    this.lean[index] = now;
-    return now;
+    const lean = was + (want - was) * this.ease;
+    this.lean[index] = lean;
+
+    const out = this.out;
+    out.lift = 0;
+    out.yaw = lean;
+    out.scale = 1;
+    out.stretch = 1;
+
+    // Squash and stretch: a unit pops in thin and tall, then settles. The
+    // overshoot alone reads as a unit that grew; the stretch is what reads as a
+    // unit that landed.
+    if (pop >= 0) {
+      const p = pop / POP_DURATION;
+      out.scale = popScale(pop);
+      out.stretch = 1 + POP_STRETCH * Math.sin(Math.min(1, p) * Math.PI) * (1 - p * 0.5);
+    }
+    // A shove: the unit crouches, twists away from whatever hit it, and comes
+    // back up. No pitch on a thin instance, so the weight is in the dip.
+    if (stumble > 0) {
+      const dip = Math.sin((1 - stumble / STUMBLE_DURATION) * Math.PI);
+      out.lift -= STUMBLE_DIP * dip;
+      out.stretch *= 1 - STUMBLE_SQUASH * dip;
+      out.yaw += (this.stumbleSide[index] ?? 1) * STUMBLE_YAW * dip;
+    }
+    // A fence: the shoulder goes into the line while the column presses.
+    if (bump > 0) {
+      const press = bump / BUMP_DURATION;
+      out.stretch *= 1 - BUMP_SQUASH * press;
+      out.yaw += (this.bumpSide[index] ?? 1) * BUMP_YAW * press;
+    }
+    // Scurrying home from a straggler group: hunched, wider and quicker.
+    if (rejoining) {
+      out.scale *= REJOIN_WIDEN;
+      out.stretch *= REJOIN_CROUCH;
+    }
+    return out;
   }
 }

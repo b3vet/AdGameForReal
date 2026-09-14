@@ -25,6 +25,7 @@
  */
 
 import { Axis } from '@babylonjs/core/Maths/math.axis';
+import { Matrix } from '@babylonjs/core/Maths/math.vector';
 import type { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { PhysicsConstraintType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import type { RagdollBoneProperties } from '@babylonjs/core/Physics/v2/ragdoll';
@@ -32,6 +33,9 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type { Skeleton } from '@babylonjs/core/Bones/skeleton';
 import type { Scene } from '@babylonjs/core/scene';
+
+import { bindSpaceInverse, reskinToParentBone, tintColors } from '@/render/characters';
+import type { ModelAsset } from '@/render/characters';
 
 /**
  * What `Ragdoll` actually reads out of a config entry. The shipped
@@ -91,6 +95,17 @@ export function ragdollConfig(): RagdollBoneProperties[] {
   return RAGDOLL_BONES as unknown as RagdollBoneProperties[];
 }
 
+export interface SkinnedMergeOptions {
+  /**
+   * The rig the parts are skinned to. With it, a part that carries no weights
+   * — the mage's hat and cape hang off bones rather than being skinned — is
+   * re-skinned to the bone it hangs from instead of being dropped.
+   */
+  skeleton?: Skeleton;
+  /** The manifest entry, for `tints` and `tintPatches` (`characters/tint.ts`). */
+  model?: ModelAsset;
+}
+
 /**
  * Merges a character's parts into one skinned mesh — one draw call per corpse
  * instead of the eight KayKit ships.
@@ -105,11 +120,52 @@ export function ragdollConfig(): RagdollBoneProperties[] {
  * an unmirrored frame. The character comes out left-right mirrored, which on a
  * symmetric skeleton is invisible, and the triangles are wound back here
  * because a mirror reverses them.
+ *
+ * The two things it *does* share with that merge are the re-skin and the tints,
+ * both imported rather than copied: a mage corpse with no hat is not a mage,
+ * and one drawn off the raw atlas is the near-black navy the tints exist to
+ * lift (D28, `characters/tint.ts`).
  */
-export function mergeSkinnedParts(scene: Scene, name: string, sources: readonly Mesh[]): Mesh {
+export function mergeSkinnedParts(
+  scene: Scene,
+  name: string,
+  sources: readonly Mesh[],
+  options: SkinnedMergeOptions = {},
+): Mesh {
+  const model = options.model;
+  const tints = model?.tints;
+  const patches = model?.tintPatches;
+  // Every part or none: `VertexData.merge` wants the same attributes on all of
+  // them, and a white multiplier is the source texture unchanged.
+  const anyTint =
+    Object.keys(tints ?? {}).length > 0 || Object.keys(patches ?? {}).length > 0;
+  const skeleton = options.skeleton;
+  const boneIndex =
+    skeleton === undefined
+      ? null
+      : new Map(skeleton.bones.map((bone, index) => [bone.name, index]));
+  const bindInverse = boneIndex === null ? Matrix.Identity() : bindSpaceInverse(sources);
+
   const parts: VertexData[] = [];
   for (const source of sources) {
     const data = VertexData.ExtractFromMesh(source, false, true);
+    if (data.matricesIndices === null || data.matricesIndices === undefined) {
+      // An accessory: parented to a bone in the file and therefore weightless.
+      // Without a rig to hang it on there is nothing to do but leave it out.
+      if (boneIndex === null) continue;
+      reskinToParentBone(data, source, boneIndex, bindInverse);
+    }
+    if (anyTint) {
+      const positions = data.positions;
+      if (positions !== null && positions !== undefined) {
+        data.colors = tintColors(
+          positions.length / 3,
+          tints?.[source.name],
+          patches?.[source.name],
+          floats(data.uvs),
+        );
+      }
+    }
     reverseWinding(data);
     parts.push(data);
   }
@@ -138,6 +194,12 @@ function materialOf(sources: readonly Mesh[]): Mesh['material'] {
     if (source.material !== null) return source.material;
   }
   return null;
+}
+
+/** `undefined` and `null` both mean "this mesh has no such attribute". */
+function floats(data: Float32Array | number[] | null | undefined): Float32Array | null {
+  if (data === null || data === undefined) return null;
+  return data instanceof Float32Array ? data : Float32Array.from(data);
 }
 
 function reverseWinding(data: VertexData): void {

@@ -14,6 +14,13 @@
 
 export { loadCharacterAsset, loadCharacterAssets } from './asset';
 export type { CharacterAsset, LoadCharacterOptions } from './asset';
+// The two halves of "merge a KayKit character into one skinned mesh" that the
+// physics layer's own merge needs as well (`src/physics/rig.ts`): a ragdoll is
+// skinned live rather than from a baked texture, so it cannot use the merge
+// above — but a hat parented to a bone has to become a weighted vertex either
+// way, and that rule may only exist once.
+export { bindSpaceInverse, reskinToParentBone } from './asset';
+export { tintColors } from './tint';
 export { StaticCrowd } from './crowd';
 export type { Crowd } from './crowd';
 export { VatCrowd } from './VatCrowd';

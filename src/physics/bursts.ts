@@ -38,6 +38,10 @@ import {
   SHARD_SPIN,
   SHATTER_SHARDS,
   STREAM_PUSH_SCALE,
+  UNIT_FALL_MIN_SPEED,
+  UNIT_FALL_SPEED_SCALE,
+  UNIT_FALL_SPIN,
+  UNIT_FALL_UP,
   gateTint,
 } from './tuning';
 
@@ -50,6 +54,8 @@ export class DebrisBursts {
   constructor(
     private readonly ragdolls: RagdollPool,
     private readonly shards: ShardPool,
+    /** The mage pool, when the layer managed to build one; see `unitFall`. */
+    private readonly units: RagdollPool | null = null,
   ) {}
 
   /**
@@ -94,6 +100,36 @@ export class DebrisBursts {
       dz * speed + (this.random() - 0.5) * 0.5,
       RAGDOLL_PUSH_UP * STREAM_PUSH_SCALE * (0.7 + this.random() * 0.6),
       (this.random() - 0.5) * 2 * RAGDOLL_SPIN,
+    );
+  }
+
+  /**
+   * One of the squad's own goes down where it stood, carrying the velocity the
+   * sim last had it at (D43).
+   *
+   * The direction is the unit's own motion, not a direction away from anything:
+   * a mage is not thrown off its feet by a kill the way a grunt is — it is
+   * walking, or spilling along a fence, or scurrying home from a straggler
+   * group, and what reads as a body going down is that motion continuing and
+   * failing. The floor under it is for the unit that dies standing still.
+   */
+  unitFall(x: number, z: number, vx: number, vz: number): void {
+    const pool = this.units;
+    if (pool === null) return;
+    const speed = Math.sqrt(vx * vx + vz * vz);
+    const scaled = Math.max(UNIT_FALL_MIN_SPEED, speed * UNIT_FALL_SPEED_SCALE);
+    // A unit with no motion at all still has to fall somewhere; down the road
+    // is where the crowd was going.
+    const dx = speed < 0.01 ? 0 : (vx / speed) * scaled;
+    const dz = speed < 0.01 ? scaled : (vz / speed) * scaled;
+    pool.spawn(
+      x,
+      z,
+      Math.atan2(dx, dz) + (this.random() - 0.5),
+      dx + (this.random() - 0.5) * 0.4,
+      dz + (this.random() - 0.5) * 0.4,
+      UNIT_FALL_UP * (0.7 + this.random() * 0.6),
+      (this.random() - 0.5) * 2 * UNIT_FALL_SPIN,
     );
   }
 

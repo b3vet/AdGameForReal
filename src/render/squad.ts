@@ -22,11 +22,16 @@
  *
  * The sim steps at a fixed 1/60 s and the display may run at 120, so the view
  * never draws a step: it keeps the last two and draws between them
- * (`./squadAgents.ts`). The rest of it is `./squadGait.ts` (running, casting,
- * cheering), `./squadReact.ts` (what the flags left behind),
- * `./squadDust.ts` (the scuff at a fence) and `./squadCorpses.ts` (the dead) —
- * all split out for the file-size rule (CLAUDE.md), on the seam of *what a unit
- * looks like this frame* against *what happened to it*.
+ * (`./squadAgents.ts`). What is left here is one loop: where each unit is drawn
+ * this frame, and the instance and blob shadow that come out of it.
+ *
+ * The rest is split out for the file-size rule (CLAUDE.md), on the seam of
+ * *what a unit looks like this frame* against *what happened to it*:
+ * `./squadGait.ts` (running, casting, cheering, and the crowd's speed),
+ * `./squadReact.ts` (what the flags left behind, and what they do to a unit's
+ * transform), `./squadDust.ts` (the scuff at a fence), `./squadDeaths.ts` (who
+ * popped in, who fell, and which of them the physics layer takes) and
+ * `./squadCorpses.ts` (the ring the rest of them lie in).
  */
 
 import type { Scene } from '@babylonjs/core/scene';
@@ -36,14 +41,12 @@ import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
 import type { SpriteLayer } from './sprites';
 import { AgentFrame } from './squadAgents';
-import { CorpseRing } from './squadCorpses';
+import { SquadDeaths } from './squadDeaths';
+import type { FallenSink } from './squadDeaths';
 import { SquadDust } from './squadDust';
 import { SquadGait } from './squadGait';
 import { AgentLook } from './squadReact';
 import {
-  BUMP_DURATION,
-  BUMP_SQUASH,
-  BUMP_YAW,
   EMBER_COLOR,
   FROST_COLOR,
   GATE_BOUNCE_DURATION,
@@ -53,20 +56,11 @@ import {
   MAGE_LIFT,
   MAGE_SCALE,
   POOL,
-  POP_DURATION,
-  POP_STRETCH,
   REJOIN_CLIP_SPEED,
-  REJOIN_CROUCH,
-  REJOIN_WIDEN,
   SHADOW,
   STORM_COLOR,
-  STUMBLE_DIP,
-  STUMBLE_DURATION,
-  STUMBLE_SQUASH,
-  STUMBLE_YAW,
   clipSpeed,
   crowdScale,
-  popScale,
   timeOffsetOf,
   yawOf,
 } from './theme';
@@ -104,8 +98,8 @@ export class SquadView {
   private readonly look = new AgentLook(POOL.squad);
   /** Scuffs at a fence, into the shared sprite batch (`./squadDust.ts`). */
   private readonly dust = new SquadDust();
-  /** The dead, drawn out of the same buffer as the living (`./squadCorpses.ts`). */
-  private readonly corpses = new CorpseRing();
+  /** Who popped in, who fell, and what became of them (`./squadDeaths.ts`). */
+  private readonly deaths = new SquadDeaths();
   /** Running, standing, casting or cheering (`./squadGait.ts`). */
   private readonly gait = new SquadGait();
 
@@ -114,6 +108,16 @@ export class SquadView {
 
   constructor(scene: Scene) {
     this.scene = scene;
+  }
+
+  /** Whether `src/physics` takes one squad death in ten (`./squadDeaths.ts`). */
+  setRagdolls(enabled: boolean): void {
+    this.deaths.setRagdolls(enabled);
+  }
+
+  /** Hands this frame's fallen units to `sink` and forgets them. */
+  drainFallen(sink: FallenSink): void {
+    this.deaths.drain(sink);
   }
 
   /**
@@ -146,7 +150,7 @@ export class SquadView {
     this.agents.reset();
     this.look.clear();
     this.dust.clear();
-    this.corpses.clear();
+    this.deaths.clear();
     this.gait.reset();
     this.hidden.fill(0);
     for (const crowd of this.crowds.values()) {
@@ -222,11 +226,11 @@ export class SquadView {
     agents.beginFrame(agentState, state.time, dt);
     this.look.beginFrame(dt);
     this.dust.beginFrame();
-    if (this.gait.unprimed) this.gait.prime(this.measureSpeed());
+    if (this.gait.unprimed) this.gait.prime(this.gait.measureSpeed(agents));
 
     const crowdScaleNow = crowdScale(Math.max(1, agents.live));
-    this.takeBirths();
-    this.takeDeaths(crowdScaleNow);
+    this.deaths.takeBirths(agents, this.pop);
+    this.deaths.takeDeaths(agents, crowdScaleNow);
 
     const inArena = squad.z >= state.arenaZ - 0.5;
     // The gate row does not reach the whole crowd at once: it passes the front
@@ -300,51 +304,21 @@ export class SquadView {
         }
       }
       const rejoining = (flag & CROWD_REJOINING) !== 0;
-      const lean = this.look.advance(i, speedX, dt);
+      // Everything this unit's own reactions do to its transform, in one pass
+      // over its timers (`./squadReact.ts`).
+      const react = this.look.advance(i, speedX, dt, rejoining);
 
       // How far back this unit stands, in metres: what the hop wave arrives on.
       const depth = frontZ > drawnZ ? frontZ - drawnZ : 0;
       const hopPhase = (gait.hopAge - depth / hopSpeed) / GATE_BOUNCE_DURATION;
-      let lift =
+      const hop =
         hopPhase > 0 && hopPhase < 1 ? Math.sin(hopPhase * Math.PI) * GATE_BOUNCE_HEIGHT : 0;
 
-      let scale = crowdScaleNow;
-      // Squash and stretch: a unit pops in thin and tall, then settles. The
-      // overshoot alone reads as a unit that grew; the stretch is what reads as
-      // a unit that landed.
-      let stretch = 1;
-      const age = this.look.pop[i] ?? -1;
-      if (age >= 0) {
-        const p = age / POP_DURATION;
-        scale = crowdScaleNow * popScale(age);
-        stretch = 1 + POP_STRETCH * Math.sin(Math.min(1, p) * Math.PI) * (1 - p * 0.5);
-      }
-
       const sway = gait.swayOf(i);
-      lift += sway * IDLE_SWAY_LIFT;
-      let yaw = yawOf(i) + sway * IDLE_SWAY_YAW + lean;
-
-      // A shove: the unit crouches, twists away from whatever hit it, and comes
-      // back up. No pitch on a thin instance, so the weight is in the dip.
-      const stumble = this.look.stumble[i] ?? 0;
-      if (stumble > 0) {
-        const dip = Math.sin((1 - stumble / STUMBLE_DURATION) * Math.PI);
-        lift -= STUMBLE_DIP * dip;
-        stretch *= 1 - STUMBLE_SQUASH * dip;
-        yaw += (this.look.stumbleSide[i] ?? 1) * STUMBLE_YAW * dip;
-      }
-      // A fence: the shoulder goes into the line while the column presses.
-      const bump = this.look.bump[i] ?? 0;
-      if (bump > 0) {
-        const press = bump / BUMP_DURATION;
-        stretch *= 1 - BUMP_SQUASH * press;
-        yaw += (this.look.bumpSide[i] ?? 1) * BUMP_YAW * press;
-      }
-      // Scurrying home from a straggler group: hunched, wider and quicker.
-      if (rejoining) {
-        scale *= REJOIN_WIDEN;
-        stretch *= REJOIN_CROUCH;
-      }
+      const lift = hop + sway * IDLE_SWAY_LIFT + react.lift;
+      const yaw = yawOf(i) + sway * IDLE_SWAY_YAW + react.yaw;
+      const scale = crowdScaleNow * react.scale;
+      const stretch = react.stretch;
 
       // Under the *drawn* position, never a slot: the blob is the contact patch
       // of the mage the player is watching. The pop's own scale rides in it
@@ -376,7 +350,7 @@ export class SquadView {
     gait.endFrame(agents.live > 0 ? forward / agents.live : 0, dt);
     if (sprites !== null) this.dust.draw(sprites, dt);
 
-    const dying = this.corpses.write(crowd, limit, dt);
+    const dying = this.deaths.write(crowd, limit, dt);
     // The corpses have just written over the slots above the live crowd, so
     // those slots no longer hold the zero-scale matrix `hidden` claims they do:
     // an index that fell out of the live range and comes back as a dead one
@@ -392,48 +366,11 @@ export class SquadView {
     this.crowds.clear();
   }
 
-  /** Units that took an index this step pop in; the first frame of a level
-   *  finds everyone already standing and settles them instead. */
-  private takeBirths(): void {
-    const agents = this.agents;
-    for (let k = 0; k < agents.bornCount; k++) {
-      const index = agents.born[k] ?? 0;
-      this.look.spawn(index);
-    }
-  }
-
   /**
-   * Units that died this step, laid down where they were: the sim's own last
-   * live position and velocity for that index, not a formation slot.
+   * A unit took a free index: it pops in where it stands. A field rather than a
+   * closure made per frame, because nothing on the frame path may allocate.
    */
-  private takeDeaths(scale: number): void {
-    const agents = this.agents;
-    for (let k = 0; k < agents.deadCount; k++) {
-      const index = agents.dead[k] ?? 0;
-      this.corpses.push(
-        agents.prevX[index] ?? 0,
-        agents.prevZ[index] ?? 0,
-        agents.prevVX[index] ?? 0,
-        agents.prevVZ[index] ?? 0,
-        scale,
-        index,
-      );
-    }
-  }
-
-  /**
-   * The crowd's forward speed right now, for the one frame a level has no
-   * history to low-pass: a level that starts with the squad already moving
-   * starts with it already running.
-   */
-  private measureSpeed(): number {
-    const agents = this.agents;
-    if (agents.live === 0) return 0;
-    let sum = 0;
-    for (let i = 0; i < agents.limit; i++) {
-      if ((agents.alive[i] ?? 0) === 0) continue;
-      sum += agents.curVZ[i] ?? 0;
-    }
-    return sum / agents.live;
-  }
+  private readonly pop = (index: number): void => {
+    this.look.spawn(index);
+  };
 }

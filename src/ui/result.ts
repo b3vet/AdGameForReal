@@ -110,9 +110,7 @@ export class ResultPanel {
     this.stop();
     // A count-up is motion, and a player who has asked for less of it gets the
     // numbers rather than the roll — the ticks that go with it too.
-    if (!view.won || reducedMotion()) {
-      // A lost run is not a moment for a fanfare of numbers, and neither is a
-      // won one when the player has asked for stillness.
+    if (reducedMotion()) {
       this.elements.survivors.textContent = String(survivors);
       this.elements.peak.textContent = String(peak);
       this.elements.coins.textContent = String(coins);
@@ -120,9 +118,15 @@ export class ResultPanel {
       return;
     }
 
+    // The purse starts where the run found it and climbs with the coins.
     this.elements.total.textContent = String(Math.max(0, total - coins));
-    this.countUp(survivors, peak, coins, total);
-    if (view.firstClear) replay(this.elements.badge, 'result__badge--pop');
+    // A lost run is still not a moment for a fanfare of numbers — the survivors
+    // and the peak are simply there — but it *pays* now (D46, 30 percent of the
+    // road walked), and the purse filling is the one thing on this screen a
+    // player who has just been overwhelmed is owed a beat for. So the loss
+    // skips the first roll and keeps the second.
+    this.countUp(survivors, peak, coins, total, view.won);
+    if (view.won && view.firstClear) replay(this.elements.badge, 'result__badge--pop');
   }
 
   stop(): void {
@@ -136,22 +140,34 @@ export class ResultPanel {
    * throttled to the ear rather than to the frame — a 400-unit peak counting up
    * at 60 fps would be a buzz, not a count — and the second roll's tick is the
    * same gate click pitched up, which is what makes coins sound like coins.
+   *
+   * `rollCounts` false is the loss: the survivors and the peak are written once
+   * and the coins still roll, straight away rather than after a roll that is
+   * not happening.
    */
-  private countUp(survivors: number, peak: number, coins: number, total: number): void {
+  private countUp(
+    survivors: number,
+    peak: number,
+    coins: number,
+    total: number,
+    rollCounts: boolean,
+  ): void {
     const start = typeof performance === 'undefined' ? 0 : performance.now();
-    const countMs = COUNT_UP_SECONDS * 1000;
+    const countMs = rollCounts ? COUNT_UP_SECONDS * 1000 : 0;
     const coinsMs = COINS_UP_SECONDS * 1000;
 
     let lastCountTick = start;
     let lastCoinTick = start;
-    let shownSurvivors = -1;
-    let shownPeak = -1;
+    // Already shown when there is no roll, so the first frame neither rewrites
+    // them nor clicks for a count nobody watched.
+    let shownSurvivors = rollCounts ? -1 : survivors;
+    let shownPeak = rollCounts ? -1 : peak;
     let shownCoins = -1;
 
     const step = (time: number): void => {
       const elapsed = time - start;
       // Ease out: fast at the start, so the last few numbers are readable.
-      const t = Math.min(1, elapsed / countMs);
+      const t = countMs === 0 ? 1 : Math.min(1, elapsed / countMs);
       const eased = 1 - Math.pow(1 - t, 3);
       const nextSurvivors = Math.round(survivors * eased);
       const nextPeak = Math.round(peak * eased);
@@ -191,8 +207,8 @@ export class ResultPanel {
       this.raf = requestAnimationFrame(step);
     };
 
-    this.elements.survivors.textContent = '0';
-    this.elements.peak.textContent = '0';
+    this.elements.survivors.textContent = String(rollCounts ? 0 : survivors);
+    this.elements.peak.textContent = String(rollCounts ? 0 : peak);
     this.elements.coins.textContent = '0';
     this.raf = requestAnimationFrame(step);
   }

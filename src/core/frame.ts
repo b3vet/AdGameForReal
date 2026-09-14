@@ -311,8 +311,21 @@ export class FrameDriver {
     const physics = this.host.physics();
     if (physics === null) return;
     physics.onEvents(this.physicsEvents.events, state);
+    // The squad's own dead, which are not events: the crowd view noticed them
+    // during the render above and this is the only place that can see both
+    // sides of it (`Renderer.drainFallenUnits`). Before `update`, which is
+    // where the per-frame budget is handed back.
+    this.host.renderer.drainFallenUnits(this.throwFallenUnit);
     physics.update(frameDt);
   }
+
+  /**
+   * The sink `drainFallenUnits` writes into. A field rather than a closure made
+   * per frame: nothing on the frame path may allocate (CLAUDE.md).
+   */
+  private readonly throwFallenUnit = (x: number, z: number, vx: number, vz: number): void => {
+    this.host.physics()?.unitFell(x, z, vx, vz);
+  };
 
   private updateDebug(
     state: Readonly<RunState> | null,

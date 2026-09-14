@@ -59,6 +59,17 @@ export interface ArcaneDebugHandle {
    * fast down the road and slows the sim as the row it wants comes into reach.
    */
   setTurbo: (value: number) => void;
+  /**
+   * Takes the wheel: the running session's bot lets go and the head goes to
+   * `x` metres, 1:1, as a finger would put it there. A no-op when no run is up.
+   *
+   * The hero set is why it exists (`scripts/smoke-hero.mjs`): a whip and a
+   * fence jam are swipes, and a swipe has to be *started*, on a chosen frame at
+   * a chosen squad size, which no bot will do on request. A run whose bot has
+   * let go is no longer a run any measurement may be taken from — nothing
+   * steers it — so this is the picture-taking path and nothing else.
+   */
+  steer: (x: number) => void;
 }
 
 declare global {

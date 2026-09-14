@@ -267,7 +267,7 @@ function mergeCharacter(
 }
 
 /** World-to-bind transform, taken from the first genuinely skinned source. */
-function bindSpaceInverse(sources: readonly Mesh[]): Matrix {
+export function bindSpaceInverse(sources: readonly Mesh[]): Matrix {
   for (const source of sources) {
     if (source.skeleton === null) continue;
     source.computeWorldMatrix(true);
@@ -282,7 +282,7 @@ function bindSpaceInverse(sources: readonly Mesh[]): Matrix {
  * bone's baked matrix is the identity, so the pose it was authored in is the
  * pose it keeps.
  */
-function reskinToParentBone(
+export function reskinToParentBone(
   data: VertexData,
   source: Mesh,
   boneIndex: ReadonlyMap<string, number>,

@@ -16,6 +16,10 @@
  * cost instances and animation but not a draw call, dying twenty times a second
  * so the death range, the corpse recycle and the ragdoll rule are all in frame.
  *
+ * Two files sit behind it: `./stressState.ts` is the standing crowd it draws
+ * (the fake level and run state), and `./stressStats.ts` is what a window of
+ * frames costs. Both were split out for the file-size rule (CLAUDE.md).
+ *
  * D43 hands the mages back to the renderer. This scene used to build a mage
  * crowd of its own and write its instances *once*, at startup, which measured a
  * draw call and nothing else: the game's real per-frame cost — the two-step
@@ -32,11 +36,17 @@ import { VatCrowd, loadCharacterAsset } from '@/render/characters';
 import type { Renderer } from '@/render/Renderer';
 import { SIM_STEP } from '@/render/squadAgents';
 import { GRUNT_SCALE } from '@/render/theme';
-import { balance } from '@/data';
-import { createCrowdState, formationOffsets, mulberry32, openRoadWidth } from '@/sim';
-import type { CrowdState, LevelDef, RunState, SimEvent } from '@/sim';
+import { mulberry32 } from '@/sim';
+import type { SimEvent } from '@/sim';
 
 import { StressBodies } from './stressBodies';
+import { ENEMY_Z, fakeLevel, fakeState } from './stressState';
+import { RenderCosts } from './stressStats';
+import type { StressHandle } from './stressStats';
+
+// Re-exported where they have always lived: `src/core/App.ts` and the dev page
+// ask this file for the scene and for what it reports.
+export type { StressHandle, StressStats } from './stressStats';
 
 export interface StressOptions {
   mages?: number;
@@ -46,72 +56,6 @@ export interface StressOptions {
   /** Seconds between scripted kills. 0 turns the physics script off. */
   killEvery?: number;
   quality?: PhysicsQuality;
-}
-
-export interface StressStats {
-  drawCalls: number;
-  /**
-   * Median cost of the `scene.render` call, in milliseconds, over every frame
-   * but the first.
-   *
-   * A median and not an average: the frame a ragdoll first appears on compiles
-   * its shader and is worth hundreds of times a steady frame. With only a
-   * handful of frames in the window — a software rasteriser gets three or four
-   * into eight seconds — one such spike would own an average.
-   */
-  renderMs: number;
-  /** The worst of those frames, which is usually one of those compiles. */
-  renderMsMax: number;
-  /**
-   * The first frame, kept out of the median and reported on its own: it is the
-   * crowd's shader compilation, which is hundreds of milliseconds and says
-   * nothing about the cost of drawing a frame.
-   */
-  renderMsFirst: number;
-  /** How many frames the median is taken over. Single digits under SwiftShader. */
-  renderSamples: number;
-  /**
-   * Rolling wall-clock gap between frames, in milliseconds. On a real GPU this
-   * tracks `renderMs`; under SwiftShader it is several times larger, because
-   * `scene.render` only queues the work and the rasteriser finishes it before
-   * the next frame is scheduled. Both numbers are reported so a regression in
-   * either is visible.
-   */
-  frameMs: number;
-  fps: number;
-  frames: number;
-  mages: number;
-  skeletons: number;
-  /** Stream bodies on their feet in the measured frame. */
-  streamBodies: number;
-  ragdolls: number;
-  shards: number;
-  quality: number;
-  /** Wall-clock seconds since the first frame. */
-  seconds: number;
-}
-
-export interface StressHandle {
-  ready: boolean;
-  stats: () => StressStats;
-  /**
-   * Stops the frame loop and leaves the last frame on the canvas.
-   *
-   * A screenshot tool asks the compositor for a fresh frame and waits for it;
-   * a scene that takes over a second per frame under SwiftShader starves that
-   * request until the tool gives up, so the smoke pauses before it shoots.
-   */
-  pause: () => void;
-  /**
-   * Throws away the render costs collected so far, so the next `stats()` reads
-   * a fresh window.
-   *
-   * The smoke samples three windows and fails only if two of them are over
-   * budget (`scripts/smoke-stress.mjs`): one busy machine hiccup lands in one
-   * window, and a cumulative median would carry it into the next two.
-   */
-  resetSamples: () => void;
-  dispose: () => void;
 }
 
 declare global {
@@ -132,21 +76,6 @@ const STREAM_LANES = [-1, 0] as const;
  */
 const DEFAULT_KILL_EVERY = 0.05;
 
-/**
- * Where the crowd's *front rank* stands; the column runs backward from it (D42)
- * a long way — five hundred units are one lane wide and seventy-seven ranks
- * deep, so the tail stands at `CROWD_Z - 13.3` and the camera, posed for that
- * depth every frame (`Renderer.poseCamera`), frames the front six metres of it
- * exactly as the game does. The ranks past that are below the bottom edge and
- * still cost their instances, which is the point of keeping all five hundred.
- *
- * The 2 m in front of the front rank keeps the tail in front of the *camera*:
- * the eye stands 14.4 m behind the anchor and the column is 13.3 long.
- */
-const CROWD_Z = 2;
-const ENEMY_Z = 14;
-const ARENA_Z = 40;
-
 /** Frame delta ceiling, matching the app's own. */
 const MAX_DT = 0.05;
 
@@ -155,18 +84,6 @@ const BLOCK_KILL_EVERY = 1;
 
 /** Smoothing weight for the rolling frame interval. */
 const AVERAGE_WEIGHT = 0.1;
-
-/** How many render costs the median is taken over, at most. */
-const RENDER_SAMPLE_LIMIT = 64;
-
-function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = sorted.length >> 1;
-  const low = sorted[middle - 1] ?? 0;
-  const high = sorted[middle] ?? 0;
-  return sorted.length % 2 === 1 ? high : (low + high) / 2;
-}
 
 const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
 
@@ -215,7 +132,7 @@ export async function runStressScene(
   const physics = new PhysicsLayer(scene, { quality: options.quality ?? 2 });
   try {
     await physics.init();
-    physics.loadLevel(fakeLevel());
+    physics.loadLevel(fakeLevel(mageCount));
   } catch (error: unknown) {
     console.warn('[stress] physics unavailable', error);
     physics.setQuality(0);
@@ -239,9 +156,8 @@ export async function runStressScene(
   let sinceKill = killEvery;
   let elapsed = 0;
   let frames = 0;
-  /** Post-warmup `scene.render` costs, newest last. Bounded so it never grows. */
-  const renderCosts: number[] = [];
-  let renderMsFirst = 0;
+  /** What a window of frames cost (`./stressStats.ts`). */
+  const costs = new RenderCosts();
   let frameMs = 0;
   let fps = 0;
   let lastTime = 0;
@@ -305,12 +221,7 @@ export async function runStressScene(
 
     const start = now();
     scene.render();
-    const cost = now() - start;
-    if (frames === 1) renderMsFirst = cost;
-    else {
-      renderCosts.push(cost);
-      if (renderCosts.length > RENDER_SAMPLE_LIMIT) renderCosts.shift();
-    }
+    costs.push(now() - start);
   };
 
   rafId = requestAnimationFrame(frame);
@@ -325,10 +236,12 @@ export async function runStressScene(
     ready: true,
     stats: () => ({
       drawCalls: renderer.drawCalls,
-      renderMs: median(renderCosts),
-      renderMsMax: renderCosts.length === 0 ? 0 : Math.max(...renderCosts),
-      renderMsFirst,
-      renderSamples: renderCosts.length,
+      renderMs: costs.medianMs,
+      renderMsMax: costs.maxMs,
+      renderMsFirst: costs.firstMs,
+      renderSamples: costs.samples,
+      renderMsRun: costs.runMedianMs,
+      renderSamplesRun: costs.runSamples,
       frameMs,
       fps,
       frames,
@@ -342,7 +255,7 @@ export async function runStressScene(
     }),
     pause,
     resetSamples: () => {
-      renderCosts.length = 0;
+      costs.reset();
     },
     dispose: () => {
       if (disposed) return;
@@ -356,77 +269,4 @@ export async function runStressScene(
 
   globalThis.__stress = handle;
   return handle;
-}
-
-/** Just enough level for the physics layer's road collider. */
-function fakeLevel(): LevelDef {
-  return {
-    index: 1,
-    seed: 1,
-    runSpeed: balance.squad.runSpeed,
-    startCount: DEFAULT_MAGES,
-    rows: [],
-    arenaZ: ARENA_Z,
-    boss: { hp: 400, units: 40 },
-  };
-}
-
-/**
- * Just enough state for `PhysicsLayer.onEvents`, which reads the squad position
- * to know which way to throw a corpse. Nothing here ever ticks.
- */
-function fakeState(mages: number): RunState {
-  const crowd = createCrowdState(balance.squad.maxCount);
-  fillColumn(crowd, mages, CROWD_Z);
-  return {
-    levelIndex: 1,
-    seed: 1,
-    time: 0,
-    status: 'running',
-    squad: {
-      count: mages,
-      x: 0,
-      targetX: 0,
-      z: CROWD_Z,
-      fireRate: balance.squad.fireRate,
-      damage: balance.squad.damage,
-      fireRateBonus: 0,
-      vx: 0,
-      // The open road: this scene has no walls, and it is what the camera's
-      // pull-back measures the crowd's depth against.
-      formationWidth: openRoadWidth(),
-    },
-    gates: [],
-    enemies: [],
-    streams: [],
-    projectiles: [],
-    boss: null,
-    peakCount: mages,
-    survivors: mages,
-    arenaZ: ARENA_Z,
-    crowd,
-    groups: [{ id: 0, count: mages, leaderX: 0, z: CROWD_Z, lane: null, rejoinAt: 0 }],
-  };
-}
-
-/**
- * A full column standing in its slots: the main group, front rank first, at the
- * sim's own formation. Every unit carries the level's run speed on `z`, which
- * is what makes the view draw the run clip — the crowd is standing still in
- * world space but it is a *walking* crowd, and the frame the tripwire measures
- * has to be the one the game draws.
- */
-function fillColumn(crowd: CrowdState, count: number, z: number): void {
-  const offsets = formationOffsets(count);
-  const wanted = Math.min(crowd.capacity, count);
-  for (let i = 0; i < wanted; i++) {
-    const offset = offsets[i];
-    crowd.alive[i] = 1;
-    crowd.group[i] = 0;
-    crowd.slot[i] = i;
-    crowd.x[i] = offset?.x ?? 0;
-    crowd.z[i] = z + (offset?.z ?? 0);
-    crowd.vx[i] = 0;
-    crowd.vz[i] = balance.squad.runSpeed;
-  }
 }

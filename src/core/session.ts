@@ -27,8 +27,9 @@ export class RunSession {
   /**
    * Constructed once per session: the policy carries its own RNG stream, so
    * rebuilding it every tick would reset that stream and break determinism.
+   * Dropped for good when a hand takes the wheel (`takeWheel`).
    */
-  readonly bot: BotPolicy | null;
+  private policy: BotPolicy | null;
 
   /**
    * Bestiary ids met in this run. Small and append-only: the app reads it once,
@@ -55,7 +56,7 @@ export class RunSession {
     this.run = buildRun(this.level, balance, player);
     // The same tuning object the run was built on: a bot steers by the crowd's
     // own width and the clamp it leaves, and both come out of the balance.
-    this.bot = options.bot === null ? null : createBot(options.bot, this.level.seed, balance);
+    this.policy = options.bot === null ? null : createBot(options.bot, this.level.seed, balance);
     this.bossId = bossIdOf(this.level);
   }
 
@@ -71,11 +72,33 @@ export class RunSession {
     return this.run.state.status !== 'running';
   }
 
+  /** The policy steering this session, or null while a finger has it. */
+  get bot(): BotPolicy | null {
+    return this.policy;
+  }
+
   /** Hands the bot's decision to the run, if this session has one. */
   steer(): void {
-    if (this.bot !== null && this.run.state.status === 'running') {
-      this.run.setTargetX(this.bot(this.run.state));
+    const policy = this.policy;
+    if (policy !== null && this.run.state.status === 'running') {
+      this.run.setTargetX(policy(this.run.state));
     }
+  }
+
+  /**
+   * A hand takes the wheel: the bot lets go for the rest of the run and the
+   * head goes to `x` metres, 1:1, exactly as a finger would put it there.
+   *
+   * The hero set is why this exists (`ArcaneDebugHandle.steer`,
+   * `scripts/smoke-hero.mjs`). A whip and a fence jam are *swipes*, and a swipe
+   * has to start on a named frame at a named squad size — which is a thing no
+   * bot will do on request, and which fighting a bot for the target every step
+   * cannot produce either. Taking the wheel means the run is no longer a run
+   * anything may be measured off, so nothing but the debug handle calls it.
+   */
+  takeWheel(x: number): void {
+    this.policy = null;
+    this.run.setTargetX(x);
   }
 
   /**

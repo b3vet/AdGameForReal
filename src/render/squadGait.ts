@@ -20,6 +20,7 @@ import {
   IDLE_SWAY_RATE,
   castsWhileRunning,
 } from './crowdLook';
+import type { AgentFrame } from './squadAgents';
 import { CASTING_SHARE } from './theme';
 import type { RunStatus } from '@/sim';
 
@@ -80,6 +81,25 @@ export class SquadGait {
   prime(speed: number): void {
     this.advanceSpeed = speed;
     this.advancing = speed > ADVANCE_START_SPEED;
+  }
+
+  /**
+   * The crowd's forward speed right now, for the one frame a level has no
+   * history to low-pass: a level that starts with the squad already moving
+   * starts with it already running.
+   *
+   * Here rather than in the view because it is the number `prime` wants and
+   * nothing else ever asks for it — every other frame reads the low-passed
+   * mean the draw loop is summing anyway.
+   */
+  measureSpeed(agents: AgentFrame): number {
+    if (agents.live === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < agents.limit; i++) {
+      if ((agents.alive[i] ?? 0) === 0) continue;
+      sum += agents.curVZ[i] ?? 0;
+    }
+    return sum / agents.live;
   }
 
   /** Ages the clocks and settles what the whole crowd shares this frame. */

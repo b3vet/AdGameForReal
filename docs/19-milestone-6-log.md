@@ -122,3 +122,38 @@
   smoke's injected coins; the result sheet's coin roll on a loss; the
   stress tripwire margin on the machine that runs the smoke; `squad.ts`
   439 and `stress.ts` 432 lines.
+
+## 2026-09-14 — Phase E: integration (verified and committed)
+
+- Squad deaths: one in ten falls as a Havok ragdoll on the mage rig (a
+  second pool, since a pool carries one rig; the mage and skeleton share
+  joint names so the bone table fits both), thrown along the unit's last
+  velocity, capped at two a frame and four live; the rest go to the corpse
+  ring. Accessories are re-skinned and tinted on ragdolls, which also gave
+  the skeleton corpse its cloak tint. The smoke fails if physics is on and
+  no mage pool was built.
+- The result sheet rolls the coins on a loss (a loss pays now); the smoke's
+  injected purse is 6000 so the Yard shot shows two live rungs; the loss
+  frame moved to level 4 because the retune let the random bot clear 3.
+- Hero set: `hero-whip` (500 units strung out on a diagonal leading edge)
+  and `hero-fence-jam` (451 units packed against a fence line) at pixel
+  ratio 2, driven by a new debug `steer(x)` that takes the wheel from the
+  bot; two watchers that could photograph the same frame twice now wait
+  for the sim clock.
+- Stress: the tripwire now also needs the run-wide median over 12 ms (an
+  8 s window holds one to three frames on this container, so single-window
+  medians swung threefold between identical runs); nothing in the draw path
+  was attributable above the noise, so nothing was trimmed. 35 draws.
+- Splits: `squad.ts` 439 → 376 with `squadDeaths.ts`; `stress.ts` 432 →
+  272 with `stressState.ts` and `stressStats.ts`.
+- Smoke PASS: draw peaks 40 / 40 / 41 / 44, 0 shader compiles during play,
+  59 materials and 37 programs warmed. Frames judged one by one: the crowd
+  reads as individuals, the front rank bows into a V at the boss, the
+  column funnels through an arch at 136 units, whip and jam as described.
+  Wall clock 11 min 31 s on this container against the 7 min ceiling; the
+  same set ran in 6 min 25 s a day earlier, so the container is slower
+  today rather than the smoke heavier (the two new frames are about 2 min).
+- Carried to review: 500 Storm shots blow out to white over a third of the
+  frame (spell sprite alpha does not scale with crowd size); `steer(x)`
+  drops the bot for the rest of the run; the mage pool parks 48 bodies at
+  boot.

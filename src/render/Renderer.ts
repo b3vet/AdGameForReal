@@ -319,6 +319,31 @@ export class Renderer {
   }
 
   /**
+   * Whether the physics layer will throw the squad's own dead (D43).
+   *
+   * A second switch rather than a share of `setPhysicsQuality`, because it is a
+   * second fact: the layer can be at full quality and still have no mage pool
+   * to throw them with (`PhysicsLayer.throwsUnits`), and the crowd has to keep
+   * drawing those deaths itself when it has.
+   */
+  setUnitRagdolls(enabled: boolean): void {
+    this.views?.squad.setRagdolls(enabled);
+  }
+
+  /**
+   * Hands the units that fell this frame to `sink`, and forgets them.
+   *
+   * The frame loop calls it between the render and the physics step: the crowd
+   * view is the only thing that sees a squad death (the sim frees an index and
+   * emits nothing) and the physics layer is the only thing that can throw one,
+   * and they may not know about each other (D18, and render never reaches out
+   * of the scene). So the app carries the four numbers across.
+   */
+  drainFallenUnits(sink: (x: number, z: number, vx: number, vz: number) => void): void {
+    this.views?.squad.drainFallen(sink);
+  }
+
+  /**
    * Degrade ladder rung: the backing store is what a fill-rate-bound phone
    * feels first. `src/core/quality.ts` owns when this is called.
    */

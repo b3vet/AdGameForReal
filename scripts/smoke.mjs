@@ -111,8 +111,16 @@ const RUNS = [
     assertNotBlank: 't6.png',
   },
   {
-    label: 'random level 3',
-    query: `?bot=random&level=3&seed=2&turbo=${TURBO}&screenshot=1`,
+    // The loss sheet: a defeat ribbon and, since D46, a purse that still fills
+    // — a lost run pays 30 percent of the road it walked, and `src/ui/result.ts`
+    // rolls those coins up where it used to skip the roll entirely.
+    //
+    // Level 4, not the level 3 this run photographed through Milestone 5: the
+    // balance retune made levels 1 to 3 generous (D31) and a *random* bot now
+    // clears level 3 on this seed, which quietly turned the smoke's loss frame
+    // into a second win frame. Level 4 seed 2 is a loss in 53 s of sim.
+    label: 'random level 4',
+    query: `?bot=random&level=4&seed=2&turbo=${TURBO}&screenshot=1`,
     shots: [],
     endShot: 'end-random.png',
   },
@@ -123,8 +131,12 @@ const RUNS = [
     // at the end is the one with coins on it.
     label: 'academy level 6',
     query: `?bot=greedy&level=6&seed=3&turbo=${TURBO}&screenshot=1`,
+    // 6000 rather than Milestone 5's 2400: the economy re-priced the ladder
+    // (D46), a Yard rung is `900 * 1.6^level`, and this save's next two rungs
+    // cost 3686 and 2304. 2400 bought one row of five and greyed the rest;
+    // 6000 buys two, which is what `yard.png` is a picture of.
     save: {
-      coins: 2400,
+      coins: 6000,
       upgrades: { damage: 3, fireRate: 2, startCount: 0, gateBonus: 0, bossDamage: 0 },
       staffs: {
         ember: { unlocked: true, tier: 1 },

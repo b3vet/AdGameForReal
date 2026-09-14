@@ -390,6 +390,9 @@ export class App implements FrameHost, AppCommands {
       // The renderer plays the baked death itself at quality 0, so it follows
       // whatever the layer actually ended up at rather than what was asked.
       this.renderer.setPhysicsQuality(physics.stats.quality);
+      // And keeps drawing every squad death itself unless the layer really has
+      // a mage pool to throw the tenth one with (D43).
+      this.renderer.setUnitRagdolls(physics.throwsUnits);
     }
     this.driver.stats.qualityRung = index;
   }
@@ -408,6 +411,9 @@ export class App implements FrameHost, AppCommands {
       setPlayer: (patch: unknown) => {
         this.academy.setPlayer(patch);
         this.repaintMenu();
+      },
+      steer: (x: number) => {
+        this.session?.takeWheel(x);
       },
       setTurbo: (value: number) => {
         this.setTurbo(value);

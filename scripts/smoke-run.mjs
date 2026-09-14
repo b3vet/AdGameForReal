@@ -155,6 +155,13 @@ async function armShotPlan(page, shots, bossShare, staffRange) {
       globalThis.__smokePlan = plan;
       globalThis.__smokeStep = 0;
       globalThis.__smokeStopped = false;
+      // Sim time of the last shot. The watcher runs on its own frame callback,
+      // so after a shot is released it can qualify the *next* step before the
+      // app's loop has drawn anything — and two shots then photograph one
+      // frame. Level 10's staff gate and its 120 m mark did exactly that once
+      // the row generation moved (`staff-l10.png` and `t12-l10.png` came out
+      // byte for byte alike). A shot may not be taken until the sim has moved.
+      globalThis.__smokeAt = -1;
 
       const holds = (step, state) => {
         if (step.at === 'z') return state.squad.z >= step.value;
@@ -178,7 +185,9 @@ async function armShotPlan(page, shots, bossShare, staffRange) {
         const step = globalThis.__smokePlan[globalThis.__smokeStep];
         const state = globalThis.__arcane?.state();
         if (step === undefined || !state) return;
+        if (state.time === globalThis.__smokeAt) return;
         if (!holds(step, state)) return;
+        globalThis.__smokeAt = state.time;
         globalThis.__arcane?.app.stop();
         globalThis.__smokeStopped = true;
       };
@@ -337,6 +346,11 @@ async function playRun(page, url, run, failures, outDir, say) {
   const quality = await page.evaluate(() => ({
     rung: globalThis.__arcane?.quality() ?? -1,
     physics: globalThis.__arcane?.physics()?.stats.quality ?? -1,
+    // Whether the layer built its mage pool and is taking one squad death in
+    // ten (D43). It fails soft — a rig that will not build logs a warning and
+    // the crowd keeps drawing every death itself — so without this the feature
+    // could quietly not exist and every frame would still look right.
+    units: globalThis.__arcane?.physics()?.throwsUnits ?? false,
   }));
   // A whole level of play — every gate kind, every staff, ragdolls, shards, the
   // boss and its stomp — must not have compiled a single new shader. One that
@@ -361,8 +375,15 @@ async function playRun(page, url, run, failures, outDir, say) {
   say(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
   say(
     `[smoke]   draw calls: peak ${draws.peak} (limit ${DRAW_CALL_LIMIT}), ` +
-      `ladder rung ${quality.rung}, physics quality ${quality.physics}`,
+      `ladder rung ${quality.rung}, physics quality ${quality.physics}, ` +
+      `squad ragdolls ${quality.units ? 'on' : 'off'}`,
   );
+  if (quality.physics > 0 && !quality.units) {
+    failures.push(
+      `${run.label}: the physics layer is at quality ${quality.physics} but built no mage ` +
+        'ragdoll pool, so every squad death fell back to a drawn corpse',
+    );
+  }
   if (phase !== 'result') failures.push(`${run.label}: run ended but the result screen never showed`);
   // The purse is the meta layer's whole point: a run that paid nothing at all
   // means `runRewards` or the save never ran (D33).

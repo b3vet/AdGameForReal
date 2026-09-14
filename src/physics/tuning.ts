@@ -37,6 +37,36 @@ export const SHARD_CAPACITY = 64;
 export const RAGDOLL_LIVE_CAP = [0, 4, 8] as const;
 
 /**
+ * The squad's own dead (D43): a second, smaller pool built from the mage rig.
+ *
+ * It has to be a pool of its own rather than a share of the one above, because
+ * a slot's mesh, skeleton and twelve boxes are built once in `create` and never
+ * change character — the rig is per *pool*, not per body. Four of them, and
+ * four is a frame-budget number like every other cap here: a live ragdoll is a
+ * skinned mesh and therefore a draw call nothing can batch, and the measured
+ * peak of a run is 40 to 42 against the smoke's ceiling of 52.
+ *
+ * The renderer draws the other nine deaths in ten as corpses out of the crowd's
+ * own instance buffer, for nothing (`src/render/squadCorpses.ts`), which is why
+ * the one in ten can afford to be real.
+ */
+export const UNIT_RAGDOLL_CAPACITY = 4;
+export const UNIT_RAGDOLL_LIVE_CAP = [0, 2, 4] as const;
+/**
+ * How much of its own last velocity a fallen unit is thrown with, and the lift
+ * and tumble on top of it.
+ *
+ * A mage does not explode: it is shot or trampled where it stands, so the throw
+ * is its own motion carried a little further rather than a burst. The floor is
+ * there for the unit that dies standing still — with nothing but gravity it
+ * would drop straight down and read as a mage switched off.
+ */
+export const UNIT_FALL_SPEED_SCALE = 0.7;
+export const UNIT_FALL_MIN_SPEED = 0.8;
+export const UNIT_FALL_UP = 1.4;
+export const UNIT_FALL_SPIN = 5;
+
+/**
  * Ragdolls per `enemyKilled`, indexed by quality. 0 keeps the layer inert.
  *
  * Six rather than the plan's eight, so one block coming apart costs six draw

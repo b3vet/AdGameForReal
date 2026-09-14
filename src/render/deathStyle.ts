@@ -21,10 +21,25 @@
 export const RAGDOLL_EVERY = 10;
 
 /**
+ * How many of the squad's own dead may be handed to the physics layer in one
+ * frame (D43).
+ *
+ * The same rule as above decides *which* of them — `usesRagdoll(index)` on the
+ * crowd index, so the choice survives a gate and costs nothing to agree on —
+ * but a squad death is not a kill: a brute reaching the column or a stream
+ * leaking into it takes dozens of units on one step, and one in ten of dozens
+ * is still more corpses than the pool holds. The rest keep the drawn corpse
+ * they have always had, which is the right answer and not a fallback: a frame
+ * that kills thirty mages is not a frame anyone is counting ragdolls in.
+ */
+export const MAX_FALLEN_PER_FRAME = 2;
+
+/**
  * True when this body's death belongs to the physics layer.
  *
- * Only meaningful for stream bodies: a block is `units` skeletons and is
- * handled whole by `src/render/enemies.ts`, and the boss has its own clip.
+ * Two callers, two kinds of id: a stream body's `enemyId` (a block is `units`
+ * skeletons and is handled whole by `src/render/enemies.ts`, and the boss has
+ * its own clip), and a squad unit's crowd index.
  */
 export function usesRagdoll(enemyId: number): boolean {
   return enemyId % RAGDOLL_EVERY === 0;

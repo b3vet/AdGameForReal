@@ -74,13 +74,23 @@ export class RagdollPool {
   }
 
   /**
-   * Loads the minion once, then clones the merged mesh and the skeleton per
+   * Loads the character once, then clones the merged mesh and the skeleton per
    * slot. The skeleton clone keeps the source's link to the glTF transform
    * nodes, which is exactly what makes the per-slot pose work: pose the source,
    * clone, build the boxes from that pose, then `ragdoll()` cuts the link and
    * freezes the clone there.
+   *
+   * `poseClip` is the manifest animation the slots are posed at. It is a
+   * parameter because the rigs this pool is built from do not all declare the
+   * same clips — the skeletons walk, the mages only ever run — and the pose is
+   * a silhouette, not a behaviour.
    */
-  static async create(scene: Scene, capacity: number, modelId: string): Promise<RagdollPool> {
+  static async create(
+    scene: Scene,
+    capacity: number,
+    modelId: string,
+    poseClip = 'walk',
+  ): Promise<RagdollPool> {
     const pool = new RagdollPool(capacity);
     const model = modelAsset(modelId);
     if (model.body === undefined) throw new Error(`asset "${modelId}" declares no body meshes`);
@@ -90,12 +100,17 @@ export class RagdollPool {
     if (skeleton === undefined) throw new Error(`${modelId} has no skeleton`);
     for (const group of loaded.animationGroups) group.stop();
 
-    const walkName = model.animations['walk'];
-    const walk = loaded.animationGroups.find((group) => group.name === walkName);
-    if (walk === undefined) throw new Error(`${modelId} has no clip "${String(walkName)}"`);
+    const poseName = model.animations[poseClip];
+    const walk = loaded.animationGroups.find((group) => group.name === poseName);
+    if (walk === undefined) throw new Error(`${modelId} has no clip "${String(poseName)}"`);
 
     const scale = model.scale ?? 1;
-    const template = mergeSkinnedParts(scene, `${modelId}:ragdoll`, bodyMeshes(loaded.meshes, model.body));
+    const template = mergeSkinnedParts(
+      scene,
+      `${modelId}:ragdoll`,
+      bodyMeshes(loaded.meshes, model.body),
+      { skeleton, model },
+    );
     template.setEnabled(false);
 
     // `goToFrame` only moves a group that has been started; pausing it keeps
