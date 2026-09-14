@@ -18,8 +18,9 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { assemble, at, loadDungeonPieces, scale3, scaleToHeight } from './dungeonPieces';
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
+import { tintMaterial } from './models';
 import { applyToonRamp } from './toonRamp';
-import { ROAD_HALF_WIDTH } from './theme';
+import { ROAD_HALF_WIDTH, paletteColor } from './theme';
 
 /** The dungeon pieces a marker is assembled from. */
 const ARENA_PIECES = ['prop_dungeon_pillar', 'prop_dungeon_banner_blue'];
@@ -64,6 +65,22 @@ export class ArenaMarkers {
       writeInstance(matrices, i, 1, 1, 1, (i === 0 ? -1 : 1) * x, 0, arenaZ);
     }
     commitInstances(mesh, 2);
+  }
+
+  /**
+   * Takes the pillar out of the dungeon and into the biome's daylight (D49).
+   *
+   * The dungeon atlas is painted for torchlight, so an untinted marker is the
+   * darkest thing at the end of the road — a pair of near-black towers where
+   * the fight is. The recipe is the roadside's own (`DUNGEON` in
+   * `./propKinds.ts`) and reads `stone.light`, so the markers cool with the
+   * rest of the stonework when the biome does. Safe before the pieces arrive:
+   * a marker that is still loading is tinted by `build` when it lands.
+   */
+  setBiome(): void {
+    const stone = paletteColor('stone.light');
+    const blend = (channel: number): number => (0.65 + 0.35 * channel) * 1.18;
+    tintMaterial(this.mesh?.material, blend(stone.r), blend(stone.g), blend(stone.b));
   }
 
   /** Locks the material and the world matrix; see `RoadView.freeze`. */
@@ -113,6 +130,7 @@ export class ArenaMarkers {
 
     applyToonRamp(marker.material);
     this.mesh = marker;
+    this.setBiome();
     this.matrices = createMatrixBuffer(marker, 2);
     this.place(this.arenaZ);
     if (this.frozen) this.freeze();

@@ -129,12 +129,13 @@ export function createEngine(canvas: HTMLCanvasElement, options: EngineOptions =
 /** The scene, its fog, and the two lights the whole biome is lit by. */
 export function createScene(engine: Engine): Scene {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(SKY.r, SKY.g, SKY.b, 1);
+  scene.clearColor = new Color4(0, 0, 0, 1);
   // Linear fog into the sky's own haze band, so the road has no horizon seam.
   scene.fogMode = Scene.FOGMODE_LINEAR;
-  scene.fogColor = FOG_COLOR.clone();
+  scene.fogColor = new Color3();
   scene.fogStart = FOG_START;
   scene.fogEnd = FOG_END;
+  applyBiomeToScene(scene);
 
   const sky = new HemisphericLight('sky', new Vector3(0.08, 1, -0.25), scene);
   sky.intensity = AMBIENT_INTENSITY;
@@ -162,6 +163,23 @@ export function createScene(engine: Engine): Scene {
   scene.constantlyUpdateMeshUnderPointer = false;
 
   return scene;
+}
+
+/**
+ * The two scene-level colours a biome changes: what the canvas clears to and
+ * what the fog fades into (D49).
+ *
+ * Copied out of the palette rather than referencing its objects. `clearColor`
+ * is a `Color4` and the palette holds `Color3`s, and `fogColor` was always a
+ * clone — a scene that held the palette's own instance would be one more place
+ * that has to be remembered when the rule about mutating them changes.
+ *
+ * Called from `createScene` and again from `Renderer.setBiome`, which is the
+ * only other place the palette's roles can have moved under it.
+ */
+export function applyBiomeToScene(scene: Scene): void {
+  scene.clearColor.set(SKY.r, SKY.g, SKY.b, 1);
+  scene.fogColor.copyFrom(FOG_COLOR);
 }
 
 /**

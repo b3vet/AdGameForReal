@@ -199,7 +199,9 @@ export class CrowdScene {
         const overX = Math.abs(dx) / (this.obstacles.shovers[at + 2] ?? 1);
         const overZ = Math.abs(dz) / (this.obstacles.shovers[at + 3] ?? 1);
         if (overX >= 1 || overZ >= 1) continue;
-        const bite = 1 - Math.max(overX, overZ);
+        // `strength` is the body's own multiplier on the shared push: 1 for
+        // everything that walks, more for the two kinds that charge (D49).
+        const bite = (1 - Math.max(overX, overZ)) * (this.obstacles.shovers[at + 4] ?? 1);
         vz -= tuning.shove.back * bite;
         vx += (dx < 0 ? -1 : 1) * tuning.shove.side * bite;
         flag |= CROWD_SHOVED;

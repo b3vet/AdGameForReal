@@ -66,7 +66,7 @@ If a future session can reach GitHub, the same files are at
 | KayKit Character Pack: Skeletons (1.0) | `KayKit-Character-Pack-Skeletons-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
 | KayKit Halloween Bits (1.0) | `KayKit-Halloween-Bits-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
 | KayKit Dungeon Remastered (1.0) | `KayKit-Dungeon-Remastered-1.0` via jsDelivr | "License: (Creative Commons Zero, CC0)" |
-| ambientCG materials (PavingStones131, Grass004) | ambientcg.com/get → acg-download.struffelproductions.com | "All ambientCG assets are provided under the Creative Commons CC0 1.0 Universal License." (quoted from ambientcg.com/license into `assets/licenses/ambientcg.txt`; the zips carry no licence file) |
+| ambientCG materials (PavingStones131, Grass004, Ice004, Snow006) | ambientcg.com/get → acg-download.struffelproductions.com | "All ambientCG assets are provided under the Creative Commons CC0 1.0 Universal License." (quoted from ambientcg.com/license into `assets/licenses/ambientcg.txt`; the zips carry no licence file) |
 | Quaternius Ultimate Monsters | quaternius.com → Google Drive | "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication" |
 | Kenney Impact Sounds (1.0) | kenney.nl/assets/impact-sounds | "License: (Creative Commons Zero, CC0)" |
 | Kenney RPG Audio | kenney.nl/assets/rpg-audio | "License (Creative Commons Zero, CC0)" |
@@ -103,11 +103,13 @@ the game's about screen when there is one.
 
 ## Files
 
-Sizes are the shipped file, after trimming. `assets/` totals **3.9 MB**, against
+Sizes are the shipped file, after trimming. `assets/` totals **5.0 MB**, against
 a 12 MB budget (it was 3.0 MB before the Milestone 3 re-bake added a clip to
-each character, 3.4 MB before Milestone 5's UI kit added 10 KB of SVG, and 3.6 MB
+each character, 3.4 MB before Milestone 5's UI kit added 10 KB of SVG, 3.6 MB
 before Milestone 5's art track added the dungeon pieces and the two albedos —
-435 KB in all).
+435 KB in all — and 3.9 MB before Milestone 7 added Frostfell and the two new
+monsters: 748 KB of models, 138 KB of baked animation, 97 KB of props and
+159 KB of textures, 1.14 MB in all).
 
 ### Models — `assets/models/`
 
@@ -117,6 +119,9 @@ before Milestone 5's art track added the dungeon pieces and the two albedos —
 | `skeleton_minion.glb` | 467 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Minion.glb` | Grunt units inside an enemy block, and every body in a stream. Trimmed to 3 clips (Milestone 3 added `Running_C` as `walk2`). |
 | `skeleton_warrior.glb` | 495 KB | KayKit Skeletons, `Characters/gltf/Skeleton_Warrior.glb` | Brute units; comes with its own helmet. Trimmed to 3 clips (Milestone 3 added `Running_C` as `walk2`). |
 | `boss_demon.glb` | 408 KB | Quaternius Ultimate Monsters, `Big/glTF/Demon.gltf` | The biome-1 boss. Trimmed to 5 clips. |
+| `charger.glb` | 327 KB | Quaternius Ultimate Monsters, `Big/glTF/Dino.gltf` | Milestone 7's charger (D49). One skinned mesh (`Dino`, 5414 triangles) on the pack's shared 43-bone rig; trimmed to 4 clips and baked to a VAT, so a lane full of them is one draw call. |
+| `boss_rime.glb` | 390 KB | Quaternius Ultimate Monsters, `Big/glTF/Yeti.gltf` | The Rime Fiend, boss 2 (D49). One mesh (`Yeti`, 6094 triangles), 2.83 m in its own units; trimmed to 6 clips. Drawn as a skinned model with its animation groups intact, like the demon — no VAT. |
+| `skeleton_warrior.glb` (Milestone 7) | 529 KB | the same file, plus KayKit Skeletons `Assets/gltf/Skeleton_Shield_Large_A.gltf` | +34 KB: the shield is grafted into the warrior's own rig under `handslot.l` at fetch time (`graftAccessory` in `scripts/glb.mjs`), which is what makes the shielded brute a *variant* rather than a second model. See "The shielded brute's shield" below. |
 
 #### The mage's colours, and where the numbers came from
 
@@ -146,12 +151,19 @@ Robes and cape are unchanged from Milestone 3 Phase B2.
 |---|---|---|---|
 | `mage.bin` + `.json` | 259 KB | 168 × 197, half-float RGBA | idle 0–31, run 32–55, cast 56–83, cast2 84–146, cheer 147–196 |
 | `skeleton_minion.bin` + `.json` | 175 KB | 168 × 133 | walk 0–47, walk2 48–71, death 72–132 |
-| `skeleton_warrior.bin` + `.json` | 127 KB | 168 × 97 | walk 0–47, walk2 48–71, death 72–96 |
+| `skeleton_warrior.bin` + `.json` | 130 KB | 168 × 99 | walk 0–48, walk2 49–73, death 74–98 |
+| `charger.bin` + `.json` | 138 KB | 176 × 100, half-float RGBA | idle 0–30, run 31–48, attack 49–75, death 76–99 |
 
 Sizes and ranges above are the Milestone 3 re-bake, which added `cast2` to the
 mage and `walk2` to both skeletons (docs/10-milestone-3-log.md, Phase B2). The
 bake fails above 300 KB, which the mage is now within 40 KB of: a sixth mage
 clip needs either a smaller one or a second texture.
+
+The charger is the first non-KayKit rig in here: Quaternius's monsters carry 43
+bones, so its texture is 176 texels wide where the KayKit ones are 168. There is
+no `shieldBrute` bake, and there does not need to be one — a VAT is bone
+matrices, so the warrior's own texture drives the shield exactly as the mage's
+drives all three staffs (D23).
 
 Width is `(bones + 1) × 4` texels — 41 bones on the shared KayKit rig. Height is
 one row per baked frame at 30 fps (the source is 60; half the rows for units
@@ -208,6 +220,8 @@ artist authored from x = 0 to x = 2 arrives spanning -2 to 0
 | `dungeon_pillar.glb` | 25 KB | `pillar.gltf.glb` (1.5 × 4 × 1.5 m) | A gate arch's two legs, and the boss arena's markers |
 | `dungeon_banner_blue.glb` | 24 KB | `banner_blue.gltf.glb` (1.5 × 3.2 m) | Hangs on the arena pillars, re-tinted through the material |
 | `dungeon_torch_lit.glb` | 31 KB | `torch_lit.gltf.glb` (0.55 × 1.13 m) | The roadside light from level 6, where the lantern stops |
+| `dungeon_rubble_large.glb` | 59 KB | `rubble_large.gltf.glb` | Milestone 7: a Frostfell snow mound. The stone atlas is near-neutral grey, so an albedo multiplier lifts it to a drift with stone showing through — which the pack's orange pine cannot do (see `SNOW` in `src/render/propKinds.ts`) |
+| `dungeon_rubble_half.glb` | 38 KB | `rubble_half.gltf.glb` | The smaller mound, same tint |
 
 ### Textures — `assets/textures/`
 
@@ -229,12 +243,29 @@ stone with a toon ramp over it, and nothing in the scene would otherwise cast it
 |---|---|---|---|
 | `road_cobble.jpg` | 250 KB | ambientCG `PavingStones131`, 1K JPG, colour × AO, re-encoded to 1024 px at quality 0.75 | The road surface, one repeat every 2.2 m |
 | `field_grass.jpg` | 64 KB | ambientCG `Grass004`, 1K JPG, re-encoded to 512 px at quality 0.72 | The field either side, and the grass fringe that blends over the kerbs |
+| `road_frost.jpg` | 134 KB | ambientCG `Ice004`, 1K JPG, re-encoded to 1024 px at quality 0.75, graded `brightness(1.45) saturate(0.5) hue-rotate(14deg)` | The Frostfell road surface, one repeat every 3 m. A frozen lake from above: cells of ice with white fracture veins between them, which carry the same information the paving's joints do. The source averages rgb 125,141,140 — a dark sea-green, and a whole road of that is darker than the crowd standing on it; graded it averages 182,191,193, beside the meadow road's 178 and a shade to the blue. It is the one albedo here with no `AmbientOcclusion.jpg` in its zip, so nothing is multiplied in: the veins are the shading, and the road mesh's own vertex colours still carry the gutter and the lane wear |
+| `field_snow.jpg` | 25 KB | ambientCG `Snow006`, 1K JPG, colour × ambient occlusion, re-encoded to 512 px at quality 0.72 | The Frostfell verge and the snow fringe over the kerbs. Trodden snow rather than one of the pack's fresh ones: `Snow005` averages 147,148,149 with almost no local variation and reads as a blank sheet at a 4 m tile, while this one ships an occlusion map, so the composite has the dimples of a walked-on drift in it |
 | `road_cobble.jpg` — Milestone 5 Phase E colour grade | 249 KB | Same source and pipeline, with `saturate(0.72) hue-rotate(-14deg)` applied to the albedo before the occlusion is multiplied in (`AMBIENTCG_TEXTURES[].tint` in `scripts/fetch-assets.mjs`) | The paving is photographed with moss in its joints and averaged hue 53 at saturation 0.13, which read as olive once it covered the whole road (Phase C frame review). Graded it averages hue 40 at 0.11, beside `stone.base`'s 37, and keeps every bit of its photographic variation — a tint on the material would have multiplied the joints and the highlights by the same number |
 
 Everything else the road, the gates and the motes are painted with is drawn in
 code at boot (`src/render/artTextures.ts`): the plaque face, the gate shimmer,
 the mote blob and the alpha ramps. A gradient or a mask is a few hundred bytes
-of drawing commands and would be a hundred kilobytes of PNG.
+of drawing commands and would be a hundred kilobytes of PNG. Frostfell's ice
+crystals are drawn rather than fetched for the same reason
+(`src/render/frostProps.ts`): no CC0 pack here has a crystal, and three
+octahedra in a palette colour read better at twenty metres than a mismatched
+prop would.
+
+### Dropped in Milestone 7
+
+`tree_dead_large`, `tree_dead_medium`, `tree_dead_small`, `grave_A` and
+`pillar`, all Halloween Bits — 128 KB. No view had placed one since Milestone 3
+re-weighted the roadside around the pines, and an unplaced model is not free:
+every entry in `assets.json` is base64'd into the single-file builds whether
+anything draws it or not, and those five were 171 KB of the 12 MB hosted
+ceiling (D25) that Frostfell's own assets needed. Both files list them in their
+own history — one line in `PROPS` in `scripts/fetch-assets.mjs` and one entry in
+the manifest brings any of them back.
 
 ### Audio — `assets/audio/`
 
@@ -367,6 +398,67 @@ how well they fit biome 1: **Yeti** (heaviest silhouette), **Orc**,
 **Fish**. There are also `Blob/` and `Flying/` folders in the same pack for
 variety later.
 
+Milestone 7 took two of them (D49), and the swap was exactly those two lines.
+
+**Yeti**, as the **Rime Fiend**: the heaviest silhouette in the pack, 2.83 m in
+its own units against the demon's 2.91, and one mesh rather than the demon's
+two (the demon carries a separate 399-triangle trident). Trimmed to six clips —
+the demon's five plus `Run`, which is the lane charge D49 gives boss 2 and the
+one thing boss 1 cannot do. `assets.json` maps it as `charge`.
+
+**Dino**, as the **charger**: the pack's clearest runner, 3.23 m in its own
+units and 5414 triangles. Unlike the two bosses it is baked to a VAT and drawn
+as a crowd, because a level stands several of them, so it is trimmed to the four
+clips a charger can be in — `Idle`, `Run`, `Punch` (the lunge) and `Death`. The
+manifest's `scale` of 0.45 makes it 1.45 m tall, a little over twice a mage; it
+is a starting value like every other one here and the render agent should tune
+it by eye.
+
+### How the Drive ids were found
+
+Quaternius publishes each pack as a shared Drive folder and the ordinary folder
+page is script-rendered, so its HTML carries no file list. The endpoint that
+does is `https://drive.google.com/embeddedfolderview?id=<folder>#list`, which
+serves a plain `<div id="entry-<file id>">…<div class="flip-entry-title">name`
+per child. The trail for this pack:
+`quaternius.com/packs/ultimatemonsters.html` links folder
+`18m4KpzpEzhC9wl7jzr6dUc0N8Jozr79C`; inside it `Big` is
+`1fOL6ES-e73dPPLzc7_vvmTJ4uZ_j8QG2` and `Big/glTF` is
+`1sOXLt5U3ofaujPlQRL11s4ub2UsqN8V8`. The seventeen file ids in that last folder
+are every monster listed above; three of them are in `QUATERNIUS_MONSTERS` in
+`scripts/fetch-assets.mjs`.
+
+## The shielded brute's shield
+
+The shielded brute (D49) is **not a model of its own**. It is
+`models/skeleton_warrior.glb` drawn with the manifest variant `shield`, on the
+warrior's existing baked texture — so it costs one extra merged mesh in the
+renderer and nothing at all in draw calls, materials or VAT budget.
+
+What had to happen for that to be possible is the one new piece of glTF surgery
+in this milestone. KayKit keeps weapons and shields *out* of the character files
+and in `Assets/gltf/` as standalone models, while the accessories that are in a
+character file — the mage's staffs, the knight's shields — are plain meshes
+parented to a `handslot` bone, which is the shape `src/render/characters/asset.ts`
+knows how to re-skin and merge (D23). `graftAccessory` in `scripts/glb.mjs` puts
+the loose file into that shape at fetch time: it copies the shield's buffer
+views and accessors into the warrior's binary chunk, points its primitive at the
+warrior's existing `skeleton` material (both are the same atlas, so no second
+material and no second draw call), and hangs a node named
+`Skeleton_Shield_Large_A` off `handslot.l`.
+
+The grip is the rig's own, not a number tuned by eye. `Knight.glb` in the
+Adventurers pack carries four shields under `handslot.l` at one shared local
+transform — identity rotation, translation `(0, 0.017012, 0.155885)` — and the
+standalone `shield_round.gltf` has byte-identical geometry to the one inside
+that file, which is what proves the loose models are authored in the same local
+frame as the in-character ones. `handslot.l` itself is identical between the
+Adventurers and Skeletons packs, so the knight's offset is the skeleton's.
+
+`Skeleton_Shield_Large_A` is 923 vertices and 626 triangles; `..._Large_B` and
+the two `Small` shields are in the same folder if a lighter or a different
+silhouette is ever wanted.
+
 ## Animation name mapping
 
 The game never says a KayKit or Quaternius string. `assets.json` carries the
@@ -387,6 +479,16 @@ map; this is the same table in prose.
 | boss_demon | `attack` | `Punch` |
 | boss_demon | `hit` | `HitReact` |
 | boss_demon | `death` | `Death` |
+| charger | `idle` | `Idle` |
+| charger | `run` | `Run` |
+| charger | `attack` | `Punch` (the lunge that kills its share of the column) |
+| charger | `death` | `Death` |
+| boss_rime | `idle` | `Idle` |
+| boss_rime | `walk` | `Walk` |
+| boss_rime | `attack` | `Punch` |
+| boss_rime | `charge` | `Run` (D49's lane charge) |
+| boss_rime | `hit` | `HitReact` |
+| boss_rime | `death` | `Death` |
 
 ## The three staffs, and how they are attached
 
@@ -399,6 +501,11 @@ bones, all using the same `mage_texture` material as the body. So:
 | Ember | `2H_Staff` | Big gnarled staff, the heaviest silhouette |
 | Storm | `1H_Wand` | Short and quick, matches the fastest projectile |
 | Frost | `Spellbook_open` | A frozen grimoire. See the open issue below. |
+
+The skeleton warrior's `shield` variant (D49) rides on exactly this rule and
+adds nothing to it — the only difference is that its mesh was put into the file
+by `graftAccessory` rather than by the artist. See "The shielded brute's shield"
+above.
 
 **Approach chosen: skin the accessory to its parent bone (option a), then merge
 the result into the body mesh.** The reasoning:

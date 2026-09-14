@@ -20,6 +20,7 @@ import { laneCenter, laneOf } from './lanes';
 import { WeaponEffects } from './effects';
 import { evolutionOf, NO_MODS } from './player';
 import type { PlayerMods } from './player';
+import { hitShield } from './shields';
 import type { Streams } from './streams';
 import type { TargetList, Target } from './targeting';
 import { weaponDef, weaponIds, weaponOf } from './weapons';
@@ -366,7 +367,18 @@ export class Firing {
     // splash, chains, burns and the wisp alike.
     const dealt = enemy.kind === 'boss' ? amount * this.mods.bossDamage : amount;
 
-    enemy.hp -= dealt;
+    // A shielded brute's shield eats the hit first (D49), at its own rate, and
+    // the body underneath takes nothing until it is gone. The hit still
+    // *happened* — render and audio want it — so the event fires either way,
+    // with the body's own unchanged hp in it.
+    const shield = hitShield(enemy, dealt, this.balance);
+    if (shield.broke) this.events.shieldBreak(enemy.id, enemy.x, enemy.z);
+    if (shield.toBody <= 0) {
+      this.events.enemyHit(enemy.id, dealt, enemy.hp, enemy.x, enemy.z);
+      return;
+    }
+
+    enemy.hp -= shield.toBody;
     if (enemy.hp > 0) {
       enemy.units = unitsOf(enemy, this.balance);
       this.events.enemyHit(enemy.id, dealt, enemy.hp, enemy.x, enemy.z);

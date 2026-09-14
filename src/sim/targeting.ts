@@ -80,6 +80,20 @@ export class TargetList {
    */
   private slack = 0;
 
+  /**
+   * The fastest thing that can be on this level's road, in m/s, measured once
+   * when the world is built.
+   *
+   * It used to be `max(grunt, brute, stream)` written out in `update`. A
+   * charger runs at three times a grunt's speed (D49) and the Rime Fiend's
+   * charge at the same, so a constant sized for the walking kinds would leave
+   * a seam wide enough for a lane's whole volley to pass through the one body
+   * it most needed to stop. Read off the level instead of widened for
+   * everybody, so a meadow level — whose fastest body is still a grunt —
+   * resolves to exactly the number it always did.
+   */
+  private fastest = 0;
+
   /** Registers everything the level starts with. Called once per run. */
   build(state: RunState, balance: Balance): void {
     for (const lane of this.lanes) lane.count = 0;
@@ -94,6 +108,7 @@ export class TargetList {
     for (const enemy of state.enemies) this.insert(enemy, balance);
     const boss = state.boss;
     if (boss !== null) this.insert(boss, balance);
+    this.fastest = fastestClosing(state, balance);
   }
 
   /** Registers one body the moment it appears. Streams call this on every spawn. */
@@ -116,9 +131,7 @@ export class TargetList {
    */
   update(state: RunState, balance: Balance, dt: number): void {
     this.front = state.squad.z - BEHIND;
-    const enemies = balance.enemies;
-    this.slack =
-      dt * Math.max(enemies.grunt.speed, enemies.brute.speed, balance.streams.speed);
+    this.slack = dt * this.fastest;
 
     for (const lane of this.lanes) {
       const items = lane.items;
@@ -140,7 +153,14 @@ export class TargetList {
           target.live = enemy.alive;
         }
 
-        if (!target.live || target.z < this.front) {
+        // A target that falls behind the squad is gone for good — nothing on
+        // the road ever backs away from it. The boss is the exception (D49):
+        // the Rime Fiend charges *through* the column and stands behind its
+        // front for a second or two, and a boss dropped from the lists is a
+        // boss that can never be shot again, which is a run that cannot end.
+        // The sweeps still skip it while it is back there; `sweep` and
+        // `sweepLane` both refuse anything behind the shot's own start.
+        if (!target.live || (target.z < this.front && target.enemy?.kind !== 'boss')) {
           if (--target.refs <= 0) this.recycle(target);
           continue;
         }
@@ -250,6 +270,22 @@ export class TargetList {
     target.live = false;
     this.free.push(target);
   }
+}
+
+/**
+ * The quickest closing speed this level can produce: the walking kinds, the
+ * river, every block the level actually stands (a charger is the only one that
+ * beats them), and the Rime Fiend's charge when the arena holds one.
+ */
+function fastestClosing(state: RunState, balance: Balance): number {
+  const enemies = balance.enemies;
+  let fastest = Math.max(enemies.grunt.speed, enemies.brute.speed, balance.streams.speed);
+  for (const enemy of state.enemies) if (enemy.speed > fastest) fastest = enemy.speed;
+  const boss = state.boss;
+  if (boss !== null && boss.variant === 'rime') {
+    fastest = Math.max(fastest, enemies.boss.rime.charge.speed);
+  }
+  return fastest;
 }
 
 /**

@@ -324,7 +324,10 @@ describe('generateLevel', () => {
     // where level 9's read 13 to 54 and level 11's 16 to 64.
     expect(levelConfig(1).gateValues.sub).toEqual({ min: 2, max: 6 });
     expect(levelConfig(10).gateValues.sub).toEqual({ min: 20, max: 75 });
-    expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 25, max: 100 });
+    expect(levelConfig(20).gateValues.sub).toEqual({ min: 25, max: 100 });
+    // Frostfell carries on from there, against a squad the cap holds at 500
+    // and a curse ceiling of `curseShare` of it (D49).
+    expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 48, max: 192 });
     for (const level of [5, 10]) {
       const here = levelConfig(level).gateValues.sub;
       const before = levelConfig(level - 1).gateValues.sub;
@@ -379,15 +382,27 @@ describe('generateLevel', () => {
     }
   });
 
-  it('runs every level curve to its own peak target, never to the shared cap', () => {
+  it('runs every level curve to its own peak target, never past the shared cap', () => {
+    // The campaign's ambition, level by level: 105 on level 1, 500 by level 20.
+    // From there it is the cap, and Frostfell's twenty levels buy their
+    // difficulty from the road rather than from a squad that cannot get any
+    // bigger (D49) — so the curve climbs strictly while there is room and then
+    // sits on `squad.maxCount`.
     let previous = 0;
     for (let index = 1; index <= levelCount; index++) {
       const config = levelConfig(index);
-      expect(config.peakTarget).toBeGreaterThan(previous);
-      expect(config.peakTarget).toBeLessThanOrEqual(balance.squad.maxCount);
+      const cap = balance.squad.maxCount;
+      expect(config.peakTarget).toBeLessThanOrEqual(cap);
+      const where = `L${String(index)} peak ${String(config.peakTarget)}`;
+      expect(`${where}: ${String(config.peakTarget > previous || config.peakTarget === cap)}`).toBe(
+        `${where}: true`,
+      );
       expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
       previous = config.peakTarget;
     }
+    // The cap is reached, and only at the end of biome 1.
+    expect(levelConfig(20).peakTarget).toBe(balance.squad.maxCount);
+    expect(levelConfig(19).peakTarget).toBeLessThan(balance.squad.maxCount);
   });
 
   it('hides a block behind a gate on mixed rows', () => {

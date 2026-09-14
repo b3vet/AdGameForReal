@@ -20,13 +20,20 @@
  *               the clear band are one dial, and the campaign sits at the top
  *               of this one to sit inside that one.
  *   boss        20 to 30 seconds per level, on the human's clears.
- *   milestones  levels 5, 10, 15 and 20 are the levels the road does not give
- *               up (D45). Bare they are far under the ordinary band; with the
- *               set the campaign says the player is holding when they first
- *               arrive (D46) they open up. See `MILESTONE_ARMED` for how far
- *               that actually goes, which is not as far as D45 asks.
+ *   milestones  levels 7, 10, 15, 20 and Frostfell's 25, 30, 35, 40 are the
+ *               levels the road does not give up (D45, D48, D49). Bare they are
+ *               far under the ordinary band; with the set the campaign says the
+ *               player is holding when they first arrive (D46) they open up.
+ *               See the note above the milestone tests for how far that
+ *               actually goes, which is not as far as D45 asks.
  *   greedy      still 100 of 100 on the ordinary levels with nothing bought,
  *               and on the milestone levels with that same set.
+ *
+ * Milestone 7 doubled the campaign (D49). Everything measured on the *greedy*
+ * bot — clears, peaks, leaks, boss seconds — runs to `levelCount` and covers
+ * Frostfell; the four bands measured on the *human* bot stop at `BANDED`,
+ * because fitting those twenty levels to a hand is the balance phase's work
+ * and not the sim content phase's.
  *
  * Every number below is deterministic: a failure here is a design change, not
  * a flake.
@@ -66,9 +73,22 @@ const CAMPAIGN_TIMEOUT_MS = 300_000;
  * measures better as. Seven turns out not to separate either — see the
  * milestone tests below.
  */
-const MILESTONES: readonly number[] = [7, 10, 15, 20];
+const MILESTONES: readonly number[] = [7, 10, 15, 20, 25, 30, 35, 40];
 
 const isMilestone = (level: number): boolean => MILESTONES.includes(level);
+
+/**
+ * The levels the human-bot bands are measured over.
+ *
+ * Milestone 6 measured D45's bands on the twenty levels that existed then, and
+ * Milestone 7 Phase B added twenty more (D49) without re-measuring them on the
+ * hand: the sim content, the generator and greedy are this phase's work and
+ * the human bands on Frostfell are the balance phase's. Everything greedy, the
+ * peak targets, the leak bands and the economy already run to `levelCount`;
+ * only the four bands below — first-attempt clears, survivor share, boss
+ * seconds and the milestone separation — stop at 20 until they are fitted.
+ */
+const BANDED = 20;
 
 /** D45's headline: a decent thumb clears an ordinary level most of the time. */
 const CLEAR_BAND: readonly [number, number] = [0.7, 0.8];
@@ -218,7 +238,7 @@ describe('balance', () => {
   it('clears seven or eight ordinary levels in ten for a decent thumb', () => {
     let total = 0;
     let levels = 0;
-    for (let level = 1; level <= levelCount; level++) {
+    for (let level = 1; level <= BANDED; level++) {
       if (isMilestone(level)) continue;
       const rate = humanClearRate(level);
       total += rate;
@@ -239,7 +259,7 @@ describe('balance', () => {
   it('leaves a clear with a quarter to a half of the crowd that walked the road', () => {
     let total = 0;
     let levels = 0;
-    for (let level = 4; level <= levelCount; level++) {
+    for (let level = 4; level <= BANDED; level++) {
       if (isMilestone(level)) continue;
       let share = 0;
       let wins = 0;
@@ -262,7 +282,7 @@ describe('balance', () => {
   }, CAMPAIGN_TIMEOUT_MS);
 
   it('makes every boss a fight of twenty-odd seconds for the player it is sized for', () => {
-    for (let level = 1; level <= levelCount; level++) {
+    for (let level = 1; level <= BANDED; level++) {
       if (isMilestone(level)) continue;
       let seconds = 0;
       let wins = 0;
@@ -293,27 +313,38 @@ describe('balance', () => {
 
   /**
    * D45 asks for under 15 percent bare and about 60 percent armed. What the
-   * campaign can actually do, measured over ten seeds:
+   * campaign can actually do, measured over ten seeds with D50's cheap first
+   * `gateBonus` rung in the Yard:
    *
-   *     L 7  bare 5/10  armed 4/10   (held: startCount1, storm, frost)
-   *     L10  bare 2/10  armed 2/10   (held: damage1 fireRate1 startCount1, ...)
+   *     L 7  bare 5/10  armed 4/10   (held: startCount1 gateBonus1, storm, frost)
+   *     L10  bare 2/10  armed 3/10   (held: damage1 fireRate1 startCount1 gateBonus1, ...)
    *     L15  bare 3/10  armed 5/10
    *     L20  bare 3/10  armed 5/10
+   *     L25  bare 5/10  armed 7/10
+   *     L30  bare 0/10  armed 5/10
+   *     L35  bare 2/10  armed 7/10
+   *     L40  bare 0/10  armed 6/10
    *
-   * Levels 15 and 20 separate, because by then the player is carrying a
-   * `gateBonus` rung, which is worth about a sixth of the peak. Levels 7 and 10
-   * do not: the Academy has sold one upgrade rung and two staffs by level 7,
-   * worth a few percent of the squad's output against a single-target boss, and
-   * a few percent cannot move a clear rate by forty points. Level 7 is also the
-   * ceiling on how hard an *early* milestone can be at all — at the bite that
-   * takes the human under 45 percent there, greedy loses half its runs too,
-   * because a level-7 crowd is small enough for one bad row to end it.
+   * D50 did what it said and not what was hoped for it. The rung is in the
+   * player's hands at level 7 now — it was not before — and levels 7 and 10
+   * still do not separate: at `upgrades.effects.gateBonus` 0.05 one rung is
+   * five percent on what an `add` panel prints, which is about five percent of
+   * the squad, and five percent cannot move a clear rate by fifteen points.
+   * Measured on the same ten seeds, raising that effect to 0.09 opens level 10
+   * (2/10 to 4/10) and still does nothing for level 7 (5/10 to 5/10), and costs
+   * level 25 half its separation; the effect size is a balance decision rather
+   * than the rung D50 asked for, so it is a finding rather than a change here.
    *
-   * So the bands below are what the road does, not what D45 asks. The gap is in
-   * the report for the owner.
+   * Level 7 is also the ceiling on how hard an *early* milestone can be at all
+   * — at the bite that takes the human under 45 percent there, greedy loses
+   * half its runs too, because a level-7 crowd is small enough for one bad row
+   * to end it.
+   *
+   * So the bands below are what the road does, not what D45 asks.
    */
   it('keeps the milestone levels well under the ordinary band without upgrades', () => {
     for (const level of MILESTONES) {
+      if (level > BANDED) continue;
       const bare = humanClearRate(level);
       expectTrue(`L${String(level)} milestone bare ${bare.toFixed(2)}`, bare <= 0.55);
       expectTrue(
@@ -323,8 +354,9 @@ describe('balance', () => {
     }
   }, CAMPAIGN_TIMEOUT_MS);
 
-  it('opens the late milestone levels up with the set the road has paid for', () => {
+  it('opens the milestone levels up with the set the road has paid for', () => {
     for (const level of MILESTONES) {
+      if (level > BANDED) continue;
       const player = milestoneKit.get(level);
       expectTrue(`L${String(level)} kit`, player !== undefined);
       const bare = humanClearRate(level);

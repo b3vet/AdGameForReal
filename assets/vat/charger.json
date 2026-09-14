@@ -1,0 +1,35 @@
+{
+  "rig": "charger",
+  "source": "models/charger.glb",
+  "boneCount": 43,
+  "width": 176,
+  "height": 100,
+  "fps": 30,
+  "format": "half-float-rgba",
+  "ranges": {
+    "idle": {
+      "animation": "Idle",
+      "from": 0,
+      "to": 30,
+      "loop": true
+    },
+    "run": {
+      "animation": "Run",
+      "from": 31,
+      "to": 48,
+      "loop": true
+    },
+    "attack": {
+      "animation": "Punch",
+      "from": 49,
+      "to": 75,
+      "loop": false
+    },
+    "death": {
+      "animation": "Death",
+      "from": 76,
+      "to": 99,
+      "loop": false
+    }
+  }
+}

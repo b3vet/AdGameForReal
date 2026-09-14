@@ -19,6 +19,7 @@
  * in `./botScore.ts`, and where to stand between rows in `./botStand.ts`.
  */
 
+import { bestChargerStand } from './botCharge';
 import { createHumanBot } from './botHuman';
 import {
   chooseSide,
@@ -104,6 +105,17 @@ export function createBot(
     const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;
 
     if (kind === 'greedy' && !committed) {
+      // A charger that has set off comes first (D49): it arrives in a second
+      // and a half and takes a bite of the crowd, and the lane it is running
+      // is one the squad has to be out of or shooting into.
+      //
+      // Only between rows, like the river and the blocks below, and that is
+      // the measured half of the rule rather than a tidy one: a bot that
+      // broke its gate commitment to dodge gave up a panel a small squad
+      // could not afford — levels 36 to 40 on five seeds went from four
+      // clears to two when it did. The charger's own warning is long enough
+      // that the choice is nearly always made before the commit anyway.
+      if (bestChargerStand(state, range, balance)) return stand.x;
       // Between rows the squad's job is the river, not the next panel — but
       // only as far as the wall it is already inside allows.
       if (bestStreamStand(state, range, balance)) return stand.x;

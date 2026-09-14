@@ -171,7 +171,16 @@ describe.skipIf(process.env['TUNE'] !== '1')('economy readout', () => {
     const lines: string[] = [];
     for (const bot of ['greedy', 'human'] as const) {
       lines.push(...formatCampaign(campaign(bot, SEEDS[0] ?? 1)));
-      for (const band of [EARLY, LATER, { from: 11, to: 15 }, { from: 16, to: 20 }]) {
+      for (const band of [
+        EARLY,
+        LATER,
+        { from: 11, to: 15 },
+        { from: 16, to: 20 },
+        { from: 21, to: 25 },
+        { from: 26, to: 30 },
+        { from: 31, to: 35 },
+        { from: 36, to: 40 },
+      ]) {
         lines.push(
           `mean over ${String(SEEDS.length)} seeds, L${String(band.from)}-${String(band.to)}: ` +
             meanRunsPerPurchase(bot, band.from, band.to).toFixed(2),

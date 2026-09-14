@@ -27,13 +27,12 @@
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
-import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
 import { ArenaMarkers } from './arena';
-import { createBandOpacity, tiledAlbedo } from './artTextures';
+import { createBandOpacity } from './artTextures';
 import {
   commitInstances,
   createMatrixBuffer,
@@ -42,10 +41,9 @@ import {
 } from './instanceBuffer';
 import { MotesView } from './motes';
 import {
-  COBBLE_TILE_METRES,
+  BIOME_GROUND,
   FRINGE_OVERLAP,
   FRINGE_WIDTH,
-  GRASS_TILE_METRES,
   KERB_GAP,
   KERB_LENGTH,
   KERB_OVERLAP,
@@ -57,10 +55,14 @@ import {
   RUNE_PULSE_DEPTH,
   RUNE_PULSE_RATE,
 } from './roadLook';
+import { applyGround, buildGroundAlbedos, glow, matte } from './roadGround';
+import type { GroundMaterials } from './roadGround';
 import { createKerbPiece, createRoadSurface } from './roadSurface';
 import { createStoneTexture } from './textures';
 import { applyToonRamp } from './toonRamp';
-import { ARENA_COLOR, LANE_LINE_COLOR, ROAD_HALF_WIDTH, paletteColor } from './theme';
+import { ARENA_COLOR, LANE_LINE_COLOR, ROAD_HALF_WIDTH, paletteBiome, paletteColor } from './theme';
+import type { BiomeGround } from './roadLook';
+import type { BiomeId } from '@/data/biome-types';
 
 /** Lane boundaries for a three-lane road: the two edges and the two splits. */
 const LINE_X = [-ROAD_HALF_WIDTH, -ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH];
@@ -95,29 +97,33 @@ export class RoadView {
   /** The pillar-and-banner markers beside the arena band (`./arena.ts`). */
   private readonly arena: ArenaMarkers;
 
-  private cobbleScale = 1;
-  private grassScale = 1;
+  /**
+   * Both biomes' ground albedos, built at boot and swapped by `setBiome`.
+   *
+   * At boot rather than on the switch, because the warm-up pass runs once
+   * before the title screen: a texture created at a level load would be the one
+   * thing in the scene the pass never saw, and it would upload inside the first
+   * frame that drew the road (`src/render/warmup.ts`). Two 1024 and two 512
+   * albedos is a few hundred kilobytes of texture memory for a switch that
+   * costs one reference assignment.
+   */
+  private readonly albedos: Map<string, Texture>;
+  /** The four materials a biome repaints; see `./roadGround.ts`. */
+  private readonly ground: GroundMaterials;
+
+  /** The biome's tile sizes, and the extent the road was last stretched to. */
+  private tiles: BiomeGround = BIOME_GROUND.meadow;
+  private extent: { startZ: number; endZ: number; arenaZ: number } | null = null;
+
   private phase = 0;
 
   constructor(scene: Scene) {
     const roadMaterial = matte(scene, 'roadMat', paletteColor('stone.light'));
-    this.cobbleScale = (ROAD_HALF_WIDTH * 2) / COBBLE_TILE_METRES;
-    this.textures.push(
-      tiledAlbedo(scene, roadMaterial, 'texture_road_cobble', this.cobbleScale, 1),
-    );
-
     const fieldMaterial = matte(scene, 'fieldMat', paletteColor('grass.light'));
-    this.grassScale = FIELD_WIDTH / GRASS_TILE_METRES;
-    this.textures.push(
-      tiledAlbedo(scene, fieldMaterial, 'texture_field_grass', this.grassScale, 1),
-    );
-
-    // The fringe is the same grass one step lighter, so the verge reads as the
-    // sunlit edge of the field rather than as a second kind of grass.
+    // The fringe is the same verge one step darker, so it reads as the edge of
+    // the field rather than as a second kind of ground.
     const fringeMaterial = matte(scene, 'fringeMat', paletteColor('grass.base'));
-    this.textures.push(
-      tiledAlbedo(scene, fringeMaterial, 'texture_field_grass', FRINGE_WIDTH / GRASS_TILE_METRES, 1),
-    );
+
     // Alpha across the band: nothing where it lies on the kerb, solid a third of
     // the way out, gone again at the field. Both ends matter — the inner one
     // hides the strip's own edge behind the stone, the outer one is what makes
@@ -133,6 +139,14 @@ export class RoadView {
     this.textures.push(fringeOpacity);
 
     const kerbMaterial = matte(scene, 'kerbMat', paletteColor('stone.kerb'));
+    this.ground = {
+      road: roadMaterial,
+      field: fieldMaterial,
+      fringe: fringeMaterial,
+      kerb: kerbMaterial,
+    };
+    this.albedos = buildGroundAlbedos(scene, this.ground, ROAD_HALF_WIDTH * 2, FIELD_WIDTH);
+    for (const albedo of this.albedos.values()) this.textures.push(albedo);
     // A fine grain on the cut stone: without it the kerb is a flat band of
     // colour beside a photographic road, which is exactly where a cheap edge
     // shows.
@@ -202,10 +216,36 @@ export class RoadView {
     // ramp is what separates its top face from the two it can be seen from.
     applyToonRamp(kerbMaterial);
 
+    // The palette is already on whatever biome the app asked for (`Renderer.init`
+    // switches it before any view is built), so this is what puts the matching
+    // albedo back on each material after the loop above built all of them.
+    this.setBiome(paletteBiome());
+
     // Kicked off here so a renderer that never awaits `load` still gets its
     // arena markers; `load` hands back that same promise, so a caller that does
     // await it (and the warm-up pass behind it) waits for the real thing.
     void this.load();
+  }
+
+  /**
+   * Puts a biome's ground under the road (D49): its two albedos, and the
+   * palette's colours over them.
+   *
+   * Nothing is created or destroyed here. The albedos were all built at boot
+   * (see `albedos`), the colours are the same shared `Color3`s the palette has
+   * already rewritten in place (`setBiome` in `./palette.ts`), and the tiling
+   * follows from the biome's own tile sizes at the extent the road is already
+   * stretched to. That is what keeps ten level loads from leaving ten textures
+   * and ten materials behind.
+   */
+  setBiome(id: BiomeId): void {
+    this.tiles = BIOME_GROUND[id];
+    applyGround(this.ground, this.albedos, id);
+    // The arena's markers are dungeon stone and take the biome's tint the same
+    // way the roadside's do.
+    this.arena.setBiome();
+    const extent = this.extent;
+    if (extent !== null) this.setExtent(extent.startZ, extent.endZ, extent.arenaZ);
   }
 
   /**
@@ -238,6 +278,8 @@ export class RoadView {
 
   /** Re-stretches the road for a level. Everything is frozen again afterwards. */
   setExtent(startZ: number, endZ: number, arenaZ: number): void {
+    // Remembered so a biome switch can re-tile without being told again.
+    this.extent = { startZ, endZ, arenaZ };
     // The dressed road runs past the level's own end, and the bare surface runs
     // past *that* to the horizon: the fog reaches 260 m and the camera can stand
     // at the arena looking down the rest of it (`./roadLook.ts`).
@@ -255,15 +297,13 @@ export class RoadView {
 
     this.surface.scaling.z = surfaceLength;
     this.surface.position.z = surfaceCentre;
-    // The cobble tile is 2.2 m of road either way, so the stones stay square
-    // however long the level is.
-    this.retile(this.surface.material, this.cobbleScale, surfaceLength / COBBLE_TILE_METRES);
-    this.retile(this.field.material, this.grassScale, surfaceLength / GRASS_TILE_METRES);
-    this.retile(
-      this.fringe.material,
-      FRINGE_WIDTH / GRASS_TILE_METRES,
-      dressedLength / GRASS_TILE_METRES,
-    );
+    // The tile is the same number of metres either way, so the stones — or the
+    // slabs of ice — stay square however long the level is.
+    const road = this.tiles.roadTile;
+    const verge = this.tiles.vergeTile;
+    this.retile(this.surface.material, (ROAD_HALF_WIDTH * 2) / road, surfaceLength / road);
+    this.retile(this.field.material, FIELD_WIDTH / verge, surfaceLength / verge);
+    this.retile(this.fringe.material, FRINGE_WIDTH / verge, dressedLength / verge);
 
     for (let i = 0; i < LINE_X.length; i++) {
       writeInstance(this.runeMatrices, i, 1, 1, surfaceLength, LINE_X[i] ?? 0, 0, surfaceCentre);
@@ -367,17 +407,3 @@ export class RoadView {
 
 }
 
-function matte(scene: Scene, name: string, color: Color3): StandardMaterial {
-  const material = new StandardMaterial(name, scene);
-  material.diffuseColor = color;
-  material.specularColor = Color3.Black();
-  return material;
-}
-
-function glow(scene: Scene, name: string, color: Color3, strength: number): StandardMaterial {
-  const material = new StandardMaterial(name, scene);
-  material.diffuseColor = color.scale(0.2);
-  material.emissiveColor = color.scale(strength);
-  material.specularColor = Color3.Black();
-  return material;
-}

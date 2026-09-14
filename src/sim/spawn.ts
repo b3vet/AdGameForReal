@@ -7,6 +7,7 @@ import { enemyBalance } from './enemies';
 import { gateCap } from './gates';
 import { laneCenter } from './lanes';
 import type { LevelDef } from './level';
+import { shieldFor } from './shields';
 import type { EnemyState, GateState, Lane } from './types';
 import type { Balance } from '@/data/types';
 
@@ -50,7 +51,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     for (const def of row.enemies) {
       const config = enemyBalance(def.kind, balance);
       const hp = def.units * config.hpPerUnit;
-      enemies.push({
+      const enemy: EnemyState = {
         id: nextId++,
         kind: def.kind,
         x: laneCenter(def.lane, balance.road.laneWidth),
@@ -65,7 +66,12 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         alive: true,
         slowUntil: 0,
         diedAt: 0,
-      });
+      };
+      // The shield is a share of the body it stands in front of (D49), so a
+      // bigger brute carries a bigger shield and the label still reads the
+      // body alone.
+      if (def.kind === 'shieldBrute') enemy.shield = shieldFor(hp, balance);
+      enemies.push(enemy);
     }
   }
 
@@ -83,6 +89,9 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     slowUntil: 0,
     diedAt: 0,
     enraged: false,
+    // Which boss stands here (D49). Written always rather than only for the
+    // Rime Fiend, so render never has to guess what an absent field means.
+    variant: level.boss.kind ?? 'demon',
   };
 
   return { gates, enemies, boss, nextId: nextId + 1 };

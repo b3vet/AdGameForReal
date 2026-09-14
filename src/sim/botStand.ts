@@ -10,7 +10,7 @@
  */
 
 import { overlapShare } from './contact';
-import { enemyFootprint } from './enemies';
+import { effectiveUnits, enemyFootprint } from './enemies';
 import { halfWidth } from './formation';
 import type { RunState } from './types';
 import { clampToWalls } from './walls';
@@ -111,7 +111,14 @@ export function bestStreamStand(state: RunState, range: WallLimits, balance: Bal
  *
  * Stream bodies are not blocks and are deliberately not counted: one costs a
  * single soldier, and the squad is standing where it is precisely in order to
- * shoot the lane it came down. A block costs a share of its whole unit count.
+ * shoot the lane it came down. A block costs a share of its whole unit count —
+ * and a *shielded* brute costs a share of what it takes to clear rather than of
+ * what it prints (`effectiveUnits`, D49), because the shield is the reason the
+ * squad will still be standing in front of it when it arrives.
+ *
+ * Chargers are not counted either, for the opposite reason to stream bodies:
+ * they are not a block standing in the way but a body that has aimed itself,
+ * and `botCharge.ts` prices them against the lane they committed to.
  */
 export function contactCost(state: RunState, x: number, balance: Balance): number {
   const squad = state.squad;
@@ -120,10 +127,11 @@ export function contactCost(state: RunState, x: number, balance: Balance): numbe
   let cost = 0;
   for (const enemy of state.enemies) {
     if (!enemy.alive || !enemy.active || enemy.streamId !== undefined) continue;
+    if (enemy.kind === 'charger') continue;
     const gap = enemy.z - squad.z;
     if (gap < 0 || gap > balance.bots.threatLookahead) continue;
     const half = enemyFootprint(enemy.kind, enemy.units, balance);
-    cost += overlapShare(enemy.x, half, x, squadHalf, minShare) * enemy.units;
+    cost += overlapShare(enemy.x, half, x, squadHalf, minShare) * effectiveUnits(enemy, balance);
   }
   return cost;
 }

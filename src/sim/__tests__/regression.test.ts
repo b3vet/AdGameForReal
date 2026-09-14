@@ -144,6 +144,38 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
   return hashOf(parts.join('|'));
 }
 
+/**
+ * Levels 21 to 23, greedy, seeds 1 to 5: the first three levels of Frostfell
+ * (D49), captured when Phase B built them.
+ *
+ * Their reason for existing is the opposite of the table above. Those goldens
+ * guard a road that must never move; these are a *baseline* for one that has
+ * just been made, and they cover the three things the biome adds on the levels
+ * that first stand them — level 21 a charger row, level 23 a shielded brute as
+ * well, and all three the Rime Fiend and its lane charge. A change to any of
+ * the new kinds that was not meant to reach the campaign shows up here.
+ *
+ * Levels 1 to 20 are untouched by all of it, which `./frost.test.ts` says of
+ * the recipes and the table above says of the runs.
+ */
+const FROST_GOLDEN: Readonly<Record<string, string>> = {
+  '21:1': '7fe25517',
+  '21:2': 'c40474b7',
+  '21:3': 'f7f1923c',
+  '21:4': '0bac6b90',
+  '21:5': '3caf8149',
+  '22:1': 'f21ce220',
+  '22:2': 'ab0afd20',
+  '22:3': 'b8311f81',
+  '22:4': 'e29db6a5',
+  '22:5': '88ad72f7',
+  '23:1': '6b615cbb',
+  '23:2': 'f4134cea',
+  '23:3': 'cc05f030',
+  '23:4': 'c9f284c8',
+  '23:5': '5ea6d5d6',
+};
+
 describe('no-upgrade regression', () => {
   it('replays the recorded run on the levels the design did not touch', () => {
     // Every mismatch at once, in the shape `GOLDEN` is written in: a golden
@@ -160,6 +192,18 @@ describe('no-upgrade regression', () => {
     expect(moved.join('\n')).toBe('');
   }, 120_000);
 
+  it('replays the recorded run on the first three levels of Frostfell', () => {
+    const moved: string[] = [];
+    for (let level = 21; level <= 23; level++) {
+      for (const seed of SEEDS) {
+        const key = `${String(level)}:${String(seed)}`;
+        const hash = runHash(level, seed);
+        if (hash !== FROST_GOLDEN[key]) moved.push(`  '${key}': '${hash}',`);
+      }
+    }
+    expect(moved.join('\n')).toBe('');
+  }, 120_000);
+
   it('makes a player with nothing bought the identity, on every level', () => {
     const nothing = emptyPlayer();
     for (let level = 1; level <= levelCount; level++) {
@@ -168,9 +212,9 @@ describe('no-upgrade regression', () => {
         expect(`${where} ${runHash(level, seed, nothing)}`).toBe(`${where} ${runHash(level, seed)}`);
       }
     }
-  }, 300_000);
+  }, 900_000);
 
-  it('replays the same run from the same inputs, on all twenty levels', () => {
+  it('replays the same run from the same inputs, on every level', () => {
     // Determinism is the contract the whole balance suite rests on (CLAUDE.md):
     // fixed step, seeded RNG, no clock. Two runs of the same level with the
     // same player and the same steering are the same run, step for step.
@@ -191,7 +235,7 @@ describe('no-upgrade regression', () => {
         `L${String(level)} ${JSON.stringify(a.state)}`,
       );
     }
-  }, 120_000);
+  }, 300_000);
 
   it('generates the same level with an empty player as with none at all', () => {
     const nothing = emptyPlayer();

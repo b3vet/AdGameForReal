@@ -24,9 +24,12 @@ import { balance, levelConfig, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
-/** The four the tech lead settled on (D45, C2 follow-up): the flag in
- *  `levels.json` is what the generator reads, not a list of indices in code. */
-const MILESTONES = [7, 10, 15, 20];
+/**
+ * The four of biome 1 (D45, C2 follow-up) and the four Frostfell adds (D49).
+ * The flag in `levels.json` is what the generator reads, not a list of indices
+ * in code; this is the list the data is checked against.
+ */
+const MILESTONES = [7, 10, 15, 20, 25, 30, 35, 40];
 
 function everyLevel(body: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
@@ -39,7 +42,7 @@ function hasGates(gates: ReadonlyArray<GateDef | null>): boolean {
 }
 
 describe('milestone levels', () => {
-  it('marks exactly the four the plan names, in the data and not in code', () => {
+  it('marks exactly the eight the plans name, in the data and not in code', () => {
     const flagged: number[] = [];
     for (let index = 1; index <= levelCount; index++) {
       if (levelConfig(index).milestone === true) flagged.push(index);
@@ -99,6 +102,40 @@ describe('the gauntlet before the arena', () => {
       expect(`L${String(index)} s${String(seed)} last row threats > 0: ${String(threats > 0)}`).toBe(
         `L${String(index)} s${String(seed)} last row threats > 0: true`,
       );
+    });
+  });
+});
+
+describe('two fences in a row', () => {
+  it('never lets one stretch begin while another is still holding', () => {
+    // Milestone 7's fairness re-check (`walls.stretchGap`). Two stretches
+    // closer than a bot's commit horizon are one commitment: the side of the
+    // second is chosen out of whatever lanes the first has left open, and the
+    // two guarded rows can between them offer nothing worth taking however
+    // payable each of them is on its own. Level 34 seed 5 was the one that
+    // found it — a fence on the left ruled out an `add`, and the next fence,
+    // decided six metres later, priced a curse now against a worse curse next.
+    //
+    // The rule runs from `walls.stretchGapFromLevel`, so the twenty levels
+    // Milestone 6 balanced are exempt: three of them deal a stacked pair on
+    // one seed in ten, which is a finding for the next retune rather than
+    // something to change under a shipped set of bands.
+    const from = balance.walls.stretchGapFromLevel;
+    const gap = balance.walls.stretchGap;
+    everyLevel((level, index, seed) => {
+      if (index < from) return;
+      const walls = level.walls ?? [];
+      for (const a of walls) {
+        for (const b of walls) {
+          // The mirrored stretch a horde row adds shares both ends; it is one
+          // commitment with two fences, not two commitments.
+          if (a === b || (a.zStart === b.zStart && a.zEnd === b.zEnd)) continue;
+          const where = `L${String(index)} s${String(seed)} ${a.zEnd.toFixed(1)} then ${b.zStart.toFixed(1)}`;
+          expect(`${where}: ${String(b.zStart >= a.zEnd + gap || a.zStart >= b.zEnd + gap)}`).toBe(
+            `${where}: true`,
+          );
+        }
+      }
     });
   });
 });

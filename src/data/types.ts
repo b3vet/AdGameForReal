@@ -19,65 +19,37 @@ export type {
   WeaponSplash,
 } from './weapon-types';
 
-export interface EnemyBalance {
-  /** HP one visual unit of this block is worth; `units = ceil(hp / hpPerUnit)`. */
-  hpPerUnit: number;
-  speed: number;
-  /** Half-width of the block's footprint along `x`, in meters. */
-  footprint: number;
-}
+/**
+ * Which biome a level is set in (D49). Its own one-line module because the
+ * render track's palette reads it without pulling in the whole schema, and
+ * because two parallel tracks had to be able to write the same file.
+ */
+export type { BiomeId } from './biome-types';
 
-export interface BossBalance extends EnemyBalance {
-  /**
-   * How fast the boss walks the squad down, and with it when the fight stops
-   * being a ranged trade (Milestone 6, the C2 follow-up).
-   *
-   * It starts `level.bossOffset` metres up the arena and stops at
-   * `enemies.contactDistance`, so the seconds to contact are
-   * `(bossOffset - contactDistance) / speed`: at 22 m, 1.2 m and 1.75 m/s that
-   * is 11.9 s, about half of the 24 second fight the campaign is sized for.
-   *
-   * It used to be 0.55, which is 37.8 s — longer than any fight that is going
-   * to be won — so `contactShare` below never fired at all and the whole of a
-   * run's attrition was stomps. That is what made the share of the crowd that
-   * walks away and the share of runs that are won the same number read two
-   * ways: both were `1 - e^{-kT}` for the one decay the fight had.
-   */
-  speed: number;
-  stompInterval: number;
-  stompRange: number;
-  /** Floor on the units one stomp removes, whatever the squad size. */
-  stompKills: number;
-  /** Share of the squad one stomp removes, above that floor. */
-  stompShare: number;
-  /**
-   * Share of the squad standing in contact that dies every second.
-   *
-   * Live since the C2 follow-up (see `speed`). It is the unit sink the road did
-   * not have: a fight that runs past the boss's arrival costs the crowd whether
-   * or not it is eventually won, so what walks away can be pulled down without
-   * pulling the clear rate down with it.
-   */
-  contactShare: number;
-  /** Fraction of max HP at which the boss enrages. */
-  enrageAt: number;
-  /** Stomp interval once enraged. */
-  enrageStompInterval: number;
-  /** Walk speed multiplier once enraged. */
-  enrageSpeedMul: number;
-  /** How fast the boss slides sideways to line itself up with the squad. */
-  lateralSpeed: number;
-  /**
-   * How deep in front of itself the boss pushes the crowd (D43's shove, Phase
-   * C2). Its own `crowd.shove.reach` rather than the shared one because the
-   * boss never gets within a body's length of the column: it starts
-   * `level.bossOffset` away and closes at half a metre a second, so a fight it
-   * loses ends with it still ten metres out. This is the depth of the push
-   * field instead — the crowd starts to bow at about the range the boss can
-   * stomp from, and leans harder the closer the thing gets.
-   */
-  shoveReach: number;
-}
+/**
+ * The enemy schema is `./enemy-types.ts` — a body, a boss and the two kinds
+ * Frostfell adds (D49) — split out for the file-size rule and re-exported here
+ * so every importer still reads one module.
+ */
+import type { BossBalance, ChargerBalance, EnemyBalance, ShieldBalance } from './enemy-types';
+
+export type {
+  BossBalance,
+  BossKind,
+  ChargerBalance,
+  EnemyBalance,
+  RimeBalance,
+  ShieldBalance,
+} from './enemy-types';
+
+/**
+ * The level recipes are `./level-types.ts` — the forty entries of
+ * `levels.json` — split out for the file-size rule and re-exported here so
+ * every importer still reads one module.
+ */
+import type { ValueRange } from './level-types';
+
+export type { LevelGenConfig, ValueRange } from './level-types';
 
 export interface Balance {
   squad: {
@@ -235,6 +207,10 @@ export interface Balance {
     despawnBehind: number;
     grunt: EnemyBalance;
     brute: EnemyBalance;
+    /** The charger (D49). A shielded brute is a brute and reads `brute`. */
+    charger: ChargerBalance;
+    /** What a shield is worth on the brute that carries one (D49). */
+    shield: ShieldBalance;
     boss: BossBalance;
   };
   level: {
@@ -283,6 +259,29 @@ export interface Balance {
     fromRow: number;
     /** From this level a stretch over a horde row may wall both boundaries. */
     bothFromLevel: number;
+    /**
+     * Metres of clear road between one stretch's far end and the next one's
+     * start (D49's fairness re-check).
+     *
+     * Two stretches closer than this are a *pair* rather than two choices: a
+     * player commits to the second while the first is still holding them, so
+     * the second choice is made out of whatever lanes the first left open, and
+     * the two guarded rows can between them offer nothing but curses however
+     * payable each row is on its own. Measured on level 34 seed 5, where a
+     * fence on the left ruled out an `add` and the next fence, decided six
+     * metres later, then priced "a curse now and a grower next" against "a
+     * grower now and a worse curse next": greedy took the arithmetic it was
+     * offered and came out of the pair with 39 units of 65.
+     */
+    stretchGap: number;
+    /**
+     * First level the gap above is enforced on. The rule arrived with
+     * Milestone 7 and the twenty levels Milestone 6 measured are left exactly
+     * as they were balanced — three of them deal a stacked pair on one seed in
+     * ten, which is a finding for the next retune rather than something to
+     * change under a shipped set of bands.
+     */
+    stretchGapFromLevel: number;
   };
   /** Enemy streams (D29): the river of single bodies that walks down a lane. */
   streams: {
@@ -432,6 +431,17 @@ export interface Balance {
     bruteChance: number;
     /** A brute block carries this share of a grunt block's unit count. */
     bruteUnitFrac: number;
+    /**
+     * Row-kind weights for the two Frostfell kinds (D49). A charger row and a
+     * shield row are threat rows like `bruteRows`: no gates, one or two bodies
+     * standing in a lane, and the level's own `chargerRows` / `shieldRows`
+     * counts say how many of them a level deals. These are what those bodies
+     * are *worth* — the same shape as `bruteUnitFrac` above.
+     */
+    chargerLanes: ValueRange;
+    /** A shielded brute carries this share of a plain brute's unit count, so
+     *  the shield is time added rather than a second block. */
+    shieldUnitFrac: number;
     /** The block guarding a good gate on a mixed row, relative to a normal block. */
     mixedBlockFrac: number;
     /** Levels below this one never generate `sub` gates. */
@@ -503,6 +513,19 @@ export interface Balance {
      * sideways faster than it runs.
      */
     wallCommitDistance: number;
+    /**
+     * How far ahead a bot reads a charger that has set off (D49). Past the
+     * charger's own `triggerRange`, so a bot sees one the moment it moves.
+     */
+    chargerLookahead: number;
+    /**
+     * Share of the squad's raw output a bot assumes actually lands on a
+     * charger running at it. Below 1 because the river, the gates and the
+     * blocks in the same lane are eating shots too, and a bot that believed
+     * its whole output was on the charger would stand in the lane and lose the
+     * argument.
+     */
+    chargerAimShare: number;
     /** The human-like bot the difficulty bands are measured on (D45). */
     human: {
       /**
@@ -550,80 +573,6 @@ export interface Balance {
     /** Defeat crawl, held until the result screen replaces the run. */
     defeatScale: number;
   };
-}
-
-export interface ValueRange {
-  min: number;
-  max: number;
-}
-
-/** One entry of `levels.json`: the recipe `generateLevel` turns into a `LevelDef`. */
-export interface LevelGenConfig {
-  index: number;
-  seed: number;
-  rows: number;
-  startCount: number;
-  /**
-   * Squad size this level is designed to peak at — the top of `squadCurve` and
-   * the scale every gate and block on the level is sized against. Growth across
-   * the campaign is this number rising, not the shared `maxCount` cap.
-   */
-  peakTarget: number;
-  /** Multiplier on generated enemy block sizes. */
-  hpScale: number;
-  /**
-   * `bite` scales what a stomp and boss contact take (D31): levels 1 to 3 are
-   * generous, and the Milestone 2 attrition returns at full strength from
-   * level 6. The fight's *length* stays in the 18 to 32 second band on every
-   * level; only what it costs changes.
-   */
-  boss: { hp: number; bite: number };
-  gateValues: {
-    mul: ValueRange;
-    add: ValueRange;
-    /** The curse range for this level, before the `curseShare` ceiling. */
-    sub: ValueRange;
-    fireRate: ValueRange;
-  };
-  /** How many of this level's rows carry gates (the plan's 8 to 12). */
-  gateRows: number;
-  /** How many of those gate rows also stand a block short of the gate. */
-  mixedRows: number;
-  /** Threat rows that pour two streams at once. */
-  hordeRows: number;
-  /** Threat rows that stand a brute block instead of a stream. */
-  bruteRows: number;
-  /**
-   * Gate rows this level guards with a lane wall (D32). Zero below
-   * `balance.walls.fromLevel`; most of them from level 11.
-   */
-  wallRows: number;
-  /**
-   * The pressure a stream on this level is built to: `count * hp` over
-   * `expected squad dps * window` (docs/09-milestone-3-plan.md, "Stream
-   * pressure"). 0.45 to 0.6 on levels 1 to 3, 0.65 to 0.8 on 4 and 5, 0.85 to
-   * 0.95 from 6.
-   */
-  streamPressure: number;
-  /**
-   * A milestone level (D45, and D48 for the list): 7, 10, 15 and 20 as
-   * shipped, which the road is not meant to give up without the upgrades the
-   * economy has paid for by then. Level 5 was on the list until the balance
-   * report showed the set affordable by then is worth a few percent of output.
-   * The generator turns `balance.gen.milestone`'s screws on it; everything
-   * else about the level is the ordinary per-level tuning below.
-   *
-   * Optional because the render fixtures and the stress scene build a config
-   * by hand and an ordinary level is the default.
-   */
-  milestone?: boolean;
-  /**
-   * Bodies one stream sends per unit of the squad the row is built for. It is
-   * the density dial — and it is also what a leak costs, since a leak takes one
-   * soldier per body: at 1.0 a three percent leak costs three percent of the
-   * squad at any size.
-   */
-  streamDensity: number;
 }
 
 /* ------------------------------------------------------------------ */

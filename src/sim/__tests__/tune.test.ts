@@ -236,7 +236,7 @@ describe.skipIf(!ON)('milestone readout', () => {
   }, 900_000);
 });
 
-const MILESTONE_LEVELS = [7, 10, 15, 20];
+const MILESTONE_LEVELS = [7, 10, 15, 20, 25, 30, 35, 40];
 
 function loadoutText(held: {
   upgrades: Record<string, number>;

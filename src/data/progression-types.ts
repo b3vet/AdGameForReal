@@ -97,6 +97,19 @@ export interface Progression {
     baseCost: number;
     costGrowth: number;
     maxLevel: number;
+    /**
+     * Price of the *first* rung of a named track, overriding the ladder (D50).
+     *
+     * The Milestone 6 finding: the Academy sells nothing that compounds before
+     * a `gateBonus` rung, so an early milestone level could not be gated by an
+     * upgrade the economy had actually paid for — levels 7 and 10 cleared at
+     * the same rate armed or bare. One cheap first rung fixes exactly that and
+     * nothing else: the ladder above it is untouched, so the runs-per-purchase
+     * curve the prices were tuned against still holds.
+     *
+     * A track with no entry here prices its first rung at `baseCost` as before.
+     */
+    starterRung?: Partial<Record<UpgradeId, number>>;
     /** What one level of each upgrade is worth (a share, except `startCount`). */
     effects: Record<UpgradeId, number>;
   };

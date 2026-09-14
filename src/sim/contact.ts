@@ -21,7 +21,8 @@
  * die, never how many of them do.
  */
 
-import { enemyBalance, enemyFootprint } from './enemies';
+import { chargerKills, startCharge, steerCharger } from './chargers';
+import { activationRange, enemyBalance, enemyFootprint } from './enemies';
 import type { EventBuffer } from './events';
 import { halfWidth } from './formation';
 import type { EnemyState, GroupState, RunState, UnitLossReason } from './types';
@@ -136,12 +137,17 @@ export function advanceEnemies(
     if (!enemy.alive) continue;
 
     if (!enemy.active) {
-      if (enemy.z - squad.z > balance.enemies.activationDistance) continue;
+      // A charger has a trigger range of its own (D49): it stands still until
+      // the column is close enough, and the step it wakes on is the step it
+      // commits to a lane.
+      if (enemy.z - squad.z > activationRange(enemy.kind, balance)) continue;
       enemy.active = true;
       events.enemyActivated(enemy.id);
+      if (enemy.kind === 'charger') startCharge(enemy, state, balance, events);
     }
 
     enemy.z -= effectiveSpeed(enemy, state.time) * dt;
+    if (enemy.kind === 'charger') steerCharger(enemy, balance, dt);
 
     let hit = false;
     for (let g = 0; g < groupCount && !hit; g++) {
@@ -170,7 +176,13 @@ export function advanceEnemies(
           balance.enemies.contactMinShare,
         );
         if (share <= 0) continue;
-        const taken = Math.max(1, Math.ceil(enemy.units * share));
+        // A charger is a runner rather than a block: what it costs is its own
+        // bite of whoever it reached, not a share of its printed number, which
+        // is small on purpose so it can be shot out of the lane (D49).
+        const taken =
+          enemy.kind === 'charger'
+            ? chargerKills(group.count, balance)
+            : Math.max(1, Math.ceil(enemy.units * share));
         killEnemy(enemy, state.time);
         events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
         hitSquad(taken, 'contact', enemy.x, enemy.z, group.id);

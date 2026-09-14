@@ -61,6 +61,24 @@ export class EventBuffer {
     this.list.push(e);
   }
 
+  /** A shielded brute's shield broke. Once per body: `shields.ts` guards it. */
+  shieldBreak(enemyId: number, x: number, z: number): void {
+    const e = this.pools.shieldBreaks.take();
+    e.enemyId = enemyId;
+    e.x = x;
+    e.z = z;
+    this.list.push(e);
+  }
+
+  /** A charger set off, or the Rime Fiend started a charge down `lane`. */
+  charge(enemyId: number, kind: EnemyKind, lane: Lane): void {
+    const e = this.pools.charges.take();
+    e.enemyId = enemyId;
+    e.kind = kind;
+    e.lane = lane;
+    this.list.push(e);
+  }
+
   enemyShattered(enemyId: number, x: number, z: number, streamId?: number): void {
     const e = this.pools.shatters.take();
     e.enemyId = enemyId;

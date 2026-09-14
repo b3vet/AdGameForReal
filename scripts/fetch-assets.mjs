@@ -5,17 +5,22 @@
  * `node_modules/.asset-cache/`, and a cached file is reused rather than
  * re-fetched. Delete the cache to force a refresh.
  *
- * Two transforms happen on the way in, and they are the reason this is a
+ * Three transforms happen on the way in, and they are the reason this is a
  * script rather than a list of curl lines:
  *
- *   1. The KayKit character `.glb` files carry 76 to 95 animations each, which
- *      is 80 percent of their bytes. We keep four at most, so `trimGlb` drops
- *      the rest and garbage-collects the accessors and buffer views that go
- *      with them. A 3.5 MB Mage becomes ~0.4 MB with no loss of what we use.
+ *   1. The KayKit character `.glb` files carry 76 to 95 animations each, and
+ *      the Quaternius monsters fourteen, which is most of their bytes. We keep
+ *      six at most, so `trimGlb` drops the rest and garbage-collects the
+ *      accessors and buffer views that go with them. A 3.5 MB Mage becomes
+ *      ~0.5 MB with no loss of what we use.
  *   2. Quaternius ships `.gltf` with a base64 buffer, and KayKit props ship
  *      `.gltf` + `.bin` + a shared `.png`. Both become self-contained `.glb`
  *      so the runtime fetches one file per model and the single-file build has
  *      one thing to base64.
+ *   3. KayKit keeps weapons and shields out of its character files, so the
+ *      skeleton warrior's shield is grafted into its rig here (`SHIELD` and
+ *      `graftAccessory`) — the renderer only knows how to merge an accessory
+ *      that is already parented to a bone (D23).
  *
  *   node scripts/fetch-assets.mjs            every step
  *   node scripts/fetch-assets.mjs textures   one of them, by name
@@ -33,7 +38,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 
-import { gltfToGlb, readGlb, trimGlb } from './glb.mjs';
+import { gltfToGlb, graftAccessory, readGlb, trimGlb } from './glb.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = path.join(ROOT, 'node_modules', '.asset-cache');
@@ -51,8 +56,29 @@ const AMBIENTCG = 'https://ambientcg.com/get?file=';
 
 /** Quaternius publishes through Google Drive; these are file ids in that folder. */
 const DRIVE = 'https://drive.google.com/uc?export=download&id=';
-const QUATERNIUS_DEMON = '1XhBLnR6tjqIrFy0AUfRlqKf-hYmVwIR4';
 const QUATERNIUS_LICENSE = '16GqsDGESyEOfRbc4dS7EqAwkIUSIW4_y';
+
+/**
+ * The Ultimate Monsters we ship, as `<game id>: <Drive file id>`.
+ *
+ * The ids are files inside `Big/glTF/` of the pack's shared folder. They were
+ * read off `https://drive.google.com/embeddedfolderview?id=<folder>#list`,
+ * which serves a plain list where the ordinary folder page is script-rendered:
+ * the pack folder is `18m4KpzpEzhC9wl7jzr6dUc0N8Jozr79C` (linked from
+ * `quaternius.com/packs/ultimatemonsters.html`) and `Big/glTF` inside it is
+ * `1sOXLt5U3ofaujPlQRL11s4ub2UsqN8V8`. Every monster in that folder shares one
+ * 43-bone rig and the same fourteen clips, so a swap is one line here and one
+ * `url` in `assets.json` (docs/ASSETS.md, "The boss").
+ *
+ *   boss_demon  the biome-1 boss
+ *   charger     Milestone 7's charger (D49): a runner, so the Dino
+ *   boss_rime   the Rime Fiend (D49), the heaviest cold silhouette in the pack
+ */
+const QUATERNIUS_MONSTERS = {
+  boss_demon: '1XhBLnR6tjqIrFy0AUfRlqKf-hYmVwIR4',
+  charger: '1xBAObQmJQP1kCslielMmS_KMfPZUsdNm',
+  boss_rime: '1_skNq11VXoaGPu9D-hHb4-0OQXEWNTzY',
+};
 
 /**
  * The animations we keep per character. Everything else is dropped at fetch
@@ -69,18 +95,48 @@ export const KEPT_ANIMATIONS = {
   skeleton_minion: ['Walking_D_Skeletons', 'Running_C', 'Death_C_Skeletons'],
   skeleton_warrior: ['Walking_C', 'Running_C', 'Death_A'],
   boss_demon: ['Idle', 'Walk', 'Punch', 'HitReact', 'Death'],
+  // The charger (D49) only ever does three things: it appears, it runs its
+  // lane, and it dies. `Idle` comes along for the frame before it is released
+  // and for a stand-in pose; `Punch` is the lunge it kills a column with.
+  charger: ['Idle', 'Run', 'Punch', 'Death'],
+  // The Rime Fiend is a boss, so it keeps the demon's five and adds `Run` —
+  // the lane charge of D49, which is the one thing boss 1 cannot do.
+  boss_rime: ['Idle', 'Walk', 'Run', 'Punch', 'HitReact', 'Death'],
 };
 
-/** Halloween Bits props: dead trees, graves and fence posts line the road. */
+/**
+ * The shielded brute's shield (D49), grafted into the skeleton warrior.
+ *
+ * KayKit keeps weapons and shields out of the character files and in
+ * `Assets/gltf/`, so this one accessory has to be put into the shape the
+ * renderer already understands — a mesh parented to a hand bone (D23). The
+ * grip is the Adventurers pack's own: `Knight.glb` hangs all four of its
+ * shields off `handslot.l` at exactly this offset, and the loose
+ * `shield_round.gltf` has byte-identical geometry to the one in that file, so
+ * the offset is the rig's, not the knight's.
+ */
+const SHIELD = {
+  file: 'Skeleton_Shield_Large_A',
+  parent: 'handslot.l',
+  material: 'skeleton',
+  transform: { translation: [0, 0.017011786, 0.155885339] },
+};
+
+/**
+ * Halloween Bits props: the conifers, the gravestone, the fence and the lantern.
+ *
+ * Five of the pack's pieces that Milestone 2 shipped are gone as of Milestone 7
+ * — `tree_dead_large/medium/small`, `grave_A` and `pillar`. No view has placed
+ * one since Milestone 3 re-weighted the roadside around the pines
+ * (`src/render/propKinds.ts`), and an unplaced model is not free: every entry in
+ * `assets.json` is base64'd into the single-file builds whether anything draws
+ * it or not, and those five were 128 KB of file — 171 KB of the 12 MB hosted
+ * ceiling (D25). Adding one back is a line here and an entry in the manifest.
+ */
 const PROPS = [
-  'tree_dead_large',
-  'tree_dead_medium',
-  'tree_dead_small',
   'tree_pine_orange_large',
   'tree_pine_orange_medium',
   'gravestone',
-  'grave_A',
-  'pillar',
   'post_lantern',
   'fence',
 ];
@@ -103,7 +159,18 @@ const PROPS = [
  *   banner_blue   — hangs on those pillars, re-tinted to `arcane` in render
  *   torch_lit     — roadside light beside the gate rows of later levels
  */
-const DUNGEON_PIECES = ['column', 'barrier_half', 'pillar', 'banner_blue', 'torch_lit'];
+const DUNGEON_PIECES = [
+  'column',
+  'barrier_half',
+  'pillar',
+  'banner_blue',
+  'torch_lit',
+  // Milestone 7: Frostfell's snow mounds. A heap of broken stone under a
+  // near-white tint is a drift with something buried in it, and the pack has
+  // no snow of its own — this is the cheapest real mesh that reads as one.
+  'rubble_large',
+  'rubble_half',
+];
 
 /**
  * The road and field albedos (Milestone 5 plan, "Road texture bad"), from
@@ -154,6 +221,54 @@ const AMBIENTCG_TEXTURES = [
     quality: 0.72,
     ao: false,
     use: 'the field either side and the grass fringe along the kerbs',
+  },
+  /**
+   * Frostfell (D49). The pair does the same two jobs one biome over, and the
+   * choice between them is the same one the meadow made: the road has to be the
+   * surface with structure in it and the verge the large quiet mass, or the
+   * kerb line disappears and the road stops being a road.
+   *
+   * `Ice004` is a frozen lake photographed from above — cells of dark ice with
+   * white fracture veins between them, which is the same *shape* of information
+   * the paving's joints carry and the reason it beats every "Snow" material for
+   * this job (they are all near-featureless at a 2 m tile; `Snow005` averages
+   * rgb 147,148,149 with almost no local variation). It is the one texture here
+   * with no `AmbientOcclusion.jpg` in its zip, so unlike the cobble nothing is
+   * multiplied into it: the veins are already the shading, and the road mesh's
+   * own vertex colours still carry the gutter and the lane wear.
+   *
+   * `Snow006` is trodden snow and *does* ship an occlusion map, so the verge is
+   * the composite this time — the dimples of a walked-on drift, which is what
+   * keeps a white field from reading as a blank sheet of paper.
+   */
+  {
+    file: 'road_frost.jpg',
+    asset: 'Ice004',
+    size: 1024,
+    // 0.68 where the cobble is 0.75: ice is a smooth field with a few hard
+    // veins in it, which is the easiest thing a DCT ever has to encode, and the
+    // single-file builds are 130 KB under their 12 MB ceiling (D25).
+    quality: 0.68,
+    ao: false,
+    /**
+     * The grade. The source averages rgb 125,141,140 — a dark sea-green, which
+     * is what lake ice actually looks like and what a whole road of it must not
+     * be: at that value the road is darker than the crowd standing on it and
+     * the frame loses its floor. Brightness takes it to the low 180s (the
+     * meadow's graded cobble averages 178), the desaturation takes the green
+     * out, and the small positive rotation lands the residue on the blue side
+     * of neutral so it sits beside `spell.frost` rather than fighting it.
+     */
+    tint: 'brightness(1.45) saturate(0.5) hue-rotate(14deg)',
+    use: 'the Frostfell road surface',
+  },
+  {
+    file: 'field_snow.jpg',
+    asset: 'Snow006',
+    size: 512,
+    quality: 0.72,
+    ao: true,
+    use: 'the Frostfell verge and the snow fringe along the kerbs',
   },
 ];
 
@@ -233,10 +348,11 @@ async function writeAsset(relative, bytes) {
   return bytes.length;
 }
 
-async function character(name, base, file, cacheName) {
+async function character(name, base, file, cacheName, graft) {
   const source = await cached(`${base}/Characters/gltf/${file}`, cacheName);
-  const trimmed = trimGlb(readGlb(source), KEPT_ANIMATIONS[name]);
-  return await writeAsset(`models/${name}.glb`, trimmed);
+  let glb = trimGlb(readGlb(source), KEPT_ANIMATIONS[name]);
+  if (graft !== undefined) glb = await graft(glb);
+  return await writeAsset(`models/${name}.glb`, glb);
 }
 
 async function props() {
@@ -376,15 +492,49 @@ async function encodeTextures(maps) {
   }
 }
 
-async function boss() {
+/**
+ * One Quaternius monster: fetch, fold into a `.glb`, drop every clip we do not
+ * play. Their `.gltf` is self-contained (a base64 buffer with the atlas inside
+ * it), so `gltfToGlb` has nothing to resolve.
+ */
+async function monster(name, driveId) {
   const doc = JSON.parse(
-    (await cached(`${DRIVE}${QUATERNIUS_DEMON}`, 'quaternius/Demon.gltf')).toString('utf8'),
+    (await cached(`${DRIVE}${driveId}`, `quaternius/${name}.gltf`)).toString('utf8'),
   );
   const glb = await gltfToGlb(doc, () => {
-    throw new Error('Demon.gltf was expected to be self-contained');
+    throw new Error(`${name}.gltf was expected to be self-contained`);
   });
-  const trimmed = trimGlb(readGlb(glb), KEPT_ANIMATIONS.boss_demon);
-  return await writeAsset('models/boss_demon.glb', trimmed);
+  const trimmed = trimGlb(readGlb(glb), KEPT_ANIMATIONS[name]);
+  return await writeAsset(`models/${name}.glb`, trimmed);
+}
+
+async function monsters() {
+  let total = 0;
+  for (const [name, driveId] of Object.entries(QUATERNIUS_MONSTERS)) {
+    total += await monster(name, driveId);
+  }
+  return total;
+}
+
+/**
+ * The skeleton warrior's shield, out of the pack's loose `Assets/gltf/` file
+ * and into the warrior's rig under `handslot.l` (see `SHIELD`).
+ */
+async function graftShield(warrior) {
+  const doc = JSON.parse(
+    (await cached(`${SKELETONS}/Assets/gltf/${SHIELD.file}.gltf`, `kaykit/${SHIELD.file}.gltf`))
+      .toString('utf8'),
+  );
+  const bin = await cached(
+    `${SKELETONS}/Assets/gltf/${SHIELD.file}.bin`,
+    `kaykit/${SHIELD.file}.bin`,
+  );
+  return graftAccessory(readGlb(warrior), { json: doc, bin }, {
+    name: SHIELD.file,
+    parent: SHIELD.parent,
+    material: SHIELD.material,
+    transform: SHIELD.transform,
+  });
 }
 
 async function licenses() {
@@ -477,11 +627,15 @@ const STEPS = {
         SKELETONS,
         'Skeleton_Warrior.glb',
         'kaykit/Skeleton_Warrior.glb',
+        // The shielded brute is the same file with one accessory in its left
+        // hand, so the shield rides along here rather than in a model of its
+        // own: one `.glb`, one VAT and one material serve both (D49, D23).
+        graftShield,
       );
       return total;
     },
   ],
-  boss: ['Quaternius boss', boss],
+  monsters: ['Quaternius monsters', monsters],
   props: ['KayKit Halloween Bits props', props],
   dungeon: ['KayKit Dungeon Remastered pieces', dungeon],
   textures: ['ambientCG road and field albedos', ambientcg],

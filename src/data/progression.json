@@ -3,6 +3,9 @@
     "baseCost": 900,
     "costGrowth": 1.6,
     "maxLevel": 10,
+    "starterRung": {
+      "gateBonus": 250
+    },
     "effects": {
       "damage": 0.08,
       "fireRate": 0.06,

@@ -197,3 +197,79 @@ async function resolveUri(uri, resolve) {
   if (match !== null) return Buffer.from(match[1], 'base64');
   return await resolve(decodeURIComponent(uri));
 }
+
+/**
+ * Grafts one mesh out of a separate `.gltf` into a character `.glb`, hung off a
+ * bone node of the target's rig.
+ *
+ * KayKit ships weapons and shields as their own files rather than inside the
+ * character (`Assets/gltf/Skeleton_Shield_Large_A.gltf`), while the accessories
+ * that *are* in a character file — the mage's staffs, the knight's shields —
+ * are plain meshes parented to a `handslot` bone. Milestone 2 built the whole
+ * accessory path around that second shape (D23: re-skin to the parent bone,
+ * then merge), so the cheapest way to give the skeleton warrior a shield is to
+ * put the loose file into the same shape at fetch time. Nothing in the renderer
+ * then has to know that this one accessory arrived from somewhere else.
+ *
+ * `transform` is the accessory's local placement inside the bone, which is the
+ * artist's own grip: the Adventurers pack's `Knight.glb` carries four shields
+ * under `handslot.l` at one shared offset, and the standalone `shield_round.gltf`
+ * has byte-identical geometry to the one in the character file — so the loose
+ * files are authored in the same local frame and that offset is the grip for
+ * any shield on this rig.
+ *
+ * The accessory's material is *not* copied: it is mapped onto an existing
+ * material of the target by name. Both packs paint out of one atlas per pack,
+ * so the shield shares the warrior's `skeleton` material and the merge in
+ * `src/render/characters/asset.ts` costs no second draw call.
+ */
+export function graftAccessory({ json, bin }, source, options) {
+  const doc = structuredClone(json);
+  const src = structuredClone(source.json);
+
+  const parent = (doc.nodes ?? []).findIndex((node) => node.name === options.parent);
+  if (parent < 0) throw new Error(`no node "${options.parent}" to graft onto`);
+  const material = (doc.materials ?? []).findIndex((each) => each.name === options.material);
+  if (material < 0) throw new Error(`no material "${options.material}" in the target`);
+  const mesh = (src.meshes ?? [])[options.mesh ?? 0];
+  if (mesh === undefined) throw new Error('the accessory has no mesh');
+
+  // The source's buffer views are appended to the target's binary chunk, each
+  // aligned to four bytes as the format requires.
+  const chunks = [bin];
+  let offset = bin.length;
+  const views = new Map();
+  const copyView = (index) => {
+    const seen = views.get(index);
+    if (seen !== undefined) return seen;
+    const view = src.bufferViews[index];
+    const start = view.byteOffset ?? 0;
+    const padding = pad4(offset);
+    if (padding > 0) {
+      chunks.push(Buffer.alloc(padding));
+      offset += padding;
+    }
+    chunks.push(source.bin.subarray(start, start + view.byteLength));
+    const at = doc.bufferViews.push({ ...view, buffer: 0, byteOffset: offset }) - 1;
+    offset += view.byteLength;
+    views.set(index, at);
+    return at;
+  };
+  const copyAccessor = (index) => {
+    const accessor = src.accessors[index];
+    return doc.accessors.push({ ...accessor, bufferView: copyView(accessor.bufferView) }) - 1;
+  };
+
+  const primitives = mesh.primitives.map((primitive) => ({
+    ...primitive,
+    attributes: mapValues(primitive.attributes, copyAccessor),
+    indices: copyAccessor(primitive.indices),
+    material,
+  }));
+  const meshIndex = doc.meshes.push({ name: mesh.name, primitives }) - 1;
+  const node = { name: options.name, mesh: meshIndex, ...options.transform };
+  const nodeIndex = doc.nodes.push(node) - 1;
+  (doc.nodes[parent].children ??= []).push(nodeIndex);
+
+  return writeGlb(doc, Buffer.concat(chunks));
+}

@@ -372,9 +372,18 @@ export class Run {
       this.balance,
       dt,
       this.level.boss.bite ?? 1,
+      state.time,
     );
     if (step.activated) this.events.bossActivated(boss.id);
     if (step.enraged) this.events.bossEnraged(boss.id);
+    // The Rime Fiend's lane charge (D49). Its kills are taken nearest the boss
+    // itself, wherever it is on its run, so the dead are the people it went
+    // through rather than a share of the column.
+    if (step.charged) this.events.charge(boss.id, boss.kind, step.chargeLane);
+    if (step.chargeKills > 0) {
+      this.loseUnits(step.chargeKills, 'contact', boss.x, boss.z, -1);
+      if (state.status !== 'running') return;
+    }
     // Whoever is standing nearest the boss, whichever group they are in: its
     // reach and its foot do not know about fences.
     if (step.contactKills > 0) {

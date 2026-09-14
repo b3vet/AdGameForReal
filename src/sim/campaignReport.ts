@@ -43,14 +43,14 @@ export function formatCampaign(result: CampaignResult): string[] {
         `  ${loadoutLine(level.held)}`,
     );
   }
-  lines.push(
-    `runs/purchase L1-5 ${runsPerPurchase(result, 1, 5).toFixed(2)}` +
-      `  L6-10 ${runsPerPurchase(result, 6, 10).toFixed(2)}` +
-      `  L11-15 ${runsPerPurchase(result, 11, 15).toFixed(2)}` +
-      `  L16-20 ${runsPerPurchase(result, 16, 20).toFixed(2)}`,
-  );
+  const bands: string[] = [];
+  for (let from = 1; from <= 36; from += 5) {
+    const to = from === 1 ? 5 : from + 4;
+    bands.push(`L${String(from)}-${String(to)} ${runsPerPurchase(result, from, to).toFixed(2)}`);
+  }
+  lines.push(`runs/purchase ${bands.join('  ')}`);
   lines.push(`coins in ${String(result.coinsIn)} out ${String(result.coinsOut)}`);
-  for (const level of [5, 10, 15, 20]) {
+  for (const level of [5, 7, 10, 15, 20, 25, 30, 35, 40]) {
     const report = result.levels.find((entry) => entry.level === level);
     if (report !== undefined) lines.push(`held at L${String(level)}: ${loadoutLine(report.held)}`);
   }

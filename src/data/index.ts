@@ -17,7 +17,13 @@ export const balance: Balance = balanceJson;
 /** Mix and throttles for `src/audio`; see `audio-types.ts`. */
 export const audioMix: AudioMix = audioJson;
 
-export const levels: readonly LevelGenConfig[] = levelsJson;
+/**
+ * The cast is the one place a JSON import's widened strings are narrowed:
+ * `biome` and `boss.kind` are string-literal unions (D49) and TypeScript reads
+ * a `.json` module's strings as `string`. Doing it here rather than at every
+ * read site is the whole point of this file.
+ */
+export const levels: readonly LevelGenConfig[] = levelsJson as readonly LevelGenConfig[];
 
 /**
  * Level configs are 1-indexed for players. Out-of-range indices clamp to the

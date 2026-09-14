@@ -96,6 +96,13 @@ export function buildCloudBand(
   return mesh;
 }
 
+/** The sheet, and the one thing about it a biome changes: its colour. */
+export interface CloudSheet {
+  texture: DynamicTexture;
+  /** Repaints it in the colour `sky.horizon` names *now* (D49). */
+  repaint(): void;
+}
+
 /**
  * The cloud sheet: tileable value-noise fbm, thresholded into soft cloud
  * shapes, faded out at the top and bottom of the band.
@@ -103,13 +110,15 @@ export function buildCloudBand(
  * Tileable because the band wraps the compass and then scrolls: the lattice
  * wraps at `CLOUD_TILES` cells across the texture, so the left edge and the
  * right edge are the same samples and the seam never arrives.
+ *
+ * The noise is computed once and kept. A biome switch only changes the three
+ * bytes a cloud pixel is *coloured* with, and the fbm is a quarter of a million
+ * samples of four octaves — paying for it again at every level load would be
+ * the most expensive thing in the switch by two orders of magnitude.
  */
-export function buildCloudTexture(scene: Scene): DynamicTexture {
+export function buildCloudSheet(scene: Scene): CloudSheet {
   const size = CLOUD_TEXTURE_SIZE;
   const texture = new DynamicTexture('skyCloudSheet', { width: size, height: size }, scene, true);
-  const context = texture.getContext();
-  const image = context.getImageData(0, 0, size, size);
-  const data = image.data;
   const noise = latticeNoise(CLOUD_SEED);
 
   // Pass one: the field, and the range it actually covers. See CLOUD_THRESHOLD.
@@ -126,38 +135,46 @@ export function buildCloudTexture(scene: Scene): DynamicTexture {
   }
   const span = highest - lowest || 1;
 
-  // The band's own colour: the horizon's, lifted toward white so a cloud reads
-  // as lit from above rather than as a grey smear on the gradient.
-  const tint = Color3.Lerp(SKY_HORIZON, Color3.White(), 0.55);
-  const red = Math.round(tint.r * 255);
-  const green = Math.round(tint.g * 255);
-  const blue = Math.round(tint.b * 255);
+  const repaint = (): void => {
+    const context = texture.getContext();
+    const image = context.getImageData(0, 0, size, size);
+    const data = image.data;
 
-  for (let y = 0; y < size; y++) {
-    const v = y / size;
-    // Cloud cover across the band: nothing at the very bottom (the hills are
-    // there) or the very top, most of it in the middle third.
-    const band = smoothstep(0.04, 0.34, v) * (1 - smoothstep(0.62, 0.98, v));
-    for (let x = 0; x < size; x++) {
-      const value = ((field[y * size + x] ?? lowest) - lowest) / span;
-      const cloud = smoothstep(CLOUD_THRESHOLD, CLOUD_THRESHOLD + CLOUD_EDGE, value);
-      const alpha = cloud * band * CLOUD_ALPHA;
-      const at = (y * size + x) * 4;
-      data[at] = red;
-      data[at + 1] = green;
-      data[at + 2] = blue;
-      data[at + 3] = Math.round(alpha * 255);
+    // The band's own colour: the horizon's, lifted toward white so a cloud reads
+    // as lit from above rather than as a grey smear on the gradient.
+    const tint = Color3.Lerp(SKY_HORIZON, Color3.White(), 0.55);
+    const red = Math.round(tint.r * 255);
+    const green = Math.round(tint.g * 255);
+    const blue = Math.round(tint.b * 255);
+
+    for (let y = 0; y < size; y++) {
+      const v = y / size;
+      // Cloud cover across the band: nothing at the very bottom (the hills are
+      // there) or the very top, most of it in the middle third.
+      const band = smoothstep(0.04, 0.34, v) * (1 - smoothstep(0.62, 0.98, v));
+      for (let x = 0; x < size; x++) {
+        const value = ((field[y * size + x] ?? lowest) - lowest) / span;
+        const cloud = smoothstep(CLOUD_THRESHOLD, CLOUD_THRESHOLD + CLOUD_EDGE, value);
+        const alpha = cloud * band * CLOUD_ALPHA;
+        const at = (y * size + x) * 4;
+        data[at] = red;
+        data[at + 1] = green;
+        data[at + 2] = blue;
+        data[at + 3] = Math.round(alpha * 255);
+      }
     }
-  }
 
-  context.putImageData(image, 0, 0);
-  texture.update(false);
+    context.putImageData(image, 0, 0);
+    texture.update(false);
+  };
+
+  repaint();
   texture.hasAlpha = true;
   texture.uScale = CLOUD_REPEATS;
   texture.wrapU = Texture.WRAP_ADDRESSMODE;
   // Clamped vertically, or the band's bottom row bleeds into its top one.
   texture.wrapV = Texture.CLAMP_ADDRESSMODE;
-  return texture;
+  return { texture, repaint };
 }
 
 /** A seeded value-noise lattice that wraps every `CLOUD_TILES` cells. */

@@ -14,8 +14,10 @@
  *   ?quality=3      pin a rung of the degrade ladder (0 best, 5 worst)
  *   ?screenshot=1   keep the drawing buffer readable, for the smoke's frames
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
+ *   ?biome=frost    pin every level to one biome, whatever the level says
  */
 
+import type { BiomeId } from '@/data/biome-types';
 import type { PhysicsQuality } from '@/physics';
 import type { BotKind } from '@/sim';
 
@@ -52,6 +54,14 @@ export interface QueryOptions {
   qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */
   muted: boolean;
+  /**
+   * Pins the look to one biome, or null to follow each level's own (D49).
+   *
+   * A probe affordance: the campaign decides which levels are Frostfell, and
+   * this is how a Frostfell frame is photographed on any level — including the
+   * meadow ones the hero set already uses.
+   */
+  biome: BiomeId | null;
 }
 
 /**
@@ -103,7 +113,14 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     physicsQuality: parseQuality(params.get('physics')),
     qualityRung: Number.isFinite(qualityParam) ? clampRung(qualityParam) : null,
     muted: save.muted,
+    biome: parseBiome(params.get('biome')),
   };
+}
+
+function parseBiome(raw: string | null): BiomeId | null {
+  if (raw === 'frost') return 'frost';
+  if (raw === 'meadow') return 'meadow';
+  return null;
 }
 
 function parseScene(raw: string | null): SceneKind {

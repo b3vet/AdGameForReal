@@ -16,8 +16,8 @@ import type { Balance } from '@/data/types';
 /** Floats per fence: the line, the `z` it holds from and to, the wall index. */
 export const FENCE_STRIDE = 4;
 
-/** Floats per shover: x, z, half along x, half along z. */
-export const SHOVE_STRIDE = 4;
+/** Floats per shover: x, z, half along x, half along z, and how hard it pushes. */
+export const SHOVE_STRIDE = 5;
 
 /**
  * Most bodies that may shove in one step. A body only qualifies while it
@@ -39,7 +39,7 @@ export class Obstacles {
   readonly arches: Float64Array;
   archCount = 0;
 
-  /** `(x, z, halfX, halfZ)` per body close enough to push somebody. */
+  /** `(x, z, halfX, halfZ, strength)` per body close enough to push somebody. */
   readonly shovers: Float64Array;
   shoveCount = 0;
 
@@ -178,7 +178,8 @@ export class Obstacles {
       // than a footprint — so a shove that only reached the body's own width
       // would never happen at all: the body would die on the step it first
       // came within reach. `reach` is what buys the bow its approach.
-      const halfZ = halfX + (enemy.kind === 'boss' ? balance.enemies.boss.shoveReach : reach);
+      const push = shoveOf(enemy, balance, reach);
+      const halfZ = halfX + push.reach;
       if (enemy.x + halfX < xLo || enemy.x - halfX > xHi) continue;
       if (enemy.z + halfZ < zLo || enemy.z - halfZ > zHi) continue;
       const at = count * SHOVE_STRIDE;
@@ -186,8 +187,46 @@ export class Obstacles {
       this.shovers[at + 1] = enemy.z;
       this.shovers[at + 2] = halfX;
       this.shovers[at + 3] = halfZ;
+      this.shovers[at + 4] = push.strength;
       count++;
     }
     this.shoveCount = count;
   }
+}
+
+/** One body's push field: how far in front of itself it reaches, and how hard
+ *  it pushes compared with the shared `crowd.shove`. Re-used, never allocated. */
+const push = { reach: 0, strength: 1 };
+
+/**
+ * What this body's shove is worth.
+ *
+ * Everything walking on the road pushes with the shared numbers. The boss has
+ * its own reach because it never gets within a body's length of the column
+ * (`BossBalance.shoveReach`), and the two things that *run* — a charger and
+ * the Rime Fiend mid-charge — have both their own reach and their own
+ * strength, because a charge that bowed the column no harder than a grunt
+ * standing in it would not read as a charge at all (D49).
+ */
+function shoveOf(
+  enemy: EnemyState,
+  balance: Balance,
+  reach: number,
+): { reach: number; strength: number } {
+  const enemies = balance.enemies;
+  if (enemy.kind === 'boss') {
+    const charge = enemies.boss.rime.charge;
+    const charging = enemy.variant === 'rime' && enemy.charge !== undefined;
+    push.reach = charging ? charge.shoveReach : enemies.boss.shoveReach;
+    push.strength = charging ? charge.shoveStrength : 1;
+    return push;
+  }
+  if (enemy.kind === 'charger') {
+    push.reach = enemies.charger.shoveReach;
+    push.strength = enemies.charger.shoveStrength;
+    return push;
+  }
+  push.reach = reach;
+  push.strength = 1;
+  return push;
 }

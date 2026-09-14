@@ -7,7 +7,8 @@
  * in one place.
  */
 
-import type { EnemyState, SquadState } from './types';
+import { RimeCharge } from './bossCharge';
+import type { EnemyState, Lane, SquadState } from './types';
 import type { Balance } from '@/data/types';
 
 /** Slack for the stand-off distance, which lands on `contactDistance` exactly. */
@@ -20,11 +21,20 @@ export interface BossStep {
   stomped: boolean;
   stompKills: number;
   contactKills: number;
+  /** Rime Fiend only (D49): true on the step a lane charge begins. */
+  charged: boolean;
+  /** The lane it charged, valid on the step `charged` is true. */
+  chargeLane: Lane;
+  /** Units its charge ran over this step, taken nearest the boss itself. */
+  chargeKills: number;
 }
 
 export class BossController {
   private stompTimer = 0;
   private contactCarry = 0;
+
+  /** Boss 2's extra move. Idle for a demon, which never asks it anything. */
+  private readonly rime = new RimeCharge();
 
   /** Re-used every step: the sim must not allocate in hot loops (CLAUDE.md). */
   private readonly result: BossStep = {
@@ -33,6 +43,9 @@ export class BossController {
     stomped: false,
     stompKills: 0,
     contactKills: 0,
+    charged: false,
+    chargeLane: 0,
+    chargeKills: 0,
   };
 
   update(
@@ -42,6 +55,7 @@ export class BossController {
     balance: Balance,
     dt: number,
     bite = 1,
+    time = 0,
   ): BossStep {
     const out = this.result;
     out.activated = false;
@@ -49,6 +63,8 @@ export class BossController {
     out.stomped = false;
     out.stompKills = 0;
     out.contactKills = 0;
+    out.charged = false;
+    out.chargeKills = 0;
     if (!boss.alive) return out;
 
     const config = balance.enemies.boss;
@@ -68,6 +84,19 @@ export class BossController {
     const enraged = boss.enraged === true;
     const speed = boss.speed * (enraged ? config.enrageSpeedMul : 1);
     const stompInterval = enraged ? config.enrageStompInterval : config.stompInterval;
+
+    // Boss 2's lane charge (D49). While it is away from its stand it does not
+    // line itself up, close, grind or stomp — it is somewhere else — so the
+    // whole of the standing fight below is skipped for those seconds.
+    if (boss.variant === 'rime') {
+      const charge = this.rime.update(boss, squad, balance, dt, enraged, time);
+      if (charge.started) {
+        out.charged = true;
+        out.chargeLane = charge.lane;
+      }
+      out.chargeKills = charge.kills;
+      if (charge.busy) return out;
+    }
 
     // It lines itself up with the squad, slowly, and never leaves the road.
     const dx = squad.x - boss.x;

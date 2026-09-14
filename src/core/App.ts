@@ -85,6 +85,9 @@ export class App implements FrameHost, AppCommands {
       // and only a screenshot tool needs one, so it is opt-in by URL and
       // `npm run smoke` is the only thing that asks (`src/render/scene.ts`).
       preserveDrawingBuffer: new URLSearchParams(search).has('screenshot'),
+      // `?biome=frost` pins the look; without it every level brings its own
+      // (D49), which `Renderer.loadLevel` reads off the level itself.
+      ...(this.options.biome === null ? {} : { biome: this.options.biome }),
     });
     this.juice = new Juice(canvas, this.renderer, this.options.turbo === 1);
     this.audio = new GameAudio({ muted: this.muted });

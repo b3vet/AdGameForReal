@@ -61,28 +61,65 @@
         "Mage_Hat": [
           {
             "note": "hat band: the orange strip of the atlas, kept warm gold instead of clipping to white",
-            "u": [0.63, 0.72],
-            "v": [0.0, 0.16],
-            "tint": [1.1, 2.6, 1.35]
+            "u": [
+              0.63,
+              0.72
+            ],
+            "v": [
+              0.0,
+              0.16
+            ],
+            "tint": [
+              1.1,
+              2.6,
+              1.35
+            ]
           },
           {
             "note": "band buckle: the steel patch, taken gold so it reads as a buckle and not a hole",
-            "u": [0.38, 0.48],
-            "v": [0.0, 0.16],
-            "tint": [2.4, 1.6, 0.6]
+            "u": [
+              0.38,
+              0.48
+            ],
+            "v": [
+              0.0,
+              0.16
+            ],
+            "tint": [
+              2.4,
+              1.6,
+              0.6
+            ]
           },
           {
             "note": "brim and the crown's flare: the dark end of the hat's gradient strip, lifted above the crown so the brim edge is the light rim of the silhouette",
-            "v": [0.4, 1.0],
-            "tint": [12.1, 7.5, 9.0]
+            "v": [
+              0.4,
+              1.0
+            ],
+            "tint": [
+              12.1,
+              7.5,
+              9.0
+            ]
           }
         ],
         "Mage_Head": [
           {
             "note": "hair: three quarters of the head mesh and near-black in the atlas, which is what made a squad of a hundred read as a dark mass",
-            "u": [0.1, 0.26],
-            "v": [0.0, 0.22],
-            "tint": [30.0, 22.0, 13.0]
+            "u": [
+              0.1,
+              0.26
+            ],
+            "v": [
+              0.0,
+              0.22
+            ],
+            "tint": [
+              30.0,
+              22.0,
+              13.0
+            ]
           }
         ]
       },
@@ -145,7 +182,10 @@
         "Skeleton_Warrior_Helmet"
       ],
       "variants": {
-        "default": []
+        "default": [],
+        "shield": [
+          "Skeleton_Shield_Large_A"
+        ]
       },
       "tints": {
         "Skeleton_Warrior_Cloak": [
@@ -153,6 +193,25 @@
           1.15,
           1.0
         ]
+      }
+    },
+    {
+      "id": "charger",
+      "kind": "model",
+      "url": "models/charger.glb",
+      "vat": "vat-charger",
+      "scale": 0.45,
+      "animations": {
+        "idle": "Idle",
+        "run": "Run",
+        "attack": "Punch",
+        "death": "Death"
+      },
+      "body": [
+        "Dino"
+      ],
+      "variants": {
+        "default": []
       }
     },
     {
@@ -169,16 +228,23 @@
       }
     },
     {
+      "id": "boss_rime",
+      "kind": "model",
+      "url": "models/boss_rime.glb",
+      "scale": 1,
+      "animations": {
+        "idle": "Idle",
+        "walk": "Walk",
+        "attack": "Punch",
+        "charge": "Run",
+        "hit": "HitReact",
+        "death": "Death"
+      }
+    },
+    {
       "id": "prop_fence",
       "kind": "model",
       "url": "props/fence.glb",
-      "animations": {},
-      "scale": 0.35
-    },
-    {
-      "id": "prop_grave_A",
-      "kind": "model",
-      "url": "props/grave_A.glb",
       "animations": {},
       "scale": 0.35
     },
@@ -190,37 +256,9 @@
       "scale": 0.35
     },
     {
-      "id": "prop_pillar",
-      "kind": "model",
-      "url": "props/pillar.glb",
-      "animations": {},
-      "scale": 0.35
-    },
-    {
       "id": "prop_post_lantern",
       "kind": "model",
       "url": "props/post_lantern.glb",
-      "animations": {},
-      "scale": 0.35
-    },
-    {
-      "id": "prop_tree_dead_large",
-      "kind": "model",
-      "url": "props/tree_dead_large.glb",
-      "animations": {},
-      "scale": 0.35
-    },
-    {
-      "id": "prop_tree_dead_medium",
-      "kind": "model",
-      "url": "props/tree_dead_medium.glb",
-      "animations": {},
-      "scale": 0.35
-    },
-    {
-      "id": "prop_tree_dead_small",
-      "kind": "model",
-      "url": "props/tree_dead_small.glb",
       "animations": {},
       "scale": 0.35
     },
@@ -274,6 +312,20 @@
       "scale": 1
     },
     {
+      "id": "prop_dungeon_rubble_large",
+      "kind": "model",
+      "url": "props/dungeon_rubble_large.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
+      "id": "prop_dungeon_rubble_half",
+      "kind": "model",
+      "url": "props/dungeon_rubble_half.glb",
+      "animations": {},
+      "scale": 1
+    },
+    {
       "id": "texture_road_cobble",
       "kind": "texture",
       "url": "textures/road_cobble.jpg"
@@ -282,6 +334,16 @@
       "id": "texture_field_grass",
       "kind": "texture",
       "url": "textures/field_grass.jpg"
+    },
+    {
+      "id": "texture_road_frost",
+      "kind": "texture",
+      "url": "textures/road_frost.jpg"
+    },
+    {
+      "id": "texture_field_snow",
+      "kind": "texture",
+      "url": "textures/field_snow.jpg"
     },
     {
       "id": "vat-mage",
@@ -300,6 +362,12 @@
       "kind": "vat",
       "url": "vat/skeleton_warrior.bin",
       "metaUrl": "vat/skeleton_warrior.json"
+    },
+    {
+      "id": "vat-charger",
+      "kind": "vat",
+      "url": "vat/charger.bin",
+      "metaUrl": "vat/charger.json"
     },
     {
       "id": "sfx_block_kill",

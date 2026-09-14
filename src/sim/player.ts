@@ -72,6 +72,25 @@ export function upgradeCost(level: number): number {
   return Math.round(up.baseCost * Math.pow(up.costGrowth, Math.max(0, Math.floor(level))));
 }
 
+/**
+ * The same, for a named track: the ladder above, except that a track listed in
+ * `upgrades.starterRung` prices its own first rung (D50).
+ *
+ * One track is listed as shipped, `gateBonus`, and the reason is the Milestone
+ * 6 finding: it is the only upgrade that *compounds* — it moves what every
+ * `add` gate on the level prints — so until a player owns a rung of it, what
+ * the Academy has sold them is worth a few percent of their output and a
+ * milestone level cannot be gated by it. Making the first rung cheap puts one
+ * in the player's hands by about level 7 and leaves every price above it
+ * exactly where the economy was tuned.
+ */
+export function upgradeCostFor(id: UpgradeId, level: number): number {
+  const rung = Math.max(0, Math.floor(level));
+  const starter = progression.upgrades.starterRung?.[id];
+  if (rung === 0 && starter !== undefined) return Math.round(starter);
+  return upgradeCost(rung);
+}
+
 export function upgradeLevel(player: PlayerState, id: UpgradeId): number {
   return Math.min(maxUpgradeLevel, Math.max(0, Math.floor(player.upgrades[id])));
 }
@@ -79,7 +98,7 @@ export function upgradeLevel(player: PlayerState, id: UpgradeId): number {
 /** What the next level of `id` costs, or null when it is already maxed. */
 export function nextUpgradeCost(player: PlayerState, id: UpgradeId): number | null {
   const level = upgradeLevel(player, id);
-  return level >= maxUpgradeLevel ? null : upgradeCost(level);
+  return level >= maxUpgradeLevel ? null : upgradeCostFor(id, level);
 }
 
 /** Price of owning `id` at all, and of its one evolution (D33). */

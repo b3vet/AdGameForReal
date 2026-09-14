@@ -38,13 +38,14 @@
  */
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { CLOUD_CENTER_Y, buildCloudBand, buildCloudTexture, scrollClouds } from './skyClouds';
+import { CLOUD_CENTER_Y, buildCloudBand, buildCloudSheet, scrollClouds } from './skyClouds';
+import type { CloudSheet } from './skyClouds';
 import { SKY_HAZE, SKY_HORIZON, SKY_MID, SKY_ZENITH } from './theme';
 import { mulberry32 } from '@/sim';
 
@@ -88,6 +89,10 @@ const GRADIENT: readonly { at: number; color: Color3 }[] = [
   { at: 0.19, color: SKY_ZENITH },
   { at: 1, color: SKY_ZENITH },
 ];
+// The four `Color3`s above are the palette's own shared instances, which a
+// biome switch rewrites in place (`./palette.ts`). So the table is always the
+// biome's gradient; what does *not* follow on its own is the vertex buffer
+// baked from it, which is what `SkyDome.setBiome` rewrites.
 
 /**
  * The hills, in the same units: a ridge line that wanders between `HILL_MIN`
@@ -109,14 +114,14 @@ const UNDER_HORIZON = 0.94;
 export class SkyDome {
   private readonly dome: Mesh;
   private readonly clouds: Mesh;
-  private readonly cloudTexture: DynamicTexture;
+  private readonly sheet: CloudSheet;
   private readonly materials: StandardMaterial[];
 
   constructor(scene: Scene) {
     this.dome = buildDome(scene);
 
-    this.cloudTexture = buildCloudTexture(scene);
-    this.clouds = buildCloudBand(scene, this.cloudTexture, unlitSky(scene, 'skyCloudMat'));
+    this.sheet = buildCloudSheet(scene);
+    this.clouds = buildCloudBand(scene, this.sheet.texture, unlitSky(scene, 'skyCloudMat'));
 
     const materials: StandardMaterial[] = [];
     for (const mesh of [this.dome, this.clouds]) {
@@ -129,6 +134,21 @@ export class SkyDome {
       if (mesh.material instanceof StandardMaterial) materials.push(mesh.material);
     }
     this.materials = materials;
+  }
+
+  /**
+   * Repaints the sky in the biome now in force (D49): the dome's gradient and
+   * its hill band, and the tint of the clouds over them.
+   *
+   * Both are *rewritten*, not rebuilt — `updateVerticesData` into the existing
+   * colour buffer and `putImageData` into the existing sheet — so a level that
+   * changes biome adds no mesh, no material and no texture to the scene. The
+   * ridge line is seeded and the noise field is kept, so the skyline and the
+   * cloud shapes are the same ones in both biomes; only their colour moves.
+   */
+  setBiome(): void {
+    this.dome.updateVerticesData(VertexBuffer.ColorKind, domeColors(), false, false);
+    this.sheet.repaint();
   }
 
   /**
@@ -151,12 +171,12 @@ export class SkyDome {
   update(cameraX: number, cameraZ: number, dt: number): void {
     this.dome.position.set(cameraX, 0, cameraZ);
     this.clouds.position.set(cameraX, CLOUD_CENTER_Y, cameraZ);
-    scrollClouds(this.cloudTexture, dt);
+    scrollClouds(this.sheet.texture, dt);
   }
 
   dispose(): void {
     for (const material of this.materials) material.dispose();
-    this.cloudTexture.dispose();
+    this.sheet.texture.dispose();
     this.dome.dispose();
     this.clouds.dispose();
   }
@@ -174,33 +194,21 @@ function buildDome(scene: Scene): Mesh {
   const rings = RING_ELEVATIONS.length;
   const columns = DOME_SEGMENTS + 1;
   const positions = new Float32Array(rings * columns * 3);
-  const colors = new Float32Array(rings * columns * 4);
   const indices: number[] = [];
-
-  const ridge = ridgeLine(DOME_SEGMENTS);
-  const color = new Color3();
 
   for (let r = 0; r < rings; r++) {
     const elevation = ((RING_ELEVATIONS[r] ?? 0) * Math.PI) / 180;
     const height = Math.sin(elevation);
     const around = Math.cos(elevation);
     for (let c = 0; c < columns; c++) {
-      // The last column repeats the first, so the seam's colours interpolate
-      // the same way every other pair of columns does.
-      const step = c % DOME_SEGMENTS;
       const angle = (c / DOME_SEGMENTS) * Math.PI * 2;
       const index = r * columns + c;
       positions[index * 3] = Math.sin(angle) * around * SKY_RADIUS;
       positions[index * 3 + 1] = height * SKY_RADIUS;
       positions[index * 3 + 2] = Math.cos(angle) * around * SKY_RADIUS;
-
-      colorAt(height, ridge[step] ?? HILL_MIN, color);
-      colors[index * 4] = color.r;
-      colors[index * 4 + 1] = color.g;
-      colors[index * 4 + 2] = color.b;
-      colors[index * 4 + 3] = 1;
     }
   }
+  const colors = domeColors();
 
   for (let r = 0; r < rings - 1; r++) {
     for (let c = 0; c < DOME_SEGMENTS; c++) {
@@ -253,6 +261,38 @@ function unlitSky(scene: Scene, name: string): StandardMaterial {
   // the horizon and to nothing at the zenith.
   material.fogEnabled = false;
   return material;
+}
+
+/**
+ * The dome's whole colour buffer, in the biome now in force.
+ *
+ * A function rather than part of `buildDome` because it is run twice: once to
+ * build the mesh, and again whenever the biome changes the roles it reads
+ * (`SkyDome.setBiome`). The ridge is seeded, so both calls put the hills in the
+ * same place.
+ */
+function domeColors(): Float32Array {
+  const rings = RING_ELEVATIONS.length;
+  const columns = DOME_SEGMENTS + 1;
+  const colors = new Float32Array(rings * columns * 4);
+  const ridge = ridgeLine(DOME_SEGMENTS);
+  const color = new Color3();
+
+  for (let r = 0; r < rings; r++) {
+    const height = Math.sin(((RING_ELEVATIONS[r] ?? 0) * Math.PI) / 180);
+    for (let c = 0; c < columns; c++) {
+      // The last column repeats the first, so the seam's colours interpolate
+      // the same way every other pair of columns does.
+      const step = c % DOME_SEGMENTS;
+      const index = r * columns + c;
+      colorAt(height, ridge[step] ?? HILL_MIN, color);
+      colors[index * 4] = color.r;
+      colors[index * 4 + 1] = color.g;
+      colors[index * 4 + 2] = color.b;
+      colors[index * 4 + 3] = 1;
+    }
+  }
+  return colors;
 }
 
 /**

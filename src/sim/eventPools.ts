@@ -35,6 +35,18 @@ export function createEventPools() {
     splashes: new Pool<EventOf<'splash'>>(() => ({ type: 'splash', x: 0, z: 0, radius: 0 })),
     chains: new Pool<EventOf<'chain'>>(() => ({ type: 'chain', from: 0, to: 0 })),
     slows: new Pool<EventOf<'enemySlowed'>>(() => ({ type: 'enemySlowed', enemyId: 0, seconds: 0 })),
+    shieldBreaks: new Pool<EventOf<'shieldBreak'>>(() => ({
+      type: 'shieldBreak',
+      enemyId: 0,
+      x: 0,
+      z: 0,
+    })),
+    charges: new Pool<EventOf<'charge'>>(() => ({
+      type: 'charge',
+      enemyId: 0,
+      kind: 'charger',
+      lane: 0,
+    })),
     shatters: new Pool<EventOf<'enemyShattered'>>(() => ({
       type: 'enemyShattered',
       enemyId: 0,

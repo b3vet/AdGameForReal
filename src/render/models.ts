@@ -295,6 +295,27 @@ export function liftEmissive(material: unknown, amount: number): void {
 }
 
 /**
+ * A flat additive wash over a model, in a colour of its own.
+ *
+ * The counterpart to `liftEmissive`, and the one thing that cannot be done with
+ * `tintMaterial`: an albedo multiplier can only ever *remove* light from a
+ * channel, so a model whose atlas has almost no blue in it — the KayKit orange
+ * pine, the dungeon pack's brown rubble — can be darkened and desaturated but
+ * never frosted. Emissive *adds*, and with no `emissiveTexture` behind it the
+ * amount added is the same everywhere: a uniform pale-cold light sitting on the
+ * whole prop, which is what a dusting of snow looks like from twenty metres
+ * (D49).
+ *
+ * Keep it small. This is light with no shading in it, so past about a quarter
+ * the prop stops having a lit side and a shaded one and goes flat.
+ */
+export function dustEmissive(material: unknown, r: number, g: number, b: number): void {
+  if (!(material instanceof PBRMaterial)) return;
+  material.emissiveTexture = null;
+  material.emissiveColor = new Color3(r, g, b);
+}
+
+/**
  * Warms or lightens a model's albedo. PBR multiplies `albedoColor` by
  * `albedoTexture`, so this shifts the whole model without touching the atlas
  * it shares with every other prop cut from the same pack.

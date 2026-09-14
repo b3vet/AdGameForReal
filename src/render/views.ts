@@ -35,6 +35,7 @@ import { SquadView } from './squad';
 import { POOL } from './theme';
 import { WallView } from './walls';
 import { WispView } from './wisp';
+import type { BiomeId } from '@/data/biome-types';
 import type { LevelDef } from '@/sim';
 
 /**
@@ -140,6 +141,24 @@ export class SceneViews {
       this.road.load(),
       this.walls.load(),
     ]);
+  }
+
+  /**
+   * Repaints every view that a biome changes (D49): the ground under the road,
+   * the sky over it, and which kinds the roadside is dressed with.
+   *
+   * Called from `Renderer.setBiome`, which has already switched the palette —
+   * so every role these views read has moved before any of them is asked to
+   * re-read one. Nothing here creates or destroys a mesh, a material or a
+   * texture: both biomes' albedos and both biomes' prop meshes were built at
+   * boot, so a campaign's worth of switches leaves the scene exactly as it
+   * booted. The roadside's own instances are written by the `dressRoadside`
+   * that follows in `loadLevel`.
+   */
+  setBiome(id: BiomeId): void {
+    this.road.setBiome(id);
+    this.sky.setBiome();
+    this.props.setBiome(id);
   }
 
   /** Locks the materials that never change, after the first readiness pass. */

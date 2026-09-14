@@ -15,10 +15,12 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Scene } from '@babylonjs/core/scene';
 
+import { biomeOfLevel } from './biome';
 import { CameraRig } from './camera';
 import { loadDisplayFont } from './glyphAtlas';
 import { PreviewBackdrop } from './preview';
-import { createEngine, createScene } from './scene';
+import { setBiome as setPaletteBiome } from './palette';
+import { applyBiomeToScene, createEngine, createScene } from './scene';
 import { writeBossShadow } from './shadows';
 import { buildPaletteSwatches, swatchesWanted } from './swatch';
 import { DEFAULT_ROAD_END_Z, ROAD_PAST_ARENA, ROAD_START_Z } from './theme';
@@ -26,6 +28,7 @@ import { applyToonRampToScene } from './toonRamp';
 import { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
+import type { BiomeId } from '@/data/biome-types';
 import { weaponOf } from '@/sim';
 import type { LevelDef, PlayerState, RunState, SimEvent, SquadState } from '@/sim';
 
@@ -41,6 +44,14 @@ export interface RendererOptions {
    * wants it (`?screenshot=1`); see `createEngine`.
    */
   preserveDrawingBuffer?: boolean;
+  /**
+   * Pins every level to one biome, whatever the level says (`?biome=frost`).
+   *
+   * A probe affordance, not a game one: the biome a level is set in is the
+   * level's own (D49), and this is how a Frostfell frame is photographed on a
+   * level the campaign has not reached yet.
+   */
+  biome?: BiomeId;
 }
 
 /**
@@ -57,6 +68,10 @@ export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly preserveDrawingBuffer: boolean;
   private maxPixelRatio: number;
+  /** `?biome=`, or undefined to follow each level's own (see `RendererOptions`). */
+  private readonly forcedBiome: BiomeId | undefined;
+  /** The biome the scene is painted in right now. */
+  private biome: BiomeId = 'meadow';
 
   private engine: Engine | null = null;
   private sceneRef: Scene | null = null;
@@ -90,9 +105,17 @@ export class Renderer {
     this.canvas = canvas;
     this.maxPixelRatio = Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO);
     this.preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
+    this.forcedBiome = options.biome;
   }
 
   async init(): Promise<void> {
+    // Before anything is built, so every material, vertex colour and painted
+    // texture in the scene is made in the right biome the first time and the
+    // boot warm-up compiles exactly what the first frame draws. A level load
+    // that changes biome afterwards goes through `setBiome`.
+    this.biome = this.forcedBiome ?? 'meadow';
+    setPaletteBiome(this.biome);
+
     const engine = createEngine(this.canvas, {
       preserveDrawingBuffer: this.preserveDrawingBuffer,
       effectivePixelRatio: this.effectivePixelRatio(),
@@ -125,6 +148,10 @@ export class Renderer {
     views.road.setExtent(ROAD_START_Z, DEFAULT_ROAD_END_Z, 168);
 
     await views.load();
+    // Every view's first reading of the biome, once its meshes and materials
+    // exist. `setBiome` above is for *changes*, and there is none to make here:
+    // the palette was switched before the scene was built.
+    views.setBiome(this.biome);
     views.dressRoadside(1, ROAD_START_Z, DEFAULT_ROAD_END_Z);
 
     scene.blockMaterialDirtyMechanism = false;
@@ -354,9 +381,48 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
+  /**
+   * Repaints the scene in a biome (D49), and answers whether it had to.
+   *
+   * The palette switches first and the views re-read their roles after, which
+   * is the whole order: `src/render/palette.ts` rewrites every `Color3` a role
+   * has handed out *in place*, so a material or a module constant holding one
+   * follows on its own, and everything baked from a role — a vertex buffer, a
+   * painted texture, a copied material colour — is repainted by the views.
+   *
+   * Nothing is allocated: every biome's ground albedo and every biome's prop
+   * meshes are built at boot precisely so that this is a swap. The warm-up pass
+   * that follows is therefore a no-op in the normal case, and the guarantee
+   * that it stays one — a material that somehow did arrive late is compiled
+   * here, during the level's load, rather than inside the frame that draws it.
+   */
+  setBiome(id: BiomeId): boolean {
+    if (this.disposed) return false;
+    // The renderer's own record, not the palette's answer: `init` switches the
+    // palette before any view exists, so a first level on a pinned biome would
+    // find the palette already there and skip the fan-out the views still need.
+    if (id === this.biome) return false;
+    this.biome = id;
+    setPaletteBiome(id);
+    const scene = this.sceneRef;
+    if (scene !== null) applyBiomeToScene(scene);
+    this.views?.setBiome(id);
+    void this.warmUp();
+    return true;
+  }
+
+  /** Which biome the scene is painted in. The debug panel prints it. */
+  get biomeId(): BiomeId {
+    return this.biome;
+  }
+
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
+    // Before the views are handed the level: the road's extent, the roadside's
+    // layout and the arena all land inside `loadLevel`, and they have to land
+    // on the biome this level is set in (`./biome.ts`).
+    this.setBiome(biomeOfLevel(level, this.forcedBiome));
     this.views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA);
     this.rig?.reset();
   }

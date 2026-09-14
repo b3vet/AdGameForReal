@@ -49,6 +49,7 @@ export {
   WALL_STONE_COLOR,
   WISP_COLOR,
   palette,
+  paletteBiome,
   paletteColor,
   paletteHex,
 } from './palette';

@@ -285,7 +285,8 @@ describe('death events', () => {
         expect(`${where}: ${twice.join(',')}`).toBe(`${where}: `);
       }
     }
-    // Fifty whole levels of bot play, and a Milestone 3 level is twice the road
-    // a Milestone 2 one was: well past vitest's five-second default.
-  }, 120_000);
+    // Two hundred whole levels of bot play since Frostfell doubled the campaign
+    // (D49), and a Milestone 3 level is twice the road a Milestone 2 one was:
+    // well past vitest's five-second default, and the slowest test in the sim.
+  }, 300_000);
 });

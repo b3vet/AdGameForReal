@@ -94,6 +94,23 @@ const RIGS = [
       { id: 'death', animation: 'Death_A', loop: false },
     ],
   },
+  /**
+   * The charger (D49). One rig, four ranges, and no `walk`: a charger is never
+   * walking — it stands at its row, runs its lane, lunges and dies. The
+   * shielded brute is not here because it is the warrior above wearing an
+   * accessory, and a VAT is bone matrices: the same baked texture drives the
+   * shield exactly as it drives the mage's staffs (D23, docs/ASSETS.md).
+   */
+  {
+    rig: 'charger',
+    model: 'models/charger.glb',
+    ranges: [
+      { id: 'idle', animation: 'Idle', loop: true },
+      { id: 'run', animation: 'Run', loop: true },
+      { id: 'attack', animation: 'Punch', loop: false },
+      { id: 'death', animation: 'Death', loop: false },
+    ],
+  },
 ];
 
 /**

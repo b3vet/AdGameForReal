@@ -742,5 +742,829 @@
         "max": 0.1
       }
     }
+  },
+  {
+    "index": 21,
+    "biome": "frost",
+    "seed": 3877,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 2,
+    "bruteRows": 2,
+    "chargerRows": 1,
+    "shieldRows": 0,
+    "wallRows": 1,
+    "startCount": 23,
+    "peakTarget": 500,
+    "hpScale": 0.948,
+    "streamPressure": 0.9,
+    "streamDensity": 0.85,
+    "boss": {
+      "hp": 19000,
+      "bite": 0.5,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 26,
+        "max": 104
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 22,
+    "biome": "frost",
+    "seed": 4014,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 0,
+    "wallRows": 1,
+    "startCount": 24,
+    "peakTarget": 500,
+    "hpScale": 0.956,
+    "streamPressure": 0.88,
+    "streamDensity": 1.1,
+    "boss": {
+      "hp": 19200,
+      "bite": 0.58,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 27,
+        "max": 108
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 23,
+    "biome": "frost",
+    "seed": 4151,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 25,
+    "peakTarget": 500,
+    "hpScale": 0.964,
+    "streamPressure": 0.9,
+    "streamDensity": 0.8,
+    "boss": {
+      "hp": 19300,
+      "bite": 0.46,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 28,
+        "max": 112
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 24,
+    "biome": "frost",
+    "seed": 4288,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 26,
+    "peakTarget": 500,
+    "hpScale": 0.972,
+    "streamPressure": 0.91,
+    "streamDensity": 1.15,
+    "boss": {
+      "hp": 19500,
+      "bite": 0.55,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 29,
+        "max": 116
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 25,
+    "milestone": true,
+    "biome": "frost",
+    "seed": 4425,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 27,
+    "peakTarget": 500,
+    "hpScale": 0.98,
+    "streamPressure": 0.9,
+    "streamDensity": 0.78,
+    "boss": {
+      "hp": 20200,
+      "bite": 0.7,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 33,
+        "max": 132
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 26,
+    "biome": "frost",
+    "seed": 4562,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 8,
+    "hordeRows": 3,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 0,
+    "wallRows": 1,
+    "startCount": 28,
+    "peakTarget": 500,
+    "hpScale": 0.988,
+    "streamPressure": 0.92,
+    "streamDensity": 0.95,
+    "boss": {
+      "hp": 19900,
+      "bite": 0.48,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 31,
+        "max": 124
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 27,
+    "biome": "frost",
+    "seed": 4699,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 29,
+    "peakTarget": 500,
+    "hpScale": 0.996,
+    "streamPressure": 0.93,
+    "streamDensity": 1.05,
+    "boss": {
+      "hp": 20100,
+      "bite": 0.56,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 32,
+        "max": 128
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 28,
+    "biome": "frost",
+    "seed": 4836,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 30,
+    "peakTarget": 500,
+    "hpScale": 1.004,
+    "streamPressure": 0.9,
+    "streamDensity": 0.82,
+    "boss": {
+      "hp": 20200,
+      "bite": 0.45,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 33,
+        "max": 132
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 29,
+    "biome": "frost",
+    "seed": 4973,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 2,
+    "shieldRows": 0,
+    "wallRows": 1,
+    "startCount": 31,
+    "peakTarget": 500,
+    "hpScale": 1.012,
+    "streamPressure": 0.93,
+    "streamDensity": 1.12,
+    "boss": {
+      "hp": 20400,
+      "bite": 0.58,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 34,
+        "max": 136
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 30,
+    "milestone": true,
+    "biome": "frost",
+    "seed": 5110,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 32,
+    "peakTarget": 500,
+    "hpScale": 1.02,
+    "streamPressure": 0.91,
+    "streamDensity": 0.8,
+    "boss": {
+      "hp": 21100,
+      "bite": 0.7,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 38,
+        "max": 152
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 31,
+    "biome": "frost",
+    "seed": 5247,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 3,
+    "bruteRows": 0,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 33,
+    "peakTarget": 500,
+    "hpScale": 1.028,
+    "streamPressure": 0.92,
+    "streamDensity": 0.98,
+    "boss": {
+      "hp": 20800,
+      "bite": 0.5,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 36,
+        "max": 144
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 32,
+    "biome": "frost",
+    "seed": 5384,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 34,
+    "peakTarget": 500,
+    "hpScale": 1.036,
+    "streamPressure": 0.94,
+    "streamDensity": 1.08,
+    "boss": {
+      "hp": 21000,
+      "bite": 0.57,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 37,
+        "max": 148
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 33,
+    "biome": "frost",
+    "seed": 5521,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 2,
+    "bruteRows": 0,
+    "chargerRows": 2,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 35,
+    "peakTarget": 500,
+    "hpScale": 1.044,
+    "streamPressure": 0.92,
+    "streamDensity": 0.84,
+    "boss": {
+      "hp": 21100,
+      "bite": 0.47,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 38,
+        "max": 152
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 34,
+    "biome": "frost",
+    "seed": 5658,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 9,
+    "hordeRows": 3,
+    "bruteRows": 0,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 36,
+    "peakTarget": 500,
+    "hpScale": 1.052,
+    "streamPressure": 0.93,
+    "streamDensity": 0.95,
+    "boss": {
+      "hp": 21300,
+      "bite": 0.59,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 39,
+        "max": 156
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 35,
+    "milestone": true,
+    "biome": "frost",
+    "seed": 5795,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 37,
+    "peakTarget": 500,
+    "hpScale": 1.06,
+    "streamPressure": 0.92,
+    "streamDensity": 0.8,
+    "boss": {
+      "hp": 22000,
+      "bite": 0.7,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 43,
+        "max": 172
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 36,
+    "biome": "frost",
+    "seed": 5932,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 2,
+    "bruteRows": 0,
+    "chargerRows": 2,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 38,
+    "peakTarget": 500,
+    "hpScale": 1.068,
+    "streamPressure": 0.94,
+    "streamDensity": 1.0,
+    "boss": {
+      "hp": 21700,
+      "bite": 0.52,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 41,
+        "max": 164
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 37,
+    "biome": "frost",
+    "seed": 6069,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 3,
+    "bruteRows": 0,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 39,
+    "peakTarget": 500,
+    "hpScale": 1.076,
+    "streamPressure": 0.93,
+    "streamDensity": 1.1,
+    "boss": {
+      "hp": 21900,
+      "bite": 0.58,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 42,
+        "max": 168
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 38,
+    "biome": "frost",
+    "seed": 6206,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 2,
+    "bruteRows": 0,
+    "chargerRows": 2,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 40,
+    "peakTarget": 500,
+    "hpScale": 1.084,
+    "streamPressure": 0.95,
+    "streamDensity": 0.86,
+    "boss": {
+      "hp": 22000,
+      "bite": 0.48,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 43,
+        "max": 172
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 39,
+    "biome": "frost",
+    "seed": 6343,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 2,
+    "bruteRows": 1,
+    "chargerRows": 1,
+    "shieldRows": 1,
+    "wallRows": 1,
+    "startCount": 41,
+    "peakTarget": 500,
+    "hpScale": 1.092,
+    "streamPressure": 0.93,
+    "streamDensity": 1.16,
+    "boss": {
+      "hp": 22200,
+      "bite": 0.6,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 44,
+        "max": 176
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
+  },
+  {
+    "index": 40,
+    "milestone": true,
+    "biome": "frost",
+    "seed": 6480,
+    "rows": 19,
+    "gateRows": 14,
+    "mixedRows": 10,
+    "hordeRows": 2,
+    "bruteRows": 0,
+    "chargerRows": 2,
+    "shieldRows": 1,
+    "wallRows": 2,
+    "startCount": 42,
+    "peakTarget": 500,
+    "hpScale": 1.1,
+    "streamPressure": 0.94,
+    "streamDensity": 0.82,
+    "boss": {
+      "hp": 22900,
+      "bite": 0.7,
+      "kind": "rime"
+    },
+    "gateValues": {
+      "mul": {
+        "min": 2,
+        "max": 3
+      },
+      "add": {
+        "min": 1,
+        "max": 400
+      },
+      "sub": {
+        "min": 48,
+        "max": 192
+      },
+      "fireRate": {
+        "min": 0.03,
+        "max": 0.1
+      }
+    }
   }
 ]

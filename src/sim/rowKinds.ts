@@ -22,6 +22,10 @@ export const MIXED_ROW = 1;
 export const STREAM_ROW = 2;
 export const HORDE_ROW = 3;
 export const BRUTE_ROW = 4;
+/** Frostfell's two (D49). Threat rows like `BRUTE_ROW`: no gates, bodies in a
+ *  lane, dealt out of the same pool and subject to the same order rules. */
+export const CHARGER_ROW = 5;
+export const SHIELD_ROW = 6;
 
 /**
  * The kind of every row, dealt rather than rolled.
@@ -44,13 +48,27 @@ export function dealRowKinds(rng: Rng, config: LevelGenConfig, rowCount: number)
   const threats = rowCount - gateRows;
   const hordes = Math.min(threats, Math.max(0, Math.round(config.hordeRows)));
   const brutes = Math.min(threats - hordes, Math.max(0, Math.round(config.bruteRows)));
+  // Frostfell's two (D49). Absent means zero, which is every level of biome 1,
+  // so the twenty levels that predate them deal exactly the mix they always
+  // did — and they are taken after the hordes and the brutes, so a level that
+  // over-books its threat rows loses its plain streams first.
+  const chargers = Math.min(
+    threats - hordes - brutes,
+    Math.max(0, Math.round(config.chargerRows ?? 0)),
+  );
+  const shields = Math.min(
+    threats - hordes - brutes - chargers,
+    Math.max(0, Math.round(config.shieldRows ?? 0)),
+  );
 
   const tail: number[] = [];
   for (let i = 0; i < gateRows - 1 - mixed; i++) tail.push(GATE_ROW);
   for (let i = 0; i < mixed; i++) tail.push(MIXED_ROW);
   for (let i = 0; i < hordes; i++) tail.push(HORDE_ROW);
   for (let i = 0; i < brutes; i++) tail.push(BRUTE_ROW);
-  for (let i = 0; i < threats - hordes - brutes; i++) tail.push(STREAM_ROW);
+  for (let i = 0; i < chargers; i++) tail.push(CHARGER_ROW);
+  for (let i = 0; i < shields; i++) tail.push(SHIELD_ROW);
+  for (let i = 0; i < threats - hordes - brutes - chargers - shields; i++) tail.push(STREAM_ROW);
   shuffle(rng, tail);
 
   // A long run of threat rows is a dead zone: the squad cannot grow while the

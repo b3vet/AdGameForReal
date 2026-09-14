@@ -88,6 +88,19 @@ function pickLanes(rng: Rng, count: number): Lane[] {
   return chosen;
 }
 
+/**
+ * What one body of this kind is worth against a grunt block of the same
+ * budget. A brute is fewer, much tougher units; a shielded brute is a brute
+ * (its own extra discount is `shieldRow`'s, since the shield is the rest of
+ * it); a charger is a single runner sized to be shot down in the second and a
+ * half it gives you.
+ */
+function kindFrac(kind: EnemyKind): number {
+  if (kind === 'brute' || kind === 'shieldBrute') return balance.gen.bruteUnitFrac;
+  if (kind === 'charger') return balance.enemies.charger.unitFrac;
+  return 1;
+}
+
 function blockUnits(
   rng: Rng,
   config: LevelGenConfig,
@@ -98,8 +111,7 @@ function blockUnits(
   const gen = balance.gen;
   const frac = randomRange(rng, gen.enemyFrac.min, gen.enemyFrac.max);
   const gruntUnits = estimate * frac * config.hpScale * scale * genDials(config).blockScale;
-  const kindScale = kind === 'brute' ? gen.bruteUnitFrac : 1;
-  return Math.max(1, Math.round(gruntUnits * kindScale));
+  return Math.max(1, Math.round(gruntUnits * kindFrac(kind)));
 }
 
 /** A block standing short of a gate row, so the player meets it on the way in. */
@@ -212,6 +224,60 @@ export function bruteRow(rng: Rng, config: LevelGenConfig, z: number, budget: Ro
     enemies.push({ kind: 'brute', lane, units: blockUnits(rng, config, budget.estimate, 'brute', share) });
   }
   return { z, gates: emptyGates(), enemies, streams: [] };
+}
+
+/**
+ * A charger row (D49): one or two runners standing in their lanes, waiting.
+ *
+ * Built like a brute row — the row's threat is one budget split across its
+ * lanes, so two chargers are two half-sized chargers rather than twice the
+ * row — because the question it asks is the same shape: which lane is the
+ * squad going to be standing in when this goes off. What makes it a different
+ * question is that a charger *moves*, and `enemies.charger.lanePick` decides
+ * how far it will come to find you.
+ */
+export function chargerRow(
+  rng: Rng,
+  config: LevelGenConfig,
+  z: number,
+  budget: RowBudget,
+): RowDef {
+  const range = balance.gen.chargerLanes;
+  const lanes = pickLanes(rng, randomInt(rng, range.min, range.max));
+  const share = 1 / lanes.length;
+  const enemies: RowEnemyDef[] = [];
+  for (const lane of lanes) {
+    enemies.push({
+      kind: 'charger',
+      lane,
+      units: blockUnits(rng, config, budget.estimate, 'charger', share),
+    });
+  }
+  return { z, gates: emptyGates(), enemies, streams: [] };
+}
+
+/**
+ * A shield row (D49): one shielded brute, alone in its lane.
+ *
+ * Alone, and smaller than a plain brute block (`gen.shieldUnitFrac`), because
+ * the shield is already worth more than the body it hides: the block has to be
+ * cleared *through* a wall that takes hits at half rate, so two of them on one
+ * row is not a choice between lanes, it is a row nobody gets through.
+ */
+export function shieldRow(
+  rng: Rng,
+  config: LevelGenConfig,
+  z: number,
+  budget: RowBudget,
+): RowDef {
+  const lane = pickLanes(rng, 1)[0] ?? 0;
+  const units = Math.max(
+    1,
+    Math.round(
+      blockUnits(rng, config, budget.estimate, 'shieldBrute', 1) * balance.gen.shieldUnitFrac,
+    ),
+  );
+  return { z, gates: emptyGates(), enemies: [{ kind: 'shieldBrute', lane, units }], streams: [] };
 }
 
 function streamDuration(rng: Rng): number {

@@ -1,23 +1,18 @@
 /**
- * Roadside dressing down both edges of the road, from the KayKit Halloween Bits
- * pack.
+ * Roadside dressing down both edges of the road: how a biome's prop kinds
+ * (`./propKinds.ts`) are laid out, instanced and frozen.
  *
- * Milestone 2 dressed a night graveyard: dead trees, gravestones and lanterns.
- * Under D28's daylight the same set reads as a cemetery at noon — the wrong
- * tone entirely — so the mix is re-weighted around the pack's orange pines,
- * with the fence runs that make a country lane and a quarter as many
- * gravestones. The dead trees are gone: seen from Milestone 3's lower camera
- * they are bare trunks at eye level, and in daylight a brown trunk beside the
- * road reads as a fallen log in the frame rather than as a silhouette against
- * the sky. Dropping the kind also gives a draw call back.
+ * Every prop type is one mesh drawn as thin instances, so a biome costs one
+ * draw call per type it dresses with, however many of them there are — and a
+ * type the biome does not dress with costs nothing at all, because a mesh with
+ * no instances is not drawn. The layout is seeded off the level index: the same
+ * level is dressed the same way every time it is played, which matters for
+ * screenshots and for a player replaying a level.
  *
- * Every prop type is one mesh drawn as thin instances, so the whole biome costs
- * one draw call per type however many of them there are. The layout is seeded
- * off the level index: the same level is dressed the same way every time it is
- * played, which matters for screenshots and for a player replaying a level.
- *
- * Placed once per level in `build`, never touched again — props do not move, so
- * nothing here runs per frame.
+ * Every kind of every biome is loaded once, at boot, and a biome switch only
+ * changes which of them the next `build` writes instances for and what albedo
+ * multiplier each wears (D49). Nothing here allocates at a level load beyond
+ * growing an instance buffer for a longer road, and nothing runs per frame.
  */
 
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -29,100 +24,13 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { modelAsset } from './characters';
 import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
-import { liftEmissive, loadStaticMesh, meshExtent, tintMaterial } from './models';
+import { dustEmissive, liftEmissive, loadStaticMesh, meshExtent, tintMaterial } from './models';
+import { PROP_KINDS, tintFrom } from './propKinds';
+import type { PropKind } from './propKinds';
 import { applyToonRamp } from './toonRamp';
-import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH, paletteColor } from './theme';
-import type { PaletteRole } from './theme';
+import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH } from './theme';
 import { mulberry32 } from '@/sim';
-
-/**
- * What stands beside the road, how often, and how far out. `weight` is relative
- * within one band; `near` and `far` are metres from the road's edge.
- */
-interface PropKind {
-  id: string;
-  weight: number;
-  near: number;
-  far: number;
-  /** Extra turn applied to every instance, for props authored facing across. */
-  yaw?: number;
-  /** Multiplies the manifest scale, before the per-instance jitter. */
-  size?: number;
-  /** Albedo multiplier, for the daylight re-tint; see `tintMaterial`. */
-  tint?: readonly [number, number, number];
-  /**
-   * True when the manifest's `scale` is already metres per model unit. The
-   * KayKit *character* packs are authored at a scale the mage's own 0.35 was
-   * derived from, and the roadside inherited that; the dungeon pieces (D39) are
-   * authored in metres, so they must not be put through it twice.
-   */
-  metres?: boolean;
-  /** How far below its own origin the model hangs, in model units. */
-  lift?: number;
-  /** A flame rides at this share of the prop's height, this many metres across. */
-  flame?: { at: number; size: number };
-  /** Levels this kind is dressed on. Absent means every level. */
-  fromLevel?: number;
-  untilLevel?: number;
-}
-
-/**
- * The daylight re-tint, as a palette role rather than three numbers (D36).
- *
- * `mix` is how much of the role's own hue is folded into white and `gain` is
- * how much the result is lifted: the Halloween pack is painted for a night
- * scene, so every prop needs both a hue and a lift or it reads as soot under
- * D28's daylight. The gain is a look number, the hue is the palette's.
- */
-function tintFrom(role: PaletteRole, mix: number, gain: number): [number, number, number] {
-  const color = paletteColor(role);
-  const blend = (channel: number): number => (1 - mix + mix * channel) * gain;
-  return [blend(color.r), blend(color.g), blend(color.b)];
-}
-
-/** Warmer and a shade lighter, for the foliage. */
-const WARM = tintFrom('gold.light', 0.3, 1.12);
-/** For the greys — stone and iron — which go to soot under daylight. */
-const PALE = tintFrom('stone.light', 0.45, 1.3);
-/** The dungeon pieces are painted for torchlight; this brings them outside. */
-const DUNGEON = tintFrom('stone.light', 0.35, 1.18);
-
-/** From this level, the roadside lights are dungeon torches, not lanterns. */
-const TORCH_FROM_LEVEL = 6;
-
-const KINDS: readonly PropKind[] = [
-  { id: 'prop_tree_pine_orange_large', weight: 3.2, near: 2.2, far: 9, size: 1.2, tint: WARM },
-  { id: 'prop_tree_pine_orange_medium', weight: 3, near: 1.4, far: 7, tint: WARM },
-  { id: 'prop_fence', weight: 1.8, near: 0.5, far: 1.1, tint: PALE },
-  { id: 'prop_gravestone', weight: 0.6, near: 0.9, far: 4, tint: PALE },
-  {
-    id: 'prop_post_lantern',
-    weight: 0.8,
-    near: 0.7,
-    far: 1.4,
-    tint: PALE,
-    flame: { at: 0.88, size: 0.34 },
-    untilLevel: TORCH_FROM_LEVEL - 1,
-  },
-  /**
-   * The dungeon torch takes the lantern's place from level 6 (plan, "a few
-   * torches near gates on later levels"): the same slot in the layout and the
-   * same flame, in the stonework the arches and walls are built from, so the
-   * later road reads as a dungeon approach rather than as a country lane.
-   */
-  {
-    id: 'prop_dungeon_torch_lit',
-    weight: 1.1,
-    near: 0.55,
-    far: 1.2,
-    tint: DUNGEON,
-    metres: true,
-    size: 1.5,
-    lift: 0.395,
-    flame: { at: 0.94, size: 0.3 },
-    fromLevel: TORCH_FROM_LEVEL,
-  },
-];
+import type { BiomeId } from '@/data/biome-types';
 
 /** Metres between one roadside prop and the next, per side. */
 const GAP_MIN = 6;
@@ -194,6 +102,9 @@ export class PropsView {
   private readonly flames: Mesh;
   private readonly flameMatrices: Float32Array;
 
+  /** Which biome's kinds are dressed and which tint they wear (D49). */
+  private biome: BiomeId = 'meadow';
+
   constructor(scene: Scene) {
     this.scene = scene;
 
@@ -213,20 +124,33 @@ export class PropsView {
 
   async load(): Promise<void> {
     const loaded = await Promise.all(
-      KINDS.map(async (kind) => loadStaticMesh(this.scene, kind.id, kind.id)),
+      PROP_KINDS.map(async (kind) =>
+        kind.build === undefined
+          ? await loadStaticMesh(this.scene, kind.id, kind.id)
+          : kind.build(this.scene),
+      ),
     );
-    KINDS.forEach((kind, index) => {
+    PROP_KINDS.forEach((kind, index) => {
       const mesh = loaded[index];
       if (mesh === null || mesh === undefined) return;
+      // Every prop mesh is named for its slot, and every name starts with the
+      // kind's id: `addPropShadows` finds the roadside by the `prop_` prefix
+      // (`./shadows.ts`), and two biomes' pines are the same model under
+      // different tints, so the slot index is what keeps the names apart.
+      mesh.name = `${kind.id}#${String(index)}`;
       mesh.setEnabled(false);
-      // Enough for a dead tree to read as a shape against the sky rather than
-      // a hole in it; less than a character, because props are scenery.
-      liftEmissive(mesh.material, PROP_LIFT);
-      const tint = kind.tint;
-      if (tint !== undefined) tintMaterial(mesh.material, tint[0], tint[1], tint[2]);
+      // Enough for a tree to read as a shape against the sky rather than a hole
+      // in it; less than a character, because props are scenery. A kind with a
+      // `dust` recipe writes the same material property and is left to
+      // `setBiome`, which is where a role can have moved under it.
+      if (kind.dust === undefined) liftEmissive(mesh.material, PROP_LIFT);
       applyToonRamp(mesh.material);
-      const manifestScale = modelAsset(kind.id).scale ?? 1;
-      const unit = kind.metres === true ? manifestScale : manifestScale * MAGE_SCALE;
+      // A built mesh has no manifest entry to take a scale from and is authored
+      // in metres by construction.
+      const manifestScale = kind.build === undefined ? (modelAsset(kind.id).scale ?? 1) : 1;
+      const unit = kind.metres === true || kind.build !== undefined
+        ? manifestScale
+        : manifestScale * MAGE_SCALE;
       this.slots.push({
         kind,
         mesh,
@@ -239,6 +163,33 @@ export class PropsView {
         height: meshExtent(mesh).y,
       });
     });
+    this.setBiome(this.biome);
+  }
+
+  /**
+   * Re-tints the roadside for a biome (D49) and remembers which kinds it
+   * dresses with; the next `build` lays out that set.
+   *
+   * Only albedo multipliers change here — no mesh, no material and no buffer is
+   * created or freed, because every kind of every biome was loaded at boot.
+   * That is what keeps the scene's mesh count flat across a campaign's worth of
+   * level loads, and it is why the tints are recipes rather than numbers: the
+   * roles they name mean something different once the palette has switched.
+   */
+  setBiome(id: BiomeId): void {
+    this.biome = id;
+    for (const slot of this.slots) {
+      const tint = slot.kind.tint;
+      if (tint !== undefined) {
+        const [r, g, b] = tintFrom(tint);
+        tintMaterial(slot.mesh.material, r, g, b);
+      }
+      const dust = slot.kind.dust;
+      if (dust !== undefined) {
+        const [r, g, b] = tintFrom(dust);
+        dustEmissive(slot.mesh.material, r, g, b);
+      }
+    }
   }
 
   /**
@@ -253,7 +204,7 @@ export class PropsView {
     // Only the kinds this level dresses with: the lantern gives way to the
     // dungeon torch at level 6, and a weight that is not in the roll is what
     // keeps the layout from leaving a gap where the other one would have gone.
-    const lit = this.slots.filter((slot) => dressedOn(slot.kind, levelIndex));
+    const lit = this.slots.filter((slot) => dressedOn(slot.kind, levelIndex, this.biome));
     const total = lit.reduce((sum, slot) => sum + slot.kind.weight, 0);
     // What this road can hold, per kind. Buffers only ever grow, and only at a
     // level load: a later level with a longer road pays one allocation for the
@@ -337,10 +288,14 @@ export class PropsView {
   }
 }
 
-/** Whether a kind is dressed on this level. Absent bounds mean every level. */
-function dressedOn(kind: PropKind, levelIndex: number): boolean {
+/**
+ * Whether a kind is dressed on this level, in this biome. Absent bounds mean
+ * every level, and an absent biome list means every biome.
+ */
+function dressedOn(kind: PropKind, levelIndex: number, biome: BiomeId): boolean {
   if (kind.fromLevel !== undefined && levelIndex < kind.fromLevel) return false;
   if (kind.untilLevel !== undefined && levelIndex > kind.untilLevel) return false;
+  if (kind.biomes !== undefined && !kind.biomes.includes(biome)) return false;
   return true;
 }
 

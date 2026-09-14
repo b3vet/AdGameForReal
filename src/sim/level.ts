@@ -21,19 +21,21 @@ import {
   countGateRows,
   dealRowKinds,
   BRUTE_ROW,
+  CHARGER_ROW,
   GATE_ROW,
   HORDE_ROW,
   MIXED_ROW,
+  SHIELD_ROW,
   STREAM_ROW,
 } from './rowKinds';
-import { bruteRow, gateRow, hordeRow, mixedRow, streamRow } from './rows';
+import { bruteRow, chargerRow, gateRow, hordeRow, mixedRow, shieldRow, streamRow } from './rows';
 import type { RowDef, RowEnemyDef, RowPermits } from './rows';
 import { mulberry32 } from './rng';
 import type { GateDef, StreamDef } from './types';
 import { generateWalls } from './walls';
 import type { WallDef } from './walls';
 import { balance } from '@/data';
-import type { LevelGenConfig, PlayerState } from '@/data/types';
+import type { BiomeId, BossKind, LevelGenConfig, PlayerState } from '@/data/types';
 
 export { FIRE_RATE_GATE_WORTH } from './gates';
 export { addValueAt, squadCurve } from './curve';
@@ -41,10 +43,11 @@ export { laneCenter, laneOf } from './lanes';
 export type { LevelGenConfig, RowDef, RowEnemyDef, StreamDef, WallDef };
 
 /**
- * Which boss stands in the arena. One entry for now (D33's bestiary wants the
- * id on the level rather than looked up from the level index).
+ * Which boss stands in the arena. D33's bestiary wants the id on the level
+ * rather than looked up from the level index; from D49 there are two of them
+ * and the id *is* the `BossKind` the level recipe names.
  */
-export type BossId = 'demon';
+export type BossId = BossKind;
 
 export interface LevelDef {
   index: number;
@@ -59,13 +62,18 @@ export interface LevelDef {
    * Optional for the same reason as `RowDef.streams`: hand-made levels in the
    * render fixtures predate it and take the full Milestone 2 numbers.
    */
-  boss: { hp: number; units: number; bite?: number };
+  boss: { hp: number; units: number; bite?: number; kind?: BossKind };
   /**
-   * Always `demon` today; the bestiary records whatever stands here (D33).
-   * Optional for the same reason as `boss.bite`: the render fixtures and the
-   * stress scene build a `LevelDef` by hand. `generateLevel` always writes it.
+   * Which boss the arena holds (D33, D49). Optional for the same reason as
+   * `boss.bite`: the render fixtures and the stress scene build a `LevelDef`
+   * by hand. `generateLevel` always writes it.
    */
   bossId?: BossId;
+  /**
+   * Which biome the road runs through (D49). Optional for the same reason;
+   * absent means `meadow`, which is every level of the first twenty.
+   */
+  biome?: BiomeId;
   /**
    * Lane walls (D32). Empty below `balance.walls.fromLevel`; optional for the
    * same reason as `bossId`, and `generateLevel` always writes it.
@@ -197,6 +205,10 @@ function buildRow(
       return hordeRow(rng, config, rowIndex, z);
     case BRUTE_ROW:
       return bruteRow(rng, config, z, budget);
+    case CHARGER_ROW:
+      return chargerRow(rng, config, z, budget);
+    case SHIELD_ROW:
+      return shieldRow(rng, config, z, budget);
     default:
       return gateRow(rng, config, z, budget, permits);
   }
@@ -289,6 +301,8 @@ export function generateLevel(
   // second budget the plan sets.
   const arenaZ = spacing * (rowCount + 1);
 
+  const bossKind: BossKind = config.boss.kind ?? 'demon';
+
   return {
     index,
     seed: resolvedSeed,
@@ -296,12 +310,14 @@ export function generateLevel(
     startCount: config.startCount + mods.startCount,
     rows,
     arenaZ,
-    bossId: 'demon',
+    bossId: bossKind,
+    biome: config.biome ?? 'meadow',
     walls: generateWalls(rows, index, resolvedSeed, arenaZ, config.wallRows),
     boss: {
       hp: config.boss.hp,
       units: Math.max(1, Math.ceil(config.boss.hp / balance.enemies.boss.hpPerUnit)),
       bite: config.boss.bite,
+      kind: bossKind,
     },
   };
 }

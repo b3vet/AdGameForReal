@@ -201,6 +201,21 @@ function bothHalvesPayable(row: RowDef, boundary: WallBoundary): boolean {
   return laneKeeps(row, 1) && (laneKeeps(row, -1) || laneKeeps(row, 0));
 }
 
+/**
+ * True when `[zStart, zEnd]` lies within `gap` metres of a stretch already
+ * placed. Both directions, because the candidates are shuffled and the one
+ * that lands first is not the one further up the road.
+ *
+ * The mirrored stretch a horde row adds is exempt by construction: it is the
+ * same `zStart` and `zEnd`, and it is pushed after this test has run.
+ */
+function tooClose(walls: readonly WallDef[], zStart: number, zEnd: number, gap: number): boolean {
+  for (const wall of walls) {
+    if (zStart < wall.zEnd + gap && wall.zStart < zEnd + gap) return true;
+  }
+  return false;
+}
+
 /** True when a horde (two streams at once) stands inside `[from, to]`. */
 function hordeInside(rows: readonly RowDef[], from: number, to: number): boolean {
   for (const row of rows) {
@@ -246,6 +261,7 @@ export function generateWalls(
   shuffle(rng, candidates);
 
   const walls: WallDef[] = [];
+  const gap = index >= tuning.stretchGapFromLevel ? tuning.stretchGap : 0;
   for (const candidate of candidates) {
     if (walls.length >= wanted) break;
 
@@ -255,6 +271,9 @@ export function generateWalls(
     const length = tuning.length.min + rng() * (tuning.length.max - tuning.length.min);
     const zStart = Math.max(zEnd - length, floor);
     if (zEnd - zStart < tuning.minLength) continue;
+    // Never a stretch that begins while another is still holding the column
+    // (`walls.stretchGap`): the pair would be one commitment, not two.
+    if (gap > 0 && tooClose(walls, zStart, zEnd, gap)) continue;
 
     const drawn: WallBoundary = rng() < 0.5 ? -1 : 1;
     const guarded = rows[candidate.index];

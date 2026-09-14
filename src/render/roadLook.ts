@@ -15,6 +15,53 @@
  */
 
 import { balance } from '@/data';
+import type { BiomeId } from '@/data/biome-types';
+
+/**
+ * The two ground albedos a biome is floored with, and how far one repeat of
+ * each covers (D49).
+ *
+ * A biome is a pair of manifest ids and two tile sizes, and nothing else: the
+ * colour on top of them is the palette's (`stone.light` under the road,
+ * `grass.light` under the verge), so a biome that wanted a warmer road would
+ * change a hex in `palette.json` rather than anything here.
+ *
+ * Both biomes' textures are created at boot rather than on the switch, which
+ * is what makes the switch free and the warm-up honest: every material in the
+ * scene is compiled once before the title screen, and a level that changes
+ * biome swaps a texture reference on a material that is already ready
+ * (`RoadView.setBiome`).
+ *
+ * The frost tiles are wider than the meadow's. The cobble is nine setts across
+ * and reads at 2.2 m; `Ice004` is about five cells across, so at 2.2 m a cell
+ * would be a 0.44 m slab of ice — bigger than a paving stone but small enough
+ * that the crack pattern turns into noise at twenty metres. 3 m puts a cell at
+ * 0.6 m, which is a frozen-over flagstone, and the fracture veins still read as
+ * joints at the far end of the road.
+ */
+export interface BiomeGround {
+  /** Manifest ids of the two albedos. */
+  road: string;
+  verge: string;
+  /** Metres one repeat covers, along the road and across the field. */
+  roadTile: number;
+  vergeTile: number;
+}
+
+export const BIOME_GROUND: Readonly<Record<BiomeId, BiomeGround>> = {
+  meadow: {
+    road: 'texture_road_cobble',
+    verge: 'texture_field_grass',
+    roadTile: 2.2,
+    vergeTile: 3.4,
+  },
+  frost: {
+    road: 'texture_road_frost',
+    verge: 'texture_field_snow',
+    roadTile: 3,
+    vergeTile: 4.2,
+  },
+};
 
 /**
  * Metres of road one repeat of the cobble albedo covers.

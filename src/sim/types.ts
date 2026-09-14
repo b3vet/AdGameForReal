@@ -7,9 +7,9 @@
  */
 
 import type { WallDef } from './walls';
-import type { FamiliarTier, WeaponId } from '@/data/types';
+import type { BiomeId, BossKind, FamiliarTier, WeaponId } from '@/data/types';
 
-export type { WeaponId };
+export type { BiomeId, BossKind, WeaponId };
 export type { WallDef, WallBoundary } from './walls';
 
 /** Lane index. Lane centers are at `x = lane * laneWidth` (laneWidth = 2). */
@@ -48,7 +48,15 @@ export interface GateState {
   weaponId?: WeaponId;
 }
 
-export type EnemyKind = 'grunt' | 'brute' | 'boss';
+/**
+ * What is standing on the road (D49 added `charger` and `shieldBrute`).
+ *
+ * A `shieldBrute` is a brute in every way the arithmetic cares about — its
+ * hp per unit, its speed and its footprint all come from `enemies.brute` — and
+ * differs only by carrying a `shield` the fire has to break first. A `charger`
+ * has a block of its own in `enemies.charger`.
+ */
+export type EnemyKind = 'grunt' | 'brute' | 'charger' | 'shieldBrute' | 'boss';
 
 export interface EnemyState {
   id: number;
@@ -93,6 +101,26 @@ export interface EnemyState {
   burnNextAt?: number;
   /** In the burn list right now, so a refresh does not file it twice. */
   burning?: boolean;
+  /**
+   * Shielded brute (D49): hit points left on the shield. While it is above
+   * zero every hit is worth `enemies.shield.damageMul` of itself and is taken
+   * from here rather than from `hp`, so the block's printed number does not
+   * move until the shield breaks. Absent or zero means no shield.
+   */
+  shield?: number;
+  /**
+   * Bosses only: which boss this is (D49). Absent means `demon`, so the render
+   * fixtures and the stress scene, which build an `EnemyState` by hand, are
+   * still boss 1.
+   */
+  variant?: BossKind;
+  /**
+   * Set while a charger or the Rime Fiend is running a lane down (D49).
+   * `lane` is the lane it has committed to and `until` is the sim time it
+   * expects to have finished the run in — render's clock for the animation,
+   * not a rule the sim enforces.
+   */
+  charge?: { until: number; lane: Lane };
 }
 
 /**
@@ -323,6 +351,13 @@ export type SimEvent =
       streamId?: number;
     }
   | { type: 'enemySlowed'; enemyId: number; seconds: number }
+  /** A shielded brute's shield reached zero. Fires once per body (D49). */
+  | { type: 'shieldBreak'; enemyId: number; x: number; z: number }
+  /**
+   * A charger set off, or the Rime Fiend started a charge (D49). `kind` is
+   * which of the two, since they look and sound nothing like each other.
+   */
+  | { type: 'charge'; enemyId: number; kind: EnemyKind; lane: Lane }
   /**
    * A body was set alight by an evolved ember staff. Emitted when the burn
    * *starts*, not on every tick: a tick is four a second on every burning body

@@ -43,12 +43,15 @@ export {
   staffCost,
   staffPrices,
   upgradeCost,
+  upgradeCostFor,
   upgradeIds,
   upgradeLevel,
   NO_MODS,
 } from './player';
 export type { PlayerMods } from './player';
 export type {
+  BiomeId,
+  BossKind,
   FamiliarTier,
   PlayerState,
   Progression,
@@ -72,7 +75,18 @@ export {
   wallKeep,
 } from './formation';
 export type { FormationOffset } from './formation';
-export { enemyBalance, enemyFootprint, enemyHalfWidth } from './enemies';
+export {
+  activationRange,
+  effectiveUnits,
+  enemyBalance,
+  enemyFootprint,
+  enemyHalfWidth,
+} from './enemies';
+/** The two Frostfell kinds and boss 2's charge (D49), for the views that draw
+ *  them: what a charger's lane pick is, what a shield is worth, what a charge
+ *  costs. Render reads the state; these are the rules behind it. */
+export { chargeLane, chargerKills } from './chargers';
+export { shieldFor } from './shields';
 /**
  * The crowd (D43, D44). Render draws `state.crowd` directly and reads the flag
  * bits for its animations; `createCrowdState` is for a caller that builds a

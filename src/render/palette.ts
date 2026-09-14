@@ -29,6 +29,7 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 
 import paletteJson from '@/data/palette.json';
+import type { BiomeId } from '@/data/biome-types';
 
 /**
  * Every dotted path in the palette that ends at a hex string:
@@ -53,34 +54,92 @@ export const palette = paletteJson;
  *
  * Shared instances: every caller of `paletteColor('gold.base')` gets the same
  * object, exactly as the named exports below have always been shared. Nothing
- * may mutate one in place — `scale`, `clone` and `Color3.LerpToRef` all write
- * somewhere else, which is what the views already do.
+ * *outside this file* may mutate one in place — `scale`, `clone` and
+ * `Color3.LerpToRef` all write somewhere else, which is what the views already
+ * do. `setBiome` is the one exception and it is why the rule matters: a biome
+ * switch rewrites these objects rather than replacing them, so every `const`
+ * below and every material that was handed one stays correct across a switch.
  */
 const colors = new Map<string, Color3>();
 
-/** The hex string a role names, `'#rrggbb'`. Throws on a role the file lacks. */
-export function paletteHex(role: PaletteRole): string {
-  let node: unknown = paletteJson;
+/**
+ * Which biome's overrides are in force (D49). `meadow` is the base list with
+ * nothing over it, which is why it has no entry in `$biomes`.
+ */
+let biome: BiomeId = 'meadow';
+
+/** The biome overrides, as a plain tree; `$` keys are not roles (see the JSON). */
+const biomeOverrides: Record<string, unknown> = paletteJson.$biomes;
+
+/** Walks a dotted role into a tree, or `null` if that tree does not carry it. */
+function lookup(root: unknown, role: string): string | null {
+  let node: unknown = root;
   for (const key of role.split('.')) {
-    if (typeof node !== 'object' || node === null) break;
+    if (typeof node !== 'object' || node === null) return null;
     node = (node as Record<string, unknown>)[key];
   }
-  if (typeof node !== 'string') {
+  return typeof node === 'string' ? node : null;
+}
+
+/**
+ * The hex string a role names, `'#rrggbb'`, under the biome in force.
+ *
+ * The override tree is consulted first and the base list answers everything it
+ * does not carry, so a biome names only what it changes — the gates, the
+ * spells and the UI stay one family across the whole game (D49).
+ */
+export function paletteHex(role: PaletteRole): string {
+  if (biome !== 'meadow') {
+    const override = lookup(biomeOverrides[biome], role);
+    if (override !== null) return override;
+  }
+  const base = lookup(paletteJson, role);
+  if (base === null) {
     // A throw rather than a fallback colour: the role union makes this
     // unreachable from TypeScript, so reaching it means the JSON and the types
     // have come apart and a silent magenta would hide it until a playtest.
     throw new Error(`palette.json has no colour at role "${role}"`);
   }
-  return node;
+  return base;
 }
 
-/** The `Color3` a role names. Shared and never mutated; see `colors`. */
+/** The `Color3` a role names. Shared; only `setBiome` ever rewrites one. */
 export function paletteColor(role: PaletteRole): Color3 {
   const cached = colors.get(role);
   if (cached !== undefined) return cached;
   const color = Color3.FromHexString(paletteHex(role));
   colors.set(role, color);
   return color;
+}
+
+/** Which biome's colours the roles are resolving to right now. */
+export function paletteBiome(): BiomeId {
+  return biome;
+}
+
+/**
+ * Switches the palette to a biome's overrides and rewrites every `Color3` the
+ * roles have already handed out. Answers whether anything changed, so a caller
+ * can skip a rebuild it does not need.
+ *
+ * In place, and that is the whole design: `SKY_HAZE`, `ROAD_COLOR`,
+ * `WALL_STONE_COLOR` and two dozen more are module constants bound at import
+ * time, and several materials were handed the object itself as their
+ * `diffuseColor`. Handing out fresh instances here would leave every one of
+ * them pointing at the previous biome. What it does *not* do is repaint
+ * anything already baked from a colour — a vertex buffer, a canvas texture, a
+ * material colour that was copied rather than referenced. Those rebuild in the
+ * views, which is what `Renderer.setBiome` fans out to.
+ */
+export function setBiome(id: BiomeId): boolean {
+  if (id === biome) return false;
+  biome = id;
+  for (const [role, color] of colors) {
+    // `role` came out of this same map, so it is a role the file carries; the
+    // cast is the compiler catching up with that rather than a new claim.
+    color.copyFrom(Color3.FromHexString(paletteHex(role as PaletteRole)));
+  }
+  return true;
 }
 
 /** Sky gradient, bottom to top; the dome is `./sky.ts`. */

@@ -1,5 +1,5 @@
 {
-  "$comment": "Single source of truth for color. Render reads it for materials and effects; UI generates CSS variables from it. Roles, not names, are what code references.",
+  "$comment": "Single source of truth for color. Render reads it for materials and effects; UI generates CSS variables from it. Roles, not names, are what code references. A key starting with $ is not a colour role: the generator (scripts/palette-css.mjs), the swatch harness and the role union all skip them, which is why the biome overrides below live under $biomes — the overlay must look the same in every biome, so they must not become CSS variables.",
   "arcane":   { "base": "#6d4fd6", "light": "#a48cff", "deep": "#3b2a7a" },
   "gold":     { "base": "#f2b33d", "light": "#ffd97a", "deep": "#b5741c" },
   "sky":      { "top": "#4f9de6", "mid": "#8fc6f2", "horizon": "#e2f1fb", "haze": "#f6e7cf" },
@@ -17,5 +17,15 @@
   "gate": {
     "add": "#4fd27a", "sub": "#e0483f", "mul": "#f2b33d", "fireRate": "#5ec8ff", "weapon": "#a48cff"
   },
-  "shadow": { "blob": "#2a1f3d" }
+  "shadow": { "blob": "#2a1f3d" },
+
+  "$biomesComment": "Per-biome overrides of the roles above (D49). A biome names only what changes; every role it does not name resolves to the base list, so the gates, the spells and the UI are one family across the whole game. src/render/palette.ts applies them with setBiome().",
+  "$biomes": {
+    "frost": {
+      "sky":    { "top": "#5f92c8", "mid": "#9dc4e4", "horizon": "#eaf3fa", "haze": "#dfe9f2" },
+      "grass":  { "base": "#e2edf7", "deep": "#b9cde0", "light": "#f2f7fc" },
+      "stone":  { "base": "#b9cfe0", "deep": "#6f8aa3", "light": "#cfe0ec", "kerb": "#a8bfd2" },
+      "shadow": { "blob": "#1f2c3d" }
+    }
+  }
 }

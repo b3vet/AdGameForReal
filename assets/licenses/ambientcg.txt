@@ -13,3 +13,5 @@ Copied from https://ambientcg.com/license on 2026-09-13:
 Assets used here, downloaded as <id>_1K-JPG.zip through https://ambientcg.com/get:
   PavingStones131 — https://ambientcg.com/a/PavingStones131 — the road surface
   Grass004 — https://ambientcg.com/a/Grass004 — the field either side and the grass fringe along the kerbs
+  Ice004 — https://ambientcg.com/a/Ice004 — the Frostfell road surface
+  Snow006 — https://ambientcg.com/a/Snow006 — the Frostfell verge and the snow fringe along the kerbs

@@ -39,6 +39,7 @@ import {
   reachable,
   secondLane,
 } from './botLanes';
+import { bestChargerStand } from './botCharge';
 import { bestDodge, bestStreamStand, stand } from './botStand';
 import { laneCenter } from './lanes';
 import type { Rng } from './rng';
@@ -106,6 +107,12 @@ export function createHumanBot(rng: Rng, balance: Balance): (state: RunState) =>
     }
 
     if (row < 0 || distance > balance.bots.gateCommitDistance) {
+      // A charger that has set off comes before the river and the blocks: a
+      // decent player does get out of the way of the thing running at them
+      // (D49). The hand is still late and still slow, which is where the
+      // difficulty is — this is the observation, and the reaction ring and the
+      // swipe limit below decide whether the crowd arrives in time.
+      if (bestChargerStand(state, range, balance)) return stand.x;
       if (bestStreamStand(state, range, balance)) return stand.x;
       if (bestDodge(state, range, balance)) return stand.x;
       if (row < 0) return clampToWalls(state.squad.x, range);
