@@ -231,3 +231,11 @@ prices are 28 percent dearer to pay for the stronger gate-bonus rung;
 level 7 is not an upgrade gate at any gate-bonus size; the Fiend's wake
 reads as a scuffed band rather than a gouge under the volley; the smoke
 takes 15 minutes on this container.
+
+## 2026-09-14 — Milestone 8 drafted; waiting for the owner's play
+
+- Product owner asked for the Milestone 8 draft and will play Version 16
+  first; feedback folds into the plan. Draft written as
+  `docs/22-milestone-8-plan-draft.md` with seven questions. Three stray
+  probe processes from Phase A were stopped. No implementation starts
+  until the owner reviews.

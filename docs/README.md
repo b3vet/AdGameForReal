@@ -36,5 +36,6 @@ Index:
 | `19-milestone-6-log.md` | Milestone 6 process log (append-only) |
 | `20-milestone-7-plan.md` | Milestone 7 plan, approved: Frostfell biome, charger and shielded brute, the Rime Fiend, levels 21 to 40 |
 | `21-milestone-7-log.md` | Milestone 7 process log (append-only) |
+| `22-milestone-8-plan-draft.md` | Milestone 8 draft plan v1: missions, streaks, bestiary rewards and cosmetics, endless, deeper evolutions; awaiting the owner's play and answers |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |
