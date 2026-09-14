@@ -12,3 +12,11 @@
   cosmetics). Wave one launched in parallel: A (meta core) and B (sim:
   endless and evolutions). C (render and UI) and D (balance and economy)
   follow; E integrates and reviews.
+
+## 2026-09-14 — Container restart mid wave one
+
+- The container restarted while A and B were mid-flight; both agents were
+  lost with their partial work left in the tree (data files, types, the
+  clock and streak modules, player state fields, the endless config; 13
+  typecheck errors). Both relaunched with the instruction to read the
+  partial work, keep what is sound and finish; nothing was reset.
