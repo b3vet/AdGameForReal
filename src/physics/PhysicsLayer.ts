@@ -252,6 +252,12 @@ export class PhysicsLayer {
               const away = this.awayFromSquad(event.x, event.z, state);
               this.bursts?.streamFall(event.x, event.z, away.dx, away.dz);
             }
+          } else if (event.kind === 'charger') {
+            // Nothing. A charger is one body and it is not a skeleton (D49):
+            // the corpse pool is made of the grunt rig, so a ring of six of
+            // them out of a dead runner is the wrong species twice over. Its
+            // own baked death plays in the renderer instead
+            // (`src/render/chargers.ts`).
           } else if (!this.wasShattered(event.enemyId)) {
             const away = this.awayFromSquad(event.x, event.z, state);
             this.bursts?.kill(event.x, event.z, away.dx, away.dz, this.quality);
@@ -268,6 +274,11 @@ export class PhysicsLayer {
           // A block bursting into ice chips is an event; a stream doing it body
           // by body is a blizzard, and a shard pool that never stops recycling.
           if (event.streamId === undefined) this.bursts?.shatter(event.x, event.z, this.quality);
+          break;
+        case 'shieldBreak':
+          // Once per body, by construction (D49), so it needs no guard of its
+          // own: the sim fires it on the step the shield reaches zero.
+          this.bursts?.shieldBreak(event.x, event.z, this.quality);
           break;
         case 'gatePassed': {
           const at = this.gatePosition(event.gateId, state);

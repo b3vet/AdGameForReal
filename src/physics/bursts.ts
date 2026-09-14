@@ -37,6 +37,7 @@ import {
   SHARD_SIZES,
   SHARD_SPIN,
   SHATTER_SHARDS,
+  SHIELD_SHARDS,
   STREAM_PUSH_SCALE,
   UNIT_FALL_MIN_SPEED,
   UNIT_FALL_SPEED_SCALE,
@@ -136,6 +137,15 @@ export class DebrisBursts {
   /** A frozen block comes apart: ice-blue chips, radial. */
   shatter(x: number, z: number, quality: number): void {
     this.ring(x, 0.35, z, SHATTER_SHARDS[quality] ?? 0, 0, ICE_TINT, 1);
+  }
+
+  /**
+   * A shielded brute's shield breaks (D49): the same ice chips a shatter
+   * throws, fewer of them and from chest height rather than from the ground,
+   * because what came apart is something the block was holding up.
+   */
+  shieldBreak(x: number, z: number, quality: number): void {
+    this.ring(x, 0.7, z, SHIELD_SHARDS[quality] ?? 0, 1, ICE_TINT, 0.8);
   }
 
   /** The boss goes down: a wider, slower ring of violet debris. */

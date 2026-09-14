@@ -102,8 +102,10 @@ export class SceneViews {
     this.projectiles = new ProjectileView(this.sprites);
     this.effects = new EffectsView(scene, this.sprites);
     this.gates = new GateView(scene, this.labels);
-    this.enemies = new EnemyView(scene, this.labels);
-    this.boss = new BossView(scene, this.labels);
+    // Both take the sprite batch: a charger's dust and the Rime Fiend's frost
+    // wake (D49) land in it, so neither costs a draw call of its own.
+    this.enemies = new EnemyView(scene, this.labels, this.sprites);
+    this.boss = new BossView(scene, this.labels, this.sprites);
     this.walls = new WallView(scene, this.sprites);
     this.wisp = new WispView(this.sprites);
     this.burn = new BurnView(this.sprites);
@@ -186,6 +188,10 @@ export class SceneViews {
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef, roadStartZ: number, roadEndZ: number): void {
     this.road.setExtent(roadStartZ, roadEndZ, level.arenaZ);
+    // Which boss stands in the arena (D49). Both models were loaded at boot, so
+    // this only decides which of them is the one that will be enabled; the
+    // level is the authority, and `BossView.update` confirms it from the state.
+    this.boss.setVariant(level.boss.kind ?? level.bossId ?? 'demon');
     this.dressRoadside(level.index, roadStartZ, roadEndZ);
     // The fences are placed once here and only culled per frame afterwards
     // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that

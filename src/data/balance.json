@@ -135,7 +135,7 @@
     "fromRow": 5,
     "bothFromLevel": 8,
     "stretchGap": 10,
-    "stretchGapFromLevel": 21
+    "stretchGapFromLevel": 1
   },
   "gates": {
     "caps": {

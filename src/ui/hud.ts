@@ -13,8 +13,9 @@
  * scene.
  */
 
+import { academy } from '@/data/academy-types';
 import { weaponOf } from '@/sim';
-import type { RunState, SimEvent, WeaponId } from '@/sim';
+import type { BossKind, RunState, SimEvent, WeaponId } from '@/sim';
 
 import { setIcon, staffIcon } from './icons';
 
@@ -64,6 +65,9 @@ export class Hud {
   private shownStaff: WeaponId | null = null;
   private bossVisible = false;
   private bossEnraged = false;
+  /** Which boss is in the arena, so the bar can print its name (D49). */
+  private bossKind: BossKind = 'demon';
+  private shownBossTitle = '';
   private lastBossShake = 0;
 
   constructor(elements: HudElements) {
@@ -80,6 +84,8 @@ export class Hud {
     this.setStaff(staff, false);
 
     this.setBossVisible(false);
+    this.bossKind = 'demon';
+    this.shownBossTitle = '';
     this.setBossEnraged(false);
     this.shownBossHp = -1;
     this.shownBossRatio = -1;
@@ -140,6 +146,13 @@ export class Hud {
     if (visible !== this.bossVisible) this.setBossVisible(visible);
     if (!visible || boss === null) return;
 
+    // The bar is titled with whichever boss is standing there (D49), which the
+    // state carries; a hand-made one carries none and is boss 1.
+    const kind = boss.variant ?? 'demon';
+    if (kind !== this.bossKind) {
+      this.bossKind = kind;
+      this.paintBossTitle();
+    }
     if (enraged !== this.bossEnraged) this.setBossEnraged(enraged);
 
     const maxHp = boss.maxHp > 0 ? boss.maxHp : 1;
@@ -175,7 +188,19 @@ export class Hud {
   private setBossEnraged(enraged: boolean): void {
     this.bossEnraged = enraged;
     this.elements.bossBar.classList.toggle(BOSS_ENRAGED_CLASS, enraged);
-    this.elements.bossLabel.textContent = enraged ? 'Enraged' : 'Boss';
+    this.paintBossTitle();
+  }
+
+  /**
+   * The bar's title: the boss's own name, from the Bestiary's copy, until it
+   * enrages — at which point the word that matters is what it is doing, not
+   * what it is called.
+   */
+  private paintBossTitle(): void {
+    const title = this.bossEnraged ? academy.hud.enraged : bossName(this.bossKind);
+    if (title === this.shownBossTitle) return;
+    this.shownBossTitle = title;
+    this.elements.bossLabel.textContent = title;
   }
 
   /**
@@ -208,6 +233,15 @@ export class Hud {
     void element.offsetWidth;
     element.classList.add(className);
   }
+}
+
+/**
+ * What the Bestiary calls a boss (D49). One list of names for the cards and the
+ * bar, so a boss that is renamed is renamed once; an id the copy has no entry
+ * for falls back to the plain word rather than printing its id.
+ */
+function bossName(kind: BossKind): string {
+  return academy.bestiary.entries.find((entry) => entry.id === kind)?.name ?? academy.hud.bossFallback;
 }
 
 /** The same trick for elements with only one animation class. */

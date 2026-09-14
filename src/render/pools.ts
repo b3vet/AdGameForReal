@@ -18,6 +18,23 @@ const MAX_ROWS = levels.reduce((most, level) => Math.max(most, Math.ceil(level.r
 const PER_ROW_POOL = MAX_ROWS * 3 + 6;
 
 /**
+ * Charger rows the longest level can carry (D49). Optional on a level recipe —
+ * biome 1 has none — so an absent count is zero.
+ */
+const MAX_CHARGER_ROWS = levels.reduce(
+  (most, level) => Math.max(most, Math.ceil(level.chargerRows ?? 0)),
+  0,
+);
+/**
+ * Skeletons drawn for one block, however many units it is worth.
+ *
+ * Here rather than in `./theme.ts` with the rest of the look, because the
+ * minion pool below is derived from it and `theme.ts` imports *this* file; it
+ * is re-exported from `theme.ts`, so the views still read one module.
+ */
+export const ENEMY_MAX_INSTANCES = 18;
+
+/**
  * Streams a level can register: one per mixed row and two per horde row (D29),
  * plus slack. They are all registered at level load, so this is the number of
  * `StreamState`s `RunState.streams` can hold, not the number live at once.
@@ -74,8 +91,21 @@ export const POOL = {
    * `ENEMY_DRAW_RANGE` at `ENEMY_MAX_INSTANCES` each. One draw call covers all
    * of them, so the only cost of the headroom is the instance buffer.
    */
-  grunts: balance.enemies.maxLive + 4 * 18,
+  grunts: balance.enemies.maxLive + 4 * ENEMY_MAX_INSTANCES,
+  /**
+   * Warrior instances, *per variant*: the plain brute and the shielded one are
+   * two meshes out of one parse and one baked texture (D49, `loadCrowds`), and
+   * each carries an instance buffer of this size. A level deals at most one
+   * shield row, so the second buffer is mostly headroom — 120 matrices is 7 KB,
+   * and the alternative is a second capacity nobody would keep in step.
+   */
   brutes: 120,
+  /**
+   * Chargers alive at once (D49): every row the longest level deals, each of
+   * them up to `gen.chargerLanes.max` bodies, plus the ones still playing a
+   * death. One instance each — a charger is a runner, not a block.
+   */
+  chargers: MAX_CHARGER_ROWS * Math.ceil(balance.gen.chargerLanes.max) + 4,
   /** Frost rings under slowed blocks. */
   slowRings: 16,
   /**

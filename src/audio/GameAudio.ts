@@ -352,7 +352,31 @@ export class GameAudio {
           }
           break;
         case 'bossStomp':
-          if (!this.throttled('stomp', audioMix.minIntervalMs.stomp)) this.play('sfx_boss_stomp');
+          // Per boss (D49): the Fiend's landing carries a crack of ice the
+          // demon's does not, which is two voices on one event rather than a
+          // second clip in `assets/`.
+          if (!this.throttled('stomp', audioMix.minIntervalMs.stomp)) {
+            const stomp = audioMix.bossStomp;
+            if (state.boss?.variant === 'rime') {
+              this.playCue(stomp.rime);
+              this.playCue(stomp.rimeIce);
+            } else {
+              this.playCue(stomp.demon);
+            }
+          }
+          break;
+        case 'charge':
+          // One voice at two sizes: a charger's rush, and the Rime Fiend's an
+          // octave under it. Throttled together, because they are the same
+          // sound and two of them at once is one muddy roar.
+          if (!this.throttled('charge', audioMix.minIntervalMs.charge)) {
+            this.playCue(event.kind === 'boss' ? audioMix.charge.boss : audioMix.charge.charger);
+          }
+          break;
+        case 'shieldBreak':
+          if (!this.throttled('shieldBreak', audioMix.minIntervalMs.shieldBreak)) {
+            this.playCue(audioMix.shieldBreak);
+          }
           break;
         case 'bossKilled':
           this.play('sfx_boss_death');

@@ -21,6 +21,13 @@ import { unlockLevel } from './save';
 /** Steers the squad in place of a finger; see `createBot`. */
 export type BotPolicy = (state: RunState) => number;
 
+/**
+ * The kinds the Bestiary has a card for, in the order the cards read. The boss
+ * is not here: it is named by the level (`bossIdOf`), because there are two of
+ * them (D49) and which one is standing in the arena is the level's business.
+ */
+const CARD_KINDS: readonly EnemyKind[] = ['grunt', 'brute', 'charger', 'shieldBrute'];
+
 export class RunSession {
   readonly level: LevelDef;
   readonly run: Run;
@@ -43,13 +50,12 @@ export class RunSession {
   private countdown: number | null = null;
 
   /**
-   * Both block kinds seen, so `absorb` can stop looking things up. A stream
-   * fires `enemyActivated` about twenty times a second (D29) and the lookup is
-   * a scan of the enemy array; after the first grunt and the first brute there
-   * is nothing left for it to find.
+   * Which of `CARD_KINDS` this run has already recorded, so `absorb` can stop
+   * looking things up. A stream fires `enemyActivated` about twenty times a
+   * second (D29) and the lookup is a scan of the enemy array; once every kind
+   * the road can hold has been met there is nothing left for it to find.
    */
-  private sawGrunt = false;
-  private sawBrute = false;
+  private readonly sawKind = new Set<EnemyKind>();
 
   constructor(levelIndex: number, options: QueryOptions, player: PlayerState) {
     this.level = buildLevel(levelIndex, options.seed, player);
@@ -104,10 +110,10 @@ export class RunSession {
   /**
    * Notes what the player has met, for the Bestiary.
    *
-   * Kinds rather than bodies: the cards are grunt, brute and the level's boss,
-   * so the whole job is answering "has one of these been on screen alive". A
-   * body is only looked up while a kind is still missing, and the boss costs
-   * nothing at all — `bossActivated` is one event per run.
+   * Kinds rather than bodies: the cards are the four road kinds and the level's
+   * boss, so the whole job is answering "has one of these been on screen
+   * alive". A body is only looked up while a kind is still missing, and the
+   * boss costs nothing at all — `bossActivated` is one event per run.
    */
   absorb(events: readonly SimEvent[]): void {
     for (const event of events) {
@@ -116,18 +122,17 @@ export class RunSession {
         continue;
       }
       if (event.type !== 'enemyActivated') continue;
-      if (this.sawGrunt && this.sawBrute) continue;
+      if (this.sawKind.size >= CARD_KINDS.length) continue;
 
       const kind = this.kindOf(event.enemyId);
-      if (kind === 'grunt') {
-        this.sawGrunt = true;
-        this.seen.add('grunt');
-      } else if (kind === 'brute') {
-        this.sawBrute = true;
-        this.seen.add('brute');
-      } else if (kind === 'boss') {
+      if (kind === null) continue;
+      if (kind === 'boss') {
         this.seen.add(this.bossId);
+        continue;
       }
+      if (this.sawKind.has(kind) || !CARD_KINDS.includes(kind)) continue;
+      this.sawKind.add(kind);
+      this.seen.add(kind);
     }
   }
 

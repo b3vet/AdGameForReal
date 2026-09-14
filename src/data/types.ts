@@ -276,10 +276,12 @@ export interface Balance {
     stretchGap: number;
     /**
      * First level the gap above is enforced on. The rule arrived with
-     * Milestone 7 and the twenty levels Milestone 6 measured are left exactly
-     * as they were balanced — three of them deal a stacked pair on one seed in
-     * ten, which is a finding for the next retune rather than something to
-     * change under a shipped set of bands.
+     * Milestone 7 Phase B and exempted the twenty levels Milestone 6 had
+     * already measured, three of which dealt a stacked pair on one seed in ten.
+     * Phase D measured the exemption away — with the gap on everywhere the
+     * Milestone 6 bands stay inside their targets on ten seeds — so it is 1,
+     * and the only thing still holding walls off the opening is
+     * `walls.fromLevel`.
      */
     stretchGapFromLevel: number;
   };

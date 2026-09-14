@@ -66,12 +66,19 @@ const STAFF_ICONS: Readonly<Record<string, IconName>> = {
 
 /**
  * The bestiary. A grunt is a skeleton and a brute is a bigger one, so both take
- * the slayer's skull; the boss takes it too, at the size the row draws it.
+ * the slayer's skull; the bosses take it too, at the size the row draws it.
+ *
+ * The Frostfell three (D49) are named here rather than left to the fallback so
+ * that a future glyph of their own is a one-line change — and so that the map
+ * says out loud which ids the bestiary can hold.
  */
 const BEAST_ICONS: Readonly<Record<string, IconName>> = {
   grunt: 'drill-slayer',
   brute: 'drill-slayer',
   demon: 'drill-slayer',
+  charger: 'drill-slayer',
+  shieldBrute: 'drill-slayer',
+  rime: 'drill-slayer',
 };
 
 export const roomIcon = (id: string): IconName => ROOM_ICONS[id] ?? 'room-play';

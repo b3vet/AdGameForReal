@@ -53,6 +53,21 @@ export interface PlayResult {
   worstLeakShare: number;
   /** What the fences cut off on the way (D44). */
   stragglers: StragglerTally;
+  /** Units the boss's stomps took (D31's `bite` is what scales them). */
+  stompKills: number;
+  /**
+   * Units the Rime Fiend's lane charge ran over (D49).
+   *
+   * The sim reports a charge's dead as `contact`, like the boss's grind and
+   * like walking into a block, because `UnitLossReason` is what render and
+   * audio switch on and a fourth reason there would be a contract change for a
+   * number only the balance bands read. They are separated here instead, off
+   * the two things that are true of a charge and nothing else: the boss is
+   * away from its stand (`boss.charge` is set, and `boss.ts` skips the grind
+   * and the stomp entirely while it is), and no body died this step for the
+   * loss to belong to.
+   */
+  chargeKills: number;
 }
 
 /**
@@ -74,6 +89,8 @@ export function playLevel(
   let steps = 0;
   let bossStart = -1;
   let countAtBoss = 0;
+  let stompKills = 0;
+  let chargeKills = 0;
   const maxSteps = Math.round(MAX_SECONDS / DT);
   const stragglers: StragglerTally = {
     groups: 0,
@@ -90,8 +107,22 @@ export function playLevel(
 
   while (run.state.status === 'running' && steps < maxSteps) {
     run.setTargetX(bot(run.state));
-    run.tick(DT);
+    const events = run.tick(DT);
     steps++;
+    // The boss is on its charge for the whole of this step or none of it: it
+    // is set on the step the charge begins and cleared on the step it is home.
+    const charging = run.state.boss?.charge !== undefined;
+    let bodyDied = false;
+    for (const event of events) {
+      if (event.type === 'enemyKilled') {
+        if (event.streamId === undefined) bodyDied = true;
+        continue;
+      }
+      if (event.type !== 'unitsLost') continue;
+      if (event.reason === 'stomp') stompKills += event.amount;
+      else if (event.reason === 'contact' && charging && !bodyDied) chargeKills += event.amount;
+      bodyDied = false;
+    }
     if (bossStart < 0 && run.state.boss?.active === true) {
       bossStart = steps;
       countAtBoss = run.state.squad.count;
@@ -126,6 +157,8 @@ export function playLevel(
     streamsSeen: seen,
     worstLeakShare: worst,
     stragglers,
+    stompKills,
+    chargeKills,
   };
 }
 

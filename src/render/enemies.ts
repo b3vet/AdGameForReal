@@ -1,11 +1,13 @@
 /**
- * Everything on the road that is not the boss: the brute and grunt blocks with
- * their HP numbers, and the streams of single bodies pouring between them.
+ * Everything on the road that is not the boss: the blocks with their HP
+ * numbers, the chargers that run a lane down, and the streams of single bodies
+ * pouring between them.
  *
- * A block is `units` skeletons — minions for a grunt, warriors for a brute —
- * drawn from two crowds, so every block on the road costs two draw calls
- * between them however many blocks there are. The cluster thins as the block
- * loses units, and because a skeleton's spot in the cluster is derived from its
+ * A block is `units` skeletons — minions for a grunt, warriors for a brute, the
+ * same warriors carrying the pack's shield for a shielded brute (D49) — drawn
+ * from three crowds, so every block on the road costs three draw calls between
+ * them however many blocks there are. The cluster thins as the block loses
+ * units, and because a skeleton's spot in the cluster is derived from its
  * index, the survivors do not shuffle when one goes.
  *
  * The stream bodies (D29) go into the *same* minion crowd, after the blocks:
@@ -14,74 +16,56 @@
  * `./streamBodies.ts` for why — and only the stream's own floating count is
  * drawn over them.
  *
+ * A charger is not a block at all: one body, its own clips, its own crowd and
+ * its own dust (`./chargers.ts`). It keeps a slot here because it needs exactly
+ * what a block needs from this file — a label, a death clock and a place in the
+ * id map — and nothing else.
+ *
+ * The slots themselves, and the numbers they print, are `./enemySlots.ts`.
+ *
  * Who draws a block's death depends on `setPhysicsQuality`: at 1 and 2
  * `src/physics` throws real ragdolls, so this only takes the instances away; at
- * 0 there is no Havok at all and the baked `death` range plays here instead.
+ * 0 there is no Havok at all and the baked `death` range plays here instead. A
+ * charger is the exception and always plays its own, because the ragdoll pool
+ * is made of skeletons and a charger is not one.
  */
 
 import type { Scene } from '@babylonjs/core/scene';
 
-import type { Crowd } from './characters';
-import { commitCrowd, writeCluster } from './enemyBlocks';
-import { createLabelView, gateCrowdsLabel, setLabelView } from './labelClearance';
+import { ChargerBodies } from './chargers';
+import { BlockCrowds, writeCluster } from './enemyBlocks';
+import { EnemySlotBook } from './enemySlots';
+import type { EnemySlot } from './enemySlots';
+import { createLabelView, setLabelView } from './labelClearance';
 import type { LabelView } from './labelClearance';
-import { labelPixels, type NumberLabels } from './labels';
-import { loadCrowd } from './models';
+import type { NumberLabels } from './labels';
 import { RingPool } from './rings';
 import { ShadowLayer } from './shadows';
+import type { SpriteLayer } from './sprites';
 import { StreamBodies } from './streamBodies';
 import {
-  ENEMY_COLOR,
+  CHARGER_ATTACK_RANGE,
   ENEMY_DRAW_RANGE,
-  ENEMY_LABEL_COLOR,
-  ENEMY_LABEL_MIN,
-  ENEMY_LABEL_SIZE,
   LABEL_BEHIND,
-  LABEL_RANGE,
   POOL,
   SLOW_RING_COLOR,
 } from './theme';
-import { balance } from '@/data';
-import { enemyFootprint } from '@/sim';
-import type { EnemyKind, EnemyState, GateState, RunState } from '@/sim';
-
-/** Where the HP number is anchored: on the cluster, not floating above it. */
-const LABEL_HEIGHT = 0.95;
-
-interface EnemySlot {
-  /** This slot's label id in the shared atlas; see `src/render/labels.ts`. */
-  label: number;
-  enemyId: number;
-  kind: EnemyKind;
-  x: number;
-  z: number;
-  units: number;
-  /** Seconds into the baked death animation, or -1 while alive. */
-  dying: number;
-  /** Seconds of frost left on this block. */
-  slow: number;
-  footprint: number;
-  seen: number;
-  /** Last hp printed, so the string is only rebuilt when the number changes. */
-  shownHp: number;
-  /** The string that number produced, handed back to the atlas every frame. */
-  shownText: string;
-}
+import { laneCenter } from '@/sim';
+import type { EnemyState, RunState } from '@/sim';
 
 export class EnemyView {
   private readonly scene: Scene;
-  private readonly labels: NumberLabels;
-  private readonly slots: EnemySlot[] = [];
-  private readonly byEnemyId = new Map<number, EnemySlot>();
   private readonly rings: RingPool;
   private readonly streams: StreamBodies;
+  /** Ids to slots, and the numbers a slot prints (`./enemySlots.ts`). */
+  private readonly book: EnemySlotBook;
+  /** The three block crowds and their per-frame counts (`./enemyBlocks.ts`). */
+  private readonly crowds = new BlockCrowds();
+  /** The chargers, which are bodies rather than blocks (`./chargers.ts`). */
+  private readonly chargers = new ChargerBodies();
+  private readonly sprites: SpriteLayer;
 
-  private grunts: Crowd | null = null;
-  private brutes: Crowd | null = null;
   private physicsQuality = 0;
-  /** Per kind: the baked `death` range is shorter for a warrior than a minion. */
-  private gruntDeath = 1;
-  private bruteDeath = 1;
   private frame = 0;
   /** The last state drawn, for `positionOf` to find a stream body in. Read
    *  only; the renderer never mutates sim state. */
@@ -89,9 +73,15 @@ export class EnemyView {
   /** The camera pose the label-clearance rule reads. Written once a frame. */
   private readonly view: LabelView = createLabelView();
 
-  constructor(scene: Scene, labels: NumberLabels) {
+  /**
+   * `sprites` is the frame's shared quad batch, opened around this view's
+   * `update` by `Renderer`: a charger's dust goes into it, so the trail behind
+   * a running body costs no draw call of its own.
+   */
+  constructor(scene: Scene, labels: NumberLabels, sprites: SpriteLayer) {
     this.scene = scene;
-    this.labels = labels;
+    this.sprites = sprites;
+    this.book = new EnemySlotBook(labels, POOL.enemies);
     this.streams = new StreamBodies(labels);
     this.rings = new RingPool(scene, 'frostRing', SLOW_RING_COLOR, POOL.slowRings, {
       thickness: 0.1,
@@ -99,45 +89,11 @@ export class EnemyView {
       additive: true,
       y: 0.05,
     });
-
-    for (let i = 0; i < POOL.enemies; i++) {
-      this.slots.push({
-        label: labels.claim(),
-        enemyId: -1,
-        kind: 'grunt',
-        x: 0,
-        z: 0,
-        units: 0,
-        dying: -1,
-        slow: 0,
-        footprint: 1,
-        seen: 0,
-        shownHp: Number.NaN,
-        shownText: '',
-      });
-    }
   }
 
   async load(): Promise<void> {
-    const [grunts, brutes] = await Promise.all([
-      loadCrowd(this.scene, {
-        modelId: 'skeleton_minion',
-        capacity: POOL.grunts,
-        fallbackColor: ENEMY_COLOR,
-        fallbackName: 'grunt',
-      }),
-      loadCrowd(this.scene, {
-        modelId: 'skeleton_warrior',
-        capacity: POOL.brutes,
-        fallbackColor: ENEMY_COLOR,
-        fallbackName: 'brute',
-      }),
-    ]);
-    this.grunts = grunts;
-    this.brutes = brutes;
-    this.gruntDeath = grunts.durationOf('death');
-    this.bruteDeath = brutes.durationOf('death');
-    this.streams.setDeathSeconds(this.gruntDeath);
+    await Promise.all([this.crowds.load(this.scene), this.chargers.load(this.scene)]);
+    this.streams.setDeathSeconds(this.crowds.deathSeconds('grunt'));
   }
 
   /**
@@ -150,10 +106,10 @@ export class EnemyView {
   }
 
   reset(): void {
-    this.byEnemyId.clear();
-    for (const slot of this.slots) this.release(slot);
+    this.book.releaseAll();
     this.rings.reset();
     this.streams.reset();
+    this.chargers.reset();
   }
 
   /**
@@ -169,27 +125,48 @@ export class EnemyView {
    * A block died. Stream bodies are not routed here at all: their death is read
    * off `EnemyState.diedAt` every frame (`./streamBodies.ts`), so there is
    * nothing for an event to start.
+   *
+   * `z` is where the sim says it died, which is the only thing that separates a
+   * charger that reached the crowd from one that was shot on the way in: both
+   * arrive as this one event (`src/sim/contact.ts`).
    */
-  onKilled(enemyId: number): void {
-    const slot = this.byEnemyId.get(enemyId);
+  onKilled(enemyId: number, z?: number): void {
+    const slot = this.book.get(enemyId);
     if (slot === undefined || slot.dying >= 0) return;
+    if (slot.kind === 'charger') {
+      const squadZ = this.lastState?.squad.z ?? Number.NEGATIVE_INFINITY;
+      slot.death = (z ?? slot.z) - squadZ <= CHARGER_ATTACK_RANGE ? 'arrived' : 'shot';
+      slot.dying = 0;
+      return;
+    }
     // Physics is throwing ragdolls for this block: two deaths for one kill
     // would read as double vision.
-    if (this.physicsQuality > 0) this.release(slot);
+    if (this.physicsQuality > 0) this.book.release(slot);
     else slot.dying = 0;
   }
 
   /** Frost: the block comes apart into shards, so nothing is left to animate. */
   onShattered(enemyId: number): void {
-    const slot = this.byEnemyId.get(enemyId);
+    const slot = this.book.get(enemyId);
     if (slot === undefined) return;
-    this.release(slot);
+    this.book.release(slot);
   }
 
   onSlowed(enemyId: number, seconds: number): void {
-    const slot = this.byEnemyId.get(enemyId);
+    const slot = this.book.get(enemyId);
     if (slot === undefined) return;
     slot.slow = Math.max(slot.slow, seconds);
+  }
+
+  /**
+   * A shielded brute's shield reached zero (D49). The shield count stops being
+   * printed and the body's own number turns to the alarm colour for the rest of
+   * its life: the block the player could not hurt is now the block they can.
+   */
+  onShieldBreak(enemyId: number): void {
+    const slot = this.book.get(enemyId);
+    if (slot === undefined) return;
+    slot.broken = true;
   }
 
   /**
@@ -201,7 +178,7 @@ export class EnemyView {
    * most `POOL.chains` in a frame.
    */
   positionOf(enemyId: number, out: { x: number; z: number }): boolean {
-    const slot = this.byEnemyId.get(enemyId);
+    const slot = this.book.get(enemyId);
     if (slot !== undefined) {
       out.x = slot.x;
       out.z = slot.z;
@@ -222,23 +199,22 @@ export class EnemyView {
 
   /**
    * `shadows` is the scene's blob layer, already opened by the frame. Every
-   * skeleton on the road gets a contact patch: the blocks' through
-   * `writeCluster`, the rivers' through `StreamBodies.write` (D38, wired here
-   * in Phase E).
+   * body on the road gets a contact patch: the blocks' through `writeCluster`,
+   * the rivers' through `StreamBodies.write`, the chargers' through their own
+   * view (D38, wired here in Phase E).
    */
   update(state: RunState, dt: number, shadows: ShadowLayer | null): void {
     this.frame++;
     this.lastState = state;
     const squadZ = state.squad.z;
     // Where the camera sits this frame, which is what turns metres of road into
-    // pixels for `gateCrowdsLabel`. Hoisted out of the loop and written into one
-    // re-used object: one rig serves every block and every stream on screen.
+    // pixels for the label-clearance rule. Hoisted out of the loop and written
+    // into one re-used object: one rig serves every block and every stream on
+    // screen.
     const view = setLabelView(this.view, squadZ, state.squad.count, state.squad.formationWidth);
 
-    const grunts = this.grunts;
-    const brutes = this.brutes;
-    let gruntCount = 0;
-    let bruteCount = 0;
+    this.crowds.begin();
+    this.chargers.begin();
     this.rings.begin();
 
     for (const enemy of state.enemies) {
@@ -247,56 +223,35 @@ export class EnemyView {
       // and no frost ring: a river of three hundred would otherwise claim every
       // block slot in the pool on its first frame.
       if (enemy.streamId !== undefined) continue;
-      const slot = this.bind(enemy);
+      const slot = this.book.bind(enemy);
       if (slot === undefined || slot.dying >= 0) continue;
       slot.seen = this.frame;
-      this.trackAlive(slot, enemy, state, dt);
-      this.paintLabel(slot, enemy, state.gates, squadZ, view);
+      const slow = this.book.track(slot, enemy, state, dt);
+      if (slow > 0) this.rings.add(enemy.x, enemy.z, slot.footprint + 0.25);
+      this.book.paint(slot, enemy, state.gates, squadZ, view);
 
       const ahead = enemy.z - squadZ;
       if (ahead > ENEMY_DRAW_RANGE || ahead < -LABEL_BEHIND * 2) continue;
-      const crowd = enemy.kind === 'brute' ? brutes : grunts;
-      if (crowd === null) continue;
-      const base = enemy.kind === 'brute' ? bruteCount : gruntCount;
-      const written = writeCluster(crowd, base, slot, enemy.active, -1, shadows, ShadowLayer.fade(ahead));
-      if (enemy.kind === 'brute') bruteCount += written;
-      else gruntCount += written;
+      this.writeBody(slot, enemy, shadows, ShadowLayer.fade(ahead), dt);
     }
 
-    for (const slot of this.slots) {
-      if (slot.enemyId < 0) continue;
-      if (slot.dying >= 0) {
-        slot.dying += dt;
-        // Its own clip's length: run past it and the baked range wraps and the
-        // block dies a second time (docs/ASSETS.md, open issue 4).
-        if (slot.dying >= (slot.kind === 'brute' ? this.bruteDeath : this.gruntDeath)) {
-          this.release(slot);
-          continue;
-        }
-        const crowd = slot.kind === 'brute' ? brutes : grunts;
-        if (crowd === null) continue;
-        const base = slot.kind === 'brute' ? bruteCount : gruntCount;
-        // A dying block's blob goes with it: the bodies are falling over, and a
-        // full-strength disc under a corpse outlives the corpse.
-        const written = writeCluster(crowd, base, slot, true, slot.dying, shadows, 0);
-        if (slot.kind === 'brute') bruteCount += written;
-        else gruntCount += written;
-      } else if (slot.seen !== this.frame) {
-        // Walked off the back of the level rather than dying: no animation.
-        this.release(slot);
-      }
-    }
+    this.sweep(dt, shadows);
 
     // The streams go into the minion crowd after every block, so both are one
     // draw call, and their floating counts into the shared glyph atlas.
+    const grunts = this.crowds.crowdFor('grunt');
     if (grunts !== null) {
-      gruntCount += this.streams.write(grunts, gruntCount, state, this.physicsQuality, shadows);
+      const base = this.crowds.writtenFor('grunt');
+      this.crowds.advance(
+        'grunt',
+        this.streams.write(grunts, base, state, this.physicsQuality, shadows),
+      );
     }
     this.streams.writeLabels(state.streams, squadZ, state.gates, view);
 
     this.rings.end();
-    commitCrowd(grunts, gruntCount, dt);
-    commitCrowd(brutes, bruteCount, dt);
+    this.crowds.commit(dt);
+    this.chargers.commit(this.sprites, dt);
   }
 
   /** Stream bodies drawn last frame, for the debug panel and the dev harness. */
@@ -304,97 +259,98 @@ export class EnemyView {
     return this.streams.count;
   }
 
+  /** Chargers drawn last frame, for the same two readers. */
+  get chargerBodies(): number {
+    return this.chargers.count;
+  }
+
   dispose(): void {
-    this.slots.length = 0;
-    this.byEnemyId.clear();
+    this.book.releaseAll();
     this.lastState = null;
     this.streams.dispose();
     this.rings.dispose();
-    this.grunts?.dispose();
-    this.brutes?.dispose();
-    this.grunts = null;
-    this.brutes = null;
+    this.chargers.dispose();
+    this.crowds.dispose();
   }
 
-  private bind(enemy: EnemyState): EnemySlot | undefined {
-    const existing = this.byEnemyId.get(enemy.id);
-    if (existing !== undefined) return existing;
-    if (!enemy.alive) return undefined;
-
-    const slot = this.freeSlot();
-    if (slot === undefined) return undefined;
-
-    slot.enemyId = enemy.id;
-    slot.kind = enemy.kind;
-    slot.dying = -1;
-    slot.slow = 0;
-    slot.shownHp = Number.NaN;
-    slot.shownText = '';
-
-    this.byEnemyId.set(enemy.id, slot);
-    return slot;
-  }
-
-  /** First unbound slot. An index loop, not `find`: this runs per block per
-   *  frame and a closure per call is an allocation in the steady-state path. */
-  private freeSlot(): EnemySlot | undefined {
-    for (let i = 0; i < this.slots.length; i++) {
-      const slot = this.slots[i];
-      if (slot !== undefined && slot.enemyId < 0) return slot;
-    }
-    return undefined;
-  }
-
-  private trackAlive(slot: EnemySlot, enemy: EnemyState, state: RunState, dt: number): void {
-    slot.x = enemy.x;
-    slot.z = enemy.z;
-    slot.units = Math.max(1, enemy.units);
-    slot.footprint = enemyFootprint(enemy.kind, slot.units, balance);
-
-    // Two sources for the same fact, because both can be missing: the sim's
-    // deadline is authoritative when it is there, and the event's countdown
-    // covers the fixtures and hand-built states that carry no `slowUntil`.
-    const remaining = enemy.slowUntil === undefined ? 0 : enemy.slowUntil - state.time;
-    slot.slow = Math.max(slot.slow - dt, remaining);
-    if (slot.slow > 0) this.rings.add(enemy.x, enemy.z, slot.footprint + 0.25);
-  }
-
-  private paintLabel(
+  /** One live body into whichever crowd draws its kind. */
+  private writeBody(
     slot: EnemySlot,
     enemy: EnemyState,
-    gates: readonly GateState[],
-    squadZ: number,
-    view: LabelView,
+    shadows: ShadowLayer | null,
+    shadowAlpha: number,
+    dt: number,
   ): void {
-    const ahead = enemy.z - squadZ;
-    const readable =
-      ahead < LABEL_RANGE &&
-      ahead > -LABEL_BEHIND &&
-      !gateCrowdsLabel(gates, enemy.x, enemy.z, LABEL_HEIGHT, view);
-    if (!readable) return;
-
-    const hp = Math.max(0, Math.round(enemy.hp));
-    if (hp !== slot.shownHp) {
-      slot.shownHp = hp;
-      slot.shownText = String(hp);
+    if (enemy.kind === 'charger') {
+      this.chargers.writeLive(
+        enemy.id,
+        enemy.x,
+        enemy.z,
+        slot.charging,
+        slot.charging ? laneCenter(enemy.charge?.lane ?? 0) - enemy.x : 0,
+        shadows,
+        shadowAlpha,
+        dt,
+      );
+      return;
     }
-    this.labels.set(
-      slot.label,
-      slot.shownText,
-      enemy.x,
-      LABEL_HEIGHT,
-      enemy.z,
-      ENEMY_LABEL_COLOR,
-      labelPixels(ENEMY_LABEL_SIZE, ENEMY_LABEL_MIN, ahead),
+    const crowd = this.crowds.crowdFor(enemy.kind);
+    if (crowd === null) return;
+    const written = writeCluster(
+      crowd,
+      this.crowds.writtenFor(enemy.kind),
+      slot,
+      enemy.active,
+      -1,
+      shadows,
+      shadowAlpha,
     );
+    this.crowds.advance(enemy.kind, written);
   }
 
-  private release(slot: EnemySlot): void {
-    if (slot.enemyId >= 0) this.byEnemyId.delete(slot.enemyId);
-    slot.enemyId = -1;
-    slot.dying = -1;
-    slot.slow = 0;
-    slot.shownHp = Number.NaN;
-    slot.shownText = '';
+  /**
+   * Ages the dying, draws them, and releases the slots of bodies that simply
+   * walked off the back of the level.
+   */
+  private sweep(dt: number, shadows: ShadowLayer | null): void {
+    for (const slot of this.book.slots) {
+      if (slot.enemyId < 0) continue;
+      if (slot.dying < 0) {
+        // Walked off the back of the level rather than dying: no animation.
+        if (slot.seen !== this.frame) this.book.release(slot);
+        continue;
+      }
+
+      slot.dying += dt;
+      if (slot.kind === 'charger') {
+        // Its own clips' length: run past it and the baked range wraps and the
+        // body dies a second time (docs/ASSETS.md, open issue 4).
+        if (slot.dying >= this.chargers.deathLength(slot.death)) {
+          this.book.release(slot);
+          continue;
+        }
+        this.chargers.writeDying(slot.x, slot.z, slot.dying, slot.death);
+        continue;
+      }
+
+      if (slot.dying >= this.crowds.deathSeconds(slot.kind)) {
+        this.book.release(slot);
+        continue;
+      }
+      const crowd = this.crowds.crowdFor(slot.kind);
+      if (crowd === null) continue;
+      // A dying block's blob goes with it: the bodies are falling over, and a
+      // full-strength disc under a corpse outlives the corpse.
+      const written = writeCluster(
+        crowd,
+        this.crowds.writtenFor(slot.kind),
+        slot,
+        true,
+        slot.dying,
+        shadows,
+        0,
+      );
+      this.crowds.advance(slot.kind, written);
+    }
   }
 }

@@ -1,6 +1,6 @@
 {
   "upgrades": {
-    "baseCost": 900,
+    "baseCost": 1150,
     "costGrowth": 1.6,
     "maxLevel": 10,
     "starterRung": {
@@ -10,7 +10,7 @@
       "damage": 0.08,
       "fireRate": 0.06,
       "startCount": 1,
-      "gateBonus": 0.05,
+      "gateBonus": 0.09,
       "bossDamage": 0.1
     }
   },

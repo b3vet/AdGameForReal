@@ -31,7 +31,8 @@
     "sfx_boss_stomp": 2,
     "sfx_boss_death": 1,
     "sfx_win_fanfare": 1,
-    "sfx_lose_sting": 1
+    "sfx_lose_sting": 1,
+    "sfx_gate_pass_bad": 3
   },
   "minIntervalMs": {
     "enemyHit": 55,
@@ -48,7 +49,9 @@
     "streamClear": 200,
     "wallBump": 220,
     "familiarShot": 110,
-    "purchase": 70
+    "purchase": 70,
+    "charge": 260,
+    "shieldBreak": 90
   },
   "shot": {
     "windowMs": 100,
@@ -87,6 +90,40 @@
     "sound": "sfx_shot_storm",
     "playbackRate": 1.85,
     "volume": 0.5
+  },
+  "charge": {
+    "charger": {
+      "sound": "sfx_gate_pass_bad",
+      "playbackRate": 0.62,
+      "volume": 0.55
+    },
+    "boss": {
+      "sound": "sfx_gate_pass_bad",
+      "playbackRate": 0.45,
+      "volume": 1
+    }
+  },
+  "shieldBreak": {
+    "sound": "sfx_shatter",
+    "playbackRate": 0.78,
+    "volume": 1
+  },
+  "bossStomp": {
+    "demon": {
+      "sound": "sfx_boss_stomp",
+      "playbackRate": 1,
+      "volume": 1
+    },
+    "rime": {
+      "sound": "sfx_boss_stomp",
+      "playbackRate": 1.18,
+      "volume": 0.85
+    },
+    "rimeIce": {
+      "sound": "sfx_shatter",
+      "playbackRate": 0.55,
+      "volume": 0.9
+    }
   },
   "ui": {
     "purchase": {

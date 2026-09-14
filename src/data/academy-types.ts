@@ -95,6 +95,16 @@ export interface AcademyCopy {
     unknown: string;
     entries: readonly BestiaryCopy[];
   };
+  /**
+   * The in-run HUD's two words (D49). The boss bar's title is the *bestiary's*
+   * name for whichever boss is in the arena — "Demon", "Rime Fiend" — so there
+   * are two copies of nothing; this is the fallback for a variant the bestiary
+   * has no entry for, and the word that replaces the name once it enrages.
+   */
+  hud: {
+    bossFallback: string;
+    enraged: string;
+  };
   buttons: {
     buy: string;
     max: string;

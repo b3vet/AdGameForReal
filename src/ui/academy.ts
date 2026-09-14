@@ -19,6 +19,7 @@
 import { roomUnlockLevel } from '@/core/player';
 import type { RoomId } from '@/core/player';
 import { academy, fill } from '@/data/academy-types';
+import { levelConfig } from '@/data';
 import type { WeaponId } from '@/sim';
 
 import { icon, roomIcon, setIcon } from './icons';
@@ -256,6 +257,10 @@ export class Academy {
       chip.hidden = !exists;
       if (!exists) continue;
       chip.dataset['level'] = String(level);
+      // Which biome the level is set in (D49), so the chips for 21 to 40 wear a
+      // cold wash and the picker says where the road goes before it is walked.
+      // The level recipe is the authority, exactly as it is for the renderer.
+      chip.dataset['biome'] = levelConfig(level).biome ?? 'meadow';
       chip.textContent = String(level);
       chip.setAttribute('aria-label', `Level ${String(level)}`);
       chip.disabled = level > view.unlockedLevel;

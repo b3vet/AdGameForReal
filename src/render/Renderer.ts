@@ -235,6 +235,12 @@ export class Renderer {
     return this.views?.enemies.streamBodies ?? 0;
   }
 
+  /** Chargers drawn last frame (D49); the debug panel prints them beside the
+   *  stream bodies, because both have a pool a level can run into. */
+  get chargerBodies(): number {
+    return this.views?.enemies.chargerBodies ?? 0;
+  }
+
   get labelStats(): { labels: number; glyphs: number; dropped: number } {
     return this.views?.labels.stats ?? { labels: 0, glyphs: 0, dropped: 0 };
   }
@@ -458,7 +464,10 @@ export class Renderer {
     views.projectiles.update(state.projectiles, weaponOf(state.squad), dt);
     views.gates.update(state, dt);
     views.enemies.update(state, dt, views.shadows);
-    views.boss.update(state.boss, state.squad.z, dt, this.timeScale(dt));
+    // The sim's clock as well as the frame's: `EnemyState.charge.until` is an
+    // absolute sim time, and it is what tells the Rime Fiend's run in from its
+    // walk home (D49).
+    views.boss.update(state.boss, state.squad.z, dt, this.timeScale(dt), state.time);
     views.effects.update(dt);
     // After the enemies, because both read positions the enemy view has just
     // refreshed: the wall's flare sprite and the wisp's spark, which homes on

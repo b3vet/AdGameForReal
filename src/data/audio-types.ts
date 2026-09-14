@@ -59,6 +59,14 @@ export interface AudioMix {
     familiarShot: number;
     /** Two taps on a Buy button in the same breath are one purchase sound. */
     purchase: number;
+    /**
+     * A charger setting off, or the Rime Fiend starting one (D49). Long, because
+     * the sound *is* long: two chargers on one row trigger a step apart, and the
+     * second rush landing on top of the first is one muddy roar.
+     */
+    charge: number;
+    /** A shield breaking. One per body by construction; this is the belt. */
+    shieldBreak: number;
   };
   /**
    * Shots are the one event that can arrive hundreds of times in a frame, so
@@ -119,6 +127,26 @@ export interface AudioMix {
    * firing twice a second sits under the squad's own volley instead of over it.
    */
   familiarShot: Cue;
+  /**
+   * Something running a lane down (D49): the charger's rush and the Rime
+   * Fiend's charge are the same clip an octave apart — the gate's force-field
+   * whoosh dropped until it growls. Two sizes of one voice, so a player who has
+   * learned what a rush means on the road already knows what the arena's is.
+   */
+  charge: { charger: Cue; boss: Cue };
+  /**
+   * A shielded brute's shield coming apart: the frost shatter's glass, pitched
+   * down so it is a heavier break than an ice kill and cannot be mistaken for
+   * one.
+   */
+  shieldBreak: Cue;
+  /**
+   * The stomp, per boss (D49). The demon's is the low explosion it always was;
+   * the Rime Fiend's is that explosion a little brighter with a crack of ice
+   * under it, so three metres of Frostfell does not land like three metres of
+   * demon.
+   */
+  bossStomp: { demon: Cue; rime: Cue; rimeIce: Cue };
   /**
    * The Academy's four voices, all reused clips (plan, "Academy"): a purchase
    * is the units-gained chime brightened, an unlock is the gate's good-news

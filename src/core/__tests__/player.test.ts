@@ -42,16 +42,21 @@ function rich(coins = 1_000_000): PlayerState {
 
 describe('upgrades', () => {
   it('charges the printed price and raises the level by one', () => {
-    const player = rich(1000);
-    const price = upgradeCost(player, 'damage');
+    // A purse of exactly one rung, read off the ladder rather than written
+    // down: `upgrades.baseCost` is tuning and moves whenever the economy is
+    // re-fitted (it went 900 to 1150 in Milestone 7), and a hard-coded purse
+    // turns that into a failure here.
+    const price = upgradeCost(defaultPlayer(), 'damage');
     expect(price).not.toBeNull();
+    const purse = price ?? 0;
+    const player = rich(purse);
 
     const next = buyUpgrade(player, 'damage');
     expect(next).not.toBeNull();
-    expect(next?.coins).toBe(1000 - (price ?? 0));
+    expect(next?.coins).toBe(0);
     expect(next?.upgrades.damage).toBe(1);
     // The state handed in is untouched: the app decides what to keep.
-    expect(player.coins).toBe(1000);
+    expect(player.coins).toBe(purse);
     expect(player.upgrades.damage).toBe(0);
   });
 

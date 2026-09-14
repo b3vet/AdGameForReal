@@ -18,7 +18,7 @@ import type { EnemyView } from './enemies';
 import type { GateView } from './gates';
 import type { ProjectileView } from './projectiles';
 import type { SquadView } from './squad';
-import { SHAKE_BOSS_KILL, SHAKE_STOMP } from './theme';
+import { SHAKE_BOSS_KILL, SHAKE_CHARGE, SHAKE_STOMP } from './theme';
 import type { WallView } from './walls';
 import type { WispView } from './wisp';
 import { startWeapon } from '@/sim';
@@ -186,7 +186,25 @@ export class RendererEvents {
             this.views.boss?.onKilled();
             this.bossDeathBurst(event.x, event.z);
           } else {
-            enemies?.onKilled(event.enemyId);
+            // The position too: it is what tells a charger that reached the
+            // crowd from one shot out of its lane (`./enemies.ts`).
+            enemies?.onKilled(event.enemyId, event.z);
+          }
+          break;
+        case 'shieldBreak':
+          // Two halves of one break: the block's own label switches to the
+          // alarm ink and stops printing a shield, and a ring of chips goes off
+          // where the sim says the shield was. The real shards, when there is a
+          // Havok to throw them, are the physics layer's (D49).
+          enemies?.onShieldBreak(event.enemyId);
+          effects?.onShieldBreak(event.x, event.z);
+          break;
+        case 'charge':
+          // Only the boss kicks the camera. A charger's own charge goes off
+          // twenty metres up the road, where a kick would read as something
+          // landing on the crowd rather than as something setting off.
+          if (event.kind === 'boss') {
+            this.views.shake(SHAKE_CHARGE.strength, SHAKE_CHARGE.seconds);
           }
           break;
         case 'familiarShot':

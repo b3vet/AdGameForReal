@@ -155,25 +155,33 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
  * well, and all three the Rime Fiend and its lane charge. A change to any of
  * the new kinds that was not meant to reach the campaign shows up here.
  *
- * Levels 1 to 20 are untouched by all of it, which `./frost.test.ts` says of
- * the recipes and the table above says of the runs.
+ * Re-captured once at the end of Phase D, for one reason: the twenty recipes
+ * these three are dealt from were re-fitted. Phase B sized them for a hand that
+ * had bought nothing and the bands are measured on the armed one (D46, D49), so
+ * the Rime Fiend's hit points are about half again what they were, `bite` is
+ * heavier, and each level gives up two to five of its guarded gate rows. Levels
+ * 21 to 23 also carry the stacked-fence rule, which runs from level 1 now.
+ *
+ * Levels 1 to 20 are untouched by all of it *as recipes*, which
+ * `./frost.test.ts` says, and the table above says their runs on 1 to 3 replay
+ * byte for byte.
  */
 const FROST_GOLDEN: Readonly<Record<string, string>> = {
-  '21:1': '7fe25517',
-  '21:2': 'c40474b7',
-  '21:3': 'f7f1923c',
-  '21:4': '0bac6b90',
-  '21:5': '3caf8149',
-  '22:1': 'f21ce220',
-  '22:2': 'ab0afd20',
-  '22:3': 'b8311f81',
-  '22:4': 'e29db6a5',
-  '22:5': '88ad72f7',
-  '23:1': '6b615cbb',
-  '23:2': 'f4134cea',
-  '23:3': 'cc05f030',
-  '23:4': 'c9f284c8',
-  '23:5': '5ea6d5d6',
+  '21:1': '77edbdb0',
+  '21:2': '23d85f27',
+  '21:3': 'deeacf9c',
+  '21:4': '399f9bbf',
+  '21:5': '17ec4d65',
+  '22:1': '523f1eb9',
+  '22:2': '7730ca76',
+  '22:3': '30062643',
+  '22:4': 'a27c5296',
+  '22:5': '4e2f2df8',
+  '23:1': '85b4e090',
+  '23:2': 'bafc362e',
+  '23:3': 'cd09ed97',
+  '23:4': '23da271c',
+  '23:5': 'e8584c24',
 };
 
 describe('no-upgrade regression', () => {

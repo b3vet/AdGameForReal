@@ -27,6 +27,23 @@ import type { Scene } from '@babylonjs/core/scene';
  */
 const GLYPHS = '0123456789+-x%.EmberStormFrostaf';
 
+/**
+ * The one glyph on the sheet that is drawn rather than typed: the shield in
+ * front of a shielded brute's count (D49).
+ *
+ * A private-use code point, so it can never collide with a character the sim
+ * prints, and a painted path rather than a font character because Cinzel has no
+ * shield in it and the fallback serif stack would answer a dingbat differently
+ * on every device. Everything else about it is a glyph like any other — one
+ * cell, one quad, the same white ink and near-black outline the digits carry —
+ * so a shield count is still one draw call with every other number in the
+ * scene.
+ */
+export const SHIELD_GLYPH = '\u{e000}';
+
+/** The same thing as a code, which is what the sheet is keyed by. */
+const SHIELD_CODE = 0xe000;
+
 /** The size the sheet is rasterised at. Labels scale it; they never re-draw it. */
 export const ATLAS_FONT_PX = 64;
 /** Outline width. Centred by the canvas, so half of it lands outside the ink. */
@@ -40,6 +57,10 @@ const BASELINE_PX = Math.round(ATLAS_FONT_PX * 1.08);
 const ATLAS_WIDTH = 512;
 /** Enough rows for the glyph set with room to add a word; unused rows are free. */
 const MAX_ROWS = 5;
+
+/** The shield's size, as shares of the font size: a little narrower than tall. */
+const SHIELD_WIDTH = 0.56;
+const SHIELD_HEIGHT = 0.7;
 
 const DISPLAY_FAMILY = 'Cinzel';
 const FALLBACK_STACK = 'Georgia, "Times New Roman", serif';
@@ -94,8 +115,10 @@ export class GlyphAtlas {
 
     // Babylon's canvas interface carries no `textAlign`/`textBaseline`, so the
     // glyphs are drawn from the left at the default alphabetic baseline and the
-    // margins are arithmetic instead.
-    const context = this.texture.getContext();
+    // margins are arithmetic instead. It carries no path methods either, and
+    // the shield below is a path, so the context is narrowed to the real thing
+    // once here — exactly as `./spriteSheets.ts` narrows its own.
+    const context = this.texture.getContext() as unknown as CanvasRenderingContext2D;
     context.clearRect(0, 0, ATLAS_WIDTH, height);
     context.font = font;
     context.lineWidth = OUTLINE_PX;
@@ -137,8 +160,63 @@ export class GlyphAtlas {
       penX += cell;
     }
 
+    this.paintShield(context, penX, row, height);
+
     // The one and only upload. Everything after this is quads and buffers.
     this.texture.update(true);
+  }
+
+  /**
+   * The shield, in the cell the text left off at.
+   *
+   * Drawn in the same ink and outline as the digits and sized to their cap
+   * height, so `⛨12` reads as one word rather than as a picture next to a
+   * number. Stroked before it is filled, exactly as the text is, so the outline
+   * sits half outside the shape and the glyph survives on a pale road.
+   */
+  private paintShield(
+    context: CanvasRenderingContext2D,
+    penX: number,
+    row: number,
+    height: number,
+  ): void {
+    const width = Math.round(ATLAS_FONT_PX * SHIELD_WIDTH);
+    const cell = width + OUTLINE_PX + PAD_PX * 2;
+    let left = penX;
+    let line = row;
+    if (left + cell > ATLAS_WIDTH) {
+      left = 0;
+      line++;
+    }
+    if (line >= MAX_ROWS) return;
+
+    const top = line * LINE_PX;
+    const baseline = top + BASELINE_PX;
+    const x = left + PAD_PX + OUTLINE_PX / 2;
+    const tall = ATLAS_FONT_PX * SHIELD_HEIGHT;
+    const y = baseline - tall;
+    const shoulder = y + tall * 0.5;
+
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x + width, y);
+    context.lineTo(x + width, shoulder);
+    context.quadraticCurveTo(x + width, baseline, x + width / 2, baseline);
+    context.quadraticCurveTo(x, baseline, x, shoulder);
+    context.closePath();
+    context.stroke();
+    context.fill();
+
+    this.glyphs.set(SHIELD_CODE, {
+      u: left / ATLAS_WIDTH,
+      v: 1 - (top + LINE_PX) / height,
+      du: cell / ATLAS_WIDTH,
+      dv: LINE_PX / height,
+      width: cell / ATLAS_FONT_PX,
+      height: LINE_PX / ATLAS_FONT_PX,
+      // A hair of air after it, so the count does not touch the shield's rim.
+      advance: (width + PAD_PX) / ATLAS_FONT_PX,
+    });
   }
 
   /** The glyph for a character code, or undefined when the sheet has none. */

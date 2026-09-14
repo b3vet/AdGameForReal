@@ -1,33 +1,25 @@
 /**
- * Spell effects: muzzle flashes, per-weapon impacts, the ember splash ring, the
- * storm chain arc and the puff a leaked enemy leaves behind.
+ * Spell effects: muzzle flashes, per-weapon impacts, the shield break, and the
+ * puff a leaked enemy leaves behind.
  *
- * The bursts and flashes are flipbook sprites written into the shared
- * `SpriteLayer` (`./sprites.ts`), so they cost no draw call of their own — they
- * land in the same batch as the projectiles. The ring and the arc stay
- * geometry, because a ring that has to be exactly `radius` metres across on the
- * ground is a torus, not a billboard; both are restyled brighter for the
- * daylight palette, where an additive shape on a light road has to work harder
- * than it did on a near-black one.
+ * All of them are flipbook sprites written into the shared `SpriteLayer`
+ * (`./sprites.ts`), so they cost no draw call of their own — they land in the
+ * same batch as the projectiles. The two effects that are *not* quads, ember's
+ * splash ring and storm's chain arc, are `./effectsGeometry.ts`, which this
+ * view owns and drives; the split is the file-size rule (CLAUDE.md) on the seam
+ * the effects already had.
  *
  * Everything is pooled and capped at `POOL.impacts` live effects (the plan's
  * 24), and nothing here allocates per frame.
  */
 
-import { Constants } from '@babylonjs/core/Engines/constants';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
-import { RingPool } from './rings';
+import { EffectGeometry } from './effectsGeometry';
 import type { SpriteLayer } from './sprites';
 import { bookCell, type SpriteBook } from './spriteSheets';
 import {
-  CHAIN_DURATION,
-  CHAIN_Y,
   EMBER_COLOR,
   FROST_COLOR,
   IMPACT_DURATION,
@@ -41,7 +33,11 @@ import {
   SHATTER_PUFF_DURATION,
   SHATTER_PUFF_SIZE,
   SHATTER_PUFF_SPOKES,
-  SPLASH_DURATION,
+  SHIELD_BREAK_COLOR,
+  SHIELD_BREAK_DURATION,
+  SHIELD_BREAK_RADIUS,
+  SHIELD_BREAK_SIZE,
+  SHIELD_BREAK_SPOKES,
   STORM_COLOR,
   paletteColor,
 } from './theme';
@@ -89,21 +85,6 @@ interface Burst {
   size: number;
 }
 
-interface Splash {
-  x: number;
-  z: number;
-  radius: number;
-  age: number;
-}
-
-interface Chain {
-  x: number;
-  z: number;
-  yaw: number;
-  length: number;
-  age: number;
-}
-
 export class EffectsView {
   private readonly sprites: SpriteLayer;
 
@@ -111,14 +92,8 @@ export class EffectsView {
   private readonly bursts: Burst[] = [];
   private burstCount = 0;
 
-  private readonly chainMesh: Mesh;
-  private readonly chainMatrices: Float32Array;
-  private readonly chains: Chain[] = [];
-  private chainCount = 0;
-
-  private readonly splashRings: RingPool;
-  private readonly splashes: Splash[] = [];
-  private splashCount = 0;
+  /** The ring and the arc, which are meshes rather than quads. */
+  private readonly geometry: EffectGeometry;
 
   private active: WeaponId = startWeapon;
 
@@ -142,23 +117,7 @@ export class EffectsView {
       });
     }
 
-    // A unit-length bar along +z, stretched between the two blocks it links.
-    this.chainMesh = CreateBox('chain', { width: 0.12, height: 0.12, depth: 1 }, scene);
-    this.chainMesh.material = unlit(scene, 'chainMat', STORM_COLOR);
-    this.chainMatrices = createMatrixBuffer(this.chainMesh, POOL.chains);
-    for (let i = 0; i < POOL.chains; i++) {
-      this.chains.push({ x: 0, z: 0, yaw: 0, length: 1, age: 0 });
-    }
-
-    this.splashRings = new RingPool(scene, 'splash', EMBER_COLOR, POOL.splashes, {
-      thickness: 0.13,
-      alpha: 0.8,
-      additive: true,
-      y: 0.5,
-    });
-    for (let i = 0; i < POOL.splashes; i++) {
-      this.splashes.push({ x: 0, z: 0, radius: 1, age: 0 });
-    }
+    this.geometry = new EffectGeometry(scene);
   }
 
   /** The staff decides which impact book is played and what colour a shot is. */
@@ -236,29 +195,42 @@ export class EffectsView {
     }
   }
 
-  onSplash(x: number, z: number, radius: number): void {
-    if (this.splashCount >= POOL.splashes) return;
-    const splash = this.splashes[this.splashCount];
-    if (splash === undefined) return;
-    splash.x = x;
-    splash.z = z;
-    splash.radius = radius;
-    splash.age = 0;
-    this.splashCount++;
+  /**
+   * A shielded brute's shield came apart (D49): a ring of ice chips thrown out
+   * from the body, in the frost role.
+   *
+   * It is drawn whatever the physics quality is, unlike the real shards the
+   * layer throws on top of it (`src/physics/bursts.ts`), because at quality 0
+   * there is no Havok at all — and the break is the one moment that has to read
+   * on every device, since it is what says the block's number will move now.
+   * Brighter than the frost impacts it sits among, so the break is not lost in
+   * the volley that caused it.
+   */
+  onShieldBreak(x: number, z: number): void {
+    for (let i = 0; i < SHIELD_BREAK_SPOKES; i++) {
+      const angle = (i / SHIELD_BREAK_SPOKES) * Math.PI * 2 + 0.2;
+      this.push(
+        'frostImpact',
+        x + Math.cos(angle) * SHIELD_BREAK_RADIUS,
+        IMPACT_Y,
+        z + Math.sin(angle) * SHIELD_BREAK_RADIUS * 0.6,
+        SHIELD_BREAK_SIZE,
+        SHIELD_BREAK_DURATION,
+        SHIELD_BREAK_COLOR.r * IMPACT_GLOW_BOOST,
+        SHIELD_BREAK_COLOR.g * IMPACT_GLOW_BOOST,
+        SHIELD_BREAK_COLOR.b * IMPACT_GLOW_BOOST,
+      );
+    }
   }
 
+  /** Ember's blast ring, on the ground at the radius the sim resolved it at. */
+  onSplash(x: number, z: number, radius: number): void {
+    this.geometry.onSplash(x, z, radius);
+  }
+
+  /** Storm's arc between two blocks. */
   onChain(fromX: number, fromZ: number, toX: number, toZ: number): void {
-    if (this.chainCount >= POOL.chains) return;
-    const chain = this.chains[this.chainCount];
-    if (chain === undefined) return;
-    const dx = toX - fromX;
-    const dz = toZ - fromZ;
-    chain.length = Math.max(0.2, Math.hypot(dx, dz));
-    chain.x = (fromX + toX) / 2;
-    chain.z = (fromZ + toZ) / 2;
-    chain.yaw = Math.atan2(dx, dz);
-    chain.age = 0;
-    this.chainCount++;
+    this.geometry.onChain(fromX, fromZ, toX, toZ);
   }
 
   /**
@@ -279,22 +251,16 @@ export class EffectsView {
 
   reset(): void {
     this.burstCount = 0;
-    this.chainCount = 0;
-    this.splashCount = 0;
-    commitInstances(this.chainMesh, 0);
-    this.splashRings.reset();
+    this.geometry.reset();
   }
 
   update(dt: number): void {
     this.updateBursts(dt);
-    this.updateChains(dt);
-    this.updateSplashes(dt);
+    this.geometry.update(dt);
   }
 
   dispose(): void {
-    this.chainMesh.material?.dispose();
-    this.chainMesh.dispose();
-    this.splashRings.dispose();
+    this.geometry.dispose();
     this.bursts.length = 0;
   }
 
@@ -359,62 +325,6 @@ export class EffectsView {
     }
     this.burstCount = write;
   }
-
-  private updateChains(dt: number): void {
-    let write = 0;
-    for (let i = 0; i < this.chainCount; i++) {
-      const chain = this.chains[i];
-      if (chain === undefined) continue;
-      chain.age += dt;
-      if (chain.age >= CHAIN_DURATION) continue;
-      const thickness = 1 - chain.age / CHAIN_DURATION;
-      writeRotatedInstance(
-        this.chainMatrices,
-        write,
-        thickness,
-        thickness,
-        chain.length,
-        chain.yaw,
-        chain.x,
-        CHAIN_Y,
-        chain.z,
-      );
-      const kept = this.chains[write];
-      if (kept !== undefined && write !== i) {
-        kept.x = chain.x;
-        kept.z = chain.z;
-        kept.yaw = chain.yaw;
-        kept.length = chain.length;
-        kept.age = chain.age;
-      }
-      write++;
-    }
-    this.chainCount = write;
-    commitInstances(this.chainMesh, write);
-  }
-
-  private updateSplashes(dt: number): void {
-    this.splashRings.begin();
-    let write = 0;
-    for (let i = 0; i < this.splashCount; i++) {
-      const splash = this.splashes[i];
-      if (splash === undefined) continue;
-      splash.age += dt;
-      if (splash.age >= SPLASH_DURATION) continue;
-      const p = splash.age / SPLASH_DURATION;
-      this.splashRings.add(splash.x, splash.z, splash.radius * (0.3 + p * 0.9), 1 - p);
-      const kept = this.splashes[write];
-      if (kept !== undefined && write !== i) {
-        kept.x = splash.x;
-        kept.z = splash.z;
-        kept.radius = splash.radius;
-        kept.age = splash.age;
-      }
-      write++;
-    }
-    this.splashCount = write;
-    this.splashRings.end();
-  }
 }
 
 function copyBurst(from: Burst, to: Burst): void {
@@ -433,17 +343,4 @@ function copyBurst(from: Burst, to: Burst): void {
 
 function tintOf(id: WeaponId): Color3 {
   return id === 'ember' ? EMBER_COLOR : id === 'storm' ? STORM_COLOR : FROST_COLOR;
-}
-
-function unlit(scene: Scene, name: string, color: Color3): StandardMaterial {
-  const material = new StandardMaterial(name, scene);
-  // Scaled above 1 because the glow pass no longer blooms these (plan,
-  // performance step 4); additive blending turns the excess into a white core.
-  material.emissiveColor = color.scale(IMPACT_GLOW_BOOST);
-  material.diffuseColor = Color3.Black();
-  material.specularColor = Color3.Black();
-  material.disableLighting = true;
-  material.alpha = 0.95;
-  material.alphaMode = Constants.ALPHA_ADD;
-  return material;
 }

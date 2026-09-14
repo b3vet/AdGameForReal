@@ -80,6 +80,16 @@ export const SHATTER_SHARDS = [0, 5, 9] as const;
 export const GLASS_SHARDS = [0, 6, 10] as const;
 /** The ring thrown when the boss dies. */
 export const BOSS_SHARDS = [0, 4, 8] as const;
+/**
+ * Shards a shielded brute's shield breaks into (D49).
+ *
+ * Fewer than a shatter's, and on purpose: a break is a *state change* on a
+ * block that goes on standing there, not a body coming apart, and the renderer
+ * is already throwing a ring of frost chips at the same spot
+ * (`EffectsView.onShieldBreak`) so that the tell survives at quality 0 where
+ * there is no Havok at all. These are the pieces with weight.
+ */
+export const SHIELD_SHARDS = [0, 4, 7] as const;
 
 export const RAGDOLL_LIFE = 2.5;
 /** After `RAGDOLL_LIFE`: sink this far while fading out, then recycle. */

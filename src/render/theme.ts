@@ -54,8 +54,9 @@ export {
   paletteHex,
 } from './palette';
 export type { PaletteRole } from './palette';
-export { POOL, WALL_POST_SPACING } from './pools';
+export { ENEMY_MAX_INSTANCES, POOL, WALL_POST_SPACING } from './pools';
 export * from './cameraLook';
+export * from './monsterLook';
 export * from './crowdLook';
 export * from './wallLook';
 export * from './spellLook';
@@ -166,6 +167,8 @@ export const SHADOW = {
   mage: 0.135,
   grunt: 0.2,
   brute: 0.26,
+  /** The charger is one body, wider across the feet than a skeleton (D49). */
+  charger: 0.3,
 } as const;
 
 /** Labels cost a 2D canvas redraw, so only near things get one. */
@@ -279,8 +282,6 @@ export const GATE_PROP_HEIGHT = 0.8;
 export const GATE_PROP_Y = GATE_CENTER_Y + 1.55;
 export const GATE_PROP_SPIN = 1.1;
 
-/** Skeletons drawn for one block, however many units it is worth. */
-export const ENEMY_MAX_INSTANCES = 18;
 /** How tightly a block's skeletons pack inside its own footprint. */
 export const ENEMY_CLUSTER_DEPTH = 1.6;
 

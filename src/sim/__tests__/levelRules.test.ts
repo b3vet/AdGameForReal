@@ -116,10 +116,14 @@ describe('two fences in a row', () => {
     // found it — a fence on the left ruled out an `add`, and the next fence,
     // decided six metres later, priced a curse now against a worse curse next.
     //
-    // The rule runs from `walls.stretchGapFromLevel`, so the twenty levels
-    // Milestone 6 balanced are exempt: three of them deal a stacked pair on
-    // one seed in ten, which is a finding for the next retune rather than
-    // something to change under a shipped set of bands.
+    // The rule ran from `walls.stretchGapFromLevel` 21 when it was written, so
+    // that the twenty levels Milestone 6 had already balanced were exempt;
+    // three of them (11, 12 and 14) dealt a stacked pair on one seed in ten.
+    // Milestone 7's balance phase measured the exemption away: with the gap on
+    // from level 1 the Milestone 6 bands stay inside their targets on ten seeds
+    // (campaign clears 118 of 160 against 119, survivors 0.450 against 0.452,
+    // every boss still in band, greedy still 100 of 100), so the dial is 1 now
+    // and the rule holds everywhere a fence can stand.
     const from = balance.walls.stretchGapFromLevel;
     const gap = balance.walls.stretchGap;
     everyLevel((level, index, seed) => {

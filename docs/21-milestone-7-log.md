@@ -64,3 +64,53 @@
   the human-bot bands for 21 to 40 are scoped behind `BANDED = 20` for
   Phase D; the ice road's fracture contrast is worth a look in the hero
   set.
+
+## 2026-09-14 — Wave two: monster views and UI, balance 21 to 40 (verified and committed)
+
+- Phase C, render: a thin-instanced VAT crowd for chargers (pooled to the
+  level's charger rows, clips resolved once at load, idle then run with a
+  lean toward the lane, attack and death at contact, death alone when shot
+  down); the block crowds load the warrior's default and shield variants
+  from one parse and one VAT texture; the shield reads as a painted shield
+  glyph and count in the frost ink above the body number (one label, one
+  atlas), turning to the alarm ink on the break with seven frost chips
+  always and real ice shards at physics quality 1 and 2; both boss models
+  load at boot with one enabled, the Rime Fiend playing its charge clip in
+  and walking home with a turn, a lighter shake than the stomp; a pooled
+  spray emitter for the charger's dust and the boss's wake at zero draw
+  calls; audio cues picked by measuring the existing clips; bestiary cards
+  Rimehound, Bulwark, Rime Fiend recorded as seen like the others; the boss
+  bar titled from the bestiary; picker chips carry a frost wash from the
+  spell-frost roles. Warm-up 67 materials and 41 programs at boot, 41
+  after a whole Frostfell level; draw peak 47 to 48. `effects.ts` and
+  `enemies.ts` split (`effectsGeometry.ts`, `enemySlots.ts`); dead
+  chargers no longer throw skeleton ragdolls.
+- Phase D, balance, armed human on ten seeds: ordinary Frostfell levels
+  clear 0.72, survivors 0.39 of peak, bosses 20 to 30 s on every level;
+  boss charges cost 18 to 27 units a run (11 to 16 percent of the stomps),
+  chargers 1 to 10, shields break in half to nine tenths of the runs that
+  meet one; the new kinds' tuning needed no change. Levers were the level
+  recipes only: boss hp 19000 to 22900 → 28000 to 33700 (an armed squad
+  does 1.8× a bare one's boss damage), bite 0.57 to 0.81, mixed rows 8 to
+  10 → 3 to 9 (the crowd had been arriving at 280 to 440), four hpScale
+  and six density corrections, two curse ranges. Gate bonus 0.05 → 0.09
+  separates six of eight milestones by 0.15 (level 7 separates at no
+  value and stays an ordinary-hard level); the Yard's `baseCost` 900 →
+  1150 pays for it so levels 6 to 10 stay at 3.9 runs per purchase.
+  Stacked-fence rule applied from level 1 after measuring the Milestone 6
+  bands unchanged (levels 11, 12 and 14 deal differently; level 12 loses
+  one clear in ten). Greedy armed 100 of 100 on 21 to 40; greedy bare 37
+  of 100 there. Frost goldens re-captured once.
+- Combined tree: typecheck 0 errors, lint clean, 414 tests, build OK,
+  hosted 11.86 MB.
+- For the owner: from level 21 the game is balanced for a player who has
+  shopped (the Academy is not optional there), Frostfell's milestones are
+  absolute gates without upgrades, Yard prices are 28 percent dearer, and
+  level 7 is not an upgrade gate.
+- Carried to Phase E: the frost wake and the charger's dust do not read
+  on a white road (a ground ring in the frost role is the next try); the
+  ice road's fracture contrast; `gateArch.ts` warm literal tint; a
+  Frostfell smoke run (level 23, greedy, shots armed off `charge`,
+  `shield` and the boss's `charge`, at scale 1 if the volley's fill makes
+  2x too slow); the bestiary's sixth card below the fold on an 844 px
+  screen; `Renderer.ts` 566 lines.

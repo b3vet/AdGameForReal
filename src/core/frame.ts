@@ -116,6 +116,7 @@ export class FrameDriver {
     drawCalls: 0,
     drawCallsPeak: 0,
     streamBodies: 0,
+    chargers: 0,
     labels: 0,
     labelGlyphs: 0,
     labelsDropped: 0,
@@ -341,6 +342,7 @@ export class FrameDriver {
     this.stats.drawCalls = host.renderer.drawCalls;
     this.stats.drawCallsPeak = this.peak;
     this.stats.streamBodies = host.renderer.streamBodies;
+    this.stats.chargers = host.renderer.chargerBodies;
     const labels = host.renderer.labelStats;
     this.stats.labels = labels.labels;
     this.stats.labelGlyphs = labels.glyphs;

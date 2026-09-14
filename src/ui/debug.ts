@@ -65,6 +65,8 @@ export interface DebugStats {
   drawCallsPeak: number;
   /** Stream bodies the renderer wrote into the crowd last frame (D29). */
   streamBodies: number;
+  /** Chargers drawn last frame (D49); `POOL.chargers` is what it can run into. */
+  chargers: number;
   /** World number labels drawn last frame, and the glyphs they cost. */
   labels: number;
   labelGlyphs: number;
@@ -252,7 +254,8 @@ export class DebugPanel {
         `  phys ${this.physicsMs.toFixed(2)}ms`,
       `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
         `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
-      `bodies ${String(stats.streamBodies)}  lbl ${String(stats.labels)}` +
+      `bodies ${String(stats.streamBodies)}  chg ${String(stats.chargers)}` +
+        `  lbl ${String(stats.labels)}` +
         `/${String(stats.labelGlyphs)}g` +
         (stats.labelsDropped > 0 ? ` DROP ${String(stats.labelsDropped)}` : ''),
       `wall ${String(stats.walls)}  wisp ${stats.wisp ? 'on' : 'off'}` +

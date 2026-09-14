@@ -33,6 +33,18 @@ interface ShatteredEvent {
   streamId?: number;
 }
 
+/**
+ * A shielded brute's shield breaking (D49). Copied like the rest: the layer
+ * throws chips for it, and under `?turbo` this list is the only place an
+ * intermediate tick's events survive to the end of the frame.
+ */
+interface ShieldBreakEvent {
+  type: 'shieldBreak';
+  enemyId: number;
+  x: number;
+  z: number;
+}
+
 interface GatePassedEvent {
   type: 'gatePassed';
   gateId: number;
@@ -93,6 +105,12 @@ export class PhysicsEventQueue {
     x: 0,
     z: 0,
   }));
+  private readonly shieldBreaks = new Pool<ShieldBreakEvent>(() => ({
+    type: 'shieldBreak',
+    enemyId: 0,
+    x: 0,
+    z: 0,
+  }));
   private readonly gates = new Pool<GatePassedEvent>(() => ({
     type: 'gatePassed',
     gateId: 0,
@@ -113,6 +131,7 @@ export class PhysicsEventQueue {
     this.list.length = 0;
     this.killed.reset();
     this.shattered.reset();
+    this.shieldBreaks.reset();
     this.gates.reset();
     this.stomps.reset();
     this.bossKills.reset();
@@ -143,6 +162,14 @@ export class PhysicsEventQueue {
           slot.z = event.z;
           if (event.streamId === undefined) delete slot.streamId;
           else slot.streamId = event.streamId;
+          this.list.push(slot);
+          break;
+        }
+        case 'shieldBreak': {
+          const slot = this.shieldBreaks.take();
+          slot.enemyId = event.enemyId;
+          slot.x = event.x;
+          slot.z = event.z;
           this.list.push(slot);
           break;
         }

@@ -71,6 +71,15 @@
   --accent-light: var(--c-arcane-light);
   --danger: var(--c-danger-base);
   --danger-light: var(--c-danger-light);
+  /*
+   * Frostfell (D49). The biome's own palette overrides never become CSS
+   * variables — the overlay has to look the same in every biome, which is why
+   * they live under `$biomes` in palette.json — so the one place the UI says
+   * "frost" reads the frost staff's hue instead: the picker's chips for the
+   * levels that run through the snow.
+   */
+  --frost: var(--c-spell-frost-body);
+  --frost-deep: var(--c-spell-frost-edge);
 
   /*
    * Parchment grain. Two crosshatches a few pixels apart at four percent ink:

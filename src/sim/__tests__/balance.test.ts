@@ -26,14 +26,22 @@
  *               player is holding when they first arrive (D46) they open up.
  *               See the note above the milestone tests for how far that
  *               actually goes, which is not as far as D45 asks.
- *   greedy      still 100 of 100 on the ordinary levels with nothing bought,
- *               and on the milestone levels with that same set.
+ *   greedy      still 100 of 100 on the ordinary levels, and on the milestone
+ *               levels with the set the road paid for.
  *
- * Milestone 7 doubled the campaign (D49). Everything measured on the *greedy*
- * bot — clears, peaks, leaks, boss seconds — runs to `levelCount` and covers
- * Frostfell; the four bands measured on the *human* bot stop at `BANDED`,
- * because fitting those twenty levels to a hand is the balance phase's work
- * and not the sim content phase's.
+ * Milestone 7 doubled the campaign (D49), and the twenty levels it added are
+ * measured on a *different hand*: the same human bot, carrying the kit the
+ * campaign says it is holding when it first walks onto each level (D46). By
+ * level 21 the Academy has sold four or five rungs and two staffs, so a bare
+ * hand there is not a player anybody will ever be — the wave-one readout put
+ * it at 0.36 against 0.74 armed — and a road tuned for the bare one would be
+ * tuned for nobody, which is the same mistake D45 corrected for greedy.
+ *
+ * The same move is what the greedy tests below do with Frostfell: greedy with
+ * nothing bought clears 33 of 100 there, because the Rime Fiend's hit points
+ * are sized against a squad carrying `bossDamage` and two damage rungs, and
+ * greedy's own ceiling is the cap on the crowd. Greedy *armed* is 100 of 100,
+ * and that is what the ceiling means from level 21 on.
  *
  * Every number below is deterministic: a failure here is a design change, not
  * a flake.
@@ -78,17 +86,27 @@ const MILESTONES: readonly number[] = [7, 10, 15, 20, 25, 30, 35, 40];
 const isMilestone = (level: number): boolean => MILESTONES.includes(level);
 
 /**
- * The levels the human-bot bands are measured over.
+ * Where biome 1 ends: the last level whose bands are measured on a bare hand.
  *
- * Milestone 6 measured D45's bands on the twenty levels that existed then, and
- * Milestone 7 Phase B added twenty more (D49) without re-measuring them on the
- * hand: the sim content, the generator and greedy are this phase's work and
- * the human bands on Frostfell are the balance phase's. Everything greedy, the
- * peak targets, the leak bands and the economy already run to `levelCount`;
- * only the four bands below — first-attempt clears, survivor share, boss
- * seconds and the milestone separation — stop at 20 until they are fitted.
+ * Milestone 6 measured D45's bands over these twenty with nothing bought, and
+ * they are still measured that way — the tuning behind them has not moved.
+ * From `FROST_FROM` the same bands are measured on the armed hand instead, for
+ * the reason in the file note above.
  */
 const BANDED = 20;
+
+/** Frostfell's first level (D49). */
+const FROST_FROM = BANDED + 1;
+
+/**
+ * Ceiling on any one ordinary Frostfell level's armed clear rate.
+ *
+ * The floor below catches a level nobody can pass; this catches the other
+ * failure, which the armed hand makes possible for the first time: a level the
+ * kit walks through. It is also the guard the `gateBonus` effect size was
+ * picked against — 0.09 opens level 10 and none of the twenty goes over this.
+ */
+const ARMED_CLEAR_CEILING = 0.85;
 
 /** D45's headline: a decent thumb clears an ordinary level most of the time. */
 const CLEAR_BAND: readonly [number, number] = [0.7, 0.8];
@@ -98,6 +116,9 @@ const CLEAR_FLOOR = 0.35;
 
 /** D31: levels 1 to 3 are generous, and a thumb finishes them. */
 const EARLY_CLEAR_FLOOR = 0.9;
+
+/** How often a Frostfell milestone may fall to a hand carrying nothing (D49). */
+const FROST_MILESTONE_BARE = 0.45;
 
 /**
  * D45's survivor band.
@@ -130,6 +151,20 @@ const SURVIVOR_CEILING = 0.6;
  */
 const BOSS_MIN_SECONDS = 19;
 const BOSS_MAX_SECONDS = 35;
+
+/**
+ * Frostfell's boss band (D20's original 20 to 30, held per level).
+ *
+ * It can be the narrow band where biome 1's could not because the hand it is
+ * measured on is the armed one: the kit grows with the level at about the rate
+ * the boss ladder does, so what the fight measures at stops drifting with the
+ * level index and only the crowd's own spread is left.
+ */
+const FROST_BOSS_MIN_SECONDS = 20;
+const FROST_BOSS_MAX_SECONDS = 30;
+
+/** What the Rime Fiend's lane charge may be worth against its own stomp. */
+const CHARGE_SHARE_CEILING = 1 / 3;
 
 /** Greedy's fight against the same boss is shorter, because greedy is bigger. */
 const GREEDY_BOSS_MIN_SECONDS = 12;
@@ -184,38 +219,55 @@ function humanClearRate(level: number, player?: PlayerState, tag = ''): number {
 
 /**
  * What the campaign says the human is carrying the first time it reaches each
- * milestone level (D46). Read off the real campaign rather than written down
- * here, because the set moves whenever the difficulty does — which is the whole
- * coupling D45 asks the milestone levels to be tuned against.
+ * level (D46). Read off the real campaign rather than written down here,
+ * because the set moves whenever the difficulty does — which is the whole
+ * coupling D45 asks the milestone levels to be tuned against, and from D49 the
+ * coupling the whole of Frostfell is tuned against.
  */
-const milestoneKit = (() => {
+const campaignKit = (() => {
   const campaign = runCampaign({ bot: 'human', seed: 1 });
   const kit = new Map<number, PlayerState>();
-  for (const level of MILESTONES) {
-    const held = campaign.levels.find((entry) => entry.level === level)?.held;
-    if (held === undefined) continue;
+  for (const entry of campaign.levels) {
     kit.set(
-      level,
+      entry.level,
       playerHolding({
-        upgrades: held.upgrades,
-        staffs: held.staffs,
-        evolved: held.evolved,
-        wispTier: held.wispTier,
-        unlockedLevel: level,
+        upgrades: entry.held.upgrades,
+        staffs: entry.held.staffs,
+        evolved: entry.held.evolved,
+        wispTier: entry.held.wispTier,
+        unlockedLevel: entry.level,
       }),
     );
   }
   return kit;
 })();
 
+/**
+ * The hand a level is measured on: nothing through biome 1 (D35, D45), the kit
+ * the Academy has sold by then from Frostfell on (D49).
+ */
+function kitFor(level: number): PlayerState | undefined {
+  return level >= FROST_FROM ? campaignKit.get(level) : undefined;
+}
+
+/** The cache tag that goes with `kitFor`, so an armed run is not read as bare. */
+function tagFor(level: number): string {
+  return level >= FROST_FROM ? 'kit' : '';
+}
+
 describe('balance', () => {
   it('lets the greedy bot clear every ordinary level on every seed', () => {
-    const greedy = summarise('greedy', SEEDS);
+    // Bare through biome 1 and armed on Frostfell, for the reason in the file
+    // note: from level 21 the boss is sized against a squad that bought things.
     for (let level = 1; level <= levelCount; level++) {
       if (isMilestone(level)) continue;
+      let wins = 0;
+      for (const seed of SEEDS) {
+        if (run(level, seed, 'greedy', kitFor(level), tagFor(level)).status === 'won') wins++;
+      }
       expectTrue(
-        `L${String(level)} greedy ${String(greedy.winsByLevel[level - 1])}/${String(SEEDS.length)}`,
-        greedy.winsByLevel[level - 1] === SEEDS.length,
+        `L${String(level)} greedy ${String(wins)}/${String(SEEDS.length)}`,
+        wins === SEEDS.length,
       );
     }
   }, CAMPAIGN_TIMEOUT_MS);
@@ -225,7 +277,7 @@ describe('balance', () => {
     // reference ceiling still gets through them once it is carrying what the
     // Academy has sold by then (D45).
     for (const level of MILESTONES) {
-      const player = milestoneKit.get(level);
+      const player = campaignKit.get(level);
       for (const seed of SEEDS) {
         expectTrue(
           `L${String(level)} s${String(seed)} greedy armed`,
@@ -298,13 +350,110 @@ describe('balance', () => {
     }
   }, CAMPAIGN_TIMEOUT_MS);
 
+  /**
+   * Frostfell's three bands (D49), the same three as above on the armed hand.
+   *
+   * They are separate tests rather than a wider loop because they are measured
+   * against a different player and read against a different ceiling: an armed
+   * level that clears nine times in ten is a level the kit walks through, and
+   * biome 1 has no such failure mode because nothing is bought there.
+   */
+  it('clears seven or eight ordinary Frostfell levels in ten for the hand it armed', () => {
+    let total = 0;
+    let levels = 0;
+    for (let level = FROST_FROM; level <= levelCount; level++) {
+      if (isMilestone(level)) continue;
+      const rate = humanClearRate(level, campaignKit.get(level), 'kit');
+      total += rate;
+      levels++;
+      const where = `L${String(level)} human armed ${rate.toFixed(2)}`;
+      expectTrue(where, rate >= CLEAR_FLOOR);
+      expectTrue(`${where} ceiling`, rate <= ARMED_CLEAR_CEILING);
+    }
+    const mean = total / levels;
+    expectTrue(
+      `Frostfell clear ${mean.toFixed(3)} in [${String(CLEAR_BAND[0])}, ${String(CLEAR_BAND[1])}]`,
+      mean >= CLEAR_BAND[0] && mean <= CLEAR_BAND[1],
+    );
+  }, CAMPAIGN_TIMEOUT_MS);
+
+  it('leaves a Frostfell clear with a quarter to a half of the crowd', () => {
+    let total = 0;
+    let levels = 0;
+    for (let level = FROST_FROM; level <= levelCount; level++) {
+      if (isMilestone(level)) continue;
+      const player = campaignKit.get(level);
+      let share = 0;
+      let wins = 0;
+      for (const seed of TEN_SEEDS) {
+        const result = run(level, seed, 'human', player, 'kit');
+        if (result.status !== 'won') continue;
+        wins++;
+        share += result.survivors / Math.max(1, result.peakCount);
+      }
+      const mean = share / Math.max(1, wins);
+      expectTrue(`L${String(level)} survivors ${mean.toFixed(2)}`, mean <= SURVIVOR_CEILING);
+      total += mean;
+      levels++;
+    }
+    const mean = total / levels;
+    expectTrue(
+      `Frostfell survivors ${mean.toFixed(3)} in [${String(SURVIVOR_BAND[0])}, ${String(SURVIVOR_BAND[1])}]`,
+      mean >= SURVIVOR_BAND[0] && mean <= SURVIVOR_BAND[1],
+    );
+  }, CAMPAIGN_TIMEOUT_MS);
+
+  it('makes every Rime Fiend a fight of twenty to thirty seconds', () => {
+    // The band D20 asks for, held per level rather than on the mean. It costs
+    // the boss ladder its smoothness — `bite` carries most of it, because what
+    // a fight *measures* at is the fights that were won, and a heavier bite
+    // wins only the quick ones — but the ladder itself is still monotone.
+    for (let level = FROST_FROM; level <= levelCount; level++) {
+      if (isMilestone(level)) continue;
+      const player = campaignKit.get(level);
+      let seconds = 0;
+      let wins = 0;
+      for (const seed of TEN_SEEDS) {
+        const result = run(level, seed, 'human', player, 'kit');
+        if (result.status !== 'won') continue;
+        wins++;
+        seconds += result.bossSeconds;
+      }
+      const mean = seconds / Math.max(1, wins);
+      const where = `L${String(level)} rime boss ${mean.toFixed(1)}s`;
+      expectTrue(where, mean >= FROST_BOSS_MIN_SECONDS && mean <= FROST_BOSS_MAX_SECONDS);
+    }
+  }, CAMPAIGN_TIMEOUT_MS);
+
+  it('never lets the Rime Fiend decide a frost level with its charge alone', () => {
+    // D49 asks for a charge that visibly costs units on every frost level and
+    // does not carry the fight by itself. Both halves are asserted: the lane
+    // charge takes somebody on every one of the twenty, and never more than a
+    // third of what the stomp does.
+    for (let level = FROST_FROM; level <= levelCount; level++) {
+      const player = campaignKit.get(level);
+      let charge = 0;
+      let stomp = 0;
+      for (const seed of TEN_SEEDS) {
+        const result = run(level, seed, 'human', player, 'kit');
+        charge += result.chargeKills;
+        stomp += result.stompKills;
+      }
+      const where = `L${String(level)} charge ${(charge / TEN_SEEDS.length).toFixed(1)} of stomp ${(stomp / TEN_SEEDS.length).toFixed(1)}`;
+      expectTrue(where, charge > 0);
+      expectTrue(`${where} share`, charge <= stomp * CHARGE_SHARE_CEILING);
+    }
+  }, CAMPAIGN_TIMEOUT_MS);
+
   it('keeps the same fight worth fighting for the reference ceiling too', () => {
     // Greedy brings a bigger crowd to a boss sized for the human's, so the same
     // fight is shorter: the floor here is what stops it being a formality.
     for (let level = 1; level <= levelCount; level++) {
       if (isMilestone(level)) continue;
       let seconds = 0;
-      for (const seed of SEEDS) seconds += run(level, seed, 'greedy').bossSeconds;
+      for (const seed of SEEDS) {
+        seconds += run(level, seed, 'greedy', kitFor(level), tagFor(level)).bossSeconds;
+      }
       const mean = seconds / SEEDS.length;
       const where = `L${String(level)} greedy boss ${mean.toFixed(1)}s`;
       expectTrue(where, mean >= GREEDY_BOSS_MIN_SECONDS && mean <= GREEDY_BOSS_MAX_SECONDS);
@@ -313,40 +462,41 @@ describe('balance', () => {
 
   /**
    * D45 asks for under 15 percent bare and about 60 percent armed. What the
-   * campaign can actually do, measured over ten seeds with D50's cheap first
-   * `gateBonus` rung in the Yard:
+   * campaign does, over ten seeds, with D50's cheap first `gateBonus` rung and
+   * the effect size Milestone 7 picked for it (0.09):
    *
-   *     L 7  bare 5/10  armed 4/10   (held: startCount1 gateBonus1, storm, frost)
-   *     L10  bare 2/10  armed 3/10   (held: damage1 fireRate1 startCount1 gateBonus1, ...)
+   *     L 7  bare 5/10  armed 5/10   (held: startCount1 gateBonus1, storm, frost)
+   *     L10  bare 2/10  armed 3/10   (held: damage1 startCount1 gateBonus1, ...)
    *     L15  bare 3/10  armed 5/10
    *     L20  bare 3/10  armed 5/10
-   *     L25  bare 5/10  armed 7/10
-   *     L30  bare 0/10  armed 5/10
-   *     L35  bare 2/10  armed 7/10
+   *     L25  bare 0/10  armed 5/10
+   *     L30  bare 0/10  armed 4/10
+   *     L35  bare 1/10  armed 3/10
    *     L40  bare 0/10  armed 6/10
    *
-   * D50 did what it said and not what was hoped for it. The rung is in the
-   * player's hands at level 7 now — it was not before — and levels 7 and 10
-   * still do not separate: at `upgrades.effects.gateBonus` 0.05 one rung is
-   * five percent on what an `add` panel prints, which is about five percent of
-   * the squad, and five percent cannot move a clear rate by fifteen points.
-   * Measured on the same ten seeds, raising that effect to 0.09 opens level 10
-   * (2/10 to 4/10) and still does nothing for level 7 (5/10 to 5/10), and costs
-   * level 25 half its separation; the effect size is a balance decision rather
-   * than the rung D50 asked for, so it is a finding rather than a change here.
+   * Six of the eight separate by the fifteen points D49 asks for. The `gateBonus`
+   * effect was measured at 0.05, 0.07 and 0.09 across all eight with the sets
+   * the campaign holds at each: 0.05 and 0.07 separate five, 0.09 separates six
+   * — it is what opens level 10 from a dead heat to ten points — and no ordinary
+   * Frostfell level goes over `ARMED_CLEAR_CEILING` at it. So 0.09 is the
+   * shipped size, and the Yard's rungs are dearer to pay for it (D46's cadence
+   * is measured in `./economy.test.ts`, not here).
    *
-   * Level 7 is also the ceiling on how hard an *early* milestone can be at all
-   * — at the bite that takes the human under 45 percent there, greedy loses
-   * half its runs too, because a level-7 crowd is small enough for one bad row
-   * to end it.
-   *
-   * So the bands below are what the road does, not what D45 asks.
+   * Level 7 is the one that does not separate at any of the three. It is also
+   * the ceiling on how hard an *early* milestone can be at all — at the bite
+   * that takes the human under 45 percent there, greedy loses half its runs
+   * too, because a level-7 crowd is small enough for one bad row to end it —
+   * so it is recorded here as an ordinary-hard level rather than an upgrade
+   * gate, and 10 is asserted no more strictly than it was.
    */
   it('keeps the milestone levels well under the ordinary band without upgrades', () => {
     for (const level of MILESTONES) {
-      if (level > BANDED) continue;
       const bare = humanClearRate(level);
-      expectTrue(`L${String(level)} milestone bare ${bare.toFixed(2)}`, bare <= 0.55);
+      // Frostfell's four are held tighter than biome 1's: by level 25 the kit
+      // is four rungs and two staffs, so "bare" there is a hypothetical player
+      // and the level is free to shut them out.
+      const ceiling = level >= FROST_FROM ? FROST_MILESTONE_BARE : 0.55;
+      expectTrue(`L${String(level)} milestone bare ${bare.toFixed(2)}`, bare <= ceiling);
       expectTrue(
         `L${String(level)} milestone bare ${bare.toFixed(2)} under the band`,
         bare <= CLEAR_BAND[0] - 0.15,
@@ -356,13 +506,11 @@ describe('balance', () => {
 
   it('opens the milestone levels up with the set the road has paid for', () => {
     for (const level of MILESTONES) {
-      if (level > BANDED) continue;
-      const player = milestoneKit.get(level);
+      const player = campaignKit.get(level);
       expectTrue(`L${String(level)} kit`, player !== undefined);
       const bare = humanClearRate(level);
       const armed = humanClearRate(level, player, 'kit');
-      // Only 15 and 20 have a set worth carrying; 7 and 10 are recorded rather
-      // than asserted, for the reason above.
+      // 7 and 10 are recorded rather than asserted, for the reason above.
       if (level >= 15) {
         expectTrue(
           `L${String(level)} armed ${armed.toFixed(2)} vs bare ${bare.toFixed(2)}`,

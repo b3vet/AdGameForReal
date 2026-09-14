@@ -57,6 +57,21 @@
   pointer-events: auto;
 }
 
+/*
+ * Frostfell's levels (D49). The chip keeps the picker's parchment — it is the
+ * same list and the same control — under a cold wash and an ice-blue rim, so a
+ * glance at the page says which half of the campaign it is. The selected and
+ * disabled rules below still win: which level is chosen and which are locked
+ * are the things the player is actually reading for.
+ */
+.picker__level[data-biome='frost'] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--frost) 30%, var(--paper)),
+    color-mix(in srgb, var(--frost-deep) 26%, var(--paper-shade))
+  );
+}
+
 .picker__level[aria-pressed='true'] {
   background: linear-gradient(180deg, var(--gold-light), var(--gold) 60%, var(--gold-deep));
   text-shadow: 0 1px 0 color-mix(in srgb, var(--gold-light) 70%, transparent);
