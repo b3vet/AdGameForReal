@@ -34,5 +34,7 @@ Index:
 | `17-milestone-6-plan-draft.md` | Milestone 6 draft plan v1: crowd agents, responsive head, a game that can be lost, economy; awaiting answers |
 | `18-milestone-6-plan.md` | Milestone 6 plan, approved: crowd agents and stragglers, head on the finger, human-bot difficulty with milestone levels, clear-based economy; roadmap for 7 to 9 |
 | `19-milestone-6-log.md` | Milestone 6 process log (append-only) |
+| `20-milestone-7-plan.md` | Milestone 7 plan, approved: Frostfell biome, charger and shielded brute, the Rime Fiend, levels 21 to 40 |
+| `21-milestone-7-log.md` | Milestone 7 process log (append-only) |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |

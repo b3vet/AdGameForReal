@@ -13,7 +13,7 @@ iOS and Android later.
 - **Subagents do not commit or push.** Leave changes in the working tree and
   report what you did, what you verified, and what is left.
 - Everything is documented in `docs/`. Read `docs/README.md` for the rules.
-  Read the current milestone plan before touching code. Current: `docs/18-milestone-6-plan.md`.
+  Read the current milestone plan before touching code. Current: `docs/20-milestone-7-plan.md`.
 
 ## Stack
 

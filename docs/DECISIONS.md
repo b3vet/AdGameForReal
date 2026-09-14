@@ -50,3 +50,5 @@
 | D46 | 2026-09-13 | Economy: rewards come from clears, a loss pays about 30 percent, prices follow a runs-per-purchase curve (two runs early, four by level 10) verified by a simulated campaign. | 18 |
 | D47 | 2026-09-13 | Roadmap: Milestone 7 content (biome 2, new enemies, second boss, levels 21 to 40), Milestone 8 meta and hooks, Milestone 9 device and store readiness. Device testing parked until near-final. | 18 |
 | D48 | 2026-09-13 | Milestone levels are 7, 10, 15 and 20 (level 5 is ordinary): the upgrade set the economy affords by level 5 cannot gate a level. The boss closes to contact within its fight so the crowd thins after the last gate. Supersedes the level list in D45. | 19 (wave two) |
+| D49 | 2026-09-14 | Biome 2 is Frostfell: palette overrides by role, snow and ice textures, tinted props; new kinds charger and shielded brute; boss 2 is the Rime Fiend with a lane charge; levels 21 to 40 with milestones 25, 30, 35, 40. | 20 |
+| D50 | 2026-09-14 | The Yard's first gate-bonus rung is cheap so a milestone level can be gated by an upgrade the economy affords (closes the Milestone 6 finding on levels 7 and 10). | 20 |
