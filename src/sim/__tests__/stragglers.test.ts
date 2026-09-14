@@ -11,9 +11,15 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { Crossings } from '../crossings';
+import { CrowdSim } from '../crowd';
+import { EventBuffer } from '../events';
+import { laneCenter } from '../lanes';
+import { openRoadWidth } from '../formation';
 import { Run } from '../Run';
+import { buildWorld } from '../spawn';
 import { CROWD_REJOINING } from '../types';
-import type { CrowdState, StreamDef } from '../types';
+import type { CrowdState, RunState, StreamDef } from '../types';
 import { wallX } from '../walls';
 import { level, play, row, runOf, testBalance, wall } from './fixtures';
 import { balance } from '@/data';
@@ -258,5 +264,93 @@ describe('the group cap', () => {
     const second = countIn(run, 1);
     expect(run.state.squad.count).toBe(120);
     expect(countIn(run, 0) + second).toBe(120);
+  });
+});
+
+describe('a slot handed straight back out', () => {
+  /** Everything `Crossings` reads, for a run driven a step at a time by hand. */
+  function stateFor(def: ReturnType<typeof level>, crowd: CrowdSim): RunState {
+    const world = buildWorld(def, balance);
+    return {
+      levelIndex: def.index,
+      seed: def.seed,
+      time: 0,
+      status: 'running',
+      squad: {
+        count: 0,
+        x: 0,
+        targetX: 0,
+        z: 0,
+        fireRate: balance.squad.fireRate,
+        damage: balance.squad.damage,
+        fireRateBonus: 0,
+        vx: 0,
+        formationWidth: openRoadWidth(balance),
+      },
+      gates: world.gates,
+      enemies: world.enemies,
+      streams: [],
+      projectiles: [],
+      boss: world.boss,
+      peakCount: 0,
+      survivors: 0,
+      arenaZ: def.arenaZ,
+      walls: def.walls ?? [],
+      crowd: crowd.crowd,
+      groups: crowd.groups,
+    };
+  }
+
+  it('starts from where its new group stands, not where the last one left off', () => {
+    // `updateStragglers` releases before it cuts, deliberately: a group that
+    // goes home this step frees its slot for the next fence. So a slot can go
+    // from live to dissolved to live again inside one step, and `Crossings`
+    // never sees the count-zero edge it would otherwise re-place the group on.
+    // Inheriting the old group's next row would walk the new one over every
+    // row between the two at once and hand it any gate nobody had claimed —
+    // gates at rows its units have already walked past.
+    //
+    // Driven through the two classes directly, because the coincidence is one
+    // step wide and cannot be aimed at from a whole run.
+    const def = level({
+      startCount: 0,
+      rows: [row(20, [null, null, { kind: 'add', value: 7, cap: 0 }])],
+      arenaZ: 400,
+    });
+    const crowd = new CrowdSim(balance, def.walls ?? []);
+    const state = stateFor(def, crowd);
+    const events = new EventBuffer();
+    const claims: number[] = [];
+    const crossings = new Crossings(def, balance, crowd.groups.length, {
+      resize: (group: number): void => {
+        claims.push(group);
+      },
+      swapWeapon: (): void => undefined,
+      wiped: (): void => undefined,
+    });
+
+    // The column, standing well short of the row so it claims nothing itself.
+    crowd.spawn(0, 20);
+    state.squad.count = crowd.total;
+
+    // A straggler group behind the row, placed and then walked one step.
+    const lane = laneCenter(1, balance.road.laneWidth);
+    expect(crowd.openGroup(1, lane, 5, 1000)).toBe(1);
+    crowd.spawn(1, 5);
+    crossings.update(state, crowd, events);
+    expect(claims).toEqual([]);
+
+    // It goes home, and the same slot is taken again by a cut at the column —
+    // which is ahead of the row the old group had still to cross.
+    crowd.rejoinToMain(1);
+    expect(crowd.groups[1]?.count).toBe(0);
+    expect(crowd.openGroup(1, lane, 30, 1000)).toBe(1);
+    crowd.spawn(1, 5);
+
+    crossings.update(state, crowd, events);
+    // The row is behind the new group: it walked through none of it, so it
+    // takes nothing. Before the `opened` generation it took the lane-1 gate.
+    expect(claims).toEqual([]);
+    expect(state.gates[0]?.passed).toBe(false);
   });
 });

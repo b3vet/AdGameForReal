@@ -75,3 +75,39 @@ export const BURN_SPARK_SIZE = 0.16;
 export const SHATTER_PUFF_SPOKES = 6;
 export const SHATTER_PUFF_SIZE = 0.34;
 export const SHATTER_PUFF_DURATION = 0.3;
+
+/**
+ * How bright the volley is drawn as the crowd grows (Milestone 6 review).
+ *
+ * Every spell in flight is an additive quad and they all fly down the same
+ * 1.6 m lane, so the brightness at a pixel is the *number* of bolts standing
+ * over it and nothing else: the sheet's own white-hot core, times a tint, times
+ * an alpha that never knew how many mages were firing. Twenty apprentices put
+ * at most 39 bolts in the air; five hundred fill the projectile pool's whole
+ * 400 into that same lane, and the sum clips every channel over a third of the
+ * frame — the white wash in the Milestone 6 hero set (`hero-whip-2x.png`,
+ * `hero-fence-jam-2x.png`).
+ *
+ * So the volley's alpha falls with the square root of how much of it there is.
+ * The sum over a pixel then grows as `sqrt(n)` rather than as `n`: a bigger
+ * squad still reads as visibly more fire, the hue survives instead of
+ * saturating, and the curve is gentle enough that the growth between two gates
+ * is still something the player can see. Only the bolts, their tails and the
+ * sparkles they shed scale this way — impacts and muzzle flashes are capped at
+ * `POOL.impacts` however big the crowd is, so they are left alone.
+ *
+ * `VOLLEY_FULL_BOLTS` is measured rather than chosen: 39 is the most a
+ * twenty-unit squad ever has in the air (levels 1, 6 and 16, greedy), so up to
+ * a crowd that size this is exactly 1 and the look is the one that shipped.
+ * The floor keeps a five-hundred column's last bolts visible against a lit
+ * road rather than letting the rule chase brightness to nothing.
+ */
+export const VOLLEY_FULL_BOLTS = 40;
+export const VOLLEY_MIN_DIM = 0.3;
+
+/** The multiplier `VOLLEY_FULL_BOLTS` describes, for `bolts` in the air. */
+export function volleyDim(bolts: number): number {
+  if (bolts <= VOLLEY_FULL_BOLTS) return 1;
+  const dim = Math.sqrt(VOLLEY_FULL_BOLTS / bolts);
+  return dim < VOLLEY_MIN_DIM ? VOLLEY_MIN_DIM : dim;
+}

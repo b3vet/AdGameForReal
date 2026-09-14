@@ -30,11 +30,13 @@ import {
   EMBER_COLOR,
   FROST_COLOR,
   POOL,
+  SPARKLE_ALPHA,
   SPARKLE_DURATION,
   SPARKLE_EVERY,
   SPARKLE_SIZE,
   STORM_COLOR,
   TRAIL_GLOW_BOOST,
+  volleyDim,
 } from './theme';
 import { startWeapon } from '@/sim';
 import type { ProjectileState, WeaponId } from '@/sim';
@@ -98,6 +100,16 @@ export class ProjectileView {
     const tailGreen = tint.g * TRAIL_GLOW_BOOST;
     const tailBlue = tint.b * TRAIL_GLOW_BOOST;
 
+    // How much volley there is, counted before any of it is drawn: a quad is
+    // additive and cannot know from inside the loop that places it how many
+    // others are about to land on the same pixels (`volleyDim`). One pass over
+    // an array the next loop walks anyway, and no allocation.
+    let inAir = 0;
+    for (const projectile of projectiles) {
+      if (projectile.alive) inAir++;
+    }
+    const dim = volleyDim(Math.min(inAir, POOL.projectiles));
+
     let live = 0;
     for (const projectile of projectiles) {
       if (!projectile.alive) continue;
@@ -116,7 +128,7 @@ export class ProjectileView {
         headRed,
         headGreen,
         headBlue,
-        1,
+        dim,
         // A slow roll, per shot: the frost crystal spins in its own frames, and
         // this is what keeps ember and storm from looking stamped.
         projectile.id * 0.7 + this.phase * 0.04,
@@ -136,7 +148,7 @@ export class ProjectileView {
           tailRed,
           tailGreen,
           tailBlue,
-          alpha,
+          alpha * dim,
         );
       }
 
@@ -148,7 +160,7 @@ export class ProjectileView {
       }
     }
 
-    this.drawSparkles(dt, tailRed, tailGreen, tailBlue);
+    this.drawSparkles(dt, tailRed, tailGreen, tailBlue, dim);
   }
 
   dispose(): void {
@@ -169,8 +181,15 @@ export class ProjectileView {
     this.sparkleCount++;
   }
 
-  /** Ages the pool and draws what is left, compacting as it goes. */
-  private drawSparkles(dt: number, red: number, green: number, blue: number): void {
+  /** Ages the pool and draws what is left, compacting as it goes. `dim` is the
+   *  volley's own, because a sparkle is part of the volley (`volleyDim`). */
+  private drawSparkles(
+    dt: number,
+    red: number,
+    green: number,
+    blue: number,
+    dim: number,
+  ): void {
     let write = 0;
     for (let i = 0; i < this.sparkleCount; i++) {
       const sparkle = this.sparkles[i];
@@ -188,7 +207,7 @@ export class ProjectileView {
         red,
         green,
         blue,
-        left * 0.4,
+        left * SPARKLE_ALPHA * dim,
         sparkle.roll,
       );
 

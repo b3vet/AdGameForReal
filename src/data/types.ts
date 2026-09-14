@@ -606,8 +606,10 @@ export interface LevelGenConfig {
    */
   streamPressure: number;
   /**
-   * A milestone level (D45): one of 5, 10, 15 and 20, which the road is not
-   * meant to give up without the upgrades the economy has paid for by then.
+   * A milestone level (D45, and D48 for the list): 7, 10, 15 and 20 as
+   * shipped, which the road is not meant to give up without the upgrades the
+   * economy has paid for by then. Level 5 was on the list until the balance
+   * report showed the set affordable by then is worth a few percent of output.
    * The generator turns `balance.gen.milestone`'s screws on it; everything
    * else about the level is the ordinary per-level tuning below.
    *

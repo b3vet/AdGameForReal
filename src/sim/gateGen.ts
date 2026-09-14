@@ -43,8 +43,11 @@ export interface GenDials {
 }
 
 /**
- * The dials this level is built with. A milestone level (5, 10, 15, 20) reads
- * `gen.milestone`; every other level reads `gen` itself, with no block scaling.
+ * The dials this level is built with. A milestone level reads `gen.milestone`;
+ * every other level reads `gen` itself, with no block scaling. Which levels
+ * those are is `levels.json`'s own `milestone` flag — 7, 10, 15 and 20 as
+ * shipped (D48; level 5 was one until the balance report showed the set the
+ * economy affords by then is worth a few percent of output).
  *
  * One place rather than three `config.milestone === true` tests spread through
  * the generator, and the reason the flag is on the level rather than a list of

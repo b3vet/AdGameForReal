@@ -21,8 +21,11 @@
  * Three consequences the rest of the sim leans on:
  *
  *   - `halfWidth` saturates at half the lane band, so the crowd can never be
- *     wider than its lane. That is what keeps it off a fence (Milestone 4
- *     deferred this: the clamp bounded the centre only).
+ *     *laid out* wider than its lane, and a fence therefore never has to hold a
+ *     slot. What keeps a unit off a fence is no longer this, though: the units
+ *     are agents now and the fence line stops each of them in `crowdForces.ts`
+ *     (D43), which is also what makes a column jammed against one spill along
+ *     it. This is the layout the spill is a departure from.
  *   - The clamp is the road less that half-width, which is 2.2 m — outside both
  *     side-lane centres — so the whole column can stand on a side gate.
  *   - The anchor is the *front* of the crowd rather than its centre, so contact

@@ -49,6 +49,13 @@ export class CrowdSim {
    *  makes stragglers happens on the edge and only once (D44). */
   readonly wallHeld: Uint8Array;
 
+  /** Per group: how many times `openGroup` has handed this slot out. A slot can
+   *  be released and taken again inside one step (`updateStragglers` releases
+   *  before it cuts), so "its count is zero" is an edge nothing outside this
+   *  class is guaranteed to see; `crossings.ts` tells a new group from the last
+   *  one to use the slot by this. Group 0 is never opened, so it stays 0. */
+  readonly opened: Int32Array;
+
   /** Live indices in index order, rebuilt each step: what the shot clock walks. */
   private readonly live: Int32Array;
   private liveTotal = 0;
@@ -86,6 +93,7 @@ export class CrowdSim {
       this.groups[g] = { id: g, count: 0, leaderX: 0, z: 0, lane: null, rejoinAt: 0 };
     }
     this.releaseZ = new Float64Array(groupCap);
+    this.opened = new Int32Array(groupCap);
     this.groupPrevZ = new Float64Array(groupCap);
     this.wallHeld = new Uint8Array(Math.max(1, walls.length));
 
@@ -238,6 +246,7 @@ export class CrowdSim {
       state.z = z;
       state.rejoinAt = 0;
       this.releaseZ[g] = releaseZ;
+      this.opened[g] = (this.opened[g] ?? 0) + 1;
       // It is already walking with the column, so its slots are too.
       this.groupPrevZ[g] = z - this.balance.squad.runSpeed / 60;
       this.scene.trails.reset(g, leaderX);

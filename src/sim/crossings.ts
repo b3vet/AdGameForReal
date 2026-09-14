@@ -45,6 +45,9 @@ export class Crossings {
   /** Next row each group has still to cross, or `UNPLACED`. */
   private readonly nextRow: Int32Array;
 
+  /** The `CrowdSim.opened` generation each `nextRow` was placed for. */
+  private readonly placedFor: Int32Array;
+
   /** Rows every live group is past; their gates are done with. */
   private swept = 0;
 
@@ -57,6 +60,7 @@ export class Crossings {
     this.sink = sink;
     this.nextRow = new Int32Array(groups).fill(UNPLACED);
     this.nextRow[0] = 0;
+    this.placedFor = new Int32Array(groups);
   }
 
   /** Walks every group over whatever rows it crossed this step. */
@@ -72,6 +76,19 @@ export class Crossings {
       if (g > 0 && group.count === 0) {
         this.nextRow[g] = UNPLACED;
         continue;
+      }
+      // A slot can be released and handed straight back out inside one step —
+      // `updateStragglers` releases before it cuts, so a group going home frees
+      // its slot for the next fence — and this loop would then never see the
+      // count-zero edge above. A fresh group would inherit the rows the last
+      // one still had to cross, and walk itself over every one of them at once:
+      // it stands where the column stands and the old group had fallen behind,
+      // so it would collect any gate nobody had claimed at rows it has already
+      // passed. The generation is the edge that cannot be missed.
+      const opened = crowd.opened[g] ?? 0;
+      if (this.placedFor[g] !== opened) {
+        this.placedFor[g] = opened;
+        this.nextRow[g] = UNPLACED;
       }
       if ((this.nextRow[g] ?? UNPLACED) < 0) this.nextRow[g] = this.rowAt(group.z);
 

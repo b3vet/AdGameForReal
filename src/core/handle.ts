@@ -61,13 +61,24 @@ export interface ArcaneDebugHandle {
   setTurbo: (value: number) => void;
   /**
    * Takes the wheel: the running session's bot lets go and the head goes to
-   * `x` metres, 1:1, as a finger would put it there. A no-op when no run is up.
+   * `x` metres, 1:1, as a finger would put it there.
+   *
+   * **It drops the bot for the rest of the run, permanently.** There is no way
+   * to hand it back: the policy is released, not paused, and from the next step
+   * the head only ever goes where the last `steer` (or a drag on the canvas)
+   * put it. A run whose bot has let go is no longer a run any measurement may
+   * be taken from — nothing steers it, so it will walk into the first curse it
+   * meets — which is why this is the picture-taking path and nothing else. A
+   * caller that wants the run to carry on playing itself has to start a new one
+   * (`app.startLevel`).
+   *
+   * A no-op unless a run is actually on the road: outside the playing phase,
+   * and on a run that has already ended, it does nothing and the bot keeps the
+   * wheel.
    *
    * The hero set is why it exists (`scripts/smoke-hero.mjs`): a whip and a
    * fence jam are swipes, and a swipe has to be *started*, on a chosen frame at
-   * a chosen squad size, which no bot will do on request. A run whose bot has
-   * let go is no longer a run any measurement may be taken from — nothing
-   * steers it — so this is the picture-taking path and nothing else.
+   * a chosen squad size, which no bot will do on request.
    */
   steer: (x: number) => void;
 }

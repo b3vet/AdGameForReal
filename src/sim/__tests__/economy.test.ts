@@ -20,7 +20,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BotKind } from '../bots';
-import { formatCampaign, runCampaign, runsPerPurchase } from '../campaign';
+import { runCampaign } from '../campaign';
+import { formatCampaign, runsPerPurchase } from '../campaignReport';
 import type { CampaignResult } from '../campaign';
 import { progression, runRewards } from '../player';
 import { levelCount } from '@/data';

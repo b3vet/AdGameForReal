@@ -42,9 +42,11 @@ export const CAMERA = {
   lookAhead: 8,
   lookHeight: 1,
   /**
-   * The camera tracks the squad's x only partly, so the road stays framed: a
-   * shot that followed the thumb exactly would slide the road out from under
-   * it, and one that never moved would leave the crowd against the edge.
+   * The camera tracks the finger only partly, so the road stays framed: a shot
+   * that followed the thumb exactly would slide the road out from under it, and
+   * one that never moved would leave the crowd against the edge. (The finger
+   * rather than the crowd since D43 — see the paragraph at the end of this
+   * comment, and `lateralFrequency` below.)
    *
    * 0.55, up from Milestone 5 Phase F's 0.45, because D42 traded width for
    * reach: the column is a third as wide (0.75 m of half extent at 500 units

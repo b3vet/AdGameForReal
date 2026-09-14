@@ -9,12 +9,18 @@
  * by level 10).
  *
  * Pure and deterministic like the rest of `src/sim`, and imported by no screen:
- * it is a measuring instrument for `economy.test.ts`, which is why it may know
- * about the Academy's rooms (`academy.json`) as well as the sim.
+ * it is a measuring instrument for `economy.test.ts`.
  *
- * Its shopping rules mirror `src/core/player.ts`, the app's own copy of them,
- * because `src/sim` must not import from `src/core`. If the two ever disagree,
- * `src/core/player.ts` is the one the player actually spends through.
+ * It shops through the *shipped* purchase rules — `buyUpgrade`, `buyStaff`,
+ * `buyFamiliar` in `./player.ts`, which `src/core/player.ts` also delegates to
+ * — so the economy it measures is the one the player spends through. Until the
+ * Milestone 6 review it kept its own copy of them, because `src/sim` may not
+ * import from `src/core` and those rules lived there; two copies of "what a
+ * purchase does" is two economies, and only one of them was ever tuned.
+ *
+ * What is still local is the *shopping*: which of the affordable things a
+ * player would pick, and whether a room is open to sell it. That is a taste
+ * rather than a rule, and the Academy has no opinion about it at all.
  */
 
 import { createBot } from './bots';
@@ -22,21 +28,23 @@ import type { BotKind } from './bots';
 import { generateLevel } from './level';
 import { Run } from './Run';
 import {
+  buyFamiliar,
+  buyStaff,
+  buyUpgrade,
   emptyPlayer,
-  familiarPrice,
-  maxFamiliarTier,
-  maxUpgradeLevel,
+  familiarCost,
   nextUpgradeCost,
   progression,
   roadProgress,
+  roomOpen,
   runRewards,
+  staffCost,
   staffPrices,
   upgradeIds,
 } from './player';
 import type { RunPayable } from './player';
 import { weaponIds } from './weapons';
 import { balance, levelConfig, levelCount } from '@/data';
-import { academy } from '@/data/academy-types';
 import type { Balance, FamiliarTier, PlayerState, UpgradeId, WeaponId } from '@/data/types';
 
 const DT = 1 / 60;
@@ -177,11 +185,6 @@ function upgradeWorth(id: UpgradeId, startCount: number, bossShare: number): num
   return effects[id];
 }
 
-function roomOpen(room: string, player: PlayerState): boolean {
-  const card = academy.rooms.find((entry) => entry.id === room);
-  return player.unlockedLevel >= (card?.unlockLevel ?? 1);
-}
-
 /**
  * The most useful thing the Academy will sell this player right now, in the
  * order a player climbs the ladder: best value per coin in the yard, then a
@@ -216,47 +219,42 @@ function bestOffer(player: PlayerState, startCount: number, bossShare: number): 
     for (const id of weaponIds) {
       const staff = player.staffs[id];
       if (!staff.unlocked || staff.tier >= 2) continue;
-      const cost = staffPrices(id).evolve;
-      if (cost <= player.coins && (best === null || cost < best.cost)) {
+      // The same price the Workbench would show for this staff's next step,
+      // which at tier 1 is its evolution.
+      const cost = staffCost(player, id);
+      if (cost !== null && cost <= player.coins && (best === null || cost < best.cost)) {
         best = { kind: 'evolution', label: `${id}+`, cost };
       }
     }
   }
 
   if (roomOpen('sanctum', player)) {
-    const tier = player.familiar.unlocked ? player.familiar.tier : 0;
-    if (tier < maxFamiliarTier) {
-      const next = (tier + 1) as FamiliarTier;
-      const cost = familiarPrice(next);
-      if (cost <= player.coins && (best === null || cost < best.cost)) {
-        best = { kind: 'wisp', label: `wisp${String(next)}`, cost };
-      }
+    const cost = familiarCost(player);
+    if (cost !== null && cost <= player.coins && (best === null || cost < best.cost)) {
+      const next = ((player.familiar.unlocked ? player.familiar.tier : 0) + 1) as FamiliarTier;
+      best = { kind: 'wisp', label: `wisp${String(next)}`, cost };
     }
   }
   return best;
 }
 
-/** Mirrors `src/core/player.ts`: a purchase is a price off the purse and a field up. */
-function apply(player: PlayerState, offer: Purchase): void {
-  player.coins -= offer.cost;
+/**
+ * Takes the offer through the shipped purchase rules, or null if they refuse.
+ *
+ * A refusal is not expected — `bestOffer` only ever names something the same
+ * rules priced and the purse can cover — and that is exactly why it is passed
+ * on rather than swallowed: if the shopping above and the rules below ever
+ * disagree, the campaign stalls on the spot and `economy.test.ts` sees it,
+ * instead of quietly measuring an economy nobody can buy.
+ */
+function buy(player: PlayerState, offer: Purchase): PlayerState | null {
   if (offer.kind === 'upgrade') {
     const id = upgradeIds.find((known) => known === offer.label);
-    if (id !== undefined) player.upgrades[id] = Math.min(maxUpgradeLevel, player.upgrades[id] + 1);
-    return;
+    return id === undefined ? null : buyUpgrade(player, id);
   }
-  if (offer.kind === 'wisp') {
-    const tier = player.familiar.unlocked ? player.familiar.tier : 0;
-    player.familiar = { unlocked: true, tier: Math.min(maxFamiliarTier, tier + 1) as FamiliarTier };
-    return;
-  }
+  if (offer.kind === 'wisp') return buyFamiliar(player);
   const id = weaponIds.find((known) => offer.label.startsWith(known));
-  if (id === undefined) return;
-  if (offer.kind === 'staff') {
-    player.staffs[id] = { unlocked: true, tier: 1 };
-    player.selectedStaff = id;
-  } else {
-    player.staffs[id] = { unlocked: true, tier: 2 };
-  }
+  return id === undefined ? null : buyStaff(player, id);
 }
 
 function loadoutOf(player: PlayerState, purchases: number, spent: number): Loadout {
@@ -281,7 +279,12 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
   const levels = Math.min(levelCount, options.levels ?? levelCount);
   const tuning = options.tuning ?? balance;
 
-  const player = emptyPlayer();
+  // Re-bound rather than mutated on the purchases, because the shipped rules
+  // are pure and answer with a new state (`./player.ts`). The two fields that
+  // are not purchases — the purse a run pays into and the highest level
+  // reached — are still written in place: they are this simulation's own
+  // bookkeeping, not something the Academy sells.
+  let player = emptyPlayer();
   const runs: CampaignRun[] = [];
   const reports: CampaignLevelReport[] = [];
   let purchases = 0;
@@ -322,7 +325,9 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
       for (;;) {
         const offer = bestOffer(player, startCount, bossShare);
         if (offer === null) break;
-        apply(player, offer);
+        const purchased = buy(player, offer);
+        if (purchased === null) break;
+        player = purchased;
         made.push(offer);
         purchases++;
         bought++;
@@ -357,49 +362,4 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
   }
 
   return { bot: kind, seed, runs, levels: reports, player, coinsIn: earned, coinsOut: spent };
-}
-
-/**
- * Runs per purchase over a band of levels: the number the prices are tuned
- * against. Infinity when the band bought nothing at all.
- */
-export function runsPerPurchase(result: CampaignResult, from: number, to: number): number {
-  const runs = result.runs.filter((run) => run.level >= from && run.level <= to);
-  const bought = runs.reduce((total, run) => total + run.purchases.length, 0);
-  return bought === 0 ? Infinity : runs.length / bought;
-}
-
-function loadoutLine(held: Loadout): string {
-  const levels = upgradeIds.map((id) => String(held.upgrades[id])).join('');
-  const extras = [...held.staffs, ...held.evolved.map((id) => `${id}+`)];
-  if (held.wispTier > 0) extras.push(`wisp${String(held.wispTier)}`);
-  return `${levels}${extras.length > 0 ? ` ${extras.join(' ')}` : ''}`;
-}
-
-/** The campaign table, for the `TUNE=1` readout and the milestone report. */
-export function formatCampaign(result: CampaignResult): string[] {
-  const lines: string[] = [];
-  lines.push(`campaign bot=${result.bot} seed=${String(result.seed)}`);
-  lines.push('L   runs  coins in  coins out  buys  runs/buy  held (dmg/rate/start/gate/boss)');
-  for (const level of result.levels) {
-    lines.push(
-      `${String(level.level).padStart(2)}  ${String(level.runs).padStart(4)}` +
-        `  ${String(level.coinsIn).padStart(8)}  ${String(level.coinsOut).padStart(9)}` +
-        `  ${String(level.purchases).padStart(4)}` +
-        `  ${(level.rolling === Infinity ? '-' : level.rolling.toFixed(2)).padStart(8)}` +
-        `  ${loadoutLine(level.held)}`,
-    );
-  }
-  lines.push(
-    `runs/purchase L1-5 ${runsPerPurchase(result, 1, 5).toFixed(2)}` +
-      `  L6-10 ${runsPerPurchase(result, 6, 10).toFixed(2)}` +
-      `  L11-15 ${runsPerPurchase(result, 11, 15).toFixed(2)}` +
-      `  L16-20 ${runsPerPurchase(result, 16, 20).toFixed(2)}`,
-  );
-  lines.push(`coins in ${String(result.coinsIn)} out ${String(result.coinsOut)}`);
-  for (const level of [5, 10, 15, 20]) {
-    const report = result.levels.find((entry) => entry.level === level);
-    if (report !== undefined) lines.push(`held at L${String(level)}: ${loadoutLine(report.held)}`);
-  }
-  return lines;
 }

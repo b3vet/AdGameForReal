@@ -1,13 +1,15 @@
 /**
  * How the crowds are drawn: how tall a unit is, how it shrinks as the squad
- * packs together, how its baked clips are played, and how the view decides the
- * squad is running rather than standing still.
+ * packs together, how its baked clips are played, how the view decides the
+ * squad is running rather than standing still, and — since D43 — what each of
+ * the sim's per-unit flags looks like on screen.
  *
  * Split out of `./theme.ts` in Milestone 4 Phase C, which had grown past the
  * file-size rule (CLAUDE.md); `theme.ts` re-exports all of it, so every view
- * still reads one module. Grouped because these are the numbers task P's
- * walking-glitch fix left behind — the smoothing, the clip speeds and the sway
- * only make sense read together.
+ * still reads one module. Grouped because they are read together: the
+ * smoothing, the clip speeds and the sway are what task P's walking-glitch fix
+ * left behind, and the stumble, the bump, the dust and the scurry are the four
+ * ways a unit can be doing something other than walking.
  */
 
 import { unitSpacing } from '@/sim';
@@ -252,8 +254,13 @@ export function clipSpeed(animation: string): number {
 }
 
 /**
- * Everything a unit is given "at random" comes out of this: the same formation
- * slot always gets the same number, and its neighbours get unrelated ones.
+ * Everything a unit is given "at random" comes out of this: the same *crowd
+ * index* always gets the same number, and its neighbours get unrelated ones.
+ *
+ * The index, not a formation slot — that is D43. A unit keeps its index from
+ * the moment it spawns to the moment it dies (`CrowdSim`), while its slot moves
+ * every time somebody in front of it falls, so a look hung off the slot would
+ * have every mage swapping face and stride each time the column closed a gap.
  *
  * The three variations below used to be `index % 7`, `index % 29` and
  * `index % 3`, which was fine on a crowd ten to sixteen columns wide because a
@@ -264,12 +271,13 @@ export function clipSpeed(animation: string): number {
  * which is exactly the conveyor belt a column has to avoid. A hash has no
  * period to resonate with, and it costs a handful of integer operations against
  * the modulo's one. Measured over all three variations at 500 units: 2 to 4 us
- * a frame where the modulos cost 2 to 3, both of them lost in the 8 us the same
- * loop already spends on the flock's `exp` and in the instance writes after it.
+ * a frame where the modulos cost 2 to 3, both of them lost in the instance
+ * writes the same loop makes after it.
  *
  * Deliberately not the sim's RNG, and deliberately not stateful: a unit's look
- * has to survive a corpse outliving the crowd it stood in and a `mul` gate
- * renumbering nothing (`SquadView.diffCount` keeps indices).
+ * has to survive a corpse outliving the crowd it stood in, and a `mul` gate
+ * renumbers nobody (`CrowdSim` never compacts, `./squadCorpses.ts` keeps the
+ * index the corpse died with).
  */
 function scramble(index: number, salt: number): number {
   let h = Math.imul(index ^ salt, 0x85eb_ca6b);

@@ -389,6 +389,8 @@ export const BOLT_TAIL_GAP = 0.3;
 /** Sparkles shed behind the volley: how long one lives and how big it starts. */
 export const SPARKLE_DURATION = 0.24;
 export const SPARKLE_SIZE = 0.22;
+/** How hard a sparkle is drawn at birth; it fades to nothing from there. */
+export const SPARKLE_ALPHA = 0.4;
 /**
  * One projectile in this many sheds a sparkle on any given frame. With 400
  * bolts in the air that is twenty a frame, which fills `POOL.sparkles` and

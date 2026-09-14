@@ -413,7 +413,14 @@ export class App implements FrameHost, AppCommands {
         this.repaintMenu();
       },
       steer: (x: number) => {
-        this.session?.takeWheel(x);
+        // Only while a run is actually on the road. Taking the wheel drops the
+        // session's bot for good, so on the title screen, in the Academy or on
+        // the result sheet — where there is nothing to steer — this has to do
+        // nothing at all rather than quietly un-bot the run behind the panel.
+        if (this.currentPhase !== 'playing') return;
+        const session = this.session;
+        if (session === null || session.finished) return;
+        session.takeWheel(x);
       },
       setTurbo: (value: number) => {
         this.setTurbo(value);

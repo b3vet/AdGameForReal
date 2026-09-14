@@ -85,8 +85,19 @@ export function killEnemy(enemy: EnemyState, time: number): void {
 const soloGroup: GroupState = { id: 0, count: 0, leaderX: 0, z: 0, lane: null, rejoinAt: 0 };
 const solo: GroupState[] = [soloGroup];
 
-/** Each group's formation half-width this step; sized for the group cap. */
-const halves = new Float64Array(16);
+/**
+ * Each group's formation half-width this step: written once a step and read
+ * once per enemy per group, so the arithmetic happens `groups` times and not
+ * `groups * enemies` times.
+ *
+ * Pooled rather than allocated per step (CLAUDE.md), and grown rather than
+ * truncated. Sixteen covers `crowd.groupCap` several times over, but a cap
+ * raised past it would otherwise have left the groups above the sixteenth
+ * unable to be walked into by anything — a straggler column that quietly
+ * cannot be hit is a worse failure than one `new Float64Array` on the step a
+ * bigger cap is first seen.
+ */
+let halves = new Float64Array(16);
 
 function groupsOf(state: RunState): readonly GroupState[] {
   const groups = state.groups;
@@ -114,7 +125,8 @@ export function advanceEnemies(
   const contact = balance.enemies.contactDistance;
   const streamHalf = balance.streams.footprint;
   const groups = groupsOf(state);
-  const groupCount = Math.min(groups.length, halves.length);
+  const groupCount = groups.length;
+  if (groupCount > halves.length) halves = new Float64Array(groupCount);
   for (let g = 0; g < groupCount; g++) {
     const group = groups[g];
     halves[g] = group === undefined ? 0 : halfWidth(group.count, squad.formationWidth, balance);
