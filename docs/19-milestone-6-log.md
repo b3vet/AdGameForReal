@@ -198,3 +198,37 @@
   re-ran the smoke once more on the final tree before committing.
 - Closed from the carried lists: the Storm blow-out, the `steer` contract,
   the mage pool cost, the duplicated purchase rules.
+
+## 2026-09-14 — Close: final verification and the hosted build
+
+- Final tree (review fixes at 17f3ff4): typecheck 0 errors, lint clean,
+  383 tests, build OK; smoke PASS in 10 min 52 s on this container (runs
+  270 s, stress 41 s, hero 339 s; draw peaks 40 / 41 / 41 / 43 of 52; 37
+  shader programs warmed, 0 compiled during play; squad ragdolls on in
+  every run; stress 500 mages, 40 skeletons, 292 bodies in 35 draws).
+  Tech lead frame review of the final hero set: the crowd reads as
+  individuals at 27 units, a 451 column packed against a fence with the
+  road beyond empty and the plaques legible through the dimmed volley,
+  the whip diagonal at 500, the front rank bowed at the boss, the funnel
+  through an arch.
+- The smoke's 7 minute ceiling is not met on this container by any tree
+  since Phase E, including the pre-milestone set re-run here; the same
+  set measured 6 min 25 s the day before. Treated as the machine, not the
+  smoke; `SMOKE_HERO_SCALES=2` remains the lever if a faster gate is
+  needed.
+
+## Milestone 6 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Agents: 500 at 60 Hz under 0.5 ms a step; fence jam with no unit through; arch squeeze; visible shove; stragglers cut, fight, rejoin; determinism test | Done: 0.24 ms a step (0.47 with 300 bodies and a jam); all six behaviours tested and photographed |
+| 2. Feel: head within 150 ms; tail after; a whip frame; owner's read "they move on their own" | Head at 150 ms on screen, interpolated for 120 Hz, tail 0.57 s after; `hero-whip` in the set. Owner's read pending |
+| 3. Challenge and economy bands measured; goldens re-captured | Done: human bot 74 percent ordinary first-attempt clears, levels 1 to 3 at 100, survivors 0.45 of peak, boss 19 to 34 s; greedy 100 of 100; 1.87 and 3.77 runs per purchase; milestones 7/10/15/20 with only 15 and 20 separating armed from bare (D48, finding for the owner) |
+| 4. All checks, smoke, hero set, hosted build republished, log, ledger | Done: D43 to D48, hosted build Version 15 |
+
+Open for the product owner: the Academy sells nothing that compounds
+before a `gateBonus` rung, so levels 7 and 10 are the hardest levels the
+reference bot still clears rather than true upgrade gates (options: a
+cheap early compounding rung, or milestones at 15 and 20 only); the Yard's
+tenth rung costs 62k and is decorative; the boss band widened to 19 to
+35 s to keep the boss ladder monotone.
