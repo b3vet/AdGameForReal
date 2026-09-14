@@ -119,6 +119,10 @@ export class ChargerBodies {
    * One live charger. `laneGap` is how far it still has to travel across the
    * road to reach the lane it committed to, which is both its lean and the
    * direction its dust is thrown; 0 for a body that has not triggered.
+   *
+   * `time` is the sim's clock, which is what the dust is shed on: the body runs
+   * at sim speed, so a trail counted in frame seconds thins out under `?turbo`
+   * (`./frostSpray.ts`).
    */
   writeLive(
     id: number,
@@ -128,7 +132,7 @@ export class ChargerBodies {
     laneGap: number,
     shadows: ShadowLayer | null,
     shadowAlpha: number,
-    dt: number,
+    time: number,
   ): void {
     const crowd = this.crowd;
     if (crowd === null || this.written >= crowd.capacity) return;
@@ -152,7 +156,7 @@ export class ChargerBodies {
     if (shadows !== null && shadowAlpha > 0) shadows.add(x, z, SHADOW.charger, shadowAlpha);
     // Behind it, because it is running at the camera: the dust is what it has
     // already torn up, not what it is about to.
-    if (charging) this.dust.emit(x, z + CHARGER_SPRAY_BEHIND, laneGap, dt);
+    if (charging) this.dust.emit(x, z + CHARGER_SPRAY_BEHIND, laneGap, time);
   }
 
   /**
@@ -182,15 +186,22 @@ export class ChargerBodies {
     this.written++;
   }
 
-  /** Uploads the frame's bodies and draws the dust. Once a frame, after both. */
-  commit(decals: GroundDecals | null, dt: number): void {
+  /**
+   * Uploads the frame's bodies and draws the dust. Once a frame, after both.
+   *
+   * Two clocks, and they are not the same one: the crowd's animation runs on
+   * the frame's `dt`, as every other crowd in the scene does, and the dust ages
+   * on the sim's `time`, because a mark on the road is a place rather than an
+   * animation (`./frostSpray.ts`).
+   */
+  commit(decals: GroundDecals | null, dt: number, time: number): void {
     const crowd = this.crowd;
     if (crowd !== null) {
       crowd.setCount(this.written);
       crowd.commit();
       crowd.update(dt);
     }
-    if (decals !== null) this.dust.draw(decals, dt);
+    if (decals !== null) this.dust.draw(decals, time);
   }
 
   /** Bodies drawn last frame, for the debug panel and the dev harness. */

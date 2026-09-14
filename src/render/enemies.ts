@@ -50,6 +50,7 @@ import {
   POOL,
   SLOW_RING_COLOR,
 } from './theme';
+import { balance } from '@/data';
 import { laneCenter } from '@/sim';
 import type { EnemyState, RunState } from '@/sim';
 
@@ -232,7 +233,7 @@ export class EnemyView {
 
       const ahead = enemy.z - squadZ;
       if (ahead > ENEMY_DRAW_RANGE || ahead < -LABEL_BEHIND * 2) continue;
-      this.writeBody(slot, enemy, shadows, ShadowLayer.fade(ahead), dt);
+      this.writeBody(slot, enemy, shadows, ShadowLayer.fade(ahead), state.time);
     }
 
     this.sweep(dt, shadows);
@@ -251,7 +252,7 @@ export class EnemyView {
 
     this.rings.end();
     this.crowds.commit(dt);
-    this.chargers.commit(this.decals, dt);
+    this.chargers.commit(this.decals, dt, state.time);
   }
 
   /** Stream bodies drawn last frame, for the debug panel and the dev harness. */
@@ -273,13 +274,16 @@ export class EnemyView {
     this.crowds.dispose();
   }
 
-  /** One live body into whichever crowd draws its kind. */
+  /**
+   * One live body into whichever crowd draws its kind. `time` is the sim's
+   * clock, which only the charger's dust reads (`./frostSpray.ts`).
+   */
   private writeBody(
     slot: EnemySlot,
     enemy: EnemyState,
     shadows: ShadowLayer | null,
     shadowAlpha: number,
-    dt: number,
+    time: number,
   ): void {
     if (enemy.kind === 'charger') {
       this.chargers.writeLive(
@@ -287,10 +291,10 @@ export class EnemyView {
         enemy.x,
         enemy.z,
         slot.charging,
-        slot.charging ? laneCenter(enemy.charge?.lane ?? 0) - enemy.x : 0,
+        slot.charging ? laneCenter(enemy.charge?.lane ?? 0, balance.road.laneWidth) - enemy.x : 0,
         shadows,
         shadowAlpha,
-        dt,
+        time,
       );
       return;
     }

@@ -110,6 +110,26 @@ export const SPRAY_EVERY = 0.055;
  * reads as flicker rather than as a trail.
  */
 export const SPRAY_DURATION = 0.55;
+/**
+ * The Rime Fiend's own two (Milestone 7 review): a mark every `BOSS_WAKE_EVERY`
+ * seconds, lasting `BOSS_WAKE_SECONDS`.
+ *
+ * The charger's numbers above photographed as a scuff under its feet, which is
+ * what a charger's dust is. The Fiend's did not photograph at all, and the
+ * reason is arithmetic rather than colour: it covers about seven metres in
+ * 0.78 s, so at the charger's cadence it sheds fourteen marks half a metre
+ * apart — every one of them inside the two metres its own body covers, and the
+ * first of them already faded by the time it arrives. What is left is a blot
+ * under a three-metre monster in the one lane the squad's volley fills.
+ *
+ * Spaced at 1.35 m and held for nearly the whole run, the same fourteen marks
+ * become nine that lie along the road the body crossed and are all up at once —
+ * a line on clean road *behind* the boss, where nothing occludes it and no fill
+ * lands. Nine is well inside `SPRAY_POOL`, so the ring never saturates and the
+ * head of the track is never the mark that was skipped.
+ */
+export const BOSS_WAKE_EVERY = 0.15;
+export const BOSS_WAKE_SECONDS = 1.3;
 export const SPRAY_DRIFT = 0.3;
 /**
  * How far over the road the discs lie: above the lane runes at 0.02 and above
@@ -131,9 +151,17 @@ export const DECAL_SOFT_EDGE = 0.5;
 /** What a mark is at birth and at death, as a share of the emitter's size. */
 export const SPRAY_SIZE_START = 0.7;
 export const SPRAY_SIZE_END = 1.6;
-/** How big one puff starts, for the charger and for the boss. */
+/**
+ * How big one puff starts, for the charger and for the boss.
+ *
+ * The Fiend's is half again what it was (Milestone 7 review). Its wake is laid
+ * down exactly where the squad's volley lands — the lane between the column and
+ * the boss — and that fill is additive and near-clipping, so anything under it
+ * survives only as the part of the mark the fill has not yet taken to white. A
+ * wider disc is more of that part; see `BOSS_WAKE_COLOR` for the other half.
+ */
 export const CHARGER_SPRAY_SIZE = 0.9;
-export const BOSS_WAKE_SIZE = 1.6;
+export const BOSS_WAKE_SIZE = 2.4;
 /** How far behind the body the puff is left, in metres. */
 export const CHARGER_SPRAY_BEHIND = 0.35;
 export const BOSS_WAKE_BEHIND = 0.9;
@@ -142,10 +170,12 @@ export const BOSS_WAKE_BEHIND = 0.9;
  *
  * Wider for the boss than for the charger because it is three metres across
  * and its wake would otherwise be entirely behind it from a camera that looks
- * up the road — which is what the first Frostfell probe frame showed.
+ * up the road — which is what the first Frostfell probe frame showed. Wider
+ * again after the review, with `BOSS_WAKE_SIZE`: two tracks either side of the
+ * body read where one under it is inside the volley's own brightest column.
  */
 export const CHARGER_SPRAY_SPREAD = 0.5;
-export const BOSS_WAKE_SPREAD = 0.85;
+export const BOSS_WAKE_SPREAD = 1.15;
 /**
  * How hard a mark is drawn at birth; it fades linearly to nothing from there.
  *
@@ -170,16 +200,21 @@ export const SPRAY_ALPHA = 0.8;
  * track nobody could see (twice — the additive version had the same answer for
  * a different reason).
  *
- * So the charger's dust is `shadow.blob`, the one role the palette keeps for
- * "darker than the ground it lies on", and the one that already carries a
- * Frostfell override — a churned track and a contact shadow are the same value
- * family, and the mark is a *hole* in the snow rather than snow in the air. The
- * Rime Fiend's wake stays `spell.frost.edge`: it is no darker than the road,
- * but it is the one saturated cold hue in the palette and it reads as frost on
- * a near-neutral surface where a grey would not read at all.
+ * So both are `shadow.blob`, the one role the palette keeps for "darker than
+ * the ground it lies on", and the one that already carries a Frostfell override
+ * — a churned track and a contact shadow are the same value family, and the
+ * mark is a *hole* in the snow rather than snow in the air.
+ *
+ * The Fiend's wake was `spell.frost.edge` through Phase E and the review's
+ * frame is why it is not (`artifacts/smoke/frost-boss-charge.png`): the frost
+ * edge is a cold *hue* and no darker than the road, and the wake is laid down
+ * in the one place the squad's volley fills — additive, near-clipping, right
+ * down the lane the boss charged. A hue under a saturated additive fill is not
+ * a hue at all. Only value survives there, so the wake takes the same dark the
+ * dust does and reads as the track it is.
  */
 export const CHARGER_SPRAY_COLOR = paletteColor('shadow.blob');
-export const BOSS_WAKE_COLOR = paletteColor('spell.frost.edge');
+export const BOSS_WAKE_COLOR = paletteColor('shadow.blob');
 
 /**
  * The kick the Rime Fiend's charge gives the camera.

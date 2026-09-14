@@ -65,6 +65,14 @@
  * are the things the player is actually reading for.
  */
 .picker__level[data-biome='frost'] {
+  /*
+   * iOS 15 to 16.1 has no `color-mix` (D41), and a declaration that uses one is
+   * dropped whole — which would leave a Frostfell chip identical to a meadow
+   * one, the single thing this rule exists to prevent. So an opaque stand-in
+   * from the same palette goes first and the gradient overrides it wherever it
+   * parses, exactly as `tokens.css` does for the tokens.
+   */
+  background: var(--c-sky-horizon);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--frost) 30%, var(--paper)),

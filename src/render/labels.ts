@@ -137,7 +137,7 @@ export class NumberLabels {
     this.material.backFaceCulling = false;
     this.material.disableDepthWrite = true;
     // Depth testing off, so a number is never swallowed by the panel, the block
-    // or the demon it belongs to. Safe because the labels have a rendering
+    // or the boss it belongs to. Safe because the labels have a rendering
     // group of their own and are drawn after everything else.
     this.material.depthFunction = Constants.ALWAYS;
     this.material.fogEnabled = false;

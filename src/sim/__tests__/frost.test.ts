@@ -194,6 +194,14 @@ describe('Frostfell', () => {
     // charger's lane pick, a shield's arithmetic and the boss's charge clock
     // are all functions of the state and the fixed step, and none of them
     // reaches for a clock or an unseeded random.
+    //
+    // Ninety seconds of sim, not fifteen. The boss's charge is the piece of
+    // this with state of its own — a timer, a phase, a kill budget and a
+    // fractional carry, none of it inside `RunState` (`../bossCharge.ts`) —
+    // and fifteen seconds is 75 m of a 360 m road, which is a window with no
+    // arena in it at all (Milestone 7 review). The charge counter below is
+    // what keeps it that way: a run that stops reaching the boss fails here
+    // rather than quietly going back to testing the road.
     for (const index of [21, 25, 33]) {
       const config = levelConfig(index);
       const seed = 3;
@@ -201,12 +209,18 @@ describe('Frostfell', () => {
       const b = new Run(generateLevel(index, config, seed), balance);
       const botA = createBot('greedy', seed);
       const botB = createBot('greedy', seed);
-      for (let step = 0; step < 900; step++) {
+      let charges = 0;
+      for (let step = 0; step < 5400; step++) {
         a.setTargetX(botA(a.state));
-        a.tick(1 / 60);
+        for (const event of a.tick(1 / 60)) {
+          if (event.type === 'charge' && event.kind === 'boss') charges++;
+        }
         b.setTargetX(botB(b.state));
         b.tick(1 / 60);
       }
+      expect(`L${String(index)} boss charges ${String(charges)}`).not.toBe(
+        `L${String(index)} boss charges 0`,
+      );
       expect(`L${String(index)} ${JSON.stringify(b.state)}`).toBe(
         `L${String(index)} ${JSON.stringify(a.state)}`,
       );

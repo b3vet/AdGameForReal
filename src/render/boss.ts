@@ -35,6 +35,8 @@ import {
   BOSS_TAUNT_SPEED,
   BOSS_WAKE_BEHIND,
   BOSS_WAKE_COLOR,
+  BOSS_WAKE_EVERY,
+  BOSS_WAKE_SECONDS,
   BOSS_WAKE_SIZE,
   BOSS_WAKE_SPREAD,
   LABEL_RANGE,
@@ -65,7 +67,13 @@ export class BossView {
   private readonly rings: RingPool;
   private readonly ringState: Ring[] = [];
   /** The frost the Fiend tears off the road while it charges (D49). */
-  private readonly wake = new FrostSpray(BOSS_WAKE_SIZE, BOSS_WAKE_COLOR, BOSS_WAKE_SPREAD);
+  private readonly wake = new FrostSpray(
+    BOSS_WAKE_SIZE,
+    BOSS_WAKE_COLOR,
+    BOSS_WAKE_SPREAD,
+    BOSS_WAKE_EVERY,
+    BOSS_WAKE_SECONDS,
+  );
   private readonly decals: GroundDecals;
 
   private current = '';
@@ -210,8 +218,27 @@ export class BossView {
     timeScale: number,
     time: number,
   ): void {
+    this.updateBody(boss, squadZ, dt, timeScale, time);
+    // Last, and never first. The marks a charge sheds are laid down inside the
+    // call above, and a batch uploaded before them is a batch that draws this
+    // frame's wake on the *next* frame — which the review caught the only way
+    // it could be caught: the frame a capture stops on is the first frame of
+    // the charge, and it photographed an empty road (`./frostSpray.ts`).
+    //
+    // On the sim's clock, not the frame's: a wake is metres of road behind a
+    // body moving at sim speed.
+    this.wake.draw(this.decals, time);
+  }
+
+  /** Everything but the wake; `update` owns the order those two go in. */
+  private updateBody(
+    boss: EnemyState | null,
+    squadZ: number,
+    dt: number,
+    timeScale: number,
+    time: number,
+  ): void {
     this.updateRings(dt);
-    this.wake.draw(this.decals, dt);
     this.hitCooldown = Math.max(0, this.hitCooldown - dt);
 
     if (this.dying >= 0) {
@@ -300,7 +327,7 @@ export class BossView {
     this.rig.face(runningIn ? FACING : FACING_HOME, dt);
     // Behind it on the way in, in front of it on the way home — either way,
     // the metre of road it has just crossed.
-    this.wake.emit(boss.x, boss.z + (runningIn ? BOSS_WAKE_BEHIND : -BOSS_WAKE_BEHIND), 0, dt);
+    this.wake.emit(boss.x, boss.z + (runningIn ? BOSS_WAKE_BEHIND : -BOSS_WAKE_BEHIND), 0, time);
     if (!runningIn) return 'walk';
     return this.rig.has('charge') ? 'charge' : 'walk';
   }

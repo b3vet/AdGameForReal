@@ -63,29 +63,28 @@ const TURBO = 60;
  *   - the hero set drives three pages instead of two, and the third walks that
  *     same Frostfell level at pixel ratio 2.
  *
- * The levers, in the order they give the most back: `SMOKE_HERO_SCALES=2`
- * drops the 3x half of the meadow set, `SMOKE_HERO_FROST_SCALES=` cannot go
- * below one scale but the page can be dropped by pointing it at the 3x list
- * the run is not judged on, and `SMOKE_RUN_CONCURRENCY=2` overlaps the runs
- * (see below). None of them is the default: a smoke that is not run is not a
- * test, and every frame here is in a definition of done.
+ * What the Milestone 7 review took back, without dropping a frame or an
+ * assertion: the meadow hero page is 2x only by default (`DEFAULT_SCALES` in
+ * `./smoke-hero.mjs` carries the reasoning — the 3x half is the same picture at
+ * more pixels), and the pace ladders that walk the Frostfell run down to its
+ * three moments run a rung faster, on margins that are written out beside them.
  *
- * The runs are independent — their own context, their own save, their own
- * screenshots — and every assertion a run carries is a *count*: draw calls,
- * shader programs, coins, a phase. None is a wall-clock measurement, so
- * running two at once cannot change an answer.
+ * The lever that is still unused is `SMOKE_RUN_CONCURRENCY=2`. The runs are
+ * independent — their own context, their own save, their own screenshots — and
+ * every assertion a run carries is a *count*: draw calls, shader programs,
+ * coins, a phase. None is a wall-clock measurement, so running two at once
+ * cannot change an answer.
  *
- * It cannot be the default anyway. Measured at 2 in Milestone 5 Phase F: the
- * run phase dropped from 182 s to about 105 s, and both attempts *failed* in
- * the same place — the page that boots while another is already playing does
- * not finish `page.goto`'s `load` inside Playwright's 30 s navigation default,
- * because one page compiling thirty-six programs through SwiftShader while
- * another draws a five-hundred-mage frame is all four cores. Turning it on
- * therefore means raising the navigation timeout as well
- * (`page.setDefaultNavigationTimeout`), which is a change worth making against
- * a full smoke run rather than inside a review. `SMOKE_RUN_CONCURRENCY=2` is
- * the lever; the timeout is `READY_TIMEOUT_MS` in `./smoke-run.mjs` and the
- * navigation one is Playwright's own.
+ * Measured at 2 in Milestone 5 Phase F: the run phase dropped from 182 s to
+ * about 105 s, and both attempts *failed* in the same place — the page that
+ * boots while another is already playing does not finish `page.goto`'s `load`
+ * inside Playwright's 30 s navigation default, because one page compiling
+ * thirty-six programs through SwiftShader while another draws a five-hundred-
+ * mage frame is all four cores. That timeout is raised now (`playRun` in
+ * `./smoke-run.mjs` sets it, as the hero pages already did), so the one known
+ * blocker is gone; what is not yet measured is whether a run at half speed
+ * still reaches each of its shots inside `SHOT_TIMEOUT_MS`, which is why the
+ * default is still 1. It is the next thing to try against a full run.
  */
 const RUN_CONCURRENCY = Number(process.env.SMOKE_RUN_CONCURRENCY ?? 1);
 

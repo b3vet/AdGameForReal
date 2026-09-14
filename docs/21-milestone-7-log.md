@@ -152,3 +152,51 @@
   read under the volley; `smoke-hero.mjs` 901 and `smoke-run.mjs` 599
   lines; grazing-angle banding at the far end of the ice road; the smoke's
   wall clock.
+
+## 2026-09-14 — Phase F: independent review and fixes (verified and committed)
+
+- The Fiend's wake had never been drawn: the boss view uploaded the decal
+  batch before the charge emitted into it, so every mark was a frame late
+  and the capture frame was empty (probe: count 0 before, 3 after). Split
+  the body update from a trailing wake draw; the wake is now the shadow
+  role, wider and spread along the seven metres it runs, and changes 5.4
+  percent of the frame. The charger's dust follows sim time and back-fills
+  along the road a frame covered, so a turbo capture shows the same track
+  as play (Phase E's note had the diagnosis wrong: the cap was one mark
+  per call, not the clock alone).
+- The determinism test on a frost level stopped at 15 s, before the first
+  boss charge at 80 s; it now runs 90 s and asserts a charge happened.
+- Smaller: a dead biome cast; a lane centre read with the module default
+  instead of the balance; the campaign report banding off a hard-coded
+  36; an iOS 15 to 16.1 fallback for the frost picker chip; four stale
+  comments.
+- Reviewed clean: chargers, the single damage funnel for shields, the
+  Fiend's schedule and paused stomp, the boss staying targetable behind
+  the front, the stacked-fence mirror, levels 21 to 40 (the byte check
+  hashes the real config), no per-step or per-frame allocations on the new
+  paths, shield strings cached until the number moves. Biome switch over
+  30 switches on the final tree: 90 meshes, 66 textures, 301 nodes, 59 →
+  60 materials (Babylon's default), 43 programs, the arch tint reversing
+  exactly.
+- Smoke budget: 18 min 6 s → 15 min 10 s (runs 475 s, stress 39 s, hero
+  393 s) with nothing weakened: the meadow 3x hero page is off by default
+  (`SMOKE_HERO_SCALES=2,3` restores it) and the pace ladders run a rung
+  faster on stated margins; two-run concurrency is unblocked but left off.
+  `smoke-hero.mjs` 901 → 293 with page, frost and swipe modules;
+  `smoke-run.mjs` 599 → 147 with plan and checks modules.
+- The contract from level 21: on every economy seed the human campaign
+  reaches 21 with the identical ten-purchase kit the bands assume and 40
+  with sixteen; the worst grind is six attempts on one level; a player who
+  only ever loses at the boss on 21 earns the next rung in about eighteen
+  losing runs, or five replays of a level-20 clear.
+- Not fixed, reported: the wake is a scuffed band rather than a gouge
+  (drawing decals above the volley is an art call); `delete boss.charge`
+  once per charge; six dps recomputations per step in the charger stand;
+  the sky dome's colour array and prop tints allocated per switch (level
+  load, not a frame); the campaign kit read off seed 1 (seed 3 is one rung
+  poorer at 35); files over ~400 that grew (`GameAudio.ts` 508, `App.ts`
+  481, `Run.ts` 423, `road.ts` 409, `firing.ts` 406, `frame.ts` 401,
+  `theme.ts` 418, `balance.test.ts` 587).
+- Review verification: typecheck 0 errors, lint clean, 414 tests, build
+  OK, hosted 11.82 MB, smoke PASS twice at about 15 min 10 s. The tech
+  lead re-ran the smoke once on the final tree before publishing.

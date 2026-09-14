@@ -11,6 +11,7 @@
 
 import type { CampaignResult, Loadout } from './campaign';
 import { upgradeIds } from './player';
+import { levelCount } from '@/data';
 
 /**
  * Runs per purchase over a band of levels: the number the prices are tuned
@@ -43,9 +44,11 @@ export function formatCampaign(result: CampaignResult): string[] {
         `  ${loadoutLine(level.held)}`,
     );
   }
+  // Bands of five, off the campaign's own length rather than a number written
+  // here: Milestone 7 doubled it and would have to have been remembered twice.
   const bands: string[] = [];
-  for (let from = 1; from <= 36; from += 5) {
-    const to = from === 1 ? 5 : from + 4;
+  for (let from = 1; from <= levelCount; from += 5) {
+    const to = Math.min(levelCount, from + 4);
     bands.push(`L${String(from)}-${String(to)} ${runsPerPurchase(result, from, to).toFixed(2)}`);
   }
   lines.push(`runs/purchase ${bands.join('  ')}`);

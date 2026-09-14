@@ -288,11 +288,14 @@ export const ENEMY_CLUSTER_DEPTH = 1.6;
 /**
  * How far ahead the boss is drawn. Its meshes opt out of frustum culling (a
  * skinned model's rest-pose bounds are wrong once it animates), so without this
- * the demon and its trident are two draw calls on every frame of the road
- * phase — for a body sixty metres away and half inside the haze. A fixed
- * number rather than `FOG_END`: the daylight fog reaches much further than the
- * dusk one did, and tying the two together would draw the demon for most of the
- * road just because the air got clearer.
+ * the boss and its weapon are two draw calls on every frame of the road phase —
+ * for a body sixty metres away and half inside the haze. Both boss models are
+ * loaded at boot from D49, so the one that is not standing in this arena is
+ * disabled rather than drawn (`./bossModels.ts`), and this is what holds the
+ * other one off the frame until it is worth seeing. A fixed number rather than
+ * `FOG_END`: the daylight fog reaches much further than the dusk one did, and
+ * tying the two together would draw the boss for most of the road just because
+ * the air got clearer.
  */
 export const BOSS_DRAW_RANGE = 75;
 

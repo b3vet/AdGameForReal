@@ -243,7 +243,8 @@ export class Academy {
       this.elements.pager.append(tab);
       this.pageButtons.push(tab);
     }
-    // A single page of ten needs no tabs at all; twenty levels give two.
+    // A single page of ten needs no tabs at all; the forty levels of two
+    // biomes (D49) give four.
     this.elements.pager.hidden = pages < 2;
   }
 

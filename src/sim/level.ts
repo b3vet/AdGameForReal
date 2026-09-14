@@ -4,11 +4,13 @@
  * gates themselves in `gateGen.ts`, one row's contents in `rows.ts`, stream
  * sizing in `pressure.ts` and the fences in `walls.ts`.
  *
- * Milestone 3's shape (D31), stretched to twenty levels by Milestone 4 (D32):
- * rows every 18 m, eight of them carrying gates on level 1 rising to fourteen
- * by level 20, and every other row a threat — a stream, a horde of two, or a
- * brute block. Sixty to seventy-five seconds of road before the arena, and from
- * level 4 a lane wall in front of some of the gate rows.
+ * Milestone 3's shape (D31), stretched to twenty levels by Milestone 4 (D32)
+ * and to forty across two biomes by Milestone 7 (D49): rows every 18 m, eight
+ * of them carrying gates on level 1 rising to fourteen by level 20, and every
+ * other row a threat — a stream, a horde of two, a brute block, and on
+ * Frostfell a charger or a shielded brute. Sixty to seventy-five seconds of
+ * road before the arena, and from level 4 a lane wall in front of some of the
+ * gate rows.
  */
 
 import { addValueAt, squadCurve } from './curve';
