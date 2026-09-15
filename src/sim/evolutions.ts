@@ -16,6 +16,7 @@
  * bottom of this file so `Run` holds one field and makes one call.
  */
 
+import type { HitFn } from './burn';
 import type { EventBuffer } from './events';
 import { Glacier } from './glacier';
 import { Meteor } from './meteor';
@@ -175,13 +176,14 @@ export class Evolutions {
     output: SquadOutput,
     blast: Blast,
     shove: Shove,
+    hit: HitFn,
   ) {
     const tuning = balance.evolutions;
     this.meteor = anyStaff(held.meteor)
       ? new Meteor(tuning.ember.meteor, balance, events, targets, held.meteor, output, blast, shove)
       : null;
     this.glacier = anyStaff(held.glacier)
-      ? new Glacier(tuning.frost.glacier, balance, events, held.glacier)
+      ? new Glacier(tuning.frost.glacier, balance, events, held.glacier, targets, output, hit)
       : null;
   }
 

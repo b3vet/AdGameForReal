@@ -37,15 +37,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
-import {
-  BARE_TINTS,
-  CAPE_LOOK,
-  CAPE_PART,
-  HAT_LOOK,
-  HAT_PART,
-  dyeAgainst,
-  isBare,
-} from './cosmetics';
+import { BARE_TINTS, partTintsInto } from './cosmetics';
 import type { WornTints } from './cosmetics';
 import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
@@ -142,19 +134,7 @@ export class SquadView {
    */
   setCosmetics(tints: WornTints): void {
     this.worn = tints;
-    // A bare slot is left out rather than passed as the identity: what the
-    // crowds are given is a multiplier *against what the part already looks
-    // like* (`dyeAgainst`), and there is nothing to correct on a part nobody
-    // is dressing.
-    this.partTints.clear();
-    if (!isBare(tints.hat)) {
-      dyeAgainst(tints.hat, HAT_LOOK, this.hatDye);
-      this.partTints.set(HAT_PART, this.hatDye);
-    }
-    if (!isBare(tints.cape)) {
-      dyeAgainst(tints.cape, CAPE_LOOK, this.capeDye);
-      this.partTints.set(CAPE_PART, this.capeDye);
-    }
+    partTintsInto(tints, this.partTints, this.hatDye, this.capeDye);
     for (const crowd of this.crowds.values()) crowd.setPartTints(this.partTints);
   }
 

@@ -60,28 +60,33 @@ describe('ember burn (tier 2)', () => {
     expect(total).toBeCloseTo(100 * BURN.share, 6);
   });
 
-  it('refreshes rather than stacks, and takes the hotter of the two burns', () => {
+  it('adds to the fire rather than restarting it, and never burns more than it was fed', () => {
+    // The Milestone 8 rule (see `../burn.ts`): what a body carries is a pool of
+    // damage still owed, and a hit adds `share` of itself to it. The Milestone 4
+    // rule was "refresh, and take the larger per-tick", written for a world
+    // where a hit is a discrete event; the squad fires in sixtieths of a second,
+    // so the whole evolution came to a quarter of a percent of the squad's fire.
     const events = new EventBuffer();
     const hits: number[] = [];
     const burn = new Burn(BURN, events, (_state, _enemy, amount) => hits.push(amount));
     const enemy = body(1, 0, 10, 1e9);
     const state = { time: 0, status: 'running' } as RunState;
-    const ticks = Math.round(BURN.seconds / BURN.tickSeconds);
 
     burn.ignite(enemy, 100, 0);
     for (let step = 1; step <= 60 * 6; step++) {
       state.time = step / 60;
-      // Set alight again and again: the burn must not become eight burns.
-      if (step % 20 === 0 && state.time < 2) burn.ignite(enemy, 40, state.time);
+      // Set alight again and again: three hits, three lots of damage owed.
+      if (step % 20 === 0 && state.time < 0.7) burn.ignite(enemy, 40, state.time);
       burn.update(state);
     }
 
-    // Refreshed twice inside its own two seconds, so it burns longer than one
-    // burn would — but never more than one tick at a time, at the hotter rate.
-    const perTick = (100 * BURN.share) / ticks;
-    for (const hit of hits) expect(hit).toBeCloseTo(perTick, 6);
-    expect(hits.length).toBeGreaterThan(ticks);
-    expect(hits.length).toBeLessThanOrEqual(ticks * 2);
+    // Everything the three hits were worth, and not a point more: the total is
+    // `share` of the damage actually dealt, however the hits were spaced.
+    const total = hits.reduce((sum, hit) => sum + hit, 0);
+    expect(total).toBeCloseTo(180 * BURN.share, 6);
+    // ...spread over ticks, never paid out in one lump.
+    expect(hits.length).toBeGreaterThan(Math.round(BURN.seconds / BURN.tickSeconds));
+    for (const hit of hits) expect(hit).toBeLessThan(total);
   });
 
   it('burns a block the squad is shooting, and says so once per fire', () => {

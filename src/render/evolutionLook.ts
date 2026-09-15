@@ -88,13 +88,18 @@ export const FREEZE_RING_ALPHA = 0.55;
  * hold — both short, because the wall is up for a few seconds and an entrance
  * that costs a quarter of that is a wall that is always moving.
  */
-export const GLACIER_HEIGHT = 1.6;
+/**
+ * Taller than the bodies it stops, so the wall reads over their heads rather
+ * than between their knees: the Phase C probe photographed a fully risen wall
+ * at 1.6 m and it was a pale plate lying in the lane.
+ */
+export const GLACIER_HEIGHT = 2.1;
 export const GLACIER_THICKNESS = 0.55;
 export const GLACIER_RISE_SECONDS = 0.22;
 export const GLACIER_MELT_SECONDS = 0.45;
-export const GLACIER_ALPHA = 0.72;
+export const GLACIER_ALPHA = 0.84;
 /** How much of the ice is lit from inside, so it reads as ice and not as stone. */
-export const GLACIER_EMISSIVE = 0.45;
+export const GLACIER_EMISSIVE = 0.5;
 
 /**
  * Ground marks the evolutions may have up at once, on top of the monsters'

@@ -22,7 +22,7 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
 import { BIOME_GROUND, FRINGE_OVERLAP, FRINGE_WIDTH } from './roadLook';
-import { applyGround, buildGroundAlbedos, matte } from './roadGround';
+import { applyGround, matte } from './roadGround';
 import type { GroundMaterials } from './roadGround';
 import { createRoadSurface } from './roadSurface';
 import { ROAD_HALF_WIDTH, paletteColor } from './theme';
@@ -54,7 +54,18 @@ export class RoadFarHalf {
    */
   private readonly fieldWidth: number;
 
-  constructor(scene: Scene, fieldWidth: number, fringeOpacity: BaseTexture, kerb: StandardMaterial) {
+  /**
+   * `albedos` are the near half's, built once at boot: this half is painted
+   * with the same textures — never with a second copy of them — and is handed
+   * one here so the boot warm-up compiles a material that already carries a
+   * diffuse texture rather than the untextured variant.
+   */
+  constructor(
+    scene: Scene,
+    fieldWidth: number,
+    fringeOpacity: BaseTexture,
+    albedos: ReadonlyMap<string, Texture>,
+  ) {
     this.fieldWidth = fieldWidth;
     const fringeMaterial = matte(scene, 'fringeFarMat', paletteColor('grass.base'));
     fringeMaterial.opacityTexture = fringeOpacity;
@@ -63,18 +74,18 @@ export class RoadFarHalf {
     // The surface is a hand-built grid with no side orientation of its own; the
     // camera is always above it, so there is nothing to cull (see `./road.ts`).
     roadMaterial.backFaceCulling = false;
+    // No kerb: there is one set of kerbs down the whole road and it belongs to
+    // the near half. Painting it from here would paint it in the *next* span's
+    // biome, which is the inversion the Phase C probe measured.
     this.ground = {
       road: roadMaterial,
       field: matte(scene, 'fieldFarMat', paletteColor('grass.light')),
       fringe: fringeMaterial,
-      // Shared with the near half: the kerb is a thin strip of cut stone read
-      // at a few metres, and splitting it would be a draw call for a colour
-      // nobody can tell apart at the distance a boundary is crossed from.
-      kerb,
     };
-    // Every biome's albedo, on these materials too, so a switch is a reference
-    // assignment here exactly as it is on the near half.
-    buildGroundAlbedos(scene, this.ground, ROAD_HALF_WIDTH * 2, fieldWidth);
+    // The near half's own albedos, not a second set of them: `tiledAlbedo`
+    // builds a texture per call, and four more copies of the two biomes'
+    // ground would be megabytes of texture memory nothing ever draws.
+    applyGround(this.ground, albedos, 'meadow');
 
     this.surface = createRoadSurface(scene);
     this.surface.material = roadMaterial;

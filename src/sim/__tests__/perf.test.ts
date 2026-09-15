@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { level, row, runOf, staffRow, testBalance, wall } from './fixtures';
-import { emptyPlayer, maxUpgradeLevel, upgradeIds } from '../player';
+import { emptyPlayer, maxStaffTier, maxUpgradeLevel, upgradeIds } from '../player';
+import { weaponIds } from '../weapons';
 import type { RowDef } from '../level';
 import { Run } from '../Run';
 import type { StreamDef } from '../types';
@@ -187,6 +188,32 @@ describe('hot loop', () => {
       tuning.enemies.maxLive - 5,
     );
     expect(measure(run)).toBeLessThan(TICK_BUDGET_MS);
+  });
+
+  it('holds the same load with a whole evolution ladder bought', () => {
+    // The test above is the Milestone 4 loadout — one evolution, the burn. D54
+    // put six more mechanics in the hot loop and three of them scan the lane
+    // lists on a clock of their own: the wildfire hands fire on at every step
+    // the squad is feeding one, the meteor blasts a crater every few seconds,
+    // and the glacier grinds whatever its wall is holding on every step of the
+    // hold. This is the loadout a player who has bought out a ladder walks a
+    // river with, which is the one that has to hold the budget.
+    for (const staff of weaponIds) {
+      const player = emptyPlayer();
+      for (const id of upgradeIds) player.upgrades[id] = maxUpgradeLevel;
+      player.staffs[staff] = { unlocked: true, tier: maxStaffTier };
+      player.selectedStaff = staff;
+      player.familiar = { unlocked: true, tier: 3 };
+
+      const tuning = saturatedTuning();
+      const run = new Run(
+        level({ startCount: UNITS, rows: saturatedStreams(), arenaZ: 40_000 }),
+        tuning,
+        player,
+      );
+      for (let i = 0; i < 600; i++) run.tick(1 / 60);
+      expect(`${staff}: ${(measure(run) < TICK_BUDGET_MS).toString()}`).toBe(`${staff}: true`);
+    }
   });
 
   it('runs a road of gates and blocks with 300 units well inside the budget', () => {

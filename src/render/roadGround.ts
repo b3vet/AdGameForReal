@@ -35,8 +35,16 @@ export interface GroundMaterials {
   field: StandardMaterial;
   /** The band that overlaps the kerb into the field, one step darker. */
   fringe: StandardMaterial;
-  /** The cut stones down both edges; it carries a painted grain, not an albedo. */
-  kerb: StandardMaterial;
+  /**
+   * The cut stones down both edges; it carries a painted grain, not an albedo.
+   *
+   * Optional, and the one material of the four that a *half* of a spanned road
+   * may not hold (D52): there is one set of kerbs down the whole road and the
+   * far half shares it, so a far half that painted it would paint it in the
+   * next span's biome — which is exactly what the Phase C probe caught, a
+   * meadow kerb beside a snow road and an ice kerb beside a cobbled one.
+   */
+  kerb?: StandardMaterial;
 }
 
 /**
@@ -96,14 +104,17 @@ export function applyGround(
   paint(materials.road, id, 'stone.light');
   paint(materials.field, id, 'grass.light');
   paint(materials.fringe, id, 'grass.base');
-  paint(materials.kerb, id, 'stone.kerb');
 
-  // Every one of the four has just changed, and three of them changed a
-  // *texture*: without this the scene keeps drawing what was bound last.
+  // Every one of these has just changed, and each of them changed a *texture*:
+  // without this the scene keeps drawing what was bound last.
   refreeze(materials.road);
   refreeze(materials.field);
   refreeze(materials.fringe);
-  refreeze(materials.kerb);
+
+  const kerb = materials.kerb;
+  if (kerb === undefined) return;
+  paint(kerb, id, 'stone.kerb');
+  refreeze(kerb);
 }
 
 /** One role, resolved in `id` rather than in the biome in force. */

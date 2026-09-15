@@ -9,10 +9,10 @@
  *                         and off the state the session already holds, so
  *                         adding a mission can never change a run.
  *   the draw is seeded    `MissionsState.rolled` is the whole of the board's
- *                         memory: draw n is `mulberry32(n)` over the pool
- *                         minus what is already on the board, so two devices
- *                         with the same save show the same three missions and
- *                         a reload never re-rolls them.
+ *                         memory: draw n is the nth card of a deck dealt by
+ *                         `mulberry32`, so two devices with the same save show
+ *                         the same three missions and a reload never re-rolls
+ *                         them.
  *   nothing allocates     `RunTracker.absorb` runs inside the frame loop, once
  *                         per sim chunk. It is counters and a loop over the
  *                         events the session is already walking; the one
@@ -21,7 +21,7 @@
 
 import { missionDef, missions as missionsData } from '@/data';
 import type { MissionDef, MissionKind, MissionState, MissionsState } from '@/data';
-import { mulberry32 } from '@/sim';
+import { mulberry32, shuffle } from '@/sim';
 import type { EnemyKind, RunState, SimEvent } from '@/sim';
 
 import type { KillCounts } from './bestiary';
@@ -220,12 +220,17 @@ export function rollMissions(state: MissionsState): MissionsState | null {
 
   let rolled = Math.max(0, Math.floor(state.rolled));
   const changed = kept.length !== state.active.length;
-  while (kept.length < boardSize) {
-    const drawn = draw(rolled, kept);
+  // Bounded because a pool shorter than the board would otherwise deal cards
+  // the board is already holding for ever; a board of two is the honest answer.
+  const attempts = Math.max(1, missionsData.pool.length) * 2;
+  for (let attempt = 0; kept.length < boardSize && attempt < attempts; attempt++) {
+    const drawn = card(rolled);
     rolled += 1;
-    // Every mission in the pool is already on the board: a board smaller than
-    // three is the honest answer, and the loop has to stop.
     if (drawn === null) break;
+    // A card the board is already holding. It happens only where two deals
+    // meet — inside one deal every card is different — so the deck moves on
+    // rather than being cut again, and `rolled` stays the whole memory.
+    if (kept.some((mission) => mission.id === drawn.id)) continue;
     kept.push({ id: drawn.id, progress: 0, done: false });
   }
 
@@ -234,20 +239,37 @@ export function rollMissions(state: MissionsState): MissionsState | null {
 }
 
 /**
- * Draw number `rolled`, over the pool minus what is on the board.
+ * Draw number `rolled`: the card at that place in the deck.
  *
- * `mulberry32(rolled)` rather than one stream advanced three times, so a board
- * can be rebuilt from `rolled` alone: the save carries one integer and the draw
- * is a function of it (the plan's "drawn seeded (mulberry32 over `rolled`)").
+ * A deck rather than a pick, because a pick repeats. Milestone 8 measured the
+ * board it replaces over forty sessions: seven of the sixteen missions were
+ * ever drawn and one of them came up four times, which is what an independent
+ * draw from a sixteen-card pool does — it has no memory, so two thirds of the
+ * pool a player paid for in writing is never seen. A deck deals every mission
+ * once before any of them comes round again.
+ *
+ * Still a function of `rolled` alone, which is the property the save depends
+ * on: deal number `n` is the whole pool shuffled by `mulberry32(n + 1)` (the
+ * board's own draw counter, one deal per pool length), so a reload rebuilds the
+ * same three missions from the one integer it stored. `n + 1` because seed 0
+ * is a state mulberry32 walks out of slowly, and the first deal is the one
+ * every new player sees.
  */
-function draw(rolled: number, taken: readonly MissionState[]): MissionDef | null {
-  const eligible = missionsData.pool.filter(
-    (def) => !taken.some((mission) => mission.id === def.id),
-  );
-  if (eligible.length === 0) return null;
-  const index = Math.min(eligible.length - 1, Math.floor(mulberry32(rolled)() * eligible.length));
-  return eligible[index] ?? null;
+function card(rolled: number): MissionDef | null {
+  const pool = missionsData.pool;
+  if (pool.length === 0) return null;
+  const deal = Math.floor(rolled / pool.length);
+  if (deal !== dealt) {
+    deck = [...pool];
+    shuffle(mulberry32(deal + 1), deck);
+    dealt = deal;
+  }
+  return deck[rolled % pool.length] ?? null;
 }
+
+/** The deal in `deck`, or -1 before the first. One deal is cut at a time. */
+let dealt = -1;
+let deck: MissionDef[] = [];
 
 // --- Progress --------------------------------------------------------------
 

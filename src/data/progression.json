@@ -18,48 +18,48 @@
     "ember": {
       "unlock": 0,
       "evolve": [
-        900,
-        1100,
-        1400
+        2600,
+        3000,
+        3800
       ],
       "worth": {
-        "unlock": 0.0,
+        "unlock": 0.05,
         "evolve": [
-          0.001,
-          0.0,
-          0.138
+          0.126,
+          0.016,
+          0.111
         ]
       }
     },
     "storm": {
       "unlock": 400,
       "evolve": [
-        950,
-        1150,
-        1500
+        1500,
+        2200,
+        3400
       ],
       "worth": {
         "unlock": 0.05,
         "evolve": [
-          0.0,
-          0.018,
-          0.122
+          0.026,
+          0.029,
+          0.16
         ]
       }
     },
     "frost": {
       "unlock": 450,
       "evolve": [
-        800,
-        950,
-        1250
+        1200,
+        1500,
+        2000
       ],
       "worth": {
         "unlock": 0.05,
         "evolve": [
-          0.027,
-          0.0,
-          0.028
+          0.036,
+          0.064,
+          0.0
         ]
       }
     }
@@ -68,21 +68,21 @@
     "ember": {
       "burn": {
         "share": 0.3,
-        "seconds": 2,
-        "tickSeconds": 0.25
+        "seconds": 0.6,
+        "tickSeconds": 0.1
       },
       "wildfire": 3,
       "meteor": 4
     },
     "storm": {
-      "extraChains": 2,
+      "extraChains": 1,
       "fullChains": 3,
       "overcharge": 4
     },
     "frost": {
       "shatter": {
-        "radius": 1,
-        "share": 0.5
+        "radius": 1.4,
+        "share": 0.7
       },
       "freezePulse": 3,
       "glacier": 4
@@ -115,9 +115,9 @@
     ],
     "worth": [
       0,
-      0.095,
-      0.044,
-      0.075
+      0.105,
+      0.049,
+      0.099
     ]
   },
   "rewards": {

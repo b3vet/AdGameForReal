@@ -99,6 +99,8 @@ export interface EnemyState {
   burnUntil?: number;
   /** Burn damage still owed, drained a tick at a time (D33, re-based in M8). */
   burnLeft?: number;
+  /** A fire the squad lit itself, so ember tier 3 may hand it on (`burn.ts`). */
+  burnSpreads?: boolean;
   burnNextAt?: number;
   /** In the burn list right now, so a refresh does not file it twice. */
   burning?: boolean;

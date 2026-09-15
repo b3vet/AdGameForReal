@@ -25,6 +25,18 @@ export interface WeaponChain {
   count: number;
   range: number;
   damageMul: number;
+  /**
+   * What each hop keeps of the one before it, so the arc fades as it travels:
+   * hop n takes `damageMul * falloff ^ (n - 1)` of the shot.
+   *
+   * Added in Milestone 8 because storm's two lower evolutions had nothing to
+   * buy without it. A flat arc is one number, and both tiers were pulling on
+   * it: "one more target" is worth nothing when the arc already reaches
+   * everything nearby, and "every hop lands as hard as the first" means
+   * nothing when they already do. With a falloff the two are different
+   * purchases — reach, and then strength at reach (D54).
+   */
+  falloff: number;
 }
 
 /** Frost: the block walks at `factor` of its speed for `seconds`, and a kill

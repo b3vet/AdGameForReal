@@ -82,6 +82,39 @@ export function dyeAgainst(tint: Tint, look: Tint, out: [number, number, number]
  */
 const DYE_STRENGTH = 2;
 
+/**
+ * The crowd's own dye job: the worn hat and cape as a map of part name to
+ * multiplier, ready for `Crowd.setPartTints`.
+ *
+ * Here rather than in `./squad.ts` because every number it needs is in this
+ * file — the part names, what those parts read as on screen, and the
+ * correction between the two — and the squad's only interest in it is that it
+ * has one map to hand its three crowds.
+ *
+ * Writes into the caller's map and the caller's two triples rather than
+ * allocating: a wardrobe change is a level load rather than a frame, but a
+ * player trying six hats on should not leave six maps behind. A bare slot is
+ * *left out* rather than written as the identity, because what a crowd is
+ * given is a correction against what the part already looks like, and there is
+ * nothing to correct on a part nobody is dressing.
+ */
+export function partTintsInto(
+  tints: WornTints,
+  out: Map<string, readonly [number, number, number]>,
+  hatDye: [number, number, number],
+  capeDye: [number, number, number],
+): void {
+  out.clear();
+  if (!isBare(tints.hat)) {
+    dyeAgainst(tints.hat, HAT_LOOK, hatDye);
+    out.set(HAT_PART, hatDye);
+  }
+  if (!isBare(tints.cape)) {
+    dyeAgainst(tints.cape, CAPE_LOOK, capeDye);
+    out.set(CAPE_PART, capeDye);
+  }
+}
+
 /** Three multipliers on r, g and b. Identity is `[1, 1, 1]`. */
 export type Tint = readonly [number, number, number];
 

@@ -17,6 +17,7 @@ import { createCrowdState } from '../crowdState';
 import type { RowEnemyDef } from '../level';
 import { Run } from '../Run';
 import type { SimEvent } from '../types';
+import { weaponDef } from '../weapons';
 import { level, play, row, testBalance, withStaff } from './fixtures';
 import { balance } from '@/data';
 import type { Balance, StaffTier } from '@/data/types';
@@ -71,12 +72,21 @@ describe('what a tier may be worth', () => {
     );
   });
 
-  it('keeps the two that hold rather than hurt on a duty cycle under a half', () => {
+  it('keeps the two that hold rather than hurt on a duty cycle under three quarters', () => {
     // The glacier holds one lane of three, so its own ceiling is about where
-    // the wall stops being a wall and starts being the road.
+    // the wall stops being a wall and starts being the road. Widened from a
+    // half in Milestone 8, with what the wall is worth: measured, a wall that
+    // held *and* killed everything it held, eight seconds in every nine and
+    // right in front of the column, moved a run by under a percent — the
+    // column runs forward at more than twice a grunt's walking pace, so the
+    // hold it buys is a second of extra fire and not the five it names.
     const ice = balance.evolutions.frost.glacier;
     const duty = ice.holdSeconds / ice.intervalSeconds;
-    expect(`glacier ${duty.toFixed(2)} duty`).toBe(`glacier ${Math.min(duty, 0.5).toFixed(2)} duty`);
+    expect(`glacier ${duty.toFixed(2)} duty`).toBe(`glacier ${Math.min(duty, 0.75).toFixed(2)} duty`);
+    // And what it takes out of the river it holds, in seconds of the squad's
+    // own fire a second, is priced like the meteor and under the same ceiling.
+    expect(ice.bite).toBeGreaterThan(0);
+    expect(ice.bite).toBeLessThanOrEqual(CEILING);
     // The freeze pulse buys time on the bodies around a frozen death; a chill
     // longer than the staff's own slow would make the pulse the mechanic.
     const pulse = balance.evolutions.frost.freezePulse;
@@ -111,7 +121,12 @@ describe('ember tier 3: wildfire', () => {
     expect(lit(3)).toEqual([0, 1]);
   });
 
-  it('cannot be hotter than the fire it came from, and hops once per source', () => {
+  it('cannot be hotter than the fire it came from, and never spreads twice', () => {
+    // What jumps is `share` of what the squad is putting into the body it
+    // jumps from, and it arrives half as a flare and half as fire (Milestone 8
+    // made the flare of it, because nine parts in ten of a hopped fire were
+    // still owed when the body it landed on died). A share under one is what
+    // keeps a fire from growing as it travels.
     const wildfire = balance.evolutions.ember.wildfire;
     expect(wildfire.share).toBeGreaterThan(0);
     expect(wildfire.share).toBeLessThan(1);
@@ -133,7 +148,9 @@ describe('ember tier 3: wildfire', () => {
       events.flatMap((event) => (event.type === 'enemyBurning' ? [event.enemyId] : [])),
     );
     // The squad only ever reaches the front body, so every other fire on the
-    // lane arrived by hopping — and no more than the budget of hops allows.
+    // lane arrived by hopping — and no more than the budget of hops allows:
+    // a fire that arrived by spreading never spreads on, so the ring around
+    // what the squad is shooting is as far as it goes.
     expect(burning.size).toBeGreaterThan(1);
     expect(burning.size).toBeLessThanOrEqual(1 + wildfire.maxTargets);
   });
@@ -219,8 +236,12 @@ describe('storm tier 3: full chains', () => {
     const two = damaged(2);
     const three = damaged(3);
     expect(two).toBeGreaterThan(0);
-    // Every link takes the whole shot instead of `chain.damageMul` of it.
-    expect(three).toBeCloseTo(two / (balance.squad.damage * 0.6), 0);
+    // Every hop lands as hard as the first: the whole shot, and no falloff
+    // along the arc, where tier 2 pays `damageMul` of it and fades by
+    // `falloff` a hop. On the first hop that is exactly `damageMul` apart.
+    const chain = weaponDef('storm').chain;
+    if (chain === undefined) throw new Error('storm has no arc');
+    expect(three).toBeCloseTo(two / chain.damageMul, 0);
     expect(three).toBeGreaterThan(two);
   });
 });
@@ -302,8 +323,11 @@ describe('frost tier 3: the freeze pulse', () => {
     expect(countOf(two.events, 'freezePulse')).toBe(0);
     expect(three.slowUntil).toBeGreaterThan(0);
     expect(countOf(three.events, 'freezePulse')).toBeGreaterThan(0);
-    // It buys time, not damage: the chill costs the neighbour nothing.
-    expect(three.hurt).toBe(two.hurt);
+    // ...and the cold bites as well as holds (`FreezePulseBalance.share`). It
+    // was a chill and nothing else until Milestone 8 measured it: a slow on a
+    // body the squad was about to kill anyway is worth nothing, and the tier
+    // came out *negative* end to end (the log).
+    expect(three.hurt).toBeGreaterThan(two.hurt);
   });
 });
 

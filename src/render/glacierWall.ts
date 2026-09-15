@@ -54,11 +54,13 @@ export class GlacierWall {
       { width: balance.road.laneWidth * 0.98, height: 1, depth: GLACIER_THICKNESS },
       scene,
     );
-    const ice = paletteColor('spell.frost.body');
     this.material = new StandardMaterial('glacierMat', scene);
-    this.material.diffuseColor = paletteColor('spell.frost.core').scale(0.7);
+    // The staff's own blue rather than its near-white core: the core over a
+    // pale road is a wall the player cannot see (the Phase C probe), and the
+    // body colour is the one every other frost effect is already drawn in.
+    this.material.diffuseColor = paletteColor('spell.frost.body');
     // Lit from inside, which is what separates ice from a pale stone block.
-    this.material.emissiveColor = ice.scale(GLACIER_EMISSIVE);
+    this.material.emissiveColor = paletteColor('spell.frost.core').scale(GLACIER_EMISSIVE);
     this.material.specularColor = Color3.Black();
     this.material.alpha = GLACIER_ALPHA;
     this.mesh.material = this.material;

@@ -134,26 +134,54 @@ export class WeaponEffects {
     if (this.scanSplashed) this.events.splash(x, z, radius);
   }
 
-  /** Up to `count` further bodies, each within `range` of the last one hit. */
+  /**
+   * The arc: a charge of `damage` spent on up to `count` further bodies, each
+   * within `range` of the last one hit, fading by `falloff` at every hop.
+   *
+   * Each hop is owed `damage * falloff ^ hop`, and what it cannot spend it
+   * carries to the next one. The carry is the Milestone 8 correction. The shot
+   * that starts an arc is the one that killed the body it came off, so its
+   * damage is that body's whole hit points — and a river body is worth one
+   * soldier (D29), so a hop onto a river was paid a block's hit points and
+   * spent one. Measured, the arc put six percent of the squad's output on a
+   * body and threw four fifths of itself away on corpses, and "one more
+   * target" therefore bought nothing at all. Carrying the remainder is what
+   * makes the hop count the thing the tier sells — another body dead — and it
+   * is what a bolt does anyway.
+   *
+   * The two storm evolutions then read off the two numbers: tier 2 buys a hop
+   * (`count`), tier 3 buys a falloff of one, so the charge arrives at the far
+   * end of the arc as whole as it left (`firing.ts` hands both over).
+   */
   chain(
     state: RunState,
     source: EnemyState,
     damage: number,
     count: number,
     range: number,
+    falloff: number,
     slow: WeaponSlow | undefined,
   ): void {
     this.chained.length = 0;
     this.chained.push(source.id);
 
     let from = source;
+    let carried = 0;
+    let hop = damage;
     for (let link = 0; link < count; link++) {
       const next = this.nearestUnchained(from, range);
       if (next === null) return;
       this.chained.push(next.id);
       this.events.chain(from.id, next.id);
-      this.damage(state, next, damage, slow);
+      // What this hop is owed plus whatever the last one could not spend, and
+      // never more than this body can take: the rest travels on. The floor is
+      // the shield, which takes the hit whatever is under it (D49).
+      const owed = hop + carried;
+      const spent = Math.min(owed, Math.max(next.hp, 0) + Math.max(next.shield ?? 0, 0));
+      this.damage(state, next, spent, slow);
       if (state.status !== 'running') return;
+      carried = owed - spent;
+      hop *= falloff;
       from = next;
     }
   }

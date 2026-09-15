@@ -74,6 +74,14 @@ const PEAK_MAX_RATIO = 1.4;
 const CAMPAIGN_TIMEOUT_MS = 300_000;
 
 /**
+ * The tier ceilings play *sixteen* levels with a second campaign's kit on top
+ * of the one every other test here shares, so they get their own budget: five
+ * minutes is what reading a cached campaign costs, and this pays for a run of
+ * every Frostfell level ten times over as well.
+ */
+const TIER_TIMEOUT_MS = 900_000;
+
+/**
  * The levels the road is not meant to give up without upgrades (D45, D48, D55).
  *
  * Level 5 was the first of them until the Milestone 6 follow-up moved it to 7,
@@ -579,7 +587,7 @@ describe('balance', () => {
       const ceiling = isMilestone(level) ? TIER_MILESTONE_CEILING : ARMED_CLEAR_CEILING;
       expectTrue(`${where} ceiling ${String(ceiling)}`, rate <= ceiling);
     }
-  }, CAMPAIGN_TIMEOUT_MS);
+  }, TIER_TIMEOUT_MS);
 
   it("grows the greedy bot to about each level's peak target, not to the cap", () => {
     // The point of `peakTarget`: level 1 is a squad of a hundred and level 20 a

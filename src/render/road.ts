@@ -169,7 +169,7 @@ export class RoadView {
     this.albedos = buildGroundAlbedos(scene, this.ground, ROAD_HALF_WIDTH * 2, FIELD_WIDTH);
     // The far half (D52), built here rather than at the first spanned load so
     // the boot warm-up compiles it with everything else (`./roadFar.ts`).
-    this.far = new RoadFarHalf(scene, FIELD_WIDTH, fringeOpacity, kerbMaterial);
+    this.far = new RoadFarHalf(scene, FIELD_WIDTH, fringeOpacity, this.albedos);
     for (const albedo of this.albedos.values()) this.textures.push(albedo);
     // A fine grain on the cut stone: without it the kerb is a flat band of
     // colour beside a photographic road, which is exactly where a cheap edge

@@ -23,8 +23,13 @@ export interface AppCommands {
   readonly audio: GameAudio;
   /** The meta layer: purchases go straight through (`./academy.ts`). */
   readonly academy: AcademyController;
-  /** Play, or Again: start the selected level. */
+  /** Play: start the road the picker is pointed at. */
   startRun(): void;
+  /**
+   * Again on the result sheet: the road just walked, re-rolled. It has to know
+   * the *mode* rather than the level, because the endless road has none (D52).
+   */
+  retryRun(): void;
   /**
    * "Same road again" on the result sheet (Milestone 8): the road just walked,
    * on the seed it was walked on — an endless one included (D52).
@@ -49,7 +54,7 @@ export function overlayCallbacks(app: AppCommands): OverlayCallbacks {
       app.startRun();
     },
     onRetry: () => {
-      app.startRun();
+      app.retryRun();
     },
     onNext: () => {
       app.nextLevel();

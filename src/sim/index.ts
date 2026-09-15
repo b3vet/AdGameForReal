@@ -134,6 +134,10 @@ export type { StreamShape } from './pressure';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
 export { mulberry32, randomInt, randomRange, weightedIndex } from './rng';
+// The seeded Fisher-Yates the generator deals its lanes with. Exported since
+// Milestone 8 because the mission board deals a deck with it (`src/core`), and
+// two shuffles would be two orders for the same seed.
+export { shuffle } from './gateGen';
 export type { Rng } from './rng';
 export type {
   CrowdState,

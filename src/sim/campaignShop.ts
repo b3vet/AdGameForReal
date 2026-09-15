@@ -43,20 +43,22 @@ export interface Purchase {
 /**
  * What `id` is worth to the player who buys it, as a share of the squad's own
  * output. Padded like `staffPrices` and floored at zero: a measured worth can
- * come out *negative* — frost's tier 3 costs the campaign more clears than it
- * wins, on the numbers in the Milestone 8 log — and a negative price per coin
- * would sort below "nothing at all", which is not a thing the shop can sell.
- * Zero says the same and keeps the ranking a comparison of gains.
+ * come out *negative* — frost's glacier reads at minus two percent on a meadow
+ * level, which is a wall holding a river the column then walks into — and a
+ * negative price per coin would sort below "nothing at all", which is not a
+ * thing the shop can sell. Zero says the same and keeps the ranking a
+ * comparison of gains.
  *
  * The `unlock` figure is the one number here that is a *model* rather than a
  * measurement, and deliberately: measured on fixed levels with a bot that never
- * changes its mind, carrying storm instead of ember is worth about three
- * percent and carrying frost is worth less than nothing. But a second staff is
- * a sidegrade the player picks for the row in front of them (D26) and the bot
- * cannot pick anything, so what the measurement reads is the bot's blindness
- * rather than the staff's worth. Both are priced at storm's best measured
- * figure, which keeps the Workbench selling them at level 5 as it always has
- * and keeps the kit the Frostfell bands are measured on the one D49 set.
+ * changes its mind, carrying storm instead of ember is worth three percent on
+ * a meadow level and nothing on a frost one, and carrying frost is worth less
+ * than nothing on both. But a second staff is a sidegrade the player picks for
+ * the row in front of them (D26) and the bot cannot pick anything, so what the
+ * measurement reads is the bot's blindness rather than the staff's worth. Both
+ * are priced a little above storm's best measured figure, which keeps the
+ * Workbench selling them at level 5 as it always has and keeps the kit the
+ * Frostfell bands are measured on the one D49 set.
  */
 export function staffWorth(id: WeaponId): StaffWorth {
   const worth = progression.staffs[id].worth;
@@ -80,6 +82,20 @@ export function familiarWorth(tier: FamiliarTier): number {
  * `progression.json` and the run just played rather than a table of tastes:
  * `startCount` is one unit against the units the level starts with, and
  * `bossDamage` only counts for the share of the run that was the boss fight.
+ *
+ * That last one is the shelf's one known under-estimate, left standing on
+ * purpose. Measured end to end (`./__tests__/worth.test.ts`, 24 seeds), a rung
+ * of `bossDamage` is worth six percent of output on level 12 and ten on level
+ * 28 — as much as a rung of `damage` — because the boss fight is not a quarter
+ * of a run that happens to be at the end of it, it is where the crowd is lost.
+ * The model prices it at a quarter of that and the shopper buys it last. Two
+ * things could close the gap and neither is free: raising `effects.bossDamage`
+ * to the size that makes the *model* agree takes level 28's armed clears to ten
+ * in ten, well over D45's ceiling (measured at 0.3), and correcting the weight
+ * here moves the kit every Frostfell recipe was fitted against. So the number
+ * stands, the bands are measured on the hand it produces, and the player who
+ * buys the rung the shopper skips is better off than the bands say rather than
+ * worse (the Milestone 8 log).
  */
 function upgradeWorth(id: UpgradeId, startCount: number, bossShare: number): number {
   const effects = progression.upgrades.effects;
@@ -107,10 +123,11 @@ function better(a: Valued | null, b: Valued | null): Valued | null {
  * Not the rung's own worth over its own price, but the best worth-per-coin of
  * any *goal* the rung is a step toward — tier 3, or tier 4 beyond it. A ladder
  * is climbed one rung at a time and the rungs are not equally good: measured,
- * every staff's tier 4 carries almost all of what its ladder is worth (the
- * Milestone 8 log). A shopper that priced only the next rung would refuse the
- * first two forever and never reach the third, which is not what a player
- * saving for the meteor does.
+ * storm's arc is worth three percent of output at tier 2 and sixteen at tier 4,
+ * while ember's is worth thirteen at tier 2 and under two at tier 3 (the
+ * Milestone 8 log). A shopper that priced only the next rung would refuse
+ * storm's first two forever and never reach the overcharge, which is not what
+ * a player saving for it does.
  */
 function ladderValue(player: PlayerState, id: WeaponId): number {
   const tier = staffTierOf(player, id);

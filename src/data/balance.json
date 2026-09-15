@@ -267,8 +267,8 @@
   "evolutions": {
     "ember": {
       "wildfire": {
-        "radius": 1.6,
-        "share": 0.8,
+        "radius": 2.2,
+        "share": 0.9,
         "maxTargets": 5
       },
       "meteor": {
@@ -296,13 +296,14 @@
         "seconds": 1.8,
         "factor": 0.4,
         "maxTargets": 24,
-        "share": 0.35
+        "share": 0.5
       },
       "glacier": {
         "intervalSeconds": 8,
         "holdSeconds": 5,
         "ahead": 12,
-        "minBodies": 3
+        "minBodies": 1,
+        "bite": 0.3
       }
     }
   }

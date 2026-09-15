@@ -155,18 +155,24 @@ export function advanceEnemies(
     // backward — and only the things that walk: the boss is `Run`'s and is
     // nowhere near this list, so the arena is never frozen out.
     const ice = state.ice;
-    if (
+    const iced =
       ice != null &&
       wasAt >= ice.z &&
       enemy.z < ice.z &&
-      laneOf(enemy.x, balance.road.laneWidth) === ice.lane
-    ) {
+      laneOf(enemy.x, balance.road.laneWidth) === ice.lane;
+    if (iced) {
       enemy.z = ice.z;
     }
     if (enemy.kind === 'charger') steerCharger(enemy, balance, dt);
 
+    // A body in the ice is out of the fight while it is in there: it is held
+    // *where it stands*, and the column walks up to a wall rather than into a
+    // row of blocks. Without this the wall was worth nothing measurable — the
+    // squad runs forward at more than twice a grunt's walking pace, so holding
+    // a river five seconds bought a second and a half of extra fire on it and
+    // handed the column the same contact a moment later (the Milestone 8 log).
     let hit = false;
-    for (let g = 0; g < groupCount && !hit; g++) {
+    for (let g = 0; g < groupCount && !hit && !iced; g++) {
       const group = groups[g];
       if (group === undefined || group.count <= 0) continue;
       if (Math.abs(enemy.z - group.z) > contact) continue;

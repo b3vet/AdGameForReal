@@ -94,6 +94,8 @@ export function buildLoadout(
     (x, z, radius, strength, until) => {
       crowd.shove(x, z, radius, strength, until);
     },
+    // The glacier grinds what it holds through the same door a burn tick uses.
+    hit,
   );
 
   const tier = mods.familiarTier;

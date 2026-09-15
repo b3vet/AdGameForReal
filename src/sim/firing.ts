@@ -302,11 +302,14 @@ export class Firing {
     const chain = weapon.chain;
     if (chain !== undefined) {
       // Storm's evolutions are both the same arc with a better budget rather
-      // than a second mechanic: tier 2 is one more target, and tier 3 is every
-      // link taking the whole shot instead of `damageMul` of it.
+      // than a second mechanic: tier 2 is another target, and tier 3 is every
+      // hop landing as hard as the first — the whole shot, and no falloff
+      // along the arc — instead of `damageMul` fading by `falloff` a hop.
       const count = chain.count + this.extraChains[weaponId];
-      const mul = this.fullChains[weaponId] ? 1 : chain.damageMul;
-      this.effects.chain(state, enemy, damage * mul, count, chain.range, weapon.slow);
+      const full = this.fullChains[weaponId];
+      const mul = full ? 1 : chain.damageMul;
+      const falloff = full ? 1 : chain.falloff;
+      this.effects.chain(state, enemy, damage * mul, count, chain.range, falloff, weapon.slow);
       if (state.status !== 'running') return;
     }
 

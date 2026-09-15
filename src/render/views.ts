@@ -40,6 +40,7 @@ import { SquadView } from './squad';
 import { POOL, SPRAY_DECAL_POOL, SPRAY_Y } from './theme';
 import { WallView } from './walls';
 import { WispView } from './wisp';
+import { biomeAt } from '@/sim';
 import type { BiomeId } from '@/data/biome-types';
 import type { LevelDef } from '@/sim';
 
@@ -227,11 +228,15 @@ export class SceneViews {
     // A spanned road is dressed per span (D52): pines in the meadow's stretches
     // and ice in the frost's, laid once here rather than re-rolled at a
     // crossing — the roadside does not move, so neither should its layout.
+    // The sim's own answer rather than a second copy of the arithmetic
+    // (`biomeAt`), so the props on a stretch and the enemies walking it can
+    // never disagree about which biome it is. Null on a road with one biome —
+    // and on a `?biome=`-pinned one, where the whole road is the forced look.
     this.dressRoadside(
       level.index,
       roadStartZ,
       roadEndZ,
-      spans.active ? (z) => spans.biomeOf(spans.indexAt(z)) : null,
+      spans.active ? (z) => biomeAt(level, z) : null,
     );
     // The fences are placed once here and only culled per frame afterwards
     // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that

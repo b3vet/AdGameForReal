@@ -174,24 +174,20 @@ describe('the campaign', () => {
   it('prices a whole evolution ladder, and every wisp tier, as a multi-run goal', () => {
     // "Multi-run goals" (docs/18): six to ten runs of a level-10 clear each.
     //
-    // The *ladder* rather than its first rung, which is where Milestone 8 moved
-    // the goal. Measured, a staff's three rungs are nothing like equal — every
-    // staff's tier 4 carries almost all of what its ladder is worth, and two of
-    // the three tier-2 mechanics are worth under a percent of output — so a
-    // ladder priced as three equal goals would be two tolls and a purchase.
-    // What has to be a goal is the thing the player is actually saving for, and
-    // that is the whole climb. The wisp's tiers are each a goal in their own
-    // right, because each of the three is worth something on its own.
+    // A wisp tier is one goal, because each of the three is worth something on
+    // its own — measured, ten, five and ten percent of the squad's output. A
+    // staff's *ladder* is one goal too, and a longer one: what a player is
+    // saving for there is the climb, because the three rungs are nothing like
+    // equal (ember's burn is worth twelve percent of output, the wildfire above
+    // it under two), so its band is the wisp's three tiers taken together.
     const clear = runRewards(ended('won', 150, 1), 10, true).coins;
-    const goals = [
-      ...Object.values(progression.staffs).map((staff) =>
-        staff.evolve.reduce((total, price) => total + price, 0),
-      ),
-      ...progression.wisp.tierPrices.slice(1),
-    ];
-    for (const price of goals) {
-      const runs = price / clear;
-      expectTrue(`${String(price)} coins is ${runs.toFixed(1)} runs`, runs >= 5 && runs <= 12);
+    for (const tier of progression.wisp.tierPrices.slice(1)) {
+      const runs = tier / clear;
+      expectTrue(`wisp tier is ${runs.toFixed(1)} runs`, runs >= 5 && runs <= 12);
+    }
+    for (const [id, staff] of Object.entries(progression.staffs)) {
+      const runs = staff.evolve.reduce((total, price) => total + price, 0) / clear;
+      expectTrue(`${id} ladder is ${runs.toFixed(1)} runs`, runs >= 8 && runs <= 20);
     }
   });
 
@@ -313,12 +309,12 @@ describe('the evolution ladder (D54)', () => {
     // what the three rungs are actually worth, measured end to end against a
     // damage rung of known size on a meadow and a frost level (the log). The
     // shape is the same — each rung dearer than the one below it — and the
-    // *climb* is the multi-run goal, five to twelve clears of level 10.
+    // *climb* is the multi-run goal, eight to twenty clears of level 10.
     const clear = runRewards(ended('won', 150, 1), 10, true).coins;
     for (const id of weaponIds) {
       const ladder = staffPrices(id).evolve;
       const runs = ladder.reduce((total, price) => total + price, 0) / clear;
-      expectTrue(`${id} ladder is ${runs.toFixed(1)} clears of L10`, runs >= 5 && runs <= 12);
+      expectTrue(`${id} ladder is ${runs.toFixed(1)} clears of L10`, runs >= 8 && runs <= 20);
       expect(ladder[1]).toBeGreaterThan(ladder[0]);
       expect(ladder[2]).toBeGreaterThan(ladder[1]);
     }

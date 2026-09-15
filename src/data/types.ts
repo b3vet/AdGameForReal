@@ -136,6 +136,21 @@ export interface GlacierBalance {
   ahead: number;
   /** Bodies that have to be in the lane before it is worth a wall. */
   minBodies: number;
+  /**
+   * What the ice takes out of what it is holding, in seconds of the squad's
+   * own fire a second, split between the bodies against the wall
+   * (`MeteorBalance.secondsOfFire` is the same currency).
+   *
+   * A wall that only *held* was worth nothing, and the reason is the road
+   * rather than the wall: the column runs forward at more than twice a
+   * grunt's walking speed, so stopping a body for five seconds buys the squad
+   * about a second and a half of extra fire on it and nothing else. Measured
+   * end to end at a hold of eight seconds in every nine, six metres in front
+   * of the column, it moved the run by under a percent. So the cold bites what
+   * it holds: the river that stacks up against the wall is a river that dies
+   * there, which is the thing a player is buying.
+   */
+  bite: number;
 }
 
 /**
