@@ -39,5 +39,9 @@ Index:
 | `22-milestone-8-plan-draft.md` | Milestone 8 draft plan v1: missions, streaks, bestiary rewards and cosmetics, endless, deeper evolutions; awaiting the owner's play and answers |
 | `23-milestone-8-plan.md` | Milestone 8 plan, approved: streak on the device clock, rotating missions, tint cosmetics from bestiary tiers, Endless as a separate mode, three evolution tiers per staff |
 | `24-milestone-8-log.md` | Milestone 8 process log (append-only) |
+| `25-milestone-9-plan.md` | Milestone 9 plan, approved: device and store readiness — art pipeline with placeholders and prompts, native shell polish, committed projects and guides, device report |
+| `26-milestone-9-log.md` | Milestone 9 process log (append-only) |
+| `ART.md` | App icon and splash: files, sizes, safe zones, the regenerate command, and the prompts for the owner's image generator |
+| `STORE.md` | App Store metadata draft and submission checklist |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |
 | `DECISIONS.md` | Decision ledger (append-only) |

@@ -12,8 +12,10 @@ iOS and Android later.
   assigns work to subagents, verifies, and commits. Subagents implement.
 - **Subagents do not commit or push.** Leave changes in the working tree and
   report what you did, what you verified, and what is left.
+- **At most five general-purpose Opus agents run in parallel** (D56). Plan
+  every milestone's waves inside that cap.
 - Everything is documented in `docs/`. Read `docs/README.md` for the rules.
-  Read the current milestone plan before touching code. Current: `docs/23-milestone-8-plan.md`.
+  Read the current milestone plan before touching code. Current: `docs/25-milestone-9-plan.md`.
 
 ## Stack
 

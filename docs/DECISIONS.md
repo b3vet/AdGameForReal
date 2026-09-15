@@ -57,3 +57,5 @@
 | D53 | 2026-09-14 | Cosmetics are tints only (hats, capes, wisp, staff glow) unlocked by bestiary kill tiers; meshes may follow later. | 23 |
 | D54 | 2026-09-14 | Three evolution tiers per staff, each a distinct mechanic, priced as multi-run goals and never mandatory below level 40. | 23 |
 | D55 | 2026-09-14 | Level 7 loses its milestone flag and plays as an ordinary-hard level; the first upgrade gate is level 10. Supersedes the level list in D48. | 23 |
+| D56 | 2026-09-15 | Process: at most five general-purpose Opus agents run in parallel; milestones plan their waves inside that cap. | 25, CLAUDE.md |
+| D57 | 2026-09-15 | App art: placeholders drawn from the palette ship in the repository; the owner's AI-generated icon and splash replace them by dropping two files and running the asset generator (`docs/ART.md` carries the prompts). Native projects are committed if the CLI can generate them without Xcode. | 25 |
