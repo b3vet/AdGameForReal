@@ -249,3 +249,43 @@
 - Review verification: typecheck 0 errors, lint clean, 530 tests, build
   OK, hosted 11.89 MB, smoke PASS. The tech lead re-ran the smoke and the
   suite once more on the final tree before publishing.
+
+## 2026-09-15 — Close: final verification and the hosted build
+
+- The first final smoke failed on one frame only: the glacier hero shot
+  was "never reached" because its hunt spent a fixed number of frames at
+  0.6 s of sim each, and on a page drawn beside two others under
+  SwiftShader those frames ran past the shot timeout. The hunt now paces
+  by the sim's own state (cruise until a block is in reach, hunt at a
+  quarter of the wall's span a frame, walk the last metres in once a wall
+  stands) and lands the same wall about six metres out every run; the
+  assertion is unchanged. Three targeted runs and one full run passed.
+- Final tree (c80b898): typecheck 0 errors, lint clean, 530 tests, build
+  OK; smoke PASS in 24 min 22 s (runs 793 s, stress 46 s, hero 620 s;
+  draw peaks 41 / 41 / 42 / 43 / 50 / 42 of 52; 46 programs warmed, 0
+  compiled during play in all six runs; stress 35 draws). Tech lead frame
+  review: the Academy screens read as one family with the game UI; the
+  Wardrobe's four rows with worn, owned and locked states; the result
+  sheet with its bonus lines, best and star, and all four buttons; the
+  endless crossing clean; the glacier slab whole in its lane.
+- Version 17 (pre-review) was published for the owner's test on request;
+  Version 18 is the reviewed build.
+
+## Milestone 8 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Missions rotate and pay; the streak survives a reload and resets on a missed day; v1 and v2 saves migrate | Done: seeded deck, pay-once, clock at noon with month and year tests; migration and repair tested |
+| 2. Endless runs to a wipe, scores metres, replays by seed, pays under the campaign rate; first ten minutes banded | Done: median 1951 of 2898 m on the level-20 kit, all wipes by attrition, 234 coins against a 344 repeat clear; the card walks a fixed seed (replay and again coincide) |
+| 3. Every kind has three tiers; every cosmetic renders and persists | Done: 18 tints across four slots, measured on the crowd |
+| 4. Six tiers in the sim with tests; bands hold with and without them | Done, with the finding that four rungs measure under 4 percent on their own because damage is not scarce and a hold buys little; ladders priced as multi-run goals |
+| 5. Hooks on the result sheet and picker; all checks, smoke, hero set, hosted build, log, ledger | Done: D51 to D55, hosted build Version 18 |
+
+Open for the product owner: whether wildfire, the storm fork, full
+chains on Frostfell and the glacier should become different mechanics
+(damage across lanes near the column is what converts); boss damage is
+mis-priced by the shopper and left at 0.1 because the values that fix its
+shelf position bust the clear ceilings; the Workbench and bestiary
+panels scroll with no visible cue on phones; both biomes' props draw on
+every frame of the endless road (peak 50 of 52); the Endless card walks
+one fixed seed; the smoke takes 24 minutes on this container.
