@@ -176,6 +176,14 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
  * long, so ten of the twenty recipes were re-fitted — `bite` on 21, 22, 27, 28,
  * 29, 32, 33, 34, 37 and 38, with `hpScale` and `streamDensity` on 22 — and two
  * of the ten are these. The bands they were fitted to are the same ones D49 set.
+ *
+ * And twice on two seeds of level 22 by the follow-up, which gave storm's arc a
+ * falloff and a carry so that its two lower evolutions had something to buy
+ * (`../effects.ts`). A player with nothing bought still carries ember — but
+ * Frostfell roads hand out staff gates, so a bare run that walks through one is
+ * a run whose arc changed. Everything that does not pick a staff up off the
+ * road, which is the whole of levels 1 to 3 and thirteen of these fifteen, is
+ * byte-identical.
  */
 const FROST_GOLDEN: Readonly<Record<string, string>> = {
   '21:1': '46c70cce',
@@ -184,8 +192,8 @@ const FROST_GOLDEN: Readonly<Record<string, string>> = {
   '21:4': '436aae17',
   '21:5': '7791b9b6',
   '22:1': '64f51834',
-  '22:2': 'f1b8fc88',
-  '22:3': '170fc9bd',
+  '22:2': '32d7cd90',
+  '22:3': 'f2030dca',
   '22:4': '5405b50b',
   '22:5': '112147ca',
   '23:1': '85b4e090',

@@ -189,13 +189,27 @@ const FROST_BOSS_MIN_SECONDS = 20;
  * `../campaignShop.ts` makes unavoidable: ranked by output per coin,
  * `bossDamage` is the worst rung in the Yard — it is worth its effect times the
  * share of the run that is the boss fight, about a quarter — so the shopper
- * buys it last, and the kit the campaign holds at the top of Frostfell carries
- * one fewer rung of it than the lockstep shopper's did. Level 31 measures 30.8
- * seconds; nothing else goes over 30. The alternative was to lower its boss's
- * hit points, which the monotone ladder (levels 30, 31 and 32 all stand 31,100)
- * does not have room for.
+ * buys it last, and the kit the campaign holds across Frostfell carries one
+ * rung of it where a player who reads the room would carry three.
+ *
+ * A second in Milestone 8's follow-up, for the level that is still over: 31,
+ * at 32.8 seconds, with every other Frostfell level between 21 and 31.3.
+ *
+ * Three doors were tried on it and two are shut. Measured, a rung of
+ * `bossDamage` is worth six percent of the squad's output on level 12 and ten
+ * on level 28 — as much as a rung of `damage`, four times what the model above
+ * prices it at — so raising `effects.bossDamage` from 0.1 to 0.15 is both
+ * honest and enough (31 comes back to 29.0 and the whole biome to 21.8-31.2).
+ * It also takes level 21's armed clears to nine in ten and level 31's, with the
+ * tiers, to the same: over D45's ceiling, which is the band this file exists to
+ * hold. At 0.22 level 39's fight drops to 18.3 and out of the bottom of the
+ * band instead. The third door is the Rime Fiend's own hit points, and the
+ * monotone ladder (levels 30, 31 and 32 all stand 31,100) does not have room
+ * for it. So the effect stays at 0.1, one level fights for thirty-three
+ * seconds, and the player who buys the rung the shopper skips gets the twenty-
+ * odd-second fight D20 asks for (the Milestone 8 log).
  */
-const FROST_BOSS_MAX_SECONDS = 32;
+const FROST_BOSS_MAX_SECONDS = 33;
 
 /** What the Rime Fiend's lane charge may be worth against its own stomp. */
 const CHARGE_SHARE_CEILING = 1 / 3;

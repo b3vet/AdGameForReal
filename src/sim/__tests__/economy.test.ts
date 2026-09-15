@@ -239,7 +239,7 @@ describe('the campaign', () => {
  * played, because playing one endless road is six minutes of sim and this test
  * would play two hundred of them.
  */
-const ENDLESS_MEDIAN_METRES = 1903;
+const ENDLESS_MEDIAN_METRES = 1951;
 
 /** One endless run a campaign level, paid by `runRewards` as the app pays it. */
 function endlessWalk(): (facts: unknown, level: number) => number {

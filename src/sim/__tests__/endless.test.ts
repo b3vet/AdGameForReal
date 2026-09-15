@@ -217,9 +217,10 @@ describe('what an endless run pays (D52)', () => {
  * before the wipe takes under a third of the column's peak. And it has to land
  * somewhere worth comparing, which is what makes the metres a score.
  *
- * Milestone 8, ten seeds: median 1903 m of 2898, min 1393, max 2340, none
- * finished, worst row 28 percent of peak, and the losses are rivers first
- * (577 units a run), then blocks walked into (194), then curses (115).
+ * Milestone 8, ten seeds on the retuned kit (the level-20 hand now carries the
+ * burn): median 1951 m of 2898, min 1392, max 2241, none finished, worst row
+ * under a third of peak, and the losses are rivers first (551 units a run),
+ * then blocks walked into (208), then curses (110).
  */
 const ENDLESS_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const ENDLESS_MEDIAN_BAND: readonly [number, number] = [1200, 2400];

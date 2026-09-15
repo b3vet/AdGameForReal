@@ -106,6 +106,10 @@ describe('the meta layer against the road (D51, D53)', () => {
         `s${String(seed)} road ${String(road)} meta ${String(result.coinsMeta)}` +
         ` (missions ${String(totals.missions)}, tiers ${String(totals.tiers)},` +
         ` streak ${String(totals.streak)}) = ${(share * 100).toFixed(0)}%`;
+      // Printed as well as asserted: what share of a campaign the meta layer
+      // pays is a number the milestone log wants written down, and it moves
+      // whenever a mission reward or a bestiary rung does.
+      console.log(where);
       expectTrue(where, share <= META_SHARE_CEILING);
       // Every one of the three pays something: a stream that never fires is a
       // screen the player is shown for nothing.
