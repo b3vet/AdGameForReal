@@ -462,9 +462,11 @@ export class Renderer {
 
   /**
    * Babylon has rebuilt its side (`./contextLoss.ts` lists what that covers).
-   * What is left is ours: the backing store's size, which is set through the
-   * engine rather than the canvas, and the materials, which Babylon would
-   * otherwise recompile one at a time inside the player's first frames back.
+   * Three things are left, and they are ours: the backing store's size, which
+   * is set through the engine rather than the canvas; every thin-instance
+   * matrix buffer written once at a level load, which Babylon cannot restore at
+   * all; and the materials, which it would otherwise recompile one at a time
+   * inside the player's first frames back.
    */
   private handleContextRestored(): void {
     if (!this.contextLost || this.disposed) return;
