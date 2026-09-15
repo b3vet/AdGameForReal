@@ -67,3 +67,16 @@
   pass `bestLevel` into the rewards; `App.ts` 533 lines. `Run.ts` 443 and
   `firing.ts` 422.
 - Combined tree: typecheck 0 errors, lint clean, 517 tests, build OK.
+
+## 2026-09-15 — Container restart mid wave two
+
+- The container restarted while C (render and UI) and the balance
+  follow-up were mid-flight; partial work across 68 files was left in the
+  tree and typechecks. Both relaunched on top of it. The balance
+  follow-up itself came from Phase D's finding that five of the nine
+  evolution tiers measured at nothing (the burn priced per step, chains
+  barely converting, the freeze pulse negative), so buying the ladder made
+  a player weaker: the follow-up makes every rung measurably worth buying,
+  re-prices the ladders as multi-run goals, gives boss damage a
+  middle-of-the-shelf value, and replaces the mission pick with a seeded
+  shuffle deck (seven of sixteen missions were ever drawn).
