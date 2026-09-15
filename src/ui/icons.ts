@@ -35,6 +35,10 @@ export type IconName =
   | 'room-workbench'
   | 'room-sanctum'
   | 'room-bestiary'
+  | 'room-wardrobe'
+  | 'star'
+  | 'streak'
+  | 'endless'
   | 'lock';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -46,6 +50,8 @@ const ROOM_ICONS: Readonly<Record<string, IconName>> = {
   workbench: 'room-workbench',
   sanctum: 'room-sanctum',
   bestiary: 'room-bestiary',
+  /** The Wardrobe (D53): the tints the kill ladders pay out are worn here. */
+  wardrobe: 'room-wardrobe',
 };
 
 /** The Training Yard's five drills, by `UpgradeId`. */

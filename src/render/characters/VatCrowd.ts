@@ -15,6 +15,7 @@
  * a 30 fps bake played at 1.3x look like motion rather than stepping.
  */
 
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 // Side-effect import: this is what puts `thinInstance*` on `Mesh.prototype`.
@@ -46,6 +47,15 @@ export class VatCrowd implements Crowd {
   private count = 0;
   /** Highest instance index written since the last `commit`, for the upload. */
   private dirty = false;
+  /**
+   * The colour buffer the tints are written into, allocated on the first
+   * cosmetic change and re-used for every later one: a wardrobe change is a
+   * level load, not a frame, but it still may not allocate a megabyte each
+   * time the player tries a hat on.
+   */
+  private tinted: Float32Array | null = null;
+  /** What is worn right now, so an unchanged selection writes nothing. */
+  private wornKey = '';
 
   constructor(
     private readonly asset: CharacterAsset,
@@ -71,6 +81,46 @@ export class VatCrowd implements Crowd {
     // Hidden until something commits instances into it: an empty thin-instance
     // mesh draws one full-size copy of itself at the origin (see `commit`).
     this.mesh.setEnabled(false);
+  }
+
+  /**
+   * Dyes named parts of the merged mesh in a cosmetic's colours (D53).
+   *
+   * The merge baked the manifest's own tints into a vertex colour per vertex
+   * (`./tint.ts`), and what arrives here is a *correction* on top of them: the
+   * worn tint divided by what the part already reads as (`dyeAgainst` in
+   * `src/render/cosmetics.ts`), so the product of the atlas texel, the
+   * manifest's tint and this comes out as the colour the player chose. The base
+   * buffer is kept untouched, so trying on a second hat starts from the
+   * artist's colours rather than from the last one.
+   *
+   * One upload of one buffer, at a level load. There is no per-instance colour
+   * involved: every mage in the crowd wears what the player is wearing.
+   */
+  setPartTints(tints: ReadonlyMap<string, readonly [number, number, number]>): void {
+    const base = this.asset.baseColors;
+    if (base === null) return;
+    // Cheap identity check: the same selection twice is the normal case (every
+    // level load re-applies whatever is worn).
+    let key = '';
+    for (const [name, tint] of tints) key += `${name}:${tint.join(',')};`;
+    if (key === this.wornKey) return;
+    this.wornKey = key;
+
+    const colors = this.tinted ?? new Float32Array(base.length);
+    this.tinted = colors;
+    colors.set(base);
+    for (const [name, tint] of tints) {
+      const range = this.asset.parts.get(name);
+      if (range === undefined) continue;
+      const end = (range.start + range.count) * 4;
+      for (let at = range.start * 4; at < end; at += 4) {
+        colors[at] = (colors[at] ?? 1) * tint[0];
+        colors[at + 1] = (colors[at + 1] ?? 1) * tint[1];
+        colors[at + 2] = (colors[at + 2] ?? 1) * tint[2];
+      }
+    }
+    this.mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
   }
 
   /** Animation ids this crowd's baked texture carries, in bake order. */

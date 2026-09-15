@@ -34,6 +34,8 @@
  */
 .picker__level {
   appearance: none;
+  /* The two marks are placed against the chip's own box; see below. */
+  position: relative;
   padding: 0.45rem 0;
   border-style: solid;
   border-color: transparent;
@@ -55,6 +57,115 @@
   touch-action: manipulation;
   user-select: none;
   pointer-events: auto;
+}
+
+/*
+ * The number and the two marks a chip carries (Milestone 8). The marks sit in
+ * the corner rather than beside the number: a chip is 60 px on a 390 px phone
+ * and the number is what the player is reading for.
+ */
+.picker__number {
+  font-variant-numeric: tabular-nums;
+}
+
+.picker__marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/*
+ * A milestone level (D45): the gold rivet in the corner says "this one is
+ * meant to be hard" before the road is walked.
+ */
+.picker__level[data-milestone='true'] .picker__marks::before {
+  content: '';
+  position: absolute;
+  top: 0.1rem;
+  right: 0.14rem;
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: var(--gold);
+  box-shadow: 0 0 0 0.06rem color-mix(in srgb, var(--c-ink-base) 45%, transparent);
+}
+
+/*
+ * A star: this level's best walk arrived with most of the crowd it ever held.
+ * The chip is small, so the star is a shape rather than a glyph — a five-point
+ * star drawn by a clip path, in the same gold every reward in the game is.
+ */
+.picker__level[data-star='true'] .picker__marks::after {
+  content: '';
+  position: absolute;
+  bottom: 0.08rem;
+  left: 0.16rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--gold-light);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+
+/* --- Endless (D52) -------------------------------------------------------- */
+
+/*
+ * The card above the chips: a mode beside the campaign rather than a level at
+ * the end of it, so it stands apart from the grid and carries its own button.
+ */
+.endless {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(100%, 22rem);
+  padding: 0.35rem 0.55rem;
+  pointer-events: auto;
+}
+
+.endless__icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--accent);
+}
+
+.endless__body {
+  display: grid;
+  gap: 0.05rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.endless__title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.endless__blurb {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+.endless__best {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--c-gold-deep);
 }
 
 /*

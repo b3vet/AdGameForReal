@@ -203,6 +203,7 @@ describe.skipIf(!ON)('milestone readout', () => {
               upgrades: held.upgrades,
               staffs: held.staffs,
               evolved: held.evolved,
+              tiers: held.tiers,
               wispTier: held.wispTier,
               unlockedLevel: level,
             });
@@ -236,7 +237,8 @@ describe.skipIf(!ON)('milestone readout', () => {
   }, 900_000);
 });
 
-const MILESTONE_LEVELS = [7, 10, 15, 20, 25, 30, 35, 40];
+// Level 7 came off the list in Milestone 8 (D55); it reads as an ordinary-hard level.
+const MILESTONE_LEVELS = [10, 15, 20, 25, 30, 35, 40];
 
 function loadoutText(held: {
   upgrades: Record<string, number>;

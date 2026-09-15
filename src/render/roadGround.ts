@@ -23,7 +23,8 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { tiledAlbedo } from './artTextures';
 import { BIOME_GROUND } from './roadLook';
-import { paletteColor } from './theme';
+import { paletteHexIn } from './theme';
+import type { PaletteRole } from './theme';
 import type { BiomeId } from '@/data/biome-types';
 
 /** The three materials a biome's ground is painted on. */
@@ -70,9 +71,17 @@ export function buildGroundAlbedos(
 /**
  * Puts one biome's albedos and palette colours onto the ground materials.
  *
- * The colours are re-read from the roles rather than left to the palette's own
- * in-place rewrite: a material that fell back to a painted tile, or one built
- * from a scaled colour, would not follow the shared instance.
+ * Both halves of that matter. The albedo is the texture — cobble or ice — and
+ * the colour over it is the palette's, and both are read *for the biome named
+ * here* rather than for the one in force. That distinction is what the endless
+ * road needs (D52): its far half is painted in the next span's biome while the
+ * palette is still on this one, so a colour taken from the roles in force would
+ * leave green verges running off into the snow.
+ *
+ * The colours are re-read rather than left to the palette's own in-place
+ * rewrite for the same reason they always were: a material that fell back to a
+ * painted tile, or one built from a scaled colour, would not follow the shared
+ * instance.
  */
 export function applyGround(
   materials: GroundMaterials,
@@ -84,10 +93,48 @@ export function applyGround(
   assignAlbedo(materials.field, albedos.get(ground.verge));
   assignAlbedo(materials.fringe, albedos.get(ground.verge));
 
-  materials.road.diffuseColor.copyFrom(paletteColor('stone.light'));
-  materials.field.diffuseColor.copyFrom(paletteColor('grass.light'));
-  materials.fringe.diffuseColor.copyFrom(paletteColor('grass.base'));
-  materials.kerb.diffuseColor.copyFrom(paletteColor('stone.kerb'));
+  paint(materials.road, id, 'stone.light');
+  paint(materials.field, id, 'grass.light');
+  paint(materials.fringe, id, 'grass.base');
+  paint(materials.kerb, id, 'stone.kerb');
+
+  // Every one of the four has just changed, and three of them changed a
+  // *texture*: without this the scene keeps drawing what was bound last.
+  refreeze(materials.road);
+  refreeze(materials.field);
+  refreeze(materials.fringe);
+  refreeze(materials.kerb);
+}
+
+/** One role, resolved in `id` rather than in the biome in force. */
+function paint(material: StandardMaterial, id: BiomeId, role: PaletteRole): void {
+  material.diffuseColor.copyFrom(Color3.FromHexString(paletteHexIn(id, role)));
+}
+
+/**
+ * Re-freezes a material that has just been changed, so the change reaches the
+ * GPU.
+ *
+ * A frozen Babylon material is one the scene keeps as its cached material and
+ * stops re-binding: the uniforms and the samplers of the *last* bind are what
+ * every later frame draws with. Swapping a texture or a colour on one is
+ * therefore invisible — which is what the Milestone 8 endless probe caught, and
+ * what the campaign's own biome switch (D49) has been doing ever since the
+ * ground materials were frozen: a Frostfell road drawn with whichever albedo
+ * happened to be bound at boot.
+ *
+ * `markDirty(true)` is the one call that reopens it: the plain `markDirty()`
+ * inside `freeze()` only clears "was previously ready", while the `true` also
+ * sets the draw wrapper's `_forceRebindOnNextCall`, which is what `_mustRebind`
+ * actually reads. The material stays frozen — one bind is let through, and
+ * every frame after it is locked again.
+ *
+ * It costs no shader: the defines do not change when one texture is swapped for
+ * another that is also present, so the effect comes back out of the engine's
+ * cache (measured: the program count does not move across a crossing).
+ */
+export function refreeze(material: StandardMaterial): void {
+  if (material.isFrozen) material.markDirty(true);
 }
 
 function assignAlbedo(material: StandardMaterial, texture: Texture | undefined): void {

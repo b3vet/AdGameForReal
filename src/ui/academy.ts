@@ -9,7 +9,9 @@
  *
  * Copy, card order and unlock levels are `src/data/academy.json`; nothing in
  * here says a word of English or knows a price. The rooms themselves are
- * `./rooms.ts`; this file is the door and the corridor.
+ * `./rooms.ts`; the corridor behind the Play card is `./picker.ts`; the streak
+ * plaque and the missions board that came with Milestone 8 (D51) are
+ * `./board.ts`. This file is the door.
  *
  * Ids are a contract with `scripts/smoke-run.mjs`, which clicks `#academy-play`
  * and then `#play-button`. The screen keeps the old `#title-screen` id so every
@@ -18,15 +20,17 @@
 
 import { roomUnlockLevel } from '@/core/player';
 import type { RoomId } from '@/core/player';
+import type { MissionView } from '@/core/missions';
+import type { StreakView } from '@/core/streak';
 import { academy, fill } from '@/data/academy-types';
-import { levelConfig } from '@/data';
 import type { WeaponId } from '@/sim';
 
+import { MetaBoard } from './board';
+import type { BoardElements } from './board';
 import { icon, roomIcon, setIcon } from './icons';
+import { Picker } from './picker';
+import type { PickerElements } from './picker';
 import { element, replay } from './widgets';
-
-/** How many level chips a page of the picker holds (plan: two pages of ten). */
-const PAGE_SIZE = 10;
 
 export interface AcademyView {
   coins: number;
@@ -41,20 +45,27 @@ export interface AcademyView {
    * the Workbench card (Milestone 4 Phase C, carried to D).
    */
   selectedStaff: WeaponId;
+  /** The daily streak, for the plaque on the home screen (D51). */
+  streak: StreakView;
+  /** The three missions on the board (D51). */
+  missions: readonly MissionView[];
+  /** Metres of the best endless walk, for the picker's card (D52). */
+  endlessBest: number;
+  /** Campaign levels whose best walk earned the picker's star (D53's sibling). */
+  stars: readonly number[];
 }
 
-export interface AcademyElements {
+export interface AcademyElements extends PickerElements, BoardElements {
   cards: HTMLElement;
   coinValue: HTMLElement;
-  picker: HTMLElement;
-  caption: HTMLElement;
-  pager: HTMLElement;
 }
 
 /** Everything the home and the picker hand back to the app. */
 export interface AcademyCallbacks {
   onOpenRoom: (room: RoomId) => void;
   onSelectLevel: (level: number) => void;
+  /** The picker's Endless card (D52). */
+  onEndless: () => void;
 }
 
 /** Wires a button so the tap sound plays before the button's own action. */
@@ -73,25 +84,32 @@ export class Academy {
   /** The Workbench card's staff badge; see `AcademyView.selectedStaff`. */
   private staffBadge: HTMLElement | null = null;
 
-  private readonly chips: HTMLButtonElement[] = [];
-  private readonly pageButtons: HTMLButtonElement[] = [];
+  /** The corridor behind the Play card (`./picker.ts`). */
+  private readonly picker: Picker;
+  /** The streak plaque and the missions board (`./board.ts`). */
+  private readonly board: MetaBoard;
 
-  private page = 0;
   private shownCoins = -1;
-  /** The last view the picker was painted with, so a page tap can repaint. */
-  private view: AcademyView | null = null;
 
   constructor(elements: AcademyElements, callbacks: AcademyCallbacks, bind: BindButton) {
     this.elements = elements;
     this.callbacks = callbacks;
     this.bind = bind;
+    this.picker = new Picker(
+      elements,
+      { onSelectLevel: callbacks.onSelectLevel, onEndless: callbacks.onEndless },
+      bind,
+    );
+    this.board = new MetaBoard(elements);
     this.buildCards();
   }
 
-  /** Paints the home: coins, which cards are open, and any reveal owed. */
+  /** Paints the home: coins, the streak, the board, and which cards are open. */
   showHome(view: AcademyView): void {
     this.setCoins(view.coins);
     this.paintStaffBadge(view);
+    this.board.showStreak(view.streak);
+    this.board.showMissions(view.missions);
     for (const room of academy.rooms) {
       const id = roomId(room.id);
       const card = id === null ? undefined : this.cards.get(id);
@@ -115,13 +133,9 @@ export class Academy {
     }
   }
 
-  /** Paints the picker: the page the selected level is on, chips flagged. */
+  /** Paints the picker, which is `./picker.ts`'s from the chips down. */
   showLevels(view: AcademyView): void {
-    this.elements.caption.textContent = academy.home.levelsCaption;
-    this.buildPicker(view.levelCount);
-    this.view = view;
-    this.page = Math.min(this.pageButtons.length - 1, pageOf(view.selectedLevel));
-    this.paintChips();
+    this.picker.show(view);
   }
 
   /**
@@ -201,86 +215,17 @@ export class Academy {
     }
   }
 
-  /**
-   * Chips and page tabs are created once for a given level count and only
-   * re-flagged afterwards; the list only changes when `levels.json` does.
-   */
-  private buildPicker(levelCount: number): void {
-    const pages = Math.max(1, Math.ceil(levelCount / PAGE_SIZE));
-    const slots = Math.min(levelCount, PAGE_SIZE);
-    if (this.chips.length === slots && this.pageButtons.length === pages) return;
-
-    this.elements.picker.textContent = '';
-    this.elements.pager.textContent = '';
-    this.chips.length = 0;
-    this.pageButtons.length = 0;
-
-    for (let slot = 0; slot < slots; slot++) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'picker__level';
-      // The level a chip stands for depends on the page, so the click reads
-      // the dataset rather than closing over a number that goes stale.
-      this.bind(chip, () => {
-        const level = Number(chip.dataset['level']);
-        if (Number.isFinite(level)) this.callbacks.onSelectLevel(level);
-      });
-      this.elements.picker.append(chip);
-      this.chips.push(chip);
-    }
-
-    for (let page = 0; page < pages; page++) {
-      const tab = document.createElement('button');
-      tab.type = 'button';
-      tab.className = 'pager__tab';
-      const first = page * PAGE_SIZE + 1;
-      const last = Math.min(levelCount, (page + 1) * PAGE_SIZE);
-      tab.textContent = `${String(first)}–${String(last)}`;
-      this.bind(tab, () => {
-        this.page = page;
-        this.paintChips();
-      });
-      this.elements.pager.append(tab);
-      this.pageButtons.push(tab);
-    }
-    // A single page of ten needs no tabs at all; the forty levels of two
-    // biomes (D49) give four.
-    this.elements.pager.hidden = pages < 2;
-  }
-
-  private paintChips(): void {
-    const view = this.view;
-    if (view === null) return;
-
-    for (const [slot, chip] of this.chips.entries()) {
-      const level = this.page * PAGE_SIZE + slot + 1;
-      const exists = level <= view.levelCount;
-      chip.hidden = !exists;
-      if (!exists) continue;
-      chip.dataset['level'] = String(level);
-      // Which biome the level is set in (D49), so the chips for 21 to 40 wear a
-      // cold wash and the picker says where the road goes before it is walked.
-      // The level recipe is the authority, exactly as it is for the renderer.
-      chip.dataset['biome'] = levelConfig(level).biome ?? 'meadow';
-      chip.textContent = String(level);
-      chip.setAttribute('aria-label', `Level ${String(level)}`);
-      chip.disabled = level > view.unlockedLevel;
-      chip.setAttribute('aria-pressed', level === view.selectedLevel ? 'true' : 'false');
-    }
-
-    for (const [index, tab] of this.pageButtons.entries()) {
-      tab.setAttribute('aria-pressed', index === this.page ? 'true' : 'false');
-    }
-  }
-}
-
-/** Which page a level lives on, counting from zero. */
-function pageOf(level: number): number {
-  return Math.max(0, Math.floor((level - 1) / PAGE_SIZE));
 }
 
 /** Narrows an id written in JSON to the rooms the app knows. */
 function roomId(raw: string): RoomId | null {
-  const rooms: readonly RoomId[] = ['play', 'yard', 'workbench', 'sanctum', 'bestiary'];
+  const rooms: readonly RoomId[] = [
+    'play',
+    'yard',
+    'workbench',
+    'sanctum',
+    'bestiary',
+    'wardrobe',
+  ];
   return rooms.find((id) => id === raw) ?? null;
 }

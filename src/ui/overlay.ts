@@ -24,7 +24,10 @@
 // (see `./fonts`).
 import './fonts';
 
+import { academy } from '@/data/academy-types';
+
 import type { PlayerState, RoomId } from '@/core/player';
+import type { CosmeticSlot } from '@/data';
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
 import { Academy } from './academy';
@@ -34,7 +37,7 @@ import { DebugPanel } from './debug';
 import type { DebugStats } from './debug';
 import { Hud } from './hud';
 import { ResultPanel } from './result';
-import type { ResultView } from './result';
+import type { ResultBonus, ResultView } from './result';
 import { Rooms } from './rooms';
 import type { RoomBump } from './rooms';
 import { watchTripleTap } from './taps';
@@ -69,9 +72,15 @@ export interface OverlayCallbacks {
   onBuyStaff: (id: WeaponId) => void;
   onSelectStaff: (id: WeaponId) => void;
   onBuyFamiliar: () => void;
+  /** A tint chip in the Wardrobe (D53). */
+  onSelectCosmetic: (slot: CosmeticSlot, id: string) => void;
+  /** The picker's Endless card: a walk of the road with no end (D52). */
+  onEndless: () => void;
+  /** "Same road again" on the result sheet: the seed just walked (D52). */
+  onReplay: () => void;
 }
 
-export type { AcademyView, ResultView, RoomBump };
+export type { AcademyView, ResultBonus, ResultView, RoomBump };
 
 export class Overlay {
   private readonly academyScreen: HTMLElement;
@@ -114,10 +123,21 @@ export class Overlay {
         picker: requireElement(root, '#level-picker'),
         caption: requireElement(root, '#picker-caption'),
         pager: requireElement(root, '#picker-pages'),
+        endless: requireElement(root, '#picker-endless'),
+        endlessTitle: requireElement(root, '#endless-title'),
+        endlessBlurb: requireElement(root, '#endless-blurb'),
+        endlessBest: requireElement(root, '#endless-best'),
+        endlessButton: requireElement<HTMLButtonElement>(root, '#endless-button'),
+        streak: requireElement(root, '#academy-streak'),
+        streakDays: requireElement(root, '#streak-days'),
+        streakHint: requireElement(root, '#streak-hint'),
+        missions: requireElement(root, '#academy-missions'),
+        missionsHeading: requireElement(root, '#missions-heading'),
       },
       {
         onOpenRoom: callbacks.onOpenRoom,
         onSelectLevel: callbacks.onSelectLevel,
+        onEndless: callbacks.onEndless,
       },
       bind,
     );
@@ -131,12 +151,14 @@ export class Overlay {
         workbench: requireElement(root, '#workbench-cards'),
         sanctum: requireElement(root, '#sanctum-card'),
         bestiary: requireElement(root, '#bestiary-cards'),
+        wardrobe: requireElement(root, '#wardrobe-rows'),
       },
       {
         onBuyUpgrade: callbacks.onBuyUpgrade,
         onBuyStaff: callbacks.onBuyStaff,
         onSelectStaff: callbacks.onSelectStaff,
         onBuyFamiliar: callbacks.onBuyFamiliar,
+        onSelectCosmetic: callbacks.onSelectCosmetic,
       },
       bind,
     );
@@ -151,8 +173,18 @@ export class Overlay {
         peak: requireElement(root, '#result-peak'),
         coins: requireElement(root, '#result-coins'),
         total: requireElement(root, '#result-total'),
-        next: requireElement<HTMLButtonElement>(root, '#next-button'),
+        advance: requireElement<HTMLButtonElement>(root, '#next-button'),
         levels: requireElement<HTMLButtonElement>(root, '#levels-button'),
+        metresRow: requireElement(root, '#result-metres-row'),
+        metres: requireElement(root, '#result-metres'),
+        bestMetres: requireElement(root, '#result-best-metres'),
+        bonuses: requireElement(root, '#result-bonuses'),
+        best: requireElement(root, '#result-best'),
+        next: requireElement(root, '#result-next'),
+        nextHeading: requireElement(root, '#result-next-heading'),
+        nextName: requireElement(root, '#result-next-name'),
+        nextPrice: requireElement(root, '#result-next-price'),
+        nextShort: requireElement(root, '#result-next-short'),
       },
       { onCountTick: callbacks.onCountTick, onCoinTick: callbacks.onCoinTick },
     );
@@ -198,6 +230,9 @@ export class Overlay {
 
     this.onTap(requireElement<HTMLButtonElement>(root, '#play-button'), callbacks.onPlay);
     this.onTap(requireElement<HTMLButtonElement>(root, '#retry-button'), callbacks.onRetry);
+    const replayButton = requireElement<HTMLButtonElement>(root, '#replay-button');
+    replayButton.textContent = academy.meta.result.replay;
+    this.onTap(replayButton, callbacks.onReplay);
     this.onTap(requireElement<HTMLButtonElement>(root, '#next-button'), callbacks.onNext);
     this.onTap(requireElement<HTMLButtonElement>(root, '#levels-button'), callbacks.onLevels);
     this.onTap(requireElement<HTMLButtonElement>(root, '#levels-back'), callbacks.onCloseRoom);
@@ -224,8 +259,9 @@ export class Overlay {
     this.showOnly(this.roomScreen);
   }
 
-  showPlaying(levelIndex: number, staff: WeaponId): void {
-    this.hud.begin(levelIndex, staff);
+  /** `endless` swaps the HUD's level chip for a metres one (D52). */
+  showPlaying(levelIndex: number, staff: WeaponId, endless = false): void {
+    this.hud.begin(levelIndex, staff, endless);
     this.showOnly(this.hudRoot);
   }
 

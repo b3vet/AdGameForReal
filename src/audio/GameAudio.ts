@@ -378,6 +378,35 @@ export class GameAudio {
             this.playCue(audioMix.shieldBreak);
           }
           break;
+        // The four evolutions with a voice (D54). Every one of them is
+        // throttled harder than the events it sits among, because every one of
+        // them is a *moment* — the player is meant to notice it happened, not
+        // to hear it running underneath the volley.
+        case 'meteor':
+          if (!this.throttled('meteor', audioMix.minIntervalMs.meteor)) {
+            this.playCue(audioMix.evolutions.meteor);
+          }
+          break;
+        case 'overcharge':
+          // Only when it reached something: an arc into empty road is a
+          // cooldown spent, not an event.
+          if (
+            event.targets > 0 &&
+            !this.throttled('overcharge', audioMix.minIntervalMs.overcharge)
+          ) {
+            this.playCue(audioMix.evolutions.overcharge);
+          }
+          break;
+        case 'freezePulse':
+          if (!this.throttled('freezePulse', audioMix.minIntervalMs.freezePulse)) {
+            this.playCue(audioMix.evolutions.freezePulse);
+          }
+          break;
+        case 'glacier':
+          if (!this.throttled('glacier', audioMix.minIntervalMs.glacier)) {
+            this.playCue(audioMix.evolutions.glacier);
+          }
+          break;
         case 'bossKilled':
           this.play('sfx_boss_death');
           break;

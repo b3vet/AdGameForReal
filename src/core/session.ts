@@ -9,8 +9,8 @@
  * state behind the menu without the app growing a second code path.
  */
 
-import { balance, levelCount } from '@/data';
-import { createBot } from '@/sim';
+import { balance, endless as endlessConfig, levelCount } from '@/data';
+import { createBot, generateEndless } from '@/sim';
 import type { EnemyKind, LevelDef, Run, RunState, SimEvent } from '@/sim';
 
 import { RunTracker } from './missions';
@@ -74,14 +74,23 @@ export class RunSession {
    * `seed` overrides the level's own (`levels.json`) and the query's, which is
    * what makes "same road again" a thing the result sheet can offer: the run's
    * seed comes back off `RunSession.seed` and goes straight into the next one.
+   *
+   * `endless` walks the road with no level number and no boss instead (D52).
+   * It is a flag rather than a level index because Endless is a *mode* beside
+   * the campaign, not a level at the end of it: nothing about it is keyed by
+   * `levelIndex`, and the one thing that still is — the seed — is the same seed
+   * the campaign's replay uses.
    */
   constructor(
     levelIndex: number,
     options: QueryOptions,
     player: PlayerState,
     seed: number | null = null,
+    endless = false,
   ) {
-    this.level = buildLevel(levelIndex, seed ?? options.seed, player);
+    this.level = endless
+      ? generateEndless(seed ?? options.seed ?? endlessConfig.seed, player)
+      : buildLevel(levelIndex, seed ?? options.seed, player);
     this.run = buildRun(this.level, balance, player);
     // The same tuning object the run was built on: a bot steers by the crowd's
     // own width and the clamp it leaves, and both come out of the balance.
@@ -97,6 +106,16 @@ export class RunSession {
   /** The seed this road was generated from. Replay it and you get this road. */
   get seed(): number {
     return this.level.seed;
+  }
+
+  /** True for the road with no level number and no boss (D52). */
+  get isEndless(): boolean {
+    return this.level.endless === true;
+  }
+
+  /** Metres of endless road walked, or 0 on a campaign run. */
+  get metres(): number {
+    return this.run.state.endless?.metres ?? 0;
   }
 
   get won(): boolean {
@@ -180,7 +199,9 @@ export class RunSession {
     if (this.countdown === null) {
       if (!this.finished) return false;
       this.countdown = balance.ui.resultDelay;
-      if (this.won && levelIndex < levelCount) unlockLevel(levelIndex + 1);
+      // An endless road that runs out is not a campaign level cleared (D52):
+      // it carries no level index, so it may not unlock the next one.
+      if (this.won && !this.isEndless && levelIndex < levelCount) unlockLevel(levelIndex + 1);
       return false;
     }
 

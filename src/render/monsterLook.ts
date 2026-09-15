@@ -148,6 +148,17 @@ export const SPRAY_Y = 0.03;
  * two overlapping puffs read as one track rather than as two coins.
  */
 export const DECAL_SOFT_EDGE = 0.5;
+/**
+ * How wide the *inner* rim of a ring decal ramps, as a share of the disc.
+ *
+ * A ring is a disc with a hole (`./groundDecals.ts`, Milestone 8), and the hole
+ * needs the same softness the outer edge has or a meteor's crater is a cut-out
+ * circle on the road. At 0 the ramp vanishes and every existing caller is
+ * untouched, which is why this is a separate number rather than a reuse of the
+ * outer one: the outer edge ramps over half the disc, and a hole that soft
+ * would have no hole left.
+ */
+export const DECAL_RING_SOFT = 0.12;
 /** What a mark is at birth and at death, as a share of the emitter's size. */
 export const SPRAY_SIZE_START = 0.7;
 export const SPRAY_SIZE_END = 1.6;

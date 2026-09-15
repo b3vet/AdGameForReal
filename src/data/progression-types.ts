@@ -139,6 +139,24 @@ export interface EvolutionDef {
   glacier?: number;
 }
 
+/**
+ * What a staff is worth to the player who buys it, as a share of the squad's
+ * own output — the number the shopper in `src/sim/campaign.ts` ranks the whole
+ * Academy by, beside `upgrades.effects` (D46).
+ *
+ * Measured rather than asserted: every figure here is the end-to-end gain the
+ * bands harness reads off a real level, converted to "how many damage rungs is
+ * this worth" against a known reference, and the Milestone 8 log records the
+ * measurement. It is a *shopping* number and the sim never reads it: what the
+ * mechanics actually do is `./balance.json` and the `EvolutionDef` above.
+ */
+export interface StaffWorth {
+  /** Output share of carrying this staff instead of the one in hand. */
+  unlock: number;
+  /** Output share each evolution adds over the tier below it: 2, then 3, then 4. */
+  evolve: readonly number[];
+}
+
 /** The six mechanics D54 adds, by the name each is switched on under. */
 export type EvolutionMechanic =
   | 'wildfire'
@@ -168,6 +186,8 @@ export interface WispDef {
   maxSparks: number;
   fireRate: number[];
   damage: number[];
+  /** What each tier is worth, indexed like `tierPrices`; index 0 is unused. */
+  worth: number[];
 }
 
 /** `src/data/progression.json`: every number the meta layer costs and pays. */
@@ -203,7 +223,7 @@ export interface Progression {
    * JSON module, whose array literals widen: a tuple here would need a cast at
    * the one place the schema exists to remove casts. `staffPrices` narrows it.
    */
-  staffs: Record<WeaponId, { unlock: number; evolve: readonly number[] }>;
+  staffs: Record<WeaponId, { unlock: number; evolve: readonly number[]; worth: StaffWorth }>;
   /** What each staff's evolutions do, and which tier each of them arrives at. */
   evolutions: Record<WeaponId, EvolutionDef>;
   wisp: WispDef;

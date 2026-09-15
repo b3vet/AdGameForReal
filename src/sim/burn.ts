@@ -12,9 +12,22 @@
  * allocation, it grows to the high-water mark of simultaneously burning bodies
  * and never shrinks, and entries leave it the step after their body dies.
  *
- * A second hit refreshes rather than stacks (the plan's rule): the clock is
- * reset and the per-tick damage is the larger of the two, so setting a body on
- * fire again cannot multiply the burn — it can only make it hotter or longer.
+ * A second hit adds to the fire rather than restarting it, and Milestone 8's
+ * balance pass is why. The Milestone 4 rule was "refresh, and take the larger
+ * per-tick damage", written for a world where a hit is a discrete event; the
+ * squad fires in sixtieths of a second, so "the hit that lit it" was one step's
+ * slice of a volley and the whole evolution was worth a quarter of a percent of
+ * the squad's output — measured, 0.1 percent end to end, and the wildfire that
+ * hops it was worth nothing at all because there was nothing to hop.
+ *
+ * What a body carries now is a *pool* of damage still owed, drained over
+ * `seconds` in ticks of `tickSeconds`, and a hit adds `share` of itself to it.
+ * That is the same sentence the Workbench prints — a hit sets its target alight
+ * for a share of its own damage — read at every time scale rather than at one:
+ * a single hit and no follow-up still burns for exactly `share` of it, and a
+ * body held under continuous fire burns at `share` of the fire landing on it,
+ * which is what the words meant all along. It cannot multiply, because the
+ * total is `share` of the damage that was actually dealt.
  */
 
 import { enemyHalfWidth } from './enemies';
@@ -72,27 +85,27 @@ export class Burn {
     this.wildfire = wildfire;
   }
 
-  /** Lights `enemy` up for `share` of `damage`, or refreshes a burn already on it. */
+  /** Adds `share` of `damage` to whatever fire `enemy` is already carrying. */
   ignite(enemy: EnemyState, damage: number, time: number): void {
     if (!enemy.alive || damage <= 0) return;
-    const lit = this.light(enemy, (damage * this.def.share) / this.ticks, time);
+    const lit = this.light(enemy, damage * this.def.share, time);
     // A fire the squad started, so it is the one that may hop (see `pending`).
     if (lit && this.wildfire !== null) this.pending.push(enemy);
   }
 
   /**
-   * The burn itself, at a per-tick cost the caller has already worked out.
-   * Returns true when this *started* a fire rather than refreshing one.
+   * Adds `owed` damage to this body's fire and pushes its clock out to the full
+   * `seconds`. Returns true when this *started* a fire rather than feeding one.
    *
-   * A second hit refreshes rather than stacks (the Milestone 4 rule): the clock
-   * is reset and the per-tick damage is the larger of the two, so setting a
-   * body on fire again cannot multiply the burn — it can only make it hotter or
-   * longer.
+   * Adding rather than refreshing to the larger per-tick is the Milestone 8
+   * change (see the file note): the total a body ever takes is `share` of the
+   * damage actually dealt to it, which is what the Workbench's copy says and
+   * what the Milestone 4 rule could not deliver at a sixtieth of a second.
    */
-  private light(enemy: EnemyState, perTick: number, time: number): boolean {
+  private light(enemy: EnemyState, owed: number, time: number): boolean {
     const alight = enemy.burning === true && (enemy.burnUntil ?? 0) > time;
 
-    enemy.burnPerTick = alight ? Math.max(enemy.burnPerTick ?? 0, perTick) : perTick;
+    enemy.burnLeft = (alight ? enemy.burnLeft ?? 0 : 0) + owed;
     enemy.burnUntil = time + this.def.seconds;
     if (alight) return false;
 
@@ -113,6 +126,7 @@ export class Burn {
       if (!enemy.alive || state.time > (enemy.burnUntil ?? 0)) {
         enemy.burning = false;
         enemy.burnUntil = 0;
+        enemy.burnLeft = 0;
         const last = this.burning.pop();
         if (last !== undefined && i < this.burning.length) this.burning[i] = last;
         continue;
@@ -123,7 +137,13 @@ export class Burn {
       // One tick per step at most: the step is 1/60 s and a tick is a quarter of
       // a second, so a burn can never fall behind its own clock.
       enemy.burnNextAt = due + step;
-      this.hit(state, enemy, enemy.burnPerTick ?? 0);
+      // The pool spread over the ticks it has left, so a fire that is being fed
+      // burns hotter and one that is not still ends with nothing owed.
+      const left = Math.max(0, enemy.burnLeft ?? 0);
+      const remaining = Math.max(1, Math.ceil(((enemy.burnUntil ?? 0) - state.time) / step));
+      const amount = left / Math.min(this.ticks, remaining);
+      enemy.burnLeft = left - amount;
+      this.hit(state, enemy, amount);
       if (state.status !== 'running') return;
     }
 
@@ -134,7 +154,7 @@ export class Burn {
    * Ember tier 3: every fire the squad started this step passes itself to the
    * bodies it is touching, once.
    *
-   * The new fire is a *share of the old one's per-tick damage*, not of the shot
+   * The new fire is a *share of what the old one still owes*, not of the shot
    * that lit it: the fire spreading cannot be hotter than the fire it came
    * from, so a river cannot be set alight at full strength by one body at the
    * front of it. With one hop and a share under one, what the whole mechanic
@@ -148,14 +168,14 @@ export class Burn {
 
     for (const source of this.pending) {
       if (!source.alive || source.burning !== true) continue;
-      const perTick = (source.burnPerTick ?? 0) * tuning.share;
-      if (perTick <= 0) continue;
+      const owed = (source.burnLeft ?? 0) * tuning.share;
+      if (owed <= 0) continue;
       this.spreadCount = 0;
       targets.forEachNear(source.z, reach, (enemy) => {
         if (enemy === source || enemy.burning === true) return true;
         const half = enemyHalfWidth(enemy, balance);
         if (blockGap(enemy.x, half, source.x, 0, enemy.z - source.z) > tuning.radius) return true;
-        this.light(enemy, perTick, state.time);
+        this.light(enemy, owed, state.time);
         this.spreadCount++;
         return this.spreadCount < tuning.maxTargets;
       });

@@ -22,6 +22,23 @@
  * road never moves, so paying for a world-matrix recompute every frame on the
  * largest meshes in the scene would be pure waste. The sky moved out to
  * `./sky.ts` in Milestone 5; only the motes are written per frame here.
+ *
+ * ## Two spans at once (D52)
+ *
+ * The endless road changes biome as it is walked, and the fog reaches 260 m
+ * against a span of about 216 — so the player can see the next biome's road
+ * before reaching it, and must. The surface, the field and the verge therefore
+ * come in *pairs*: a near half from the road's start to the boundary ahead, and
+ * a far half from that boundary onward, each with its own three materials. Six
+ * meshes rather than three, six draw calls rather than three, and only while a
+ * spanned road is loaded — a campaign level disables the far half entirely and
+ * draws exactly what it always drew.
+ *
+ * The kerbs and the lane runes are deliberately *not* split. They are thin
+ * strips of the palette's own stone and violet, they are read at a few metres
+ * rather than at two hundred, and splitting them would be two more draw calls
+ * and two more instance buffers for a colour change nobody can see at the
+ * distance a boundary is crossed from.
  */
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
@@ -55,7 +72,8 @@ import {
   RUNE_PULSE_DEPTH,
   RUNE_PULSE_RATE,
 } from './roadLook';
-import { applyGround, buildGroundAlbedos, glow, matte } from './roadGround';
+import { RoadFarHalf } from './roadFar';
+import { applyGround, buildGroundAlbedos, glow, matte, refreeze } from './roadGround';
 import type { GroundMaterials } from './roadGround';
 import { createKerbPiece, createRoadSurface } from './roadSurface';
 import { createStoneTexture } from './textures';
@@ -82,6 +100,8 @@ const KERB_CAPACITY = 800;
 export class RoadView {
   private readonly surface: Mesh;
   private readonly field: Mesh;
+  /** The far half of a spanned road (D52); idle on a campaign level. */
+  private readonly far: RoadFarHalf;
   private readonly kerbs: Mesh;
   private readonly kerbMatrices: Float32Array;
   private readonly fringe: Mesh;
@@ -136,6 +156,7 @@ export class RoadView {
     ]);
     fringeMaterial.opacityTexture = fringeOpacity;
     fringeMaterial.backFaceCulling = false;
+    // The far verge's band shares this one ramp: it is the same shape.
     this.textures.push(fringeOpacity);
 
     const kerbMaterial = matte(scene, 'kerbMat', paletteColor('stone.kerb'));
@@ -146,6 +167,9 @@ export class RoadView {
       kerb: kerbMaterial,
     };
     this.albedos = buildGroundAlbedos(scene, this.ground, ROAD_HALF_WIDTH * 2, FIELD_WIDTH);
+    // The far half (D52), built here rather than at the first spanned load so
+    // the boot warm-up compiles it with everything else (`./roadFar.ts`).
+    this.far = new RoadFarHalf(scene, FIELD_WIDTH, fringeOpacity, kerbMaterial);
     for (const albedo of this.albedos.values()) this.textures.push(albedo);
     // A fine grain on the cut stone: without it the kerb is a flat band of
     // colour beside a photographic road, which is exactly where a cheap edge
@@ -207,6 +231,7 @@ export class RoadView {
       fieldMaterial,
       fringeMaterial,
       kerbMaterial,
+      ...this.far.materials,
       this.runeMaterial,
       arenaMaterial,
     ];
@@ -249,6 +274,22 @@ export class RoadView {
   }
 
   /**
+   * Which biomes this road runs through and how long a span of one is (D52).
+   * The far half owns the answer; this hands it on and re-lays the road.
+   */
+  setSpans(biomes: readonly BiomeId[], span: number): void {
+    this.far.setSpans(biomes, span, this.albedos);
+    this.relayout();
+  }
+
+  /** The span the camera now stands in; see `RoadFarHalf.setSpan`. */
+  setSpanIndex(index: number): void {
+    if (!this.far.active) return;
+    this.far.setSpan(index, this.albedos);
+    this.relayout();
+  }
+
+  /**
    * The arena markers' dungeon pieces. Idempotent, and safe to await from
    * `SceneViews.load` — which is where it belongs, so the warm-up pass sees the
    * material before the first frame rather than compiling it at the arena.
@@ -285,10 +326,14 @@ export class RoadView {
     // at the arena looking down the rest of it (`./roadLook.ts`).
     const dressedEnd = endZ + ROAD_RUNOUT;
     const surfaceEnd = dressedEnd + ROAD_FILLER;
-    const surfaceLength = Math.max(1, surfaceEnd - startZ);
-    const surfaceCentre = (startZ + surfaceEnd) / 2;
-    const dressedLength = Math.max(1, dressedEnd - startZ);
-    const dressedCentre = (startZ + dressedEnd) / 2;
+    // Where the near half stops and the far half starts: the boundary ahead of
+    // the span the camera is in (D52), or the end of the road on a campaign
+    // level, where the near half is the whole thing.
+    const split = this.far.splitAt(startZ, surfaceEnd);
+    const surfaceLength = Math.max(1, split - startZ);
+    const surfaceCentre = (startZ + split) / 2;
+    const dressedLength = Math.max(1, Math.min(dressedEnd, split) - startZ);
+    const dressedCentre = (startZ + Math.min(dressedEnd, split)) / 2;
 
     for (const mesh of [this.field, this.surface, this.arenaBand]) mesh.unfreezeWorldMatrix();
 
@@ -304,6 +349,7 @@ export class RoadView {
     this.retile(this.surface.material, (ROAD_HALF_WIDTH * 2) / road, surfaceLength / road);
     this.retile(this.field.material, FIELD_WIDTH / verge, surfaceLength / verge);
     this.retile(this.fringe.material, FRINGE_WIDTH / verge, dressedLength / verge);
+    this.far.layout(split, surfaceEnd, dressedEnd, this.retileFor);
 
     for (let i = 0; i < LINE_X.length; i++) {
       writeInstance(this.runeMatrices, i, 1, 1, surfaceLength, LINE_X[i] ?? 0, 0, surfaceCentre);
@@ -359,6 +405,7 @@ export class RoadView {
   }
 
   dispose(): void {
+    this.far.dispose();
     for (const mesh of this.allMeshes()) {
       mesh.material?.dispose();
       mesh.dispose();
@@ -397,12 +444,26 @@ export class RoadView {
    * fallback are `Texture`s. Anything else is left alone rather than asserted
    * about.
    */
+  /** Re-stretches the road at the extent it already has, if it has one. */
+  private relayout(): void {
+    const extent = this.extent;
+    if (extent !== null) this.setExtent(extent.startZ, extent.endZ, extent.arenaZ);
+  }
+
+  /** Bound once: `RoadFarHalf.layout` is handed it on every level load. */
+  private readonly retileFor = (material: unknown, uScale: number, vScale: number): void => {
+    this.retile(material, uScale, vScale);
+  };
+
   private retile(material: unknown, uScale: number, vScale: number): void {
     if (!(material instanceof StandardMaterial)) return;
     const texture = material.diffuseTexture;
     if (!(texture instanceof Texture)) return;
     texture.uScale = uScale;
     texture.vScale = vScale;
+    // A frozen material is not re-bound, so a new tiling would not reach the
+    // shader either (`refreeze` in `./roadGround.ts`).
+    refreeze(material);
   }
 
 }

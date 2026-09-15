@@ -1,0 +1,188 @@
+/*
+ * The Academy home's two Milestone 8 fixtures (D51): the streak plaque beside
+ * the purse, and the missions board under the room cards.
+ *
+ * A file of its own rather than more of `./academy.css`, which was already at
+ * the size rule (CLAUDE.md). Both are read-only — a streak is advanced by
+ * finishing a road and a mission by playing one — so neither takes a pointer
+ * event, and the home screen's cards stay the only thing on it that can be
+ * tapped.
+ */
+
+/* --- The streak plaque ---------------------------------------------------- */
+
+/*
+ * Beside the purse and built like it: a dark inset plate over the road, with
+ * the day count in the display face. It is deliberately quiet until there *is*
+ * a streak — day zero is an invitation, not a number.
+ */
+.streak {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--chip-strong);
+  color: var(--ink-bright);
+}
+
+.streak__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--gold);
+}
+
+.streak__days {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--gold-light);
+}
+
+.streak__hint {
+  font-family: var(--font-body);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-bright-dim);
+}
+
+/* Claimed: the day is spent, so the flame cools and the line greys. */
+.streak[data-claimed='true'] .streak__icon {
+  color: var(--ink-bright-dim);
+}
+
+/* Day zero: the flame is an outline of one and the count is not printed. */
+.streak[data-started='false'] .streak__icon {
+  color: var(--ink-bright-dim);
+  opacity: 0.7;
+}
+
+/* --- The missions board --------------------------------------------------- */
+
+.board__heading {
+  margin: 0.45rem 0 0.2rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+}
+
+.board {
+  display: grid;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+/*
+ * One card per mission: the line, a bar under it, and the reward beside the
+ * progress. The bar is a `scaleX` on a pseudo element driven by one custom
+ * property, so a repaint writes one value and causes no layout.
+ */
+.mission {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem 0.35rem;
+}
+
+.mission__text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.74rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.mission__bar {
+  position: relative;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.mission__fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--bar-fill, 0));
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-light));
+}
+
+.mission__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.mission__progress {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.mission__reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-gold-deep);
+}
+
+.mission__coin {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--gold);
+}
+
+/* Claimed: the card steps back, and its bar is full rather than empty. */
+.mission[data-done='true'] {
+  filter: saturate(0.6);
+  opacity: 0.8;
+}
+
+.mission[data-done='true'] .mission__progress {
+  color: var(--c-gold-deep);
+}
+
+/*
+ * Landscape: the board goes to two columns and its text shrinks, for the same
+ * reason the cards do — a phone on its side is 320 px tall and everything has
+ * to fit above the fold.
+ */
+@media (orientation: landscape) {
+  .board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+
+  .board__heading {
+    margin-top: 0.3rem;
+    font-size: 0.7rem;
+  }
+
+  .mission__text {
+    font-size: 0.66rem;
+  }
+
+  .streak__hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mission__fill {
+    transition: none;
+  }
+}

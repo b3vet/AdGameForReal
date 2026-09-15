@@ -267,41 +267,42 @@
   "evolutions": {
     "ember": {
       "wildfire": {
-        "radius": 1.1,
-        "share": 0.55,
-        "maxTargets": 3
+        "radius": 1.6,
+        "share": 0.8,
+        "maxTargets": 5
       },
       "meteor": {
-        "intervalSeconds": 9,
+        "intervalSeconds": 7,
         "ahead": 16,
-        "radius": 3.2,
+        "radius": 3.6,
         "falloff": 0.7,
-        "secondsOfFire": 1.8,
+        "secondsOfFire": 2,
         "shoveStrength": 3,
         "shoveSeconds": 0.35
       }
     },
     "storm": {
       "overcharge": {
-        "everyVolleys": 5,
+        "everyVolleys": 4,
         "radius": 7,
         "secondsOfFire": 0.3,
         "maxTargets": 24,
-        "minSeconds": 1.2
+        "minSeconds": 1
       }
     },
     "frost": {
       "freezePulse": {
-        "radius": 2.2,
-        "seconds": 1.2,
-        "factor": 0.5,
-        "maxTargets": 12
+        "radius": 3.2,
+        "seconds": 1.8,
+        "factor": 0.4,
+        "maxTargets": 24,
+        "share": 0.35
       },
       "glacier": {
-        "intervalSeconds": 14,
-        "holdSeconds": 3,
+        "intervalSeconds": 8,
+        "holdSeconds": 5,
         "ahead": 12,
-        "minBodies": 6
+        "minBodies": 3
       }
     }
   }

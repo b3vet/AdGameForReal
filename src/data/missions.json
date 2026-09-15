@@ -3,120 +3,120 @@
     "active": 3
   },
   "streak": {
-    "perDay": 50,
-    "cap": 350
+    "perDay": 10,
+    "cap": 70
   },
   "pool": [
     {
       "id": "roads3",
       "kind": "clearLevel",
       "param": 3,
-      "reward": 180,
+      "reward": 120,
       "text": "Walk three roads to their end."
     },
     {
       "id": "roads6",
       "kind": "clearLevel",
       "param": 6,
-      "reward": 340,
+      "reward": 230,
       "text": "Six roads, end to end. Any six."
     },
     {
       "id": "arrive40",
       "kind": "finishWith",
       "param": 40,
-      "reward": 200,
+      "reward": 135,
       "text": "Reach an arena with forty still standing."
     },
     {
       "id": "arrive90",
       "kind": "finishWith",
       "param": 90,
-      "reward": 380,
+      "reward": 255,
       "text": "Bring ninety apprentices to a boss."
     },
     {
       "id": "shields12",
       "kind": "breakShields",
       "param": 12,
-      "reward": 190,
+      "reward": 130,
       "text": "Take twelve slabs of ice off the Bulwarks."
     },
     {
       "id": "shields30",
       "kind": "breakShields",
       "param": 30,
-      "reward": 360,
+      "reward": 245,
       "text": "Thirty shields, and then the number moves."
     },
     {
       "id": "hounds8",
       "kind": "killChargers",
       "param": 8,
-      "reward": 190,
+      "reward": 130,
       "text": "Put down eight Rimehounds before they arrive."
     },
     {
       "id": "hounds20",
       "kind": "killChargers",
       "param": 20,
-      "reward": 370,
+      "reward": 250,
       "text": "Twenty Rimehounds. Do not be in the lane."
     },
     {
       "id": "column1",
       "kind": "noStragglers",
       "param": 1,
-      "reward": 230,
+      "reward": 155,
       "text": "Take a whole road with the column unbroken."
     },
     {
       "id": "column3",
       "kind": "noStragglers",
       "param": 3,
-      "reward": 450,
+      "reward": 305,
       "text": "Three roads, and nobody left behind a fence."
     },
     {
       "id": "boss25",
       "kind": "bossUnder",
       "param": 25,
-      "reward": 240,
+      "reward": 165,
       "text": "Twenty-five seconds in the arena. No longer."
     },
     {
       "id": "boss15",
       "kind": "bossUnder",
       "param": 15,
-      "reward": 420,
+      "reward": 285,
       "text": "Fifteen seconds from the arena gate to a dead boss."
     },
     {
       "id": "sigils12",
       "kind": "mulGates",
       "param": 12,
-      "reward": 200,
+      "reward": 135,
       "text": "Walk through twelve multiplier sigils."
     },
     {
       "id": "sigils30",
       "kind": "mulGates",
       "param": 30,
-      "reward": 390,
+      "reward": 265,
       "text": "Thirty multipliers. Take the greedy lane."
     },
     {
       "id": "endless600",
       "kind": "endlessMetres",
       "param": 600,
-      "reward": 220,
+      "reward": 150,
       "text": "Six hundred metres of road that does not end."
     },
     {
       "id": "endless1400",
       "kind": "endlessMetres",
       "param": 1400,
-      "reward": 460,
+      "reward": 310,
       "text": "Fourteen hundred metres. Then it gets dark."
     }
   ]

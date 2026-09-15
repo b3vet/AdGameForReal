@@ -51,7 +51,11 @@
     "familiarShot": 110,
     "purchase": 70,
     "charge": 260,
-    "shieldBreak": 90
+    "shieldBreak": 90,
+    "meteor": 500,
+    "overcharge": 900,
+    "freezePulse": 180,
+    "glacier": 600
   },
   "shot": {
     "windowMs": 100,
@@ -107,6 +111,28 @@
     "sound": "sfx_shatter",
     "playbackRate": 0.78,
     "volume": 1
+  },
+  "evolutions": {
+    "meteor": {
+      "sound": "sfx_boss_stomp",
+      "playbackRate": 1.35,
+      "volume": 0.8
+    },
+    "overcharge": {
+      "sound": "sfx_shot_storm",
+      "playbackRate": 0.4,
+      "volume": 1
+    },
+    "freezePulse": {
+      "sound": "sfx_shatter",
+      "playbackRate": 1.45,
+      "volume": 0.5
+    },
+    "glacier": {
+      "sound": "sfx_shatter",
+      "playbackRate": 0.42,
+      "volume": 0.9
+    }
   },
   "bossStomp": {
     "demon": {

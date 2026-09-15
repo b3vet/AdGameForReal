@@ -26,6 +26,7 @@ import { modelAsset } from './characters';
 import { commitInstances, createMatrixBuffer, writeRotatedInstance } from './instanceBuffer';
 import { dustEmissive, liftEmissive, loadStaticMesh, meshExtent, tintMaterial } from './models';
 import { PROP_KINDS, tintFrom } from './propKinds';
+import { refreeze } from './roadGround';
 import type { PropKind } from './propKinds';
 import { applyToonRamp } from './toonRamp';
 import { EMBER_COLOR, MAGE_SCALE, ROAD_HALF_WIDTH } from './theme';
@@ -189,14 +190,36 @@ export class PropsView {
         const [r, g, b] = tintFrom(dust);
         dustEmissive(slot.mesh.material, r, g, b);
       }
+      // The roadside is frozen after the first readiness pass, and a frozen
+      // material is not re-bound: without this the new tint never reaches the
+      // shader (`refreeze` in `./roadGround.ts`).
+      const material = slot.mesh.material;
+      if (material instanceof StandardMaterial) refreeze(material);
     }
   }
 
   /**
    * Lays out one level's roadside. Seeded by the level index, so the same level
    * is always dressed the same way.
+   *
+   * `biomeAt` is the endless road's (D52): a road that changes biome as it is
+   * walked has to be dressed *per span*, so which kinds are in the roll is
+   * asked per placement rather than once. A campaign level passes none and is
+   * dressed exactly as it always was.
+   *
+   * What a shared kind is *tinted* still follows the palette, which switches at
+   * the boundary the camera crosses (`./biomeSpans.ts`): the furniture that
+   * stands in both biomes is one mesh with one material, so it wears the near
+   * span's colour along the whole road. The kinds that belong to one biome —
+   * the pines, the ice — are placed only where they belong, which is the part
+   * of this a player reads at two hundred metres.
    */
-  build(levelIndex: number, startZ: number, endZ: number): void {
+  build(
+    levelIndex: number,
+    startZ: number,
+    endZ: number,
+    biomeAt: ((z: number) => BiomeId) | null = null,
+  ): void {
     for (const slot of this.slots) slot.count = 0;
     let flames = 0;
 
@@ -206,11 +229,18 @@ export class PropsView {
     // keeps the layout from leaving a gap where the other one would have gone.
     const lit = this.slots.filter((slot) => dressedOn(slot.kind, levelIndex, this.biome));
     const total = lit.reduce((sum, slot) => sum + slot.kind.weight, 0);
+    // Every kind either biome of a spanned road can ask for, so a buffer is
+    // grown once for the whole road rather than at the first crossing.
+    const spanned = biomeAt !== null;
+    const anyBiome = spanned
+      ? this.slots.filter((slot) => dressedOn(slot.kind, levelIndex, null))
+      : lit;
+    const anyTotal = anyBiome.reduce((sum, slot) => sum + slot.kind.weight, 0);
     // What this road can hold, per kind. Buffers only ever grow, and only at a
     // level load: a later level with a longer road pays one allocation for the
     // extra trees and every level after it re-uses it.
-    for (const slot of lit) {
-      const cap = capFor(slot.kind.weight, total, endZ - startZ);
+    for (const slot of anyBiome) {
+      const cap = capFor(slot.kind.weight, anyTotal, endZ - startZ);
       if (cap <= slot.capacity) continue;
       slot.matrices = createMatrixBuffer(slot.mesh, cap);
       slot.capacity = cap;
@@ -220,7 +250,15 @@ export class PropsView {
       let z = startZ + random() * GAP_MIN;
       while (z < endZ) {
         z += GAP_MIN + random() * (GAP_MAX - GAP_MIN);
-        const slot = pick(lit, random() * total);
+        // The roll is over the kinds this *stretch* dresses with, which on a
+        // spanned road is the span's own set.
+        const here = spanned
+          ? this.slots.filter((slot) => dressedOn(slot.kind, levelIndex, biomeAt(z)))
+          : lit;
+        const weight = spanned
+          ? here.reduce((sum, slot) => sum + slot.kind.weight, 0)
+          : total;
+        const slot = pick(here, random() * weight);
         if (slot === undefined || slot.count >= slot.capacity) continue;
 
         const out = slot.kind.near + random() * (slot.kind.far - slot.kind.near);
@@ -292,10 +330,12 @@ export class PropsView {
  * Whether a kind is dressed on this level, in this biome. Absent bounds mean
  * every level, and an absent biome list means every biome.
  */
-function dressedOn(kind: PropKind, levelIndex: number, biome: BiomeId): boolean {
+function dressedOn(kind: PropKind, levelIndex: number, biome: BiomeId | null): boolean {
   if (kind.fromLevel !== undefined && levelIndex < kind.fromLevel) return false;
   if (kind.untilLevel !== undefined && levelIndex > kind.untilLevel) return false;
-  if (kind.biomes !== undefined && !kind.biomes.includes(biome)) return false;
+  // A null biome is "any of them", which is what a spanned road's cap sizing
+  // asks for: the buffers have to hold whichever span asks for the most.
+  if (biome !== null && kind.biomes !== undefined && !kind.biomes.includes(biome)) return false;
   return true;
 }
 

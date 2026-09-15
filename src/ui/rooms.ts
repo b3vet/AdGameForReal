@@ -1,8 +1,13 @@
 /**
- * The four Academy rooms: the Training Yard, the Workbench, the Sanctum and
- * the Bestiary (decision D33).
+ * The Academy's rooms: the Training Yard, the Workbench, the Sanctum (D33), the
+ * Bestiary (D33, D53) and the Wardrobe (D53).
  *
- * All four share one screen — heading, coin chip, Back — and only the body
+ * The two that grew past a list of rows have files of their own —
+ * `./bestiary.ts` for the kill ladders and `./wardrobe.ts` for the tint chips —
+ * and this file keeps the shell and the three rooms that are still a list of
+ * priced rows.
+ *
+ * All of them share one screen — heading, coin chip, Back — and only the body
  * swaps, so a room is a list that is built on its first visit and re-painted
  * from a `PlayerState` on every later one. Nothing here owns state: `App`
  * makes the purchase, writes the save and calls `show` again with the new
@@ -18,6 +23,7 @@ import {
   familiarCost,
   familiarUnlocked,
   maxFamiliarTier,
+  maxStaffTier,
   maxUpgradeLevel,
   roomUnlockLevel,
   staffCost,
@@ -27,11 +33,15 @@ import {
 } from '@/core/player';
 import type { PlayerState, RoomId, UpgradeId } from '@/core/player';
 import { academy, fill } from '@/data/academy-types';
-import { weaponIds } from '@/sim';
+import { cosmetics } from '@/data';
+import { staffTierOf, weaponIds } from '@/sim';
+import type { CosmeticSlot } from '@/data';
 import type { WeaponId } from '@/sim';
 
 import type { BindButton } from './academy';
-import { beastIcon, icon, staffIcon, upgradeIcon } from './icons';
+import { BestiaryRoom } from './bestiary';
+import { icon, staffIcon, upgradeIcon } from './icons';
+import { Wardrobe } from './wardrobe';
 import { amount, element, priceButton, replay, setPrice, text } from './widgets';
 
 export interface RoomElements {
@@ -42,15 +52,18 @@ export interface RoomElements {
   workbench: HTMLElement;
   sanctum: HTMLElement;
   bestiary: HTMLElement;
+  wardrobe: HTMLElement;
 }
 
 export interface RoomCallbacks {
   onBuyUpgrade: (id: UpgradeId) => void;
-  /** Unlocks a locked staff, or evolves an unlocked one to tier 2. */
+  /** Unlocks a locked staff, or evolves an unlocked one by one tier (D54). */
   onBuyStaff: (id: WeaponId) => void;
   onSelectStaff: (id: WeaponId) => void;
   /** Binds the wisp, or raises its tier by one. */
   onBuyFamiliar: () => void;
+  /** A tint chip in the Wardrobe (D53). */
+  onSelectCosmetic: (slot: CosmeticSlot, id: string) => void;
 }
 
 /** What just changed, so the row that changed can bump. */
@@ -69,7 +82,8 @@ interface YardRow {
 interface StaffRow {
   root: HTMLElement;
   tag: HTMLElement;
-  tier2: HTMLElement;
+  /** One line per evolution rung, greyed until the staff reaches it (D54). */
+  tiers: HTMLElement[];
   buy: HTMLButtonElement;
   price: HTMLElement;
   select: HTMLButtonElement;
@@ -91,7 +105,9 @@ export class Rooms {
 
   private readonly yardRows = new Map<UpgradeId, YardRow>();
   private readonly staffRows = new Map<WeaponId, StaffRow>();
-  private readonly beastBlurbs = new Map<string, HTMLElement>();
+  /** The two rooms with bodies of their own (see the file's note). */
+  private readonly bestiary: BestiaryRoom;
+  private readonly wardrobe: Wardrobe;
   private familiarRow: FamiliarRow | null = null;
 
   private shownCoins = -1;
@@ -100,6 +116,12 @@ export class Rooms {
     this.elements = elements;
     this.callbacks = callbacks;
     this.bind = bind;
+    this.bestiary = new BestiaryRoom({ root: elements.bestiary, subtitle: elements.subtitle });
+    this.wardrobe = new Wardrobe(
+      { root: elements.wardrobe },
+      { onSelectCosmetic: callbacks.onSelectCosmetic },
+      bind,
+    );
   }
 
   /** Opens a room, building its body the first time it is asked for. */
@@ -109,6 +131,7 @@ export class Rooms {
       ['workbench', this.elements.workbench],
       ['sanctum', this.elements.sanctum],
       ['bestiary', this.elements.bestiary],
+      ['wardrobe', this.elements.wardrobe],
     ];
     for (const [id, body] of bodies) body.hidden = id !== room;
 
@@ -130,8 +153,12 @@ export class Rooms {
         break;
       case 'bestiary':
         this.elements.title.textContent = academy.bestiary.heading;
-        this.buildBestiary();
-        this.paintBestiary(player);
+        this.bestiary.show(player);
+        break;
+      case 'wardrobe':
+        this.elements.title.textContent = cosmetics.wardrobe.heading;
+        this.elements.subtitle.textContent = '';
+        this.wardrobe.show(player);
         break;
       default:
         // `play` is a door to the picker, not a room with a body.
@@ -208,7 +235,21 @@ export class Rooms {
       head.append(tag);
 
       const blurb = text('p', 'row__effect', copy.blurb);
-      const tier2 = text('p', 'row__effect row__effect--tier2', copy.tier2);
+      // One line per evolution, so the whole ladder is visible from tier 1:
+      // what the next rung buys, and what the two after it will.
+      const tiers: HTMLElement[] = [];
+      const ladder = element('div', 'row__ladder');
+      for (const [index, tier] of copy.tiers.entries()) {
+        const line = element('p', 'row__effect row__effect--tier');
+        line.append(
+          text('span', 'row__tiername', tier.name),
+          text('span', 'row__tierline', tier.line),
+        );
+        // Staff tier 2 is the first evolution, so a rung's index is one behind.
+        line.dataset['tier'] = String(index + 2);
+        ladder.append(line);
+        tiers.push(line);
+      }
 
       const actions = element('div', 'row__actions');
       const { button, price } = priceButton();
@@ -223,9 +264,9 @@ export class Rooms {
       });
       actions.append(button, select);
 
-      root.append(head, blurb, tier2, actions);
+      root.append(head, blurb, ladder, actions);
       this.elements.workbench.append(root);
-      this.staffRows.set(id, { root, tag, tier2, buy: button, price, select });
+      this.staffRows.set(id, { root, tag, tiers, buy: button, price, select });
     }
   }
 
@@ -235,13 +276,26 @@ export class Rooms {
       const staff = player.staffs[id];
       const cost = staffCost(player, id);
       const selected = player.selectedStaff === id;
+      const tier = staffTierOf(player, id);
 
       row.root.dataset['locked'] = staff.unlocked ? 'false' : 'true';
-      row.tag.textContent = staff.tier >= 2 ? academy.workbench.evolvedTag : '';
-      row.tier2.dataset['active'] = staff.tier >= 2 ? 'true' : 'false';
+      // The rung the staff stands on, out of four (D54). A locked staff has no
+      // tier to print, and the badge stays what it always was: evolved at all.
+      row.tag.textContent = !staff.unlocked
+        ? academy.workbench.lockedTier
+        : fill(academy.workbench.tierLabel, {
+            tier: String(tier),
+            max: String(maxStaffTier),
+          });
+      for (const [index, line] of row.tiers.entries()) {
+        // Lit once the staff has reached the rung this line describes; the next
+        // one is flagged too, because it is the one the price below buys.
+        line.dataset['active'] = tier >= index + 2 ? 'true' : 'false';
+        line.dataset['next'] = tier === index + 1 ? 'true' : 'false';
+      }
 
       // Buying is unlocking while it is locked and evolving once it is not;
-      // at tier 2 there is nothing left to sell.
+      // at tier 4 there is nothing left to sell.
       row.buy.hidden = cost === null;
       setPrice(
         row.buy,
@@ -314,39 +368,5 @@ export class Rooms {
     if (!open) row.buy.disabled = true;
 
     if (bump !== null && bump.kind === 'familiar') replay(row.root, BUMP);
-  }
-
-  // --- Bestiary ------------------------------------------------------------
-
-  private buildBestiary(): void {
-    if (this.beastBlurbs.size > 0) return;
-    for (const entry of academy.bestiary.entries) {
-      const root = element('div', 'beast frame frame--card');
-      root.dataset['beast'] = entry.id;
-      const head = element('div', 'row__head');
-      head.append(icon(beastIcon(entry.id), 'beast__icon'), text('span', 'beast__name', entry.name));
-      const blurb = text('p', 'beast__blurb', entry.blurb);
-      root.append(head, blurb);
-      this.elements.bestiary.append(root);
-      this.beastBlurbs.set(entry.id, blurb);
-    }
-  }
-
-  private paintBestiary(player: PlayerState): void {
-    const entries = academy.bestiary.entries;
-    let seen = 0;
-    for (const entry of entries) {
-      const blurb = this.beastBlurbs.get(entry.id);
-      if (blurb === undefined) continue;
-      const known = player.bestiary.includes(entry.id);
-      if (known) seen++;
-      blurb.textContent = known ? entry.blurb : academy.bestiary.unknown;
-      const root = blurb.parentElement;
-      if (root !== null) root.dataset['seen'] = known ? 'true' : 'false';
-    }
-    this.elements.subtitle.textContent = fill(academy.bestiary.seenLabel, {
-      seen: String(seen),
-      total: String(entries.length),
-    });
   }
 }

@@ -183,11 +183,12 @@ export class WeaponEffects {
    * guarded against re-entry like the shatter, so one death chills a circle
    * rather than a lane.
    */
-  freezePulse(state: RunState, source: EnemyState): void {
+  freezePulse(state: RunState, source: EnemyState, damage: number): void {
     const tuning = this.freezeDef;
     if (tuning === null || this.pulsing) return;
     this.pulsing = true;
     this.scanCount = 0;
+    const spray = Math.max(0, damage) * tuning.share;
     const reach = tuning.radius + this.balance.enemies.footprintMax;
     this.targets.forEachNear(source.z, reach, (enemy) => {
       if (enemy === source) return true;
@@ -199,7 +200,11 @@ export class WeaponEffects {
       enemy.slowUntil = state.time + tuning.seconds;
       enemy.slowFactor = tuning.factor;
       this.scanCount++;
-      return this.scanCount < tuning.maxTargets;
+      // The cold bites as well as holds (see `FreezePulseBalance.share`). Damage
+      // last, because it can kill — and a kill inside the scan is what the
+      // `pulsing` guard above is here to stop cascading.
+      if (spray > 0) this.damage(state, enemy, spray, undefined);
+      return state.status === 'running' && this.scanCount < tuning.maxTargets;
     });
     this.pulsing = false;
     if (this.scanCount > 0) this.events.freezePulse(source.x, source.z, tuning.radius);

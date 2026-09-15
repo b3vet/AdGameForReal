@@ -156,6 +156,36 @@
           <path d="M12 6.6v12.6" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.6" />
         </symbol>
 
+        <!-- The Wardrobe (D53): a hat on a stand, which is the one thing every
+             slot in that room has in common with the mage wearing it. -->
+        <symbol id="i-room-wardrobe" viewBox="0 0 24 24">
+          <path d="M12 2.2c3.1 2.4 4.8 4.9 4.8 7.4 0 1.1-.3 2-.8 2.8H8c-.5-.8-.8-1.7-.8-2.8 0-2.5 1.7-5 4.8-7.4Z" />
+          <path d="M3.4 15.4c2.4-1.4 5.3-2.1 8.6-2.1s6.2.7 8.6 2.1l-1 2.4c-2.2-1.2-4.7-1.8-7.6-1.8s-5.4.6-7.6 1.8l-1-2.4Z" opacity="0.55" />
+          <rect x="4.6" y="19" width="14.8" height="2.4" rx="1.2" opacity="0.4" />
+        </symbol>
+
+        <!-- The star a well-walked level wears in the picker, and the sheet. -->
+        <symbol id="i-star" viewBox="0 0 24 24">
+          <path d="M12 2.2 15 9.1l7.4.6-5.6 4.9 1.7 7.2L12 18l-6.5 3.8 1.7-7.2L1.6 9.7 9 9.1 12 2.2Z" />
+        </symbol>
+
+        <!-- The streak (D51): a day's flame, one per day walked. -->
+        <symbol id="i-streak" viewBox="0 0 24 24">
+          <path d="M13.6 1.6c4.2 3.3 6.2 6.3 6.2 9.3a7.8 7.8 0 0 1-15.6 0c0-2.6 1.6-4.6 2.8-5.8.2 2 1.3 3 2.3 3 1.4 0 2.1-1.5 1.2-6.5Z" />
+          <path d="M12.4 12.2c1.9 1.5 2.8 2.9 2.8 4.2a3.2 3.2 0 0 1-6.4 0c0-1.1.7-2 1.3-2.5.1.8.5 1.3 1 1.3.6 0 .9-.6.3-3Z" opacity="0.45" />
+        </symbol>
+
+        <!-- Endless (D52): a road that comes back round to itself. -->
+        <symbol id="i-endless" viewBox="0 0 24 24">
+          <path
+            d="M6.2 7.2c2.8 0 3.9 2.2 5.8 4.8 1.9 2.6 3 4.8 5.8 4.8a4.8 4.8 0 0 0 0-9.6c-2.8 0-3.9 2.2-5.8 4.8-1.9 2.6-3 4.8-5.8 4.8a4.8 4.8 0 0 1 0-9.6Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linejoin="round"
+          />
+        </symbol>
+
         <symbol id="i-lock" viewBox="0 0 24 24">
           <rect x="4.6" y="10.4" width="14.8" height="10" rx="2.2" />
           <path
@@ -188,6 +218,16 @@
               ></span>
               <span id="academy-coin-value" class="coins__value">0</span>
             </div>
+
+            <!-- The daily streak (D51). A plaque rather than a button: it is
+                 advanced by finishing a road, never by tapping. -->
+            <div id="academy-streak" class="streak frame frame--inset" data-started="false">
+              <span class="icon streak__icon" aria-hidden="true"
+                ><svg viewBox="0 0 24 24"><use href="#i-streak" /></svg
+              ></span>
+              <span id="streak-days" class="streak__days"></span>
+              <span id="streak-hint" class="streak__hint"></span>
+            </div>
           </div>
 
           <div class="screen__top">
@@ -210,6 +250,12 @@
                cards take pointer events. -->
           <div class="screen__panel frame frame--panel">
             <div id="academy-cards" class="cards"></div>
+
+            <!-- The missions board (D51): three cards, built by src/ui/board.ts
+                 from the three the save is carrying. Read-only, like the
+                 plaque above it. -->
+            <h2 id="missions-heading" class="board__heading">Missions</h2>
+            <div id="academy-missions" class="board"></div>
           </div>
         </div>
 
@@ -242,8 +288,24 @@
 
           <div class="screen__panel frame frame--panel">
             <div class="screen__middle">
+              <!-- Endless (D52): a mode beside the campaign, so it stands above
+                   the chips rather than among them. -->
+              <div id="picker-endless" class="endless frame frame--card">
+                <span class="icon endless__icon" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24"><use href="#i-endless" /></svg
+                ></span>
+                <span class="endless__body">
+                  <span id="endless-title" class="endless__title">Endless</span>
+                  <span id="endless-blurb" class="endless__blurb">One road, no end.</span>
+                  <span id="endless-best" class="endless__best"></span>
+                </span>
+                <button id="endless-button" class="button button--row" type="button">
+                  Endless
+                </button>
+              </div>
+
               <p id="picker-caption" class="picker__caption">Level</p>
-              <!-- Filled by src/ui/academy.ts from the save's unlocked level. -->
+              <!-- Filled by src/ui/picker.ts from the save's unlocked level. -->
               <div id="level-picker" class="picker"></div>
               <div id="picker-pages" class="pager"></div>
             </div>
@@ -281,6 +343,8 @@
             <div id="workbench-cards" class="rows" hidden></div>
             <div id="sanctum-card" class="rows" hidden></div>
             <div id="bestiary-cards" class="beasts" hidden></div>
+            <!-- The Wardrobe (D53): four rows of tint chips, one per slot. -->
+            <div id="wardrobe-rows" class="rows rows--tints" hidden></div>
           </div>
 
           <div class="screen__actions">
@@ -368,6 +432,21 @@
                   <span id="result-coins">0</span>
                 </dd>
               </div>
+              <!-- Endless only (D52): metres walked, and the record. The row
+                   is hidden on a campaign run, where the level is the score. -->
+              <div id="result-metres-row" class="stats__row frame frame--card" hidden>
+                <dt class="stats__key">
+                  <span class="icon stats__icon" aria-hidden="true"
+                    ><svg viewBox="0 0 24 24"><use href="#i-endless" /></svg
+                  ></span>
+                  Metres
+                </dt>
+                <dd class="stats__value">
+                  <span id="result-metres">0</span>
+                  <span id="result-best-metres" class="stats__note"></span>
+                </dd>
+              </div>
+
               <div class="stats__row frame frame--card">
                 <dt class="stats__key">
                   <span class="icon stats__icon" aria-hidden="true"
@@ -387,11 +466,36 @@
                 <dd id="result-peak" class="stats__value">0</dd>
               </div>
             </dl>
+            <!-- What the meta layer paid on top of the road (D51 to D53):
+                 the streak, the missions this run finished, the bestiary rungs
+                 it crossed. Built by src/ui/resultMeta.ts; empty when the run
+                 earned none of them. -->
+            <div id="result-bonuses" class="bonuses" hidden></div>
+
+            <p id="result-best" class="result__best" hidden></p>
+
             <p class="result__total">Purse <span id="result-total">0</span></p>
+
+            <!-- The nearest thing the Academy still sells, against the purse
+                 the run has just filled. -->
+            <div id="result-next" class="unlock frame frame--inset" hidden>
+              <span id="result-next-heading" class="unlock__heading">Next unlock</span>
+              <span id="result-next-name" class="unlock__name"></span>
+              <span class="unlock__price">
+                <span class="icon unlock__coin" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24"><use href="#i-coin" /></svg
+                ></span>
+                <span id="result-next-price">0</span>
+              </span>
+              <span id="result-next-short" class="unlock__short"></span>
+            </div>
           </div>
 
           <div class="screen__actions">
             <button id="next-button" class="button" type="button" hidden>Ascend</button>
+            <button id="replay-button" class="button button--ghost" type="button">
+              Same road again
+            </button>
             <button id="retry-button" class="button button--ghost" type="button">Again</button>
             <button id="levels-button" class="button button--ghost" type="button">Academy</button>
           </div>

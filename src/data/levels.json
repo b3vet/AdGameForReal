@@ -761,7 +761,7 @@
     "streamDensity": 0.85,
     "boss": {
       "hp": 28000,
-      "bite": 0.64,
+      "bite": 0.55,
       "kind": "rime"
     },
     "gateValues": {
@@ -797,12 +797,12 @@
     "wallRows": 1,
     "startCount": 24,
     "peakTarget": 500,
-    "hpScale": 0.88,
+    "hpScale": 0.84,
     "streamPressure": 0.88,
-    "streamDensity": 0.82,
+    "streamDensity": 0.68,
     "boss": {
       "hp": 28300,
-      "bite": 0.67,
+      "bite": 0.58,
       "kind": "rime"
     },
     "gateValues": {
@@ -1005,10 +1005,10 @@
     "peakTarget": 500,
     "hpScale": 0.93,
     "streamPressure": 0.93,
-    "streamDensity": 1.05,
+    "streamDensity": 0.98,
     "boss": {
       "hp": 29700,
-      "bite": 0.75,
+      "bite": 0.62,
       "kind": "rime"
     },
     "gateValues": {
@@ -1049,7 +1049,7 @@
     "streamDensity": 0.92,
     "boss": {
       "hp": 29700,
-      "bite": 0.72,
+      "bite": 0.64,
       "kind": "rime"
     },
     "gateValues": {
@@ -1087,10 +1087,10 @@
     "peakTarget": 500,
     "hpScale": 1.012,
     "streamPressure": 0.93,
-    "streamDensity": 1.19,
+    "streamDensity": 1.24,
     "boss": {
       "hp": 30000,
-      "bite": 0.73,
+      "bite": 0.82,
       "kind": "rime"
     },
     "gateValues": {
@@ -1214,7 +1214,7 @@
     "streamDensity": 1.08,
     "boss": {
       "hp": 31100,
-      "bite": 0.72,
+      "bite": 0.81,
       "kind": "rime"
     },
     "gateValues": {
@@ -1255,7 +1255,7 @@
     "streamDensity": 0.84,
     "boss": {
       "hp": 31100,
-      "bite": 0.63,
+      "bite": 0.54,
       "kind": "rime"
     },
     "gateValues": {
@@ -1291,9 +1291,9 @@
     "wallRows": 2,
     "startCount": 36,
     "peakTarget": 500,
-    "hpScale": 0.98,
+    "hpScale": 0.94,
     "streamPressure": 0.93,
-    "streamDensity": 0.95,
+    "streamDensity": 0.88,
     "boss": {
       "hp": 31400,
       "bite": 0.81,
@@ -1420,7 +1420,7 @@
     "streamDensity": 1.1,
     "boss": {
       "hp": 32300,
-      "bite": 0.74,
+      "bite": 0.83,
       "kind": "rime"
     },
     "gateValues": {
@@ -1461,7 +1461,7 @@
     "streamDensity": 0.77,
     "boss": {
       "hp": 32300,
-      "bite": 0.81,
+      "bite": 0.64,
       "kind": "rime"
     },
     "gateValues": {

@@ -12,6 +12,10 @@
  * count, so the rings are the countable half.
  */
 
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+
+import { NO_TINT, dyeToRef } from './cosmetics';
+import type { Tint } from './cosmetics';
 import type { SpriteLayer } from './sprites';
 import { bookCellLooping } from './spriteSheets';
 import {
@@ -48,6 +52,24 @@ export class WispView {
   private readonly sprites: SpriteLayer;
   private readonly sparks: SparkPool;
 
+  /**
+   * The orb's colour: the palette's own wisp hue with the worn tint multiplied
+   * into it (D53). An instance of its own rather than the palette's shared one,
+   * because this one is *derived* — the palette rewrites its objects in place
+   * on a biome switch and a derived colour must not be one of them.
+   */
+  private readonly color = new Color3();
+  /**
+   * How much trail the worn tint asks for: a brighter tint sheds more of it
+   * and holds it longer, so two wisps differ in shape and not only in hue.
+   * Derived from the tint's own brightness rather than from a table, so a tint
+   * added to `cosmetics.json` needs no entry here.
+   */
+  private trailEvery = WISP_TRAIL_EVERY;
+  private trailLife = WISP_TRAIL_DURATION;
+  /** Scratch for the dye, so `setCosmetic` allocates nothing. */
+  private readonly dyed: [number, number, number] = [0, 0, 0];
+
   private readonly motes: Mote[] = [];
   private moteCount = 0;
 
@@ -60,6 +82,28 @@ export class WispView {
     this.sprites = sprites;
     this.sparks = new SparkPool(sprites);
     for (let i = 0; i < POOL.wispTrail; i++) this.motes.push({ x: 0, y: 0, z: 0, age: 0 });
+    this.setCosmetic(NO_TINT);
+  }
+
+  /**
+   * The worn wisp tint (D53): the orb's colour, and the shape of what it sheds.
+   *
+   * Called at a level load and when the Academy re-dresses its backdrop. The
+   * colour is read back from the palette every time rather than multiplied into
+   * itself, so trying on three tints in a row is three tints and not the
+   * product of all of them.
+   */
+  setCosmetic(tint: Tint): void {
+    // Dyed rather than multiplied, for the reason `dyeToRef` gives: the wisp's
+    // own hue is a strong green, and multiplying a warm tint into it leaves a
+    // green wisp with a cast rather than the colour the player chose.
+    dyeToRef(WISP_COLOR.r, WISP_COLOR.g, WISP_COLOR.b, tint, this.dyed);
+    this.color.set(this.dyed[0], this.dyed[1], this.dyed[2]);
+    // The mean of the multiplier, held in a band: a tint twice as bright is
+    // half again as much trail, not twice as much, and a dark one still trails.
+    const weight = Math.min(1.6, Math.max(0.6, (tint[0] + tint[1] + tint[2]) / 3));
+    this.trailEvery = WISP_TRAIL_EVERY / weight;
+    this.trailLife = WISP_TRAIL_DURATION * weight;
   }
 
   reset(): void {
@@ -112,9 +156,9 @@ export class WispView {
       y,
       familiar.z,
       size,
-      WISP_COLOR.r,
-      WISP_COLOR.g,
-      WISP_COLOR.b,
+      this.color.r,
+      this.color.g,
+      this.color.b,
       WISP_ALPHA,
     );
 
@@ -128,16 +172,16 @@ export class WispView {
         y,
         familiar.z,
         size * scale,
-        WISP_COLOR.r,
-        WISP_COLOR.g,
-        WISP_COLOR.b,
+        this.color.r,
+        this.color.g,
+        this.color.b,
         WISP_RING_ALPHA / (1 + ring * 0.35),
         this.phase * WISP_RING_SPIN * (ring % 2 === 0 ? 1 : -1),
       );
     }
 
     this.trailTimer += dt;
-    if (this.trailTimer < WISP_TRAIL_EVERY) return;
+    if (this.trailTimer < this.trailEvery) return;
     this.trailTimer = 0;
     this.pushMote(familiar.x, y, familiar.z);
   }
@@ -159,8 +203,8 @@ export class WispView {
       const mote = this.motes[i];
       if (mote === undefined) continue;
       mote.age += dt;
-      if (mote.age >= WISP_TRAIL_DURATION) continue;
-      const fade = 1 - mote.age / WISP_TRAIL_DURATION;
+      if (mote.age >= this.trailLife) continue;
+      const fade = 1 - mote.age / this.trailLife;
       this.sprites.add(
         bookCellLooping('sparkle', mote.age * 4),
         mote.x,
@@ -169,9 +213,9 @@ export class WispView {
         mote.y + (1 - fade) * 0.12,
         mote.z,
         WISP_TRAIL_SIZE * fade,
-        WISP_COLOR.r,
-        WISP_COLOR.g,
-        WISP_COLOR.b,
+        this.color.r,
+        this.color.g,
+        this.color.b,
         fade * 0.8,
       );
       const kept = this.motes[write];

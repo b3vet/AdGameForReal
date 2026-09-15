@@ -18,6 +18,8 @@
  * a projectile actually travels and nothing here may pretend otherwise.
  */
 
+import { NO_TINT, dyeToRef } from './cosmetics';
+import type { Tint } from './cosmetics';
 import type { SpriteLayer } from './sprites';
 import { bookCell, bookCellLooping, type SpriteBook } from './spriteSheets';
 import {
@@ -62,6 +64,16 @@ export class ProjectileView {
   private readonly sprites: SpriteLayer;
   private active: WeaponId = startWeapon;
 
+  /**
+   * The worn staff glow (D53): a multiplier on the spell's own hue, so a
+   * cosmetic recolours the volley without giving a staff a second identity.
+   * The bolts *are* the staff glow — there is no third-person staff prop to
+   * light — so this is where the slot lands.
+   */
+  private glow: Tint = NO_TINT;
+  /** The staff's hue after the glow is dyed into it; rewritten per frame. */
+  private readonly dyed: [number, number, number] = [0, 0, 0];
+
   /** Flipbook clock, advanced on sim time so hit-stop holds the spells too. */
   private phase = 0;
   /** Frame counter: which slice of the volley sheds a sparkle this frame. */
@@ -81,6 +93,11 @@ export class ProjectileView {
     this.active = weaponId;
   }
 
+  /** The worn staff-glow tint; see `glow`. Called at a level load. */
+  setStaffGlow(tint: Tint): void {
+    this.glow = tint;
+  }
+
   reset(): void {
     this.sparkleCount = 0;
     this.phase = 0;
@@ -93,12 +110,16 @@ export class ProjectileView {
 
     const book = BOOKS[this.active];
     const tint = tintOf(this.active);
-    const headRed = tint.r * BOLT_GLOW_BOOST;
-    const headGreen = tint.g * BOLT_GLOW_BOOST;
-    const headBlue = tint.b * BOLT_GLOW_BOOST;
-    const tailRed = tint.r * TRAIL_GLOW_BOOST;
-    const tailGreen = tint.g * TRAIL_GLOW_BOOST;
-    const tailBlue = tint.b * TRAIL_GLOW_BOOST;
+    // The staff's hue with the worn glow dyed into it (`./cosmetics.ts`), then
+    // the boosts the volley has always carried.
+    dyeToRef(tint.r, tint.g, tint.b, this.glow, this.dyed);
+    const [red, green, blue] = this.dyed;
+    const headRed = red * BOLT_GLOW_BOOST;
+    const headGreen = green * BOLT_GLOW_BOOST;
+    const headBlue = blue * BOLT_GLOW_BOOST;
+    const tailRed = red * TRAIL_GLOW_BOOST;
+    const tailGreen = green * TRAIL_GLOW_BOOST;
+    const tailBlue = blue * TRAIL_GLOW_BOOST;
 
     // How much volley there is, counted before any of it is drawn: a quad is
     // additive and cannot know from inside the loop that places it how many

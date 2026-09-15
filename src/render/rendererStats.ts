@@ -36,6 +36,19 @@ export interface FeatureReadout {
   wisp: boolean;
   sparks: number;
   burning: number;
+  /**
+   * The two Milestone 8 evolutions a frame can be *waiting for* (D54): meteors
+   * in the air, and whether an ice wall is standing.
+   *
+   * They are here for the same reason the chargers are: both are rare — a
+   * meteor every nine seconds, a wall every fourteen — so a probe that wants a
+   * picture of one cannot find it by taking frames and hoping. It polls this
+   * and shoots the frame that has one.
+   */
+  meteors: number;
+  /** Craters and pulse rings still on the road; see `EvolutionView.marks`. */
+  marks: number;
+  glacier: boolean;
 }
 
 /** Draw calls in the last rendered frame; the budget is 40 at 500 units. */
@@ -73,6 +86,9 @@ export function featureStatsOf(views: SceneViews | null): FeatureReadout {
     wisp: views?.wisp.drawn ?? false,
     sparks: views?.wisp.sparksInFlight ?? 0,
     burning: views?.burn.drawn ?? 0,
+    meteors: views?.evolutions.inFlight ?? 0,
+    marks: views?.evolutions.marksDrawn ?? 0,
+    glacier: views?.glacier.drawn ?? false,
   };
 }
 

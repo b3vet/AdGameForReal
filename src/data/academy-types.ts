@@ -42,13 +42,26 @@ export interface UpgradeCopy {
   unit: string;
 }
 
+/** One evolution rung of a staff (D54): what it is called and what it does. */
+export interface StaffTierCopy {
+  name: string;
+  /**
+   * One line, and deliberately no numbers in it: how hard a mechanic hits is
+   * `balance.json`'s and moves, and copy that repeats a number goes stale.
+   */
+  line: string;
+}
+
 export interface StaffCopy {
   /** A `WeaponId`. */
   id: string;
   name: string;
   blurb: string;
-  /** What evolving it buys; shown greyed until the staff is at tier 2. */
-  tier2: string;
+  /**
+   * The three evolutions in the order they are sold (staff tier 2, 3, 4). The
+   * Workbench greys the rungs the player has not reached yet.
+   */
+  tiers: readonly StaffTierCopy[];
 }
 
 /**
@@ -94,6 +107,10 @@ export interface AcademyCopy {
     heading: string;
     /** The badge an already-evolved staff carries. */
     evolvedTag: string;
+    /** `{tier}` of `{max}` — where a staff stands on its four-rung ladder. */
+    tierLabel: string;
+    /** What a rung says while the staff has not reached it. */
+    lockedTier: string;
     staffs: readonly StaffCopy[];
   };
   sanctum: {
@@ -118,6 +135,68 @@ export interface AcademyCopy {
     nextLabel: string;
     /** In place of `nextLabel` once all three tiers are taken. */
     maxedLabel: string;
+  };
+  /**
+   * Milestone 8's own copy (D51 to D53): the board, the streak plaque, the
+   * Endless card, the picker's badges and the result sheet's new rows.
+   *
+   * One section rather than five, because all of it is the same milestone's
+   * furniture and because the rooms above are keyed by room — none of this
+   * belongs to a room.
+   */
+  meta: {
+    missions: {
+      heading: string;
+      /** `{progress}` of `{target}` on a mission's bar. */
+      progressLabel: string;
+      /** What a finished mission's card says where its progress was. */
+      doneLabel: string;
+    };
+    streak: {
+      /** `{days}` — the plaque's headline. */
+      title: string;
+      /** `{coins}` the next finished run pays. */
+      nextLabel: string;
+      claimedLabel: string;
+      /** Day zero: nothing to show but the invitation. */
+      startLabel: string;
+    };
+    endless: {
+      title: string;
+      blurb: string;
+      /** `{metres}` — the best walk so far, on the picker's card. */
+      bestLabel: string;
+      noBestLabel: string;
+      /** `{metres}` — the HUD chip that stands in for the level chip (D52). */
+      hudLabel: string;
+    };
+    picker: {
+      /** `{level}` — the label a milestone chip carries for a screen reader. */
+      milestoneLabel: string;
+      /** `{level}` — the label a starred chip carries. */
+      starLabel: string;
+    };
+    result: {
+      /** The title of an endless run's sheet, which has no level number. */
+      endlessTitle: string;
+      /** `{metres}` — the endless record after this run. */
+      bestMetresLabel: string;
+      /** `{survivors}` of `{peak}` — this level's best walk. */
+      bestLabel: string;
+      newBestLabel: string;
+      /** The button that walks the same seed again (D52). */
+      replay: string;
+      bonusHeading: string;
+      /** `{days}` — the streak line under the coins. */
+      streakBonus: string;
+      /** `{kind}` and `{tier}` — a bestiary rung crossed. */
+      tierBonus: string;
+      /** `{name}` — the tint that rung handed over. */
+      tintBonus: string;
+      nextHeading: string;
+      /** `{coins}` still to save for the next thing the Academy sells. */
+      nextShort: string;
+    };
   };
   /**
    * The in-run HUD's two words (D49). The boss bar's title is the *bestiary's*

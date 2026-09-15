@@ -41,6 +41,16 @@ export interface Crowd {
   commit(): void;
   update(dt: number): void;
   durationOf(animationId: string): number;
+  /**
+   * Multiplies a cosmetic tint into one named part of the merged mesh (D53) —
+   * the hat, the cape — leaving every other part as the manifest painted it.
+   *
+   * One call re-tints the *whole crowd*, because a crowd is one mesh drawn many
+   * times: there is no per-instance colour and there deliberately is not one,
+   * since five hundred RGBA floats a frame would buy nothing the players of
+   * this game can see. Call it at a level load, never per frame.
+   */
+  setPartTints(tints: ReadonlyMap<string, readonly [number, number, number]>): void;
   dispose(): void;
 }
 
@@ -107,6 +117,11 @@ export class StaticCrowd implements Crowd {
 
   setCount(count: number): void {
     this.count = Math.max(0, Math.min(this.capacity, Math.floor(count)));
+  }
+
+  /** A capsule has no hat to tint; the fallback crowd wears nothing (D53). */
+  setPartTints(): void {
+    // Deliberately empty: see `Crowd.setPartTints`.
   }
 
   commit(): void {

@@ -178,6 +178,37 @@ export class EnemyView {
    * hundred comparisons, but only on a `chain` event, of which there are at
    * most `POOL.chains` in a frame.
    */
+  /**
+   * Every live body within `radius` of `(x, z)`, up to `cap`, as positions.
+   *
+   * For storm's overcharge (D54), whose event says *how many* bodies the volley
+   * reached rather than which: the sim damaged them as it walked its own lane
+   * lists, and the set inside a circle is the same set however it is found. A
+   * scan of the last state drawn, on an event that fires at most every fifth
+   * volley — the same budget `positionOf` above already spends on a chain.
+   */
+  forEachNear(
+    x: number,
+    z: number,
+    radius: number,
+    cap: number,
+    visit: (x: number, z: number) => void,
+  ): void {
+    const enemies = this.lastState?.enemies;
+    if (enemies === undefined) return;
+    const squared = radius * radius;
+    let found = 0;
+    for (let i = 0; i < enemies.length && found < cap; i++) {
+      const enemy = enemies[i];
+      if (enemy === undefined || !enemy.alive) continue;
+      const dx = enemy.x - x;
+      const dz = enemy.z - z;
+      if (dx * dx + dz * dz > squared) continue;
+      found++;
+      visit(enemy.x, enemy.z);
+    }
+  }
+
   positionOf(enemyId: number, out: { x: number; z: number }): boolean {
     const slot = this.book.get(enemyId);
     if (slot !== undefined) {

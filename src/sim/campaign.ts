@@ -27,21 +27,9 @@ import { createBot } from './bots';
 import type { BotKind } from './bots';
 import { generateLevel } from './level';
 import { Run } from './Run';
-import {
-  buyFamiliar,
-  buyStaff,
-  buyUpgrade,
-  emptyPlayer,
-  familiarCost,
-  maxStaffTier,
-  nextUpgradeCost,
-  progression,
-  roomOpen,
-  staffCost,
-  staffPrices,
-  staffTierOf,
-  upgradeIds,
-} from './player';
+import { bestOffer, buy } from './campaignShop';
+import type { Purchase } from './campaignShop';
+import { emptyPlayer, staffTierOf } from './player';
 import { roadProgress, runRewards } from './rewards';
 import type { RunPayable } from './rewards';
 import { weaponIds } from './weapons';
@@ -49,6 +37,7 @@ import { balance, levelConfig, levelCount } from '@/data';
 import type {
   Balance,
   FamiliarTier,
+  KillKind,
   PlayerState,
   StaffTier,
   UpgradeId,
@@ -66,14 +55,10 @@ const MAX_ATTEMPTS = 12;
 /** Runs the rolling runs-per-purchase figure looks back over. */
 const ROLLING_WINDOW = 5;
 
-export type PurchaseKind = 'upgrade' | 'staff' | 'evolution' | 'wisp';
-
-export interface Purchase {
-  kind: PurchaseKind;
-  /** What the row would read: `damage`, `storm`, `storm+`, `wisp2`. */
-  label: string;
-  cost: number;
-}
+// Re-exported so `economy.test.ts` and the report read one module: the shopper
+// is a separate file for the size rule (CLAUDE.md), not a separate idea.
+export { bestOffer } from './campaignShop';
+export type { Purchase, PurchaseKind } from './campaignShop';
 
 /** One attempt at one level. `attempt` is 1 for the first try. */
 export interface CampaignRun {
@@ -86,6 +71,8 @@ export interface CampaignRun {
   coins: number;
   /** Bought with the coins from this run, in the order they were bought. */
   purchases: Purchase[];
+  /** What the run did, for the meta layer's own income (D51, D53). */
+  facts: RunFacts;
 }
 
 /** Everything the player is carrying, for the report. */
@@ -123,7 +110,9 @@ export interface CampaignResult {
   runs: CampaignRun[];
   levels: CampaignLevelReport[];
   player: PlayerState;
+  /** Coins the road paid. The meta layer's own are `coinsMeta`. */
   coinsIn: number;
+  coinsMeta: number;
   coinsOut: number;
 }
 
@@ -134,6 +123,28 @@ export interface CampaignOptions {
   /** Levels to play, 1..`levels`. */
   levels?: number;
   /**
+   * Whether the shopper climbs the Workbench's evolution ladders (D54).
+   *
+   * False measures the other player the bands are defined on: the one who buys
+   * only what the Yard, the Workbench's staffs and the Sanctum sell. "Never
+   * mandatory below level 40" is a promise about *that* hand, so the Milestone
+   * 6 and 7 bands are measured on it (`balance.test.ts`).
+   */
+  evolutions?: boolean;
+  /**
+   * Coins the meta layer pays for a finished run, on top of what the road pays
+   * (D51, D53): the streak's day, whatever missions the run finished, whatever
+   * bestiary rungs its kills crossed.
+   *
+   * Injected rather than computed here because every one of those rules lives
+   * in `src/core` — they are counted off the events a run already emits, and
+   * the sim knows nothing about them — and `src/sim` may not import from there.
+   * The hook is what lets `metaIncome.test.ts` measure the campaign's cadence
+   * with the *real* board and the *real* ladders in the purse, instead of with
+   * a second copy of them written here.
+   */
+  meta?: (facts: RunFacts, level: number) => number;
+  /**
    * The tuning the runs are built on, and that the bot steers by. Defaults to
    * the shipped `balance.json`; a caller measuring a change passes its own copy
    * rather than editing the shared object under everyone else.
@@ -141,13 +152,41 @@ export interface CampaignOptions {
   tuning?: Balance;
 }
 
-/** What one attempt left behind: exactly what `runRewards` prices, plus one number. */
+/**
+ * What one attempt did, in the vocabulary the meta layer counts in (D51, D53).
+ *
+ * Structurally the `RunTally` `src/core/missions.ts` builds from the same
+ * events, so `metaIncome.test.ts` can put a campaign's runs through the real
+ * mission board and the real bestiary ladders rather than through a second copy
+ * of their rules — which is the mistake the Milestone 6 review found in the
+ * purchase rules and fixed. `src/sim` may not import `src/core`, so the shape is
+ * restated here and the test is what holds the two together.
+ */
+export interface RunFacts {
+  cleared: boolean;
+  /** Always false: the campaign walks numbered levels, never the endless road. */
+  endless: boolean;
+  survivors: number;
+  peak: number;
+  shieldsBroken: number;
+  chargersKilled: number;
+  mulGates: number;
+  /** Seconds from the arena gate to the boss's death, or null if it lived. */
+  bossSeconds: number | null;
+  /** True when no unit was ever cut off behind a fence (D44). */
+  cleanColumn: boolean;
+  metres: number;
+  kills: Record<KillKind, number>;
+}
+
+/** What one attempt left behind: exactly what `runRewards` prices, plus two. */
 interface Attempt extends RunPayable {
   status: 'won' | 'lost';
   squad: { z: number };
   arenaZ: number;
   /** Share of the run spent fighting the boss; the shopper prices `bossDamage` on it. */
   bossShare: number;
+  facts: RunFacts;
 }
 
 /** One attempt at one level, with this player's upgrades in it. */
@@ -165,116 +204,64 @@ function playAttempt(
   let steps = 0;
   let bossStart = -1;
   const maxSteps = Math.round(MAX_SECONDS / DT);
+  const facts: RunFacts = {
+    cleared: false,
+    endless: false,
+    survivors: 0,
+    peak: 0,
+    shieldsBroken: 0,
+    chargersKilled: 0,
+    mulGates: 0,
+    bossSeconds: null,
+    cleanColumn: true,
+    metres: 0,
+    kills: { grunt: 0, brute: 0, charger: 0, shieldBrute: 0, demon: 0, rime: 0 },
+  };
+  const bossKind: KillKind = def.bossId === 'rime' ? 'rime' : 'demon';
+
   while (run.state.status === 'running' && steps < maxSteps) {
     run.setTargetX(bot(run.state));
-    run.tick(DT);
+    for (const event of run.tick(DT)) {
+      if (event.type === 'enemyKilled') {
+        if (event.kind !== 'boss') facts.kills[event.kind] += 1;
+        continue;
+      }
+      if (event.type === 'shieldBreak') facts.shieldsBroken += 1;
+      else if (event.type === 'gatePassed' && event.kind === 'mul') facts.mulGates += 1;
+      else if (event.type === 'bossKilled') {
+        facts.kills[bossKind] += 1;
+        if (facts.bossSeconds === null && bossStart >= 0) {
+          facts.bossSeconds = (steps - bossStart) * DT;
+        }
+      }
+    }
     steps++;
     if (bossStart < 0 && run.state.boss?.active === true) bossStart = steps;
+    if (facts.cleanColumn && hasStragglers(run.state)) facts.cleanColumn = false;
   }
 
   const state = run.state;
+  facts.cleared = state.status === 'won';
+  facts.survivors = Math.max(0, Math.floor(state.survivors));
+  facts.peak = Math.max(0, Math.floor(state.peakCount));
   return {
     status: state.status === 'won' ? 'won' : 'lost',
     survivors: state.survivors,
     squad: { z: state.squad.z },
     arenaZ: state.arenaZ,
     bossShare: bossStart < 0 ? 0 : (steps - bossStart) / Math.max(1, steps),
+    facts,
   };
 }
 
-/**
- * What one more level of an upgrade is worth, as a share of the squad's output,
- * so the shopper can compare five rows that are priced the same. Read off
- * `progression.json` and the run just played rather than a table of tastes:
- * `startCount` is one unit against the units the level starts with, and
- * `bossDamage` only counts for the share of the run that was the boss fight.
- */
-function upgradeWorth(id: UpgradeId, startCount: number, bossShare: number): number {
-  const effects = progression.upgrades.effects;
-  if (id === 'startCount') return effects.startCount / Math.max(1, startCount);
-  if (id === 'bossDamage') return effects.bossDamage * bossShare;
-  return effects[id];
-}
-
-/**
- * The most useful thing the Academy will sell this player right now, in the
- * order a player climbs the ladder: best value per coin in the yard, then a
- * second staff, then the big-ticket evolutions and wisp tiers. Null when
- * nothing on the shelf is affordable — which is what makes a runs-per-purchase
- * figure bigger than one possible.
- *
- * Exported for the economy tests, which ask it what a given purse would be
- * sold next. The campaign as it stands never reaches the evolutions — the yard
- * has fifty rungs and a forty-level campaign earns about thirty thousand coins,
- * so there is always something cheaper on the shelf (see the Milestone 8 log) —
- * and a rule nothing exercises is a rule nobody has checked.
- */
-export function bestOffer(player: PlayerState, startCount: number, bossShare: number): Purchase | null {
-  let best: Purchase | null = null;
-  let bestValue = 0;
-  for (const id of upgradeIds) {
-    const cost = nextUpgradeCost(player, id);
-    if (cost === null || cost > player.coins) continue;
-    const value = upgradeWorth(id, startCount, bossShare) / cost;
-    if (value > bestValue) {
-      bestValue = value;
-      best = { kind: 'upgrade', label: id, cost };
-    }
+/** True while any straggler group is alive; group 0 is the column itself (D44). */
+function hasStragglers(state: { groups?: ReadonlyArray<{ count: number }> }): boolean {
+  const groups = state.groups;
+  if (groups === undefined) return false;
+  for (let i = 1; i < groups.length; i++) {
+    if ((groups[i]?.count ?? 0) > 0) return true;
   }
-  if (best !== null) return best;
-
-  if (roomOpen('workbench', player)) {
-    for (const id of weaponIds) {
-      if (player.staffs[id].unlocked) continue;
-      const cost = staffPrices(id).unlock;
-      if (cost <= player.coins && (best === null || cost < best.cost)) {
-        best = { kind: 'staff', label: id, cost };
-      }
-    }
-    if (best !== null) return best;
-
-    // The evolution ladder (D54): tier 2, then 3, then 4, one rung per
-    // purchase. It is reached only when the yard has nothing affordable left,
-    // which is the order a player climbs in — the rungs are cheap and
-    // compounding, and an evolution is a multi-run goal.
-    for (const id of weaponIds) {
-      const tier = staffTierOf(player, id);
-      if (tier === 0 || tier >= maxStaffTier) continue;
-      // The same price the Workbench would show for this staff's next step.
-      const cost = staffCost(player, id);
-      if (cost !== null && cost <= player.coins && (best === null || cost < best.cost)) {
-        best = { kind: 'evolution', label: `${id}+${String(tier + 1)}`, cost };
-      }
-    }
-  }
-
-  if (roomOpen('sanctum', player)) {
-    const cost = familiarCost(player);
-    if (cost !== null && cost <= player.coins && (best === null || cost < best.cost)) {
-      const next = ((player.familiar.unlocked ? player.familiar.tier : 0) + 1) as FamiliarTier;
-      best = { kind: 'wisp', label: `wisp${String(next)}`, cost };
-    }
-  }
-  return best;
-}
-
-/**
- * Takes the offer through the shipped purchase rules, or null if they refuse.
- *
- * A refusal is not expected — `bestOffer` only ever names something the same
- * rules priced and the purse can cover — and that is exactly why it is passed
- * on rather than swallowed: if the shopping above and the rules below ever
- * disagree, the campaign stalls on the spot and `economy.test.ts` sees it,
- * instead of quietly measuring an economy nobody can buy.
- */
-function buy(player: PlayerState, offer: Purchase): PlayerState | null {
-  if (offer.kind === 'upgrade') {
-    const id = upgradeIds.find((known) => known === offer.label);
-    return id === undefined ? null : buyUpgrade(player, id);
-  }
-  if (offer.kind === 'wisp') return buyFamiliar(player);
-  const id = weaponIds.find((known) => offer.label.startsWith(known));
-  return id === undefined ? null : buyStaff(player, id);
+  return false;
 }
 
 function loadoutOf(player: PlayerState, purchases: number, spent: number): Loadout {
@@ -303,6 +290,7 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
   const seed = options.seed ?? 1;
   const levels = Math.min(levelCount, options.levels ?? levelCount);
   const tuning = options.tuning ?? balance;
+  const evolutions = options.evolutions ?? true;
 
   // Re-bound rather than mutated on the purchases, because the shipped rules
   // are pure and answer with a new state (`./player.ts`). The two fields that
@@ -315,6 +303,7 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
   let purchases = 0;
   let spent = 0;
   let earned = 0;
+  let meta = 0;
   let bossShare = 0.25;
 
   for (let level = 1; level <= levels; level++) {
@@ -339,16 +328,20 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
       // Every attempt at this level would be its first clear: the campaign
       // moves on the moment one wins, and never comes back to farm it.
       const { coins } = runRewards(result, level, true);
-      player.coins += coins;
+      // The meta layer's coins land in the same purse a run's do, and they are
+      // counted apart so a report can say what share of the ladder they paid.
+      const bonus = Math.max(0, Math.round(options.meta?.(result.facts, level) ?? 0));
+      player.coins += coins + bonus;
       coinsIn += coins;
       earned += coins;
+      meta += bonus;
       won = result.status === 'won';
       if (won) player.unlockedLevel = Math.max(player.unlockedLevel, Math.min(levelCount, level + 1));
 
       const startCount = generateLevel(level, levelConfig(level), runSeed, player).startCount;
       const made: Purchase[] = [];
       for (;;) {
-        const offer = bestOffer(player, startCount, bossShare);
+        const offer = bestOffer(player, startCount, bossShare, evolutions);
         if (offer === null) break;
         const purchased = buy(player, offer);
         if (purchased === null) break;
@@ -368,6 +361,7 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
         survivors: result.survivors,
         coins,
         purchases: made,
+        facts: result.facts,
       });
     }
 
@@ -386,5 +380,14 @@ export function runCampaign(options: CampaignOptions = {}): CampaignResult {
     if (!won) break;
   }
 
-  return { bot: kind, seed, runs, levels: reports, player, coinsIn: earned, coinsOut: spent };
+  return {
+    bot: kind,
+    seed,
+    runs,
+    levels: reports,
+    player,
+    coinsIn: earned,
+    coinsMeta: meta,
+    coinsOut: spent,
+  };
 }

@@ -275,7 +275,7 @@ export class DevCombat {
     if (EVOLVED && burn !== undefined && weapon === 'ember' && enemy.alive) {
       enemy.burning = true;
       enemy.burnUntil = this.state.time + burn.seconds;
-      enemy.burnPerTick = 1;
+      enemy.burnLeft = 1;
       enemy.burnNextAt = this.state.time + burn.tickSeconds;
       this.events.push({
         type: 'enemyBurning',

@@ -10,6 +10,7 @@
 
 import type { Scene } from '@babylonjs/core/scene';
 
+import type { BiomeSpans } from './biomeSpans';
 import type { CameraRig } from './camera';
 import { setBiome as setPaletteBiome } from './palette';
 import { applyBiomeToScene } from './scene';
@@ -40,6 +41,40 @@ export function repaintBiome(scene: Scene | null, views: SceneViews | null, id: 
 }
 
 /**
+ * The biome for the span the camera stands in, and the crossfade around the
+ * boundary ahead of it (D52).
+ *
+ * Two things happen here and they happen at different moments. The *road* is
+ * already right: its far half was laid in the next span's biome when the last
+ * boundary was crossed, so there is nothing to change ahead of the camera.
+ * What changes at the boundary is everything keyed to "the biome in force" —
+ * the palette, the props' tint, the sky and the fog — and that switch is made
+ * as the camera crosses, where the part of the road it would repaint is behind
+ * the lens. The sky and the fog then *cross* that boundary rather than jumping
+ * at it, over a few metres either side (`./biomeSpans.ts`).
+ *
+ * `setBiome` is the renderer's own, so the switch still goes through the one
+ * place that knows which biome the scene is painted in.
+ */
+export function applySpan(
+  spans: BiomeSpans,
+  cameraZ: number,
+  force: boolean,
+  setBiome: (id: BiomeId) => void,
+  scene: Scene | null,
+  views: SceneViews | null,
+): void {
+  if (!spans.active) return;
+  const index = spans.indexAt(cameraZ);
+  if (force || index !== spans.current) {
+    spans.setCurrent(index);
+    setBiome(spans.biomeOf(index));
+    views?.road.setSpanIndex(index);
+  }
+  spans.blendSky(scene, views, cameraZ);
+}
+
+/**
  * Builds the road for this level and hands every pool back to its owner.
  *
  * The road runs `ROAD_PAST_ARENA` beyond the fight because the camera can stand
@@ -51,7 +86,8 @@ export function loadLevelInto(
   views: SceneViews | null,
   rig: CameraRig | null,
   level: LevelDef,
+  spans: BiomeSpans,
 ): void {
-  views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA);
+  views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA, spans);
   rig?.reset();
 }

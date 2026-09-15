@@ -12,6 +12,7 @@
  */
 
 import type { GameAudio } from '@/audio';
+import type { CosmeticSlot } from '@/data';
 import type { OverlayCallbacks } from '@/ui';
 
 import type { AcademyController } from './academy';
@@ -25,12 +26,12 @@ export interface AppCommands {
   /** Play, or Again: start the selected level. */
   startRun(): void;
   /**
-   * "Same road again" on the result sheet (Milestone 8): the level just
-   * played, on the seed it was played on. Not wired to a callback here yet —
-   * `OverlayCallbacks` gains the button in Phase C — but the command exists so
-   * the screen has something to call.
+   * "Same road again" on the result sheet (Milestone 8): the road just walked,
+   * on the seed it was walked on — an endless one included (D52).
    */
   replayRun(): void;
+  /** The picker's Endless card: a walk of the road with no end (D52). */
+  startEndless(seed?: number | null): void;
   /** Ascend: the level after this one. */
   nextLevel(): void;
   selectLevel(level: number): void;
@@ -95,6 +96,15 @@ export function overlayCallbacks(app: AppCommands): OverlayCallbacks {
     },
     onBuyFamiliar: () => {
       app.academy.buyFamiliar();
+    },
+    onSelectCosmetic: (slot: CosmeticSlot, id: string) => {
+      app.academy.selectCosmetic(slot, id);
+    },
+    onEndless: () => {
+      app.startEndless();
+    },
+    onReplay: () => {
+      app.replayRun();
     },
   };
 }

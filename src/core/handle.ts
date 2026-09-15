@@ -17,7 +17,7 @@ import type { Run, RunState } from '@/sim';
 import type { App } from './App';
 import type { RunPayout } from './academy';
 import type { MissionView } from './missions';
-import type { PlayerState } from './player';
+import type { PlayerState, RoomId } from './player';
 import type { StreakView } from './streak';
 
 /**
@@ -79,6 +79,18 @@ export interface ArcaneDebugHandle {
    * smoke test uses it to photograph an Academy with coins in it.
    */
   setPlayer: (patch: unknown) => void;
+  /**
+   * Opens one of the Academy's rooms from outside, so a probe can photograph
+   * the Wardrobe or the Bestiary without knowing which button opens it. A
+   * no-op outside the title phase, exactly as tapping the card would be.
+   */
+  openRoom: (room: RoomId) => void;
+  /**
+   * Starts a walk of the endless road (D52), on `seed` or on the road's own.
+   * The one way in from outside: Endless is a card on the picker, and a probe
+   * that had to find and click it would be a screenshot test of the picker.
+   */
+  startEndless: (seed?: number) => void;
   /**
    * Sim seconds per real second, live: `?turbo` after the page has booted,
    * clamped to the same 1 to `MAX_TURBO` the query parameter is.

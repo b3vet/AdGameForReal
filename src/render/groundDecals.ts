@@ -13,6 +13,11 @@
  * from the quad's own uv rather than sampled, so the batch carries no texture
  * and the mask costs one `length` and one `smoothstep`.
  *
+ * A disc may also be a *ring*: an inner radius cut out of the same quad, for
+ * the marks Milestone 8's evolutions leave — a meteor's crater and the ring a
+ * freeze pulse throws out (D54). It is a second instance attribute rather than
+ * a second batch, so a crater and a charger's dust are still one draw call.
+ *
  * Immediate mode, in the family `./shadows.ts`, `./labels.ts` and
  * `./sprites.ts` already use: an owner `begin`s, `add`s what it wants this
  * frame, and `end`s. Nothing is retained. No allocation on the frame path —
@@ -30,22 +35,25 @@ import '@babylonjs/core/Shaders/ShadersInclude/instancesDeclaration';
 import '@babylonjs/core/Shaders/ShadersInclude/instancesVertex';
 
 import { commitInstances, createMatrixBuffer, writeInstance } from './instanceBuffer';
-import { DECAL_SOFT_EDGE } from './theme';
+import { DECAL_RING_SOFT, DECAL_SOFT_EDGE } from './theme';
 
 const VERTEX_SHADER = `
 precision highp float;
 attribute vec3 position;
 attribute vec2 uv;
 attribute vec4 decalTint;
+attribute float decalInner;
 #include<instancesDeclaration>
 uniform mat4 viewProjection;
 varying vec2 vUv;
 varying vec4 vTint;
+varying float vInner;
 void main(void) {
   #include<instancesVertex>
   gl_Position = viewProjection * finalWorld * vec4(position, 1.0);
   vUv = uv;
   vTint = decalTint;
+  vInner = decalInner;
 }
 `;
 
@@ -57,11 +65,17 @@ void main(void) {
 const FRAGMENT_SHADER = `
 precision highp float;
 uniform float softEdge;
+uniform float ringSoft;
 varying vec2 vUv;
 varying vec4 vTint;
+varying float vInner;
 void main(void) {
   float d = length(vUv - vec2(0.5)) * 2.0;
   float mask = 1.0 - smoothstep(softEdge, 1.0, d);
+  // A disc is a ring with no hole: at inner 0 the second ramp is already one
+  // everywhere the quad is drawn, so every caller that predates rings is
+  // arithmetically untouched.
+  mask *= smoothstep(vInner - ringSoft, vInner, d);
   gl_FragColor = vec4(vTint.rgb, vTint.a * mask);
 }
 `;
@@ -72,6 +86,8 @@ export class GroundDecals {
   private readonly material: ShaderMaterial;
   private readonly matrices: Float32Array;
   private readonly tints: Float32Array;
+  /** Inner radius per instance, 0 to 1 of the disc; 0 is a plain disc. */
+  private readonly inners: Float32Array;
 
   private live = 0;
 
@@ -86,12 +102,13 @@ export class GroundDecals {
       scene,
       { vertexSource: VERTEX_SHADER, fragmentSource: FRAGMENT_SHADER },
       {
-        attributes: ['position', 'uv', 'decalTint'],
-        uniforms: ['world', 'viewProjection', 'softEdge'],
+        attributes: ['position', 'uv', 'decalTint', 'decalInner'],
+        uniforms: ['world', 'viewProjection', 'softEdge', 'ringSoft'],
         needAlphaBlending: true,
       },
     );
     this.material.setFloat('softEdge', DECAL_SOFT_EDGE);
+    this.material.setFloat('ringSoft', DECAL_RING_SOFT);
     this.material.alphaMode = Constants.ALPHA_COMBINE;
     this.material.backFaceCulling = false;
     // Depth-tested so a decal behind the boss is behind it, never written, so
@@ -112,6 +129,8 @@ export class GroundDecals {
     this.matrices = createMatrixBuffer(this.mesh, capacity);
     this.tints = new Float32Array(capacity * 4);
     this.mesh.thinInstanceSetBuffer('decalTint', this.tints, 4, false);
+    this.inners = new Float32Array(capacity);
+    this.mesh.thinInstanceSetBuffer('decalInner', this.inners, 1, false);
     this.mesh.setEnabled(false);
   }
 
@@ -119,8 +138,20 @@ export class GroundDecals {
     this.live = 0;
   }
 
-  /** One disc, `size` metres across, centred on `(x, z)`. */
-  add(x: number, z: number, size: number, r: number, g: number, b: number, alpha: number): void {
+  /**
+   * One disc, `size` metres across, centred on `(x, z)`. `inner` is the hole:
+   * 0 is a solid disc and 0.8 is a thin ring at four fifths of the radius.
+   */
+  add(
+    x: number,
+    z: number,
+    size: number,
+    r: number,
+    g: number,
+    b: number,
+    alpha: number,
+    inner = 0,
+  ): void {
     if (this.live >= this.capacity || size <= 0 || alpha <= 0) return;
     writeInstance(this.matrices, this.live, size, 1, size, x, this.y, z);
     const at = this.live * 4;
@@ -128,6 +159,7 @@ export class GroundDecals {
     this.tints[at + 1] = g;
     this.tints[at + 2] = b;
     this.tints[at + 3] = alpha;
+    this.inners[this.live] = Math.min(0.98, Math.max(0, inner));
     this.live++;
   }
 
@@ -136,6 +168,7 @@ export class GroundDecals {
     commitInstances(this.mesh, this.live);
     if (this.live === 0) return;
     this.mesh.thinInstanceBufferUpdated('decalTint');
+    this.mesh.thinInstanceBufferUpdated('decalInner');
   }
 
   /** Discs drawn last frame, for the debug panel and the dev harness. */

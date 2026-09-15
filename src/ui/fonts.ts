@@ -30,7 +30,11 @@ import './kit.css';
 import './screens.css';
 // The Academy's purse and cards, then the rooms behind them (D33).
 import './academy.css';
+// The streak plaque and the missions board that stand with its cards (D51).
+import './board.css';
 import './rooms.css';
+// The Wardrobe's own chips, which the rooms' sheet was too long to hold (D53).
+import './wardrobe.css';
 
 /** CSS `font` shorthands, one per face `styles.css` declares. */
 const DISPLAY_FACES = ['700 40px Cinzel', '900 40px Cinzel'] as const;

@@ -67,6 +67,18 @@ export interface AudioMix {
     charge: number;
     /** A shield breaking. One per body by construction; this is the belt. */
     shieldBreak: number;
+    /**
+     * The four Milestone 8 evolutions with a voice (D54). All four are long,
+     * because all four are *rare by design* — a meteor every nine seconds, an
+     * overcharge every fifth volley, a wall every fourteen seconds — and the
+     * one that is not rare is the freeze pulse, which can go off on every body
+     * of a river that dies frozen. Its interval is what keeps a lane of ice
+     * kills from being one continuous hiss.
+     */
+    meteor: number;
+    overcharge: number;
+    freezePulse: number;
+    glacier: number;
   };
   /**
    * Shots are the one event that can arrive hundreds of times in a frame, so
@@ -140,6 +152,23 @@ export interface AudioMix {
    * one.
    */
   shieldBreak: Cue;
+  /**
+   * The evolutions' four voices (D54), all reused clips like the Academy's.
+   *
+   * A meteor is the boss's own landing pitched up — the same weight arriving
+   * from the sky, but the player's rather than the boss's. An overcharge is the
+   * storm bolt dropped two octaves, so a volley that arcs to everything sounds
+   * like the volley it came from. A freeze pulse is the ice shatter taken up
+   * and made quiet, because it happens to a body that has already died and must
+   * sit under the kill that caused it. A glacier is that same shatter dropped
+   * as far as it goes: a slab, not a chip.
+   */
+  evolutions: {
+    meteor: Cue;
+    overcharge: Cue;
+    freezePulse: Cue;
+    glacier: Cue;
+  };
   /**
    * The stomp, per boss (D49). The demon's is the low explosion it always was;
    * the Rime Fiend's is that explosion a little brighter with a crack of ice

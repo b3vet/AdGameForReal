@@ -15,11 +15,9 @@
  */
 
 import { GameAudio } from '@/audio';
-import { balance, levelCount } from '@/data';
-import { PhysicsLayer } from '@/physics';
-import type { PhysicsQuality } from '@/physics';
+import { levelCount } from '@/data';
+import type { PhysicsLayer } from '@/physics';
 import { Renderer } from '@/render/Renderer';
-import { runRenderDevScene } from '@/render/dev-scene';
 import { weaponOf } from '@/sim';
 import { fontsReady, Overlay } from '@/ui';
 
@@ -30,19 +28,21 @@ import type { AppCommands } from './controls';
 import { FrameDriver } from './frame';
 import type { FrameHost } from './frame';
 import type { ArcaneDebugHandle } from './handle';
-import { attachInput } from './input';
-import type { DetachInput } from './input';
 import { Juice } from './juice';
+import { attachAppInput } from './appInput';
+import type { AppInput } from './appInput';
+import { applyQuality, initPhysics } from './appLayers';
+import { startDevScene } from './devScenes';
+import type { DevScene } from './devScenes';
 import { MenuStage } from './menus';
 import type { RoomId } from './player';
+import { publishHandle } from './publishHandle';
+import { resultView } from './resultView';
 import { QualityLadder } from './quality';
-import type { QualityRung } from './quality';
 import { MAX_TURBO, clampLevel, parseQuery } from './query';
 import type { QueryOptions } from './query';
 import { loadSave, setDebug, setMuted } from './save';
 import { RunSession } from './session';
-import { runStressScene } from './stress';
-import type { StressHandle } from './stress';
 
 export type AppPhase = 'title' | 'playing' | 'result';
 
@@ -64,23 +64,31 @@ export class App implements FrameHost, AppCommands {
   private readonly ladder: QualityLadder;
 
   private physicsLayer: PhysicsLayer | null = null;
-  private stress: StressHandle | null = null;
-  /** `?scene=render-test`'s own loop, so `dispose` can stop it. Structural on
-   * purpose: the handle's shape is the render agent's to change. */
-  private devScene: { stop: () => void } | null = null;
+  /** `?scene=`'s own scene, so `dispose` can stop it (`./devScenes.ts`). */
+  private devScene: DevScene | null = null;
 
   private currentPhase: AppPhase = 'title';
-  private session: RunSession | null = null;
+  /**
+   * The run on the road, or null on the title and the result sheets. Readable
+   * because the debug handle reads it (`./publishHandle.ts`); writable only
+   * here, which is what `startRun` and `showHome` are.
+   */
+  private currentSession: RunSession | null = null;
   /** The seed the next run is pinned to, or null for the level's own. */
   private replaySeed: number | null = null;
   /** The seed of the last road walked, for `replayRun`. */
   private lastSeed: number | null = null;
+  /** Whether the *next* run walks the endless road (D52); cleared by `startRun`. */
+  private nextEndless = false;
+  /** Whether the last road walked was the endless one, for `replayRun`. */
+  private lastEndless = false;
   /**
    * What the last finished run paid, meta layer included (`./academy.ts`).
    * Read by the result sheet and by the debug handle; null until a run ends.
    */
   private payout: RunPayout | null = null;
-  private detachInput: DetachInput | null = null;
+  /** The drag and the resize listener, until `dispose` (`./appInput.ts`). */
+  private input: AppInput | null = null;
   private muted: boolean;
 
   /** Set by `dispose`, so the loads still in flight there hand back their work. */
@@ -105,7 +113,12 @@ export class App implements FrameHost, AppCommands {
     this.ladder = new QualityLadder({
       forced: this.options.qualityRung,
       apply: (rung, index) => {
-        this.applyQuality(rung, index);
+        applyQuality(rung, {
+          renderer: this.renderer,
+          physics: this.physicsLayer,
+          wanted: this.options.physicsQuality,
+        });
+        this.driver.stats.qualityRung = index;
       },
     });
     this.overlay = new Overlay(overlayRoot, overlayCallbacks(this));
@@ -137,10 +150,15 @@ export class App implements FrameHost, AppCommands {
     await fontsReady;
     await this.renderer.init();
 
-    window.addEventListener('resize', this.onResize);
-    this.detachInput = attachInput(this.canvas, this.onDragDeltaPixels, {
-      // A scripted bot owns `targetX`; a stray drag must not fight it.
-      enabled: () => this.currentPhase === 'playing' && (this.session?.bot ?? null) === null,
+    this.input = attachAppInput({
+      canvas: this.canvas,
+      renderer: this.renderer,
+      session: () => this.currentSession,
+      steerable: () =>
+        this.currentPhase === 'playing' && (this.currentSession?.bot ?? null) === null,
+      markDirty: () => {
+        this.driver.markPreviewDirty();
+      },
     });
     // `?debug` is a request to keep the panel on, not to borrow it for one
     // load: it writes the save the triple-tap gesture writes.
@@ -151,16 +169,13 @@ export class App implements FrameHost, AppCommands {
     this.ladder.applyCurrent();
 
     if (this.options.scene !== 'game') {
-      // The dev scenes bypass the state machine entirely: they drive the
-      // renderer themselves, so no session, no HUD and no frame loop here.
+      // The dev scenes bypass the state machine entirely (`./devScenes.ts`).
       this.overlay.hideAll();
-      if (this.options.scene === 'render-test') {
-        this.devScene = runRenderDevScene(this.renderer);
-      } else {
-        this.stress = await runStressScene(this.renderer, {
-          quality: this.options.physicsQuality,
-        });
-      }
+      this.devScene = await startDevScene(
+        this.options.scene,
+        this.renderer,
+        this.options.physicsQuality,
+      );
       this.publishHandle();
       return;
     }
@@ -170,6 +185,9 @@ export class App implements FrameHost, AppCommands {
     this.academy.beginSession();
     this.showHome();
     this.publishHandle();
+    // `?endless=1`: straight onto the road with no end (D52). After the home
+    // screen rather than instead of it, so the Academy is what Back finds.
+    if (this.options.endless) this.startEndless();
 
     // Neither is awaited: two megabytes of Havok and twenty audio clips must
     // not hold the title screen back. Both attach themselves to whatever level
@@ -216,11 +234,29 @@ export class App implements FrameHost, AppCommands {
   startLevel(level: number, seed: number | null = null): void {
     this.options.level = clampLevel(level, levelCount);
     this.replaySeed = seed;
+    this.nextEndless = false;
     this.startRun();
   }
 
-  /** "Same road again": the level just played, on the seed it was played on. */
+  /**
+   * A walk of the endless road (D52), on `seed` or on the road's own.
+   *
+   * A mode beside the campaign rather than a level at the end of it: the level
+   * the picker is pointed at is left exactly where it was, so Back from the
+   * result sheet finds the Academy the player left.
+   */
+  startEndless(seed: number | null = null): void {
+    this.replaySeed = seed;
+    this.nextEndless = true;
+    this.startRun();
+  }
+
+  /** "Same road again": the road just walked, on the seed it was walked on. */
   replayRun(): void {
+    if (this.lastEndless) {
+      this.startEndless(this.lastSeed);
+      return;
+    }
     this.startLevel(this.options.level, this.lastSeed);
   }
 
@@ -240,12 +276,9 @@ export class App implements FrameHost, AppCommands {
   dispose(): void {
     this.disposed = true;
     this.stop();
-    this.detachInput?.();
-    this.detachInput = null;
-    window.removeEventListener('resize', this.onResize);
-    this.stress?.dispose();
-    this.stress = null;
-    this.devScene?.stop();
+    this.input?.detach();
+    this.input = null;
+    this.devScene?.dispose();
     this.devScene = null;
     this.overlay.dispose();
     this.audio.dispose();
@@ -262,8 +295,13 @@ export class App implements FrameHost, AppCommands {
     return this.options.turbo;
   }
 
+  /** The run on the road, or null. Read by `./publishHandle.ts` and `./frame.ts`. */
+  get session(): RunSession | null {
+    return this.currentSession;
+  }
+
   activeSession(): RunSession | null {
-    return this.session;
+    return this.currentSession;
   }
 
   previewSession(): RunSession | null {
@@ -286,7 +324,7 @@ export class App implements FrameHost, AppCommands {
     this.driver.stats.qualityP95 = this.ladder.p95Ms;
     this.driver.stats.qualityReason = this.ladder.reason;
 
-    const session = this.session;
+    const session = this.currentSession;
     if (session === null || this.currentPhase !== 'playing') return;
     if (session.advanceEnding(realDt, this.options.level)) this.showResult(session);
   }
@@ -300,7 +338,7 @@ export class App implements FrameHost, AppCommands {
    */
   showHome(): void {
     this.currentPhase = 'title';
-    this.session = null;
+    this.currentSession = null;
     this.juice.reset();
     this.menus.showHome();
   }
@@ -339,24 +377,32 @@ export class App implements FrameHost, AppCommands {
     this.ladder.beginLevel();
     // The player is read once, here: the level is generated with their
     // upgrades and the run starts with the staff they chose (D35).
+    const endless = this.nextEndless;
     const session = new RunSession(
       this.options.level,
       this.options,
       this.academy.player,
       this.replaySeed,
+      endless,
     );
-    // The pin is for one run: the next Play walks whatever road the level says.
+    // Both pins are for one run: the next Play walks whatever road the picker
+    // is pointed at, on that level's own seed.
     this.replaySeed = null;
+    this.nextEndless = false;
     this.lastSeed = session.seed;
-    this.session = session;
+    this.lastEndless = endless;
+    this.currentSession = session;
     this.juice.reset();
     this.audio.beginRun();
 
+    // The tints the player is wearing (D53), read once per run exactly as the
+    // upgrades are: the squad's hat and cape, the wisp and the staff glow.
+    this.renderer.setCosmetics(this.academy.player);
     this.renderer.loadLevel(session.level);
     this.physicsLayer?.loadLevel(session.level);
     this.driver.resetPeak();
     this.currentPhase = 'playing';
-    this.overlay.showPlaying(this.options.level, weaponOf(session.state.squad));
+    this.overlay.showPlaying(this.options.level, weaponOf(session.state.squad), endless);
 
     this.driver.start();
   }
@@ -374,118 +420,39 @@ export class App implements FrameHost, AppCommands {
     const payout = this.academy.payRun(session, level);
     this.payout = payout;
 
-    this.overlay.showResult({
-      levelIndex: level,
-      won: session.won,
-      survivors: session.state.survivors,
-      peakCount: session.state.peakCount,
-      coins: payout.coins,
-      totalCoins: payout.totalCoins,
-      firstClear: payout.firstClear,
-      canAdvance: level < levelCount,
-    });
+    this.overlay.showResult(resultView(session, level, payout, levelCount, this.academy.player));
   }
 
   // --- Wiring --------------------------------------------------------------
 
-  /**
-   * Havok, or nothing. A failed init is a downgrade and not a crash: a phone
-   * that cannot afford physics should still play the game, and every ladder
-   * rung below stays honest because the layer is marked unavailable.
-   */
+  /** Havok, or nothing; see `./appLayers.ts`. */
   private async initPhysics(): Promise<void> {
-    const physics = new PhysicsLayer(this.renderer.scene, {
+    const physics = await initPhysics({
+      renderer: this.renderer,
       quality: this.options.physicsQuality,
+      level: () => this.currentSession?.level ?? this.menus.session?.level ?? null,
+      disposed: () => this.disposed,
+      onReady: () => {
+        this.ladder.applyCurrent();
+      },
     });
-    try {
-      await physics.init();
-    } catch (error: unknown) {
-      console.warn('[arcane-rush] physics unavailable, running without debris', error);
-      physics.setQuality(0);
-    }
-    if (this.disposed) {
-      // The app went away while Havok was loading; nothing else will free it.
-      physics.dispose();
-      return;
-    }
+    if (physics === null) return;
     this.physicsLayer = physics;
-    // Whatever is on screen was loaded before this finished, so the road
-    // collider is built now rather than at the next `loadLevel`.
-    const level = this.session?.level ?? this.menus.session?.level ?? null;
-    if (level !== null) physics.loadLevel(level);
-    // The layer arrived after the ladder settled; hand it the current rung.
-    this.ladder.applyCurrent();
-    // Its debris pools are new meshes in the renderer's scene, so their shaders
-    // have to be compiled too or the first kill of the first run pays for them
-    // inside a frame (`src/render/warmup.ts`).
-    await this.renderer.warmUp();
-  }
-
-  /**
-   * One rung of the degrade ladder, applied to whoever owns each step
-   * (`src/core/quality.ts`). Called on construction, when the physics layer
-   * arrives, and on every step down.
-   */
-  private applyQuality(rung: QualityRung, index: number): void {
-    this.renderer.setMaxPixelRatio(rung.pixelRatio);
-    const physics = this.physicsLayer;
-    if (physics !== null) {
-      // The rung is a ceiling, not an instruction: `?physics=1` asked for less
-      // than the ladder's top rung offers, and a layer whose init failed stays
-      // at 0 whatever it is told (`PhysicsLayer.setQuality`).
-      const wanted = Math.min(rung.physics, this.options.physicsQuality) as PhysicsQuality;
-      physics.setQuality(wanted);
-      // The renderer plays the baked death itself at quality 0, so it follows
-      // whatever the layer actually ended up at rather than what was asked.
-      this.renderer.setPhysicsQuality(physics.stats.quality);
-      // And keeps drawing every squad death itself unless the layer really has
-      // a mage pool to throw the tenth one with (D43).
-      this.renderer.setUnitRagdolls(physics.throwsUnits);
-    }
-    this.driver.stats.qualityRung = index;
   }
 
   private publishHandle(): void {
-    const handle: ArcaneDebugHandle = {
-      ready: true,
-      app: this,
-      run: () => this.session?.run ?? null,
-      state: () => this.session?.state ?? null,
+    publishHandle(this, {
       physics: () => this.physicsLayer,
-      quality: () => this.ladder.rung,
-      draws: () => ({ current: this.renderer.drawCalls, peak: this.driver.peakDrawCalls }),
-      chargers: () => ({
-        current: this.renderer.chargerBodies,
-        peak: this.driver.peakChargerBodies,
-      }),
-      shaders: () => this.renderer.shaderStats,
-      player: () => this.academy.player,
-      meta: () => ({
-        streak: this.academy.streakView(),
-        missions: this.academy.missionsView(),
-        kills: this.academy.player.kills,
-        owned: this.academy.player.cosmetics.owned,
-        payout: this.payout,
-      }),
-      setPlayer: (patch: unknown) => {
-        this.academy.setPlayer(patch);
+      qualityRung: () => this.ladder.rung,
+      peakDrawCalls: () => this.driver.peakDrawCalls,
+      peakChargerBodies: () => this.driver.peakChargerBodies,
+      repaintMenu: () => {
         this.repaintMenu();
       },
-      steer: (x: number) => {
-        // Only while a run is actually on the road. Taking the wheel drops the
-        // session's bot for good, so on the title screen, in the Academy or on
-        // the result sheet — where there is nothing to steer — this has to do
-        // nothing at all rather than quietly un-bot the run behind the panel.
-        if (this.currentPhase !== 'playing') return;
-        const session = this.session;
-        if (session === null || session.finished) return;
-        session.takeWheel(x);
+      openRoom: (room) => {
+        this.openRoom(room);
       },
-      setTurbo: (value: number) => {
-        this.setTurbo(value);
-      },
-    };
-    globalThis.__arcane = handle;
+    });
   }
 
   /** The mute control on the Academy or the HUD. */
@@ -511,23 +478,4 @@ export class App implements FrameHost, AppCommands {
     this.audio.setMuted(muted);
     this.overlay.setMuted(muted);
   }
-
-  private readonly onResize = (): void => {
-    this.renderer.resize();
-    // The canvas just changed size, so whatever is on it is stale.
-    this.driver.markPreviewDirty();
-  };
-
-  /**
-   * Pixels to road meters: a full screen width of drag moves the squad
-   * `balance.input.sensitivity` meters. Tuning stays in `src/data`.
-   */
-  private readonly onDragDeltaPixels = (deltaXPixels: number): void => {
-    const session = this.session;
-    if (session === null || this.currentPhase !== 'playing') return;
-
-    const width = this.canvas.clientWidth || window.innerWidth || 1;
-    const meters = (deltaXPixels / width) * balance.input.sensitivity;
-    session.run.setTargetX(session.state.squad.targetX + meters);
-  };
 }

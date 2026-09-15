@@ -8,14 +8,14 @@
   "startCount": 8,
   "dials": {
     "peakTarget": { "start": 12, "growth": 1.055, "cap": 500 },
-    "hpScale": { "start": 0.25, "growth": 1.014, "cap": 1.35 },
-    "pressure": { "start": 0.45, "growth": 1.007, "cap": 1 },
-    "density": { "start": 0.8, "growth": 1.004, "cap": 1.25 }
+    "hpScale": { "start": 0.25, "growth": 1.018, "cap": 4 },
+    "pressure": { "start": 0.45, "growth": 1.021, "cap": 8 },
+    "density": { "start": 0.8, "growth": 1.01, "cap": 3 }
   },
   "mix": {
-    "gateRows": 0.58,
+    "gateRows": 0.54,
     "mixedRows": 0.22,
-    "hordeRows": 0.1,
+    "hordeRows": 0.06,
     "bruteRows": 0.1,
     "chargerRows": 0.06,
     "shieldRows": 0.06,

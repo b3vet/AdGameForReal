@@ -78,10 +78,17 @@ export function drawFrame(
   views.walls.update(state.squad.z, dt);
   views.wisp.update(preview.familiarFor(state), views.events.targetLookup, dt);
   views.burn.update(state, dt);
+  // The meteor in the air and the marks it and the freeze pulse leave (D54).
+  // Inside both batches: the head is a spell quad and the crater is a mark.
+  views.evolutions.update(dt);
   views.sprites.end();
   // After both views that emit one, and before the shadows close: the decals
   // are a ground layer and this is the frame's one upload of it.
   views.decals.end();
+
+  // Frost tier 4's wall, off `RunState.ice` rather than off an event: the ice
+  // is part of what the run *is* at this instant (`./glacierWall.ts`).
+  views.glacier.update(state);
 
   // The boss's own blob, and the frame's one upload of the whole buffer.
   writeBossShadow(views.shadows, state);

@@ -38,6 +38,54 @@ function countOf(events: readonly SimEvent[], type: SimEvent['type']): number {
   return events.filter((event) => event.type === type).length;
 }
 
+/**
+ * The ceiling every mechanic is held under (Milestone 8): none of them may be
+ * worth more than about a third of the squad's own output on its own.
+ *
+ * Two of the nine are priced in seconds of the squad's fire outright — the
+ * meteor and the overcharge, because what a squad puts out spans two orders of
+ * magnitude across the campaign and a flat number would be everything at level
+ * one and nothing at forty — so for those the ceiling is arithmetic over the
+ * tuning rather than a measurement, and it is the tightest form the rule can
+ * take. The other seven are held by the end-to-end ceilings in
+ * `./balance.test.ts`: measured against a damage rung of known size on a meadow
+ * and a frost level, the biggest of them is worth about a seventh of a squad's
+ * output and none of the nine comes near a third (the Milestone 8 log).
+ */
+describe('what a tier may be worth', () => {
+  const CEILING = 1 / 3;
+
+  it('never prices a mechanic above a third of the squad\'s own fire', () => {
+    const meteor = balance.evolutions.ember.meteor;
+    const share = meteor.secondsOfFire / meteor.intervalSeconds;
+    expect(`meteor ${share.toFixed(2)} of output`).toBe(
+      `meteor ${Math.min(share, CEILING).toFixed(2)} of output`,
+    );
+
+    // The arc's floor on its own gap is what turns "every fifth volley" into a
+    // beat, so it — not `everyVolleys` — is what bounds the share.
+    const arc = balance.evolutions.storm.overcharge;
+    const arcShare = arc.secondsOfFire / arc.minSeconds;
+    expect(`overcharge ${arcShare.toFixed(2)} of output`).toBe(
+      `overcharge ${Math.min(arcShare, CEILING).toFixed(2)} of output`,
+    );
+  });
+
+  it('keeps the two that hold rather than hurt on a duty cycle under a half', () => {
+    // The glacier holds one lane of three, so its own ceiling is about where
+    // the wall stops being a wall and starts being the road.
+    const ice = balance.evolutions.frost.glacier;
+    const duty = ice.holdSeconds / ice.intervalSeconds;
+    expect(`glacier ${duty.toFixed(2)} duty`).toBe(`glacier ${Math.min(duty, 0.5).toFixed(2)} duty`);
+    // The freeze pulse buys time on the bodies around a frozen death; a chill
+    // longer than the staff's own slow would make the pulse the mechanic.
+    const pulse = balance.evolutions.frost.freezePulse;
+    expect(pulse.seconds).toBeLessThanOrEqual(3);
+    expect(pulse.factor).toBeGreaterThan(0);
+    expect(pulse.factor).toBeLessThan(1);
+  });
+});
+
 describe('ember tier 3: wildfire', () => {
   it('passes the fire from the body the squad lit to the one behind it', () => {
     // Two blocks in the same lane, eight tenths of a metre apart: inside the

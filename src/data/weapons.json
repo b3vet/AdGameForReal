@@ -16,8 +16,8 @@
       "projectileSpeed": 34,
       "chain": {
         "count": 2,
-        "range": 3,
-        "damageMul": 0.6
+        "range": 5.0,
+        "damageMul": 0.5
       }
     },
     "frost": {

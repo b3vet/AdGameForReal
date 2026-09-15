@@ -116,6 +116,16 @@ export interface FreezePulseBalance {
   /** Speed multiplier the chill applies, like `WeaponSlow.factor`. */
   factor: number;
   maxTargets: number;
+  /**
+   * Share of the killing hit each chilled neighbour takes with the cold.
+   *
+   * Added in Milestone 8's balance pass. The pulse was time and nothing else,
+   * and measured end to end it was worth *less than nothing*: a slowed body
+   * lives longer in front of the column, so the crowd walks into it. A share of
+   * the hit makes the tier something the player can see happening, and keeps it
+   * a smaller, wider version of the tier-2 shatter rather than a second one.
+   */
+  share: number;
 }
 
 /** Frost tier 4: a wall of ice holds one lane's river where it stands. */
@@ -686,6 +696,7 @@ export type {
   Progression,
   ShatterDef,
   StaffTier,
+  StaffWorth,
   UpgradeId,
   WispDef,
 } from './progression-types';

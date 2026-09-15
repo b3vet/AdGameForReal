@@ -80,24 +80,65 @@
   "workbench": {
     "heading": "Workbench",
     "evolvedTag": "Evolved",
+    "tierLabel": "Tier {tier} of {max}",
+    "lockedTier": "Locked",
     "staffs": [
       {
         "id": "ember",
         "name": "Ember",
         "blurb": "A splash of flame on every hit.",
-        "tier2": "Evolved: burns for 30% of the hit over 2 s."
+        "tiers": [
+          {
+            "name": "Burn",
+            "line": "Every hit leaves its target alight."
+          },
+          {
+            "name": "Wildfire",
+            "line": "A burning body hands the fire to whatever it is touching."
+          },
+          {
+            "name": "Meteor",
+            "line": "A charged shot falls out of the sky where the crowd is aiming."
+          }
+        ]
       },
       {
         "id": "storm",
         "name": "Storm",
         "blurb": "A bolt that leaps between blocks.",
-        "tier2": "Evolved: the bolt chains one more target."
+        "tiers": [
+          {
+            "name": "Fork",
+            "line": "The bolt chains one more target."
+          },
+          {
+            "name": "Full Chain",
+            "line": "Every hop of the arc lands as hard as the first."
+          },
+          {
+            "name": "Overcharge",
+            "line": "Every fifth volley arcs to everything in range."
+          }
+        ]
       },
       {
         "id": "frost",
         "name": "Frost",
         "blurb": "Slows what it hits, shatters what it kills.",
-        "tier2": "Evolved: the shatter hits neighbours within 1 m for 50%."
+        "tiers": [
+          {
+            "name": "Shatter",
+            "line": "What it kills comes apart and takes its neighbours."
+          },
+          {
+            "name": "Freeze Pulse",
+            "line": "A frozen body that dies chills everything standing around it."
+          },
+          {
+            "name": "Glacier",
+            "line": "A wall of ice holds one lane's river where it stands."
+          }
+        ]
       }
     ]
   },
@@ -123,18 +164,18 @@
         "blurb": "One skeleton of the river. Hundreds follow it.",
         "tiers": [
           {
-            "kills": 250,
-            "coins": 150,
+            "kills": 4000,
+            "coins": 50,
             "cosmetic": "hatBone"
           },
           {
-            "kills": 1500,
-            "coins": 450,
+            "kills": 15000,
+            "coins": 140,
             "cosmetic": "capeBone"
           },
           {
-            "kills": 6000,
-            "coins": 1200,
+            "kills": 35000,
+            "coins": 380,
             "cosmetic": "wispBone"
           }
         ]
@@ -145,18 +186,18 @@
         "blurb": "A block that walks. Break it before it arrives.",
         "tiers": [
           {
-            "kills": 40,
-            "coins": 180,
+            "kills": 60,
+            "coins": 45,
             "cosmetic": "hatStone"
           },
           {
-            "kills": 200,
-            "coins": 500,
+            "kills": 150,
+            "coins": 110,
             "cosmetic": "capeQuarry"
           },
           {
-            "kills": 800,
-            "coins": 1400,
+            "kills": 280,
+            "coins": 280,
             "cosmetic": "glowQuarry"
           }
         ]
@@ -167,18 +208,18 @@
         "blurb": "The horned thing at the road's end. It stomps.",
         "tiers": [
           {
-            "kills": 5,
-            "coins": 250,
+            "kills": 8,
+            "coins": 60,
             "cosmetic": "glowEmber"
           },
           {
-            "kills": 20,
-            "coins": 700,
+            "kills": 16,
+            "coins": 160,
             "cosmetic": "capeDemon"
           },
           {
-            "kills": 60,
-            "coins": 1800,
+            "kills": 28,
+            "coins": 420,
             "cosmetic": "wispEmber"
           }
         ]
@@ -190,17 +231,17 @@
         "tiers": [
           {
             "kills": 15,
-            "coins": 200,
+            "coins": 50,
             "cosmetic": "hatHound"
           },
           {
-            "kills": 80,
-            "coins": 550,
+            "kills": 45,
+            "coins": 130,
             "cosmetic": "wispHound"
           },
           {
-            "kills": 300,
-            "coins": 1500,
+            "kills": 100,
+            "coins": 340,
             "cosmetic": "capeHound"
           }
         ]
@@ -211,18 +252,18 @@
         "blurb": "A brute behind a slab of ice. Its number will not move until the shield does.",
         "tiers": [
           {
-            "kills": 12,
-            "coins": 220,
+            "kills": 10,
+            "coins": 55,
             "cosmetic": "glowBulwark"
           },
           {
-            "kills": 60,
-            "coins": 600,
+            "kills": 20,
+            "coins": 140,
             "cosmetic": "hatSlab"
           },
           {
-            "kills": 240,
-            "coins": 1600,
+            "kills": 45,
+            "coins": 360,
             "cosmetic": "capeSlab"
           }
         ]
@@ -233,18 +274,18 @@
         "blurb": "The white giant at the far end of Frostfell. It stomps, and then it charges.",
         "tiers": [
           {
-            "kills": 3,
-            "coins": 300,
+            "kills": 5,
+            "coins": 70,
             "cosmetic": "hatFiend"
           },
           {
             "kills": 12,
-            "coins": 800,
+            "coins": 190,
             "cosmetic": "glowRime"
           },
           {
-            "kills": 40,
-            "coins": 2000,
+            "kills": 22,
+            "coins": 500,
             "cosmetic": "wispRime"
           }
         ]
@@ -253,6 +294,43 @@
     "tierLabel": "{count} felled",
     "nextLabel": "{remaining} more for {name}",
     "maxedLabel": "Every tint taken"
+  },
+  "meta": {
+    "missions": {
+      "heading": "Missions",
+      "progressLabel": "{progress} / {target}",
+      "doneLabel": "Claimed"
+    },
+    "streak": {
+      "title": "Day {days}",
+      "nextLabel": "Next road pays {coins}",
+      "claimedLabel": "Claimed today",
+      "startLabel": "Walk a road to start a streak"
+    },
+    "endless": {
+      "title": "Endless",
+      "blurb": "One road, no end.",
+      "bestLabel": "Best {metres} m",
+      "noBestLabel": "Never walked",
+      "hudLabel": "{metres} m"
+    },
+    "picker": {
+      "milestoneLabel": "Milestone level {level}",
+      "starLabel": "Level {level}, walked well"
+    },
+    "result": {
+      "endlessTitle": "Endless",
+      "bestMetresLabel": "Best {metres} m",
+      "bestLabel": "Best {survivors} of {peak}",
+      "newBestLabel": "New best",
+      "replay": "Same road again",
+      "bonusHeading": "Bonuses",
+      "streakBonus": "Day {days} streak",
+      "tierBonus": "{kind}, tier {tier}",
+      "tintBonus": "{name} unlocked",
+      "nextHeading": "Next unlock",
+      "nextShort": "{coins} to go"
+    }
   },
   "hud": {
     "bossFallback": "Boss",

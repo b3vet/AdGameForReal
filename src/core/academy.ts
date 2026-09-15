@@ -73,6 +73,12 @@ export interface AcademyDeps {
 
 /** What a finished run paid, for the result sheet. */
 export interface RunPayout {
+  /** True when this was a walk of the endless road (D52). */
+  endless: boolean;
+  /** Metres walked on it; 0 on a campaign run. */
+  metres: number;
+  /** The endless record after this run, which `endlessBest` says it set. */
+  bestMetres: number;
   /** The road's own reward (D46). */
   coins: number;
   /** What the meta layer paid on top: the streak, missions and kill tiers. */
@@ -280,8 +286,16 @@ export class AcademyController {
    */
   payRun(session: RunSession, level: number): RunPayout {
     const save = loadSave();
-    const firstClear = session.won && isFirstClear(save, level);
-    const { coins } = runRewards(session.state, level, firstClear);
+    // An endless run clears no level, however it ended (D52): it has no index,
+    // so it can neither be a first clear nor mark one.
+    const endless = session.isEndless;
+    const paidLevel = endless ? 0 : level;
+    const firstClear = !endless && session.won && isFirstClear(save, level);
+    // `bestLevel` is what caps an endless run's pay (D52) and is ignored on a
+    // campaign road, so it is passed either way rather than branched on.
+    const { coins } = runRewards(session.state, paidLevel, firstClear, {
+      bestLevel: bestClearedLevel(save.player),
+    });
 
     let player = addCoins(save.player, coins);
     const remembered = rememberSeen(player, session.seen);
@@ -291,11 +305,14 @@ export class AcademyController {
     // streak for the day, the missions it moved, the bestiary rungs it crossed
     // and the level's best walk (D51 to D53). It is paid *after* the road so
     // that a mission reward can never change what clearing a level is worth.
-    const meta = applyRunMeta(player, { level, tally: session.tally() }, this.day);
+    const meta = applyRunMeta(player, { level: paidLevel, tally: session.tally() }, this.day);
     this.commit(meta.player);
-    if (session.won) markFirstClear(level);
+    if (firstClear) markFirstClear(level);
 
     return {
+      endless,
+      metres: Math.floor(session.metres),
+      bestMetres: this.state.endless.bestMetres,
       coins,
       bonusCoins: meta.coins,
       totalCoins: this.state.coins,
@@ -327,6 +344,10 @@ export class AcademyController {
       selectedLevel,
       reveal,
       selectedStaff: this.state.selectedStaff,
+      streak: this.streakView(),
+      missions: this.missionsView(),
+      endlessBest: Math.max(0, Math.floor(this.state.endless.bestMetres)),
+      stars: starredLevels(this.state),
     };
   }
 
@@ -335,4 +356,41 @@ export class AcademyController {
     this.state = setPlayer(player).player;
     this.deps.onPlayerChanged();
   }
+}
+
+/**
+ * The highest campaign level this player has actually *cleared* — the ceiling
+ * an endless run is paid under (D52).
+ *
+ * Read off `levelBest`, which is only written on a cleared level (`./meta.ts`),
+ * rather than off `unlockedLevel`: a save carried forward from before D52 has
+ * an unlock but no bests, so the unlock minus one is the floor under it. Both
+ * are held at 1, because a player who has cleared nothing still walks a road
+ * that has to pay something.
+ */
+export function bestClearedLevel(player: PlayerState): number {
+  let best = Math.max(1, Math.floor(player.unlockedLevel) - 1);
+  for (const key of Object.keys(player.levelBest)) {
+    const level = Number.parseInt(key, 10);
+    if (Number.isFinite(level) && level > best) best = level;
+  }
+  return best;
+}
+
+/**
+ * Levels whose best walk arrived with at least `STAR_SHARE` of the crowd the
+ * run ever held — the picker's star (D45's own band: a good player ends with 35
+ * to 65 percent of peak, so the star is the top of it).
+ */
+const STAR_SHARE = 0.6;
+
+function starredLevels(player: PlayerState): readonly number[] {
+  const stars: number[] = [];
+  for (const key of Object.keys(player.levelBest)) {
+    const best = player.levelBest[key];
+    const level = Number.parseInt(key, 10);
+    if (best === undefined || !Number.isFinite(level)) continue;
+    if (best.peak > 0 && best.survivors >= best.peak * STAR_SHARE) stars.push(level);
+  }
+  return stars;
 }

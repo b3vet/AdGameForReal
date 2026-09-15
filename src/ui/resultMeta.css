@@ -1,0 +1,209 @@
+/*
+ * The result sheet's Milestone 8 rows (D51 to D53): the bonus lines under the
+ * count-up, the mission ticks among them, this level's best walk, and the next
+ * thing the Academy sells.
+ *
+ * A file of its own rather than more of `./result.css`, which was already at
+ * the size rule (CLAUDE.md), and on the same seam the code has: `result.ts`
+ * owns the verdict and the two count-ups, and `./resultMeta.ts` — which imports
+ * this — owns the lists under them.
+ */
+
+/* --- What the meta layer paid (D51 to D53) -------------------------------- */
+
+/*
+ * The coin lines under the count-up: the day's streak, the missions this run
+ * finished, and the bestiary rungs it crossed. Each is a line and a number, and
+ * the list is hidden outright when the run earned none of them — a sheet that
+ * always shows an empty list teaches the player that the list means nothing.
+ */
+/*
+ * The list is capped and scrolls: a run that crosses three bestiary rungs and
+ * finishes two missions has seven lines, and the sheet's buttons may not be
+ * pushed off the bottom of a phone by a good run.
+ */
+.bonuses {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  max-height: 26vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  pointer-events: auto;
+}
+
+/*
+ * Ink, not the bright text the HUD uses: the result sheet is a near-opaque
+ * sheet of parchment (`./styles.css`), so everything written *on* it is dark
+ * and only what sits on a dark plate is light.
+ */
+.bonus__heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+}
+
+.bonus {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+  background: var(--chip);
+}
+
+.bonus__text {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  color: var(--ink-bright);
+}
+
+/* A mission is the one bonus the player was working towards, so it is ticked. */
+.bonus[data-mission='true'] .bonus__text::before {
+  content: '✓ ';
+  color: var(--gold-light);
+  font-weight: 700;
+}
+
+.bonus__coins {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-light);
+}
+
+.bonus__coin {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--gold);
+}
+
+/* The tint a bestiary rung handed over: a whole line of its own under it. */
+.bonus__note {
+  flex: 1 0 100%;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.64rem;
+  font-style: italic;
+  color: var(--ink-bright-dim);
+}
+
+/* The endless record beside the metres, or the two words that replace it. */
+.stats__note {
+  margin-left: 0.4rem;
+  font-family: var(--font-body);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.stats__note[data-new='true'] {
+  color: var(--c-gold-deep);
+}
+
+/* --- This level's best walk ----------------------------------------------- */
+
+.result__best {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  margin: 0.3rem 0 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.result__best[data-improved='true'] {
+  color: var(--c-gold-deep);
+}
+
+.best__star {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--gold);
+}
+
+.best__new {
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gold) 40%, transparent);
+  font-size: 0.66rem;
+  color: var(--ink);
+}
+
+/* --- The next unlock ------------------------------------------------------ */
+
+/*
+ * What the purse this run just filled is now nearest to buying. A row rather
+ * than a button: the Academy is one tap away and this is the reason to take it.
+ */
+.unlock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.4rem;
+  background: var(--chip-strong);
+}
+
+.unlock__heading {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-bright-dim);
+}
+
+.unlock__name {
+  flex: 1 1 auto;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--ink-bright);
+}
+
+.unlock__price {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-bright);
+}
+
+.unlock__coin {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--gold);
+}
+
+.unlock__short {
+  flex: 1 0 100%;
+  font-family: var(--font-body);
+  font-size: 0.64rem;
+  color: var(--ink-bright-dim);
+}
+
+/* Within reach: the whole row goes gold, which is the point of showing it. */
+.unlock[data-afford='true'] .unlock__price,
+.unlock[data-afford='true'] .unlock__short {
+  color: var(--gold-light);
+}

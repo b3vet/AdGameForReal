@@ -23,7 +23,10 @@ import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/scene
 import type { Scene } from '@babylonjs/core/scene';
 
 import { biomeOfLevel } from './biome';
+import { BiomeSpans } from './biomeSpans';
 import type { CameraRig } from './camera';
+import { BARE_TINTS, applyCosmetics, sameTints, wornTints } from './cosmetics';
+import type { WornTints } from './cosmetics';
 import { PreviewBackdrop } from './preview';
 import { setBiome as setPaletteBiome } from './palette';
 import { bootScene } from './rendererBoot';
@@ -38,7 +41,7 @@ import {
   streamBodiesOf,
 } from './rendererStats';
 import type { FeatureReadout, LabelReadout } from './rendererStats';
-import { loadLevelInto, repaintBiome } from './rendererLevel';
+import { applySpan, loadLevelInto, repaintBiome } from './rendererLevel';
 import { applyToonRampToScene } from './toonRamp';
 import type { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
@@ -110,6 +113,25 @@ export class Renderer {
   /** The Academy backdrop, when one is up; see `./preview.ts`. */
   private readonly preview = new PreviewBackdrop();
 
+  /** The tints the squad, the wisp and the spells are wearing (D53). */
+  private tints: WornTints = BARE_TINTS;
+
+  /**
+   * The endless road's biome spans (D52), or inactive on a campaign level. It
+   * owns the crossings; what a crossing *does* is `applySpan` below.
+   */
+  private readonly spans = new BiomeSpans();
+
+  /**
+   * The biome switch a span crossing asks for, bound once: `applySpan` runs on
+   * every frame of a spanned road, and an arrow written at the call site would
+   * be an allocation in the steady-state path. `warm` is false because both
+   * biomes were compiled at boot (`setBiome`).
+   */
+  private readonly setSpanBiome = (id: BiomeId): void => {
+    this.setBiome(id, false);
+  };
+
   /** Warm-up bookkeeping; see `warmUp` and `./warmup.ts`. */
   private readonly warmUpTracker = new WarmUpTracker();
 
@@ -178,6 +200,25 @@ export class Renderer {
   setPreviewPlayer(player: PlayerState | null): void {
     this.preview.setPlayer(player);
     this.rig?.setDrift(this.preview.active);
+    // The backdrop crowd wears what the player is wearing (D53), so a tint
+    // chosen in the Wardrobe is on the mages behind the Academy's own cards.
+    if (player !== null) this.setCosmetics(player);
+  }
+
+  /**
+   * The tints this player is wearing (D53): the squad's hat and cape, the
+   * wisp's colour and trail, and the glow on the spell sprites.
+   *
+   * Called at a level load and whenever the Academy re-dresses its backdrop —
+   * never per frame. An unchanged selection is dropped here rather than in each
+   * view, because the crowd's is the expensive one: it rewrites a vertex colour
+   * buffer per staff.
+   */
+  setCosmetics(player: PlayerState): void {
+    const tints = wornTints(player);
+    if (sameTints(tints, this.tints)) return;
+    this.tints = tints;
+    if (this.views !== null) applyCosmetics(this.views, tints);
   }
 
   /**
@@ -318,9 +359,16 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
-  /** Repaints the scene in a biome (D49), and answers whether it had to; the
-   *  sequence itself is `repaintBiome` in `./rendererLevel.ts`. */
-  setBiome(id: BiomeId): boolean {
+  /**
+   * Repaints the scene in a biome (D49), and answers whether it had to; the
+   * sequence itself is `repaintBiome` in `./rendererLevel.ts`.
+   *
+   * `warm` is false for a crossing *inside* a run (D52's endless road): both
+   * biomes were compiled at boot precisely so a boundary costs nothing, and a
+   * readiness pass over every material in the scene every two hundred metres
+   * would be the stall this is supposed to avoid.
+   */
+  setBiome(id: BiomeId, warm = true): boolean {
     if (this.disposed) return false;
     // The renderer's own record, not the palette's answer: `init` switches the
     // palette before any view exists, so a first level on a pinned biome would
@@ -328,7 +376,7 @@ export class Renderer {
     if (id === this.biome) return false;
     this.biome = id;
     repaintBiome(this.sceneRef, this.views, id);
-    void this.warmUp();
+    if (warm) void this.warmUp();
     return true;
   }
 
@@ -340,11 +388,19 @@ export class Renderer {
   /** Builds the road for this level and hands every pool back to its owner. */
   loadLevel(level: LevelDef): void {
     if (this.disposed) return;
+    // Which biomes this road runs through, and how long a span of one is: a
+    // campaign level has one for its whole length and the endless road
+    // alternates (D52). Set before the biome below, because a spanned road's
+    // first biome is the span the squad starts in rather than the level's.
+    this.spans.setLevel(level, this.forcedBiome);
     // Before the views are handed the level: the road's extent, the roadside's
     // layout and the arena all land inside `loadLevel`, and they have to land
     // on the biome this level is set in (`./biome.ts`).
     this.setBiome(biomeOfLevel(level, this.forcedBiome));
-    loadLevelInto(this.views, this.rig, level);
+    // The road's near and far halves, for a spanned road; a no-op otherwise.
+    this.views?.road.setSpans(this.spans.biomes, this.spans.span);
+    applySpan(this.spans, 0, true, this.setSpanBiome, this.sceneRef, this.views);
+    loadLevelInto(this.views, this.rig, level, this.spans);
   }
 
   /**
@@ -364,6 +420,11 @@ export class Renderer {
     if (scene === null || views === null || rig === null) return;
 
     drawFrame({ views, rig, preview: this.preview, timeScale: this.timeScale(dt) }, state, events, dt);
+
+    // After the frame is written and before it is drawn: the camera has been
+    // posed by `drawFrame`, and which span it now stands in is what decides the
+    // biome this frame is painted in (D52).
+    applySpan(this.spans, rig.camera.position.z, false, this.setSpanBiome, scene, views);
 
     scene.render();
   }

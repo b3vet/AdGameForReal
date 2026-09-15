@@ -22,6 +22,10 @@ import { BossView } from './boss';
 import { BurnView } from './burn';
 import { EffectsView } from './effects';
 import { EnemyView } from './enemies';
+import type { BiomeSpans } from './biomeSpans';
+import { EVOLUTION_DECAL_POOL } from './evolutionLook';
+import { EvolutionView } from './evolutions';
+import { GlacierWall } from './glacierWall';
 import { GateView } from './gates';
 import { GroundDecals } from './groundDecals';
 import { NumberLabels } from './labels';
@@ -74,6 +78,13 @@ export class SceneViews {
   /** Ember's burn (D33, tier 2), read off the bodies themselves. */
   readonly burn: BurnView;
   /**
+   * The Milestone 8 evolutions that need a picture of their own (D54): the
+   * meteor falling, its crater, and the ring a freeze pulse throws.
+   */
+  readonly evolutions: EvolutionView;
+  /** Frost tier 4's ice wall, drawn off `RunState.ice` (`./glacierWall.ts`). */
+  readonly glacier: GlacierWall;
+  /**
    * Blob shadows (D38), shared by every view that puts something on the road.
    *
    * Public here rather than reached for through a view, because five owners
@@ -106,7 +117,9 @@ export class SceneViews {
     this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
     this.sprites = new SpriteLayer(scene, POOL.sprites);
-    this.decals = new GroundDecals(scene, SPRAY_DECAL_POOL, SPRAY_Y);
+    // The monsters' own marks plus the evolutions' craters and rings: one
+    // batch, one draw call, and a pool that cannot starve either of them.
+    this.decals = new GroundDecals(scene, SPRAY_DECAL_POOL + EVOLUTION_DECAL_POOL, SPRAY_Y);
     this.projectiles = new ProjectileView(this.sprites);
     this.effects = new EffectsView(scene, this.sprites);
     this.gates = new GateView(scene, this.labels);
@@ -117,6 +130,8 @@ export class SceneViews {
     this.walls = new WallView(scene, this.sprites);
     this.wisp = new WispView(this.sprites);
     this.burn = new BurnView(this.sprites);
+    this.evolutions = new EvolutionView(this.sprites, this.decals, this.effects);
+    this.glacier = new GlacierWall(scene);
     this.events = new RendererEvents({
       squad: this.squad,
       projectiles: this.projectiles,
@@ -126,6 +141,7 @@ export class SceneViews {
       boss: this.boss,
       walls: this.walls,
       wisp: this.wisp,
+      evolutions: this.evolutions,
       shake,
     });
   }
@@ -190,20 +206,33 @@ export class SceneViews {
    * re-uploaded sixty times a second with the crowd's, and a `props.build` that
    * forgot this would leave a level's trees hovering.
    */
-  dressRoadside(levelIndex: number, startZ: number, endZ: number): void {
-    this.props.build(levelIndex, startZ, endZ);
+  dressRoadside(
+    levelIndex: number,
+    startZ: number,
+    endZ: number,
+    biomeAt: ((z: number) => BiomeId) | null = null,
+  ): void {
+    this.props.build(levelIndex, startZ, endZ, biomeAt);
     this.shadows.reset();
     addPropShadows(this.scene, this.shadows);
   }
 
   /** Builds the road for this level and hands every pool back to its owner. */
-  loadLevel(level: LevelDef, roadStartZ: number, roadEndZ: number): void {
+  loadLevel(level: LevelDef, roadStartZ: number, roadEndZ: number, spans: BiomeSpans): void {
     this.road.setExtent(roadStartZ, roadEndZ, level.arenaZ);
     // Which boss stands in the arena (D49). Both models were loaded at boot, so
     // this only decides which of them is the one that will be enabled; the
     // level is the authority, and `BossView.update` confirms it from the state.
     this.boss.setVariant(level.boss.kind ?? level.bossId ?? 'demon');
-    this.dressRoadside(level.index, roadStartZ, roadEndZ);
+    // A spanned road is dressed per span (D52): pines in the meadow's stretches
+    // and ice in the frost's, laid once here rather than re-rolled at a
+    // crossing — the roadside does not move, so neither should its layout.
+    this.dressRoadside(
+      level.index,
+      roadStartZ,
+      roadEndZ,
+      spans.active ? (z) => spans.biomeOf(spans.indexAt(z)) : null,
+    );
     // The fences are placed once here and only culled per frame afterwards
     // (`./walls.ts`); `walls` is optional on `LevelDef` for the fixtures that
     // predate D32, and an absent list is simply a level with no walls.
@@ -218,10 +247,13 @@ export class SceneViews {
     this.boss.reset();
     this.wisp.reset();
     this.burn.reset();
+    this.evolutions.reset();
+    this.glacier.reset();
     this.events.reset();
   }
 
   dispose(): void {
+    this.glacier.dispose();
     this.squad.dispose();
     this.shadows.dispose();
     this.sky.dispose();

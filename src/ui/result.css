@@ -256,3 +256,24 @@
     animation-duration: 1ms;
   }
 }
+
+/*
+ * Four buttons instead of two (Milestone 8): Ascend, "Same road again", Again
+ * and Academy. A column of four is taller than the foot of a 844-px phone once
+ * the bonus lines are above it, so the three ghost buttons share a row and only
+ * the gold one — the thing the player came here to press — keeps a line of its
+ * own.
+ */
+.screen--result .screen__actions {
+  flex-flow: row wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.screen--result .screen__actions > .button {
+  flex: 1 1 8rem;
+}
+
+.screen--result .screen__actions > .button:not(.button--ghost) {
+  flex-basis: 100%;
+}

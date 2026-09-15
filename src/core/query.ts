@@ -15,6 +15,7 @@
  *   ?screenshot=1   keep the drawing buffer readable, for the smoke's frames
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  *   ?biome=frost    pin every level to one biome, whatever the level says
+ *   ?endless=1      boot straight onto the endless road instead of a level
  */
 
 import type { BiomeId } from '@/data/biome-types';
@@ -62,6 +63,13 @@ export interface QueryOptions {
    * meadow ones the hero set already uses.
    */
   biome: BiomeId | null;
+  /**
+   * Boot straight onto the endless road (D52) rather than the Academy.
+   *
+   * A probe affordance like `?biome=`: Endless is a card on the picker, and a
+   * probe that had to find and tap it would be photographing the picker.
+   */
+  endless: boolean;
 }
 
 /**
@@ -114,7 +122,14 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     qualityRung: Number.isFinite(qualityParam) ? clampRung(qualityParam) : null,
     muted: save.muted,
     biome: parseBiome(params.get('biome')),
+    endless: parseFlag(params.get('endless')),
   };
+}
+
+/** `?endless`, `?endless=1` and `?endless=true` are all on; `=0` is off. */
+function parseFlag(raw: string | null): boolean {
+  if (raw === null) return false;
+  return raw !== '0' && raw !== 'false';
 }
 
 function parseBiome(raw: string | null): BiomeId | null {

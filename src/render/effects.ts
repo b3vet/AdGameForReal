@@ -16,7 +16,17 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { Scene } from '@babylonjs/core/scene';
 
+import { NO_TINT, dyeToRef } from './cosmetics';
+import type { Tint } from './cosmetics';
 import { EffectGeometry } from './effectsGeometry';
+import {
+  METEOR_BURSTS,
+  METEOR_FLASH_DURATION,
+  METEOR_FLASH_SIZE,
+  OVERCHARGE_FLASH_DURATION,
+  OVERCHARGE_FLASH_SIZE,
+  OVERCHARGE_GLOW_BOOST,
+} from './evolutionLook';
 import type { SpriteLayer } from './sprites';
 import { bookCell, type SpriteBook } from './spriteSheets';
 import {
@@ -96,6 +106,10 @@ export class EffectsView {
   private readonly geometry: EffectGeometry;
 
   private active: WeaponId = startWeapon;
+  /** The worn staff glow (D53); see `ProjectileView.setStaffGlow`. */
+  private glow: Tint = NO_TINT;
+  /** Scratch for the dye; every use of it is inside one call. */
+  private readonly dyed: [number, number, number] = [0, 0, 0];
 
   constructor(scene: Scene, sprites: SpriteLayer) {
     this.sprites = sprites;
@@ -126,6 +140,15 @@ export class EffectsView {
   }
 
   /**
+   * The worn staff-glow tint (D53). It reaches the muzzle flash and the impact
+   * — the squad's own fire — and deliberately not the shield break or the
+   * leaked-body puff, which are the road's events rather than the staff's.
+   */
+  setStaffGlow(tint: Tint): void {
+    this.glow = tint;
+  }
+
+  /**
    * The flash at a staff's tip. A sparkle rather than a small impact: a muzzle
    * happens twice a second per unit, so at three hundred units there are a
    * dozen live at any moment *inside the crowd* — an impact burst at that rate
@@ -133,12 +156,24 @@ export class EffectsView {
    */
   onMuzzle(x: number, z: number): void {
     const tint = tintOf(this.active);
-    this.push('sparkle', x, MUZZLE_Y, z, MUZZLE_SIZE, MUZZLE_DURATION, tint.r, tint.g, tint.b);
+    dyeToRef(tint.r, tint.g, tint.b, this.glow, this.dyed);
+    this.push(
+      'sparkle',
+      x,
+      MUZZLE_Y,
+      z,
+      MUZZLE_SIZE,
+      MUZZLE_DURATION,
+      this.dyed[0],
+      this.dyed[1],
+      this.dyed[2],
+    );
   }
 
   onImpact(weaponId: WeaponId, x: number, z: number): void {
     this.setWeapon(weaponId);
     const tint = tintOf(weaponId);
+    dyeToRef(tint.r, tint.g, tint.b, this.glow, this.dyed);
     this.push(
       IMPACT_BOOKS[weaponId],
       x,
@@ -146,9 +181,9 @@ export class EffectsView {
       z,
       IMPACT_SIZE,
       IMPACT_DURATION,
-      tint.r * IMPACT_GLOW_BOOST,
-      tint.g * IMPACT_GLOW_BOOST,
-      tint.b * IMPACT_GLOW_BOOST,
+      this.dyed[0] * IMPACT_GLOW_BOOST,
+      this.dyed[1] * IMPACT_GLOW_BOOST,
+      this.dyed[2] * IMPACT_GLOW_BOOST,
     );
   }
 
@@ -221,6 +256,59 @@ export class EffectsView {
         SHIELD_BREAK_COLOR.b * IMPACT_GLOW_BOOST,
       );
     }
+  }
+
+  /**
+   * Ember tier 4 (D54): the flash and the rim bursts where a meteor landed.
+   *
+   * The blast ring is the ember splash's own, at the radius the sim struck at,
+   * so a meteor and a big splash agree about what a blast looks like; what
+   * separates them is the head falling into it (`./evolutions.ts`) and the
+   * bursts thrown round the rim here.
+   */
+  onMeteorLanding(x: number, z: number, radius: number): void {
+    this.onSplash(x, z, radius);
+    const tint = tintOf('ember');
+    this.push(
+      'emberImpact',
+      x,
+      IMPACT_Y,
+      z,
+      radius * METEOR_FLASH_SIZE,
+      METEOR_FLASH_DURATION,
+      tint.r * IMPACT_GLOW_BOOST,
+      tint.g * IMPACT_GLOW_BOOST,
+      tint.b * IMPACT_GLOW_BOOST,
+    );
+    for (let i = 0; i < METEOR_BURSTS; i++) {
+      const angle = (i / METEOR_BURSTS) * Math.PI * 2 + 0.3;
+      this.onImpact(
+        'ember',
+        x + Math.cos(angle) * radius * 0.8,
+        z + Math.sin(angle) * radius * 0.8,
+      );
+    }
+  }
+
+  /**
+   * Storm tier 4 (D54): the flash at the crowd when the volley arcs to
+   * everything at once. The arcs themselves are the chain visual and are thrown
+   * by `./rendererEvents.ts`, which is the half that knows where the bodies are.
+   */
+  onOverchargeFlash(x: number, z: number): void {
+    const tint = tintOf('storm');
+    dyeToRef(tint.r, tint.g, tint.b, this.glow, this.dyed);
+    this.push(
+      'stormImpact',
+      x,
+      IMPACT_Y,
+      z,
+      OVERCHARGE_FLASH_SIZE,
+      OVERCHARGE_FLASH_DURATION,
+      this.dyed[0] * OVERCHARGE_GLOW_BOOST,
+      this.dyed[1] * OVERCHARGE_GLOW_BOOST,
+      this.dyed[2] * OVERCHARGE_GLOW_BOOST,
+    );
   }
 
   /** Ember's blast ring, on the ground at the radius the sim resolved it at. */

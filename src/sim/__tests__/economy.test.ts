@@ -47,6 +47,13 @@ const SEEDS = [1, 2, 3, 4, 5];
  */
 const CAMPAIGN_TIMEOUT_MS = 300_000;
 
+/**
+ * For the two tests that play a *second* set of five campaigns rather than
+ * reading the cached ones: five minutes is the budget for reading a set, and
+ * playing one under the whole suite's load takes longer than that.
+ */
+const LONG_CAMPAIGN_TIMEOUT_MS = 900_000;
+
 /** docs/18: two runs per purchase on levels 1 to 5, four by level 10. */
 const EARLY = { from: 1, to: 5, target: 2, tolerance: 0.7 };
 const LATER = { from: 6, to: 10, target: 4, tolerance: 1.5 };
@@ -164,16 +171,22 @@ describe('the campaign', () => {
     }
   }, CAMPAIGN_TIMEOUT_MS);
 
-  it('prices the staff evolutions and the wisp as goals, not as pocket change', () => {
+  it('prices a whole evolution ladder, and every wisp tier, as a multi-run goal', () => {
     // "Multi-run goals" (docs/18): six to ten runs of a level-10 clear each.
+    //
+    // The *ladder* rather than its first rung, which is where Milestone 8 moved
+    // the goal. Measured, a staff's three rungs are nothing like equal — every
+    // staff's tier 4 carries almost all of what its ladder is worth, and two of
+    // the three tier-2 mechanics are worth under a percent of output — so a
+    // ladder priced as three equal goals would be two tolls and a purchase.
+    // What has to be a goal is the thing the player is actually saving for, and
+    // that is the whole climb. The wisp's tiers are each a goal in their own
+    // right, because each of the three is worth something on its own.
     const clear = runRewards(ended('won', 150, 1), 10, true).coins;
-    // The first rung of each staff, and every wisp tier. The two rungs above
-    // it are dearer still by construction (D54, provisionally 1.6x and 2.2x),
-    // and what *they* have to be worth is the tier bands in `balance.test.ts`
-    // rather than a runs-per-purchase figure: nothing above the first rung is
-    // meant to be bought before level 15.
     const goals = [
-      ...Object.values(progression.staffs).map((staff) => staff.evolve[0] ?? 0),
+      ...Object.values(progression.staffs).map((staff) =>
+        staff.evolve.reduce((total, price) => total + price, 0),
+      ),
       ...progression.wisp.tierPrices.slice(1),
     ];
     for (const price of goals) {
@@ -181,7 +194,67 @@ describe('the campaign', () => {
       expectTrue(`${String(price)} coins is ${runs.toFixed(1)} runs`, runs >= 5 && runs <= 12);
     }
   });
+
+  it('sells the human player an evolution, and only once the Yard has been worked', () => {
+    // The Milestone 8 wave-one finding, closed: with the shopper ranking the
+    // whole shelf by output per coin and saving for the best of it, a forty
+    // level campaign reaches the ladders. Before the value model it never
+    // bought one at any price, because the Yard's cheapest rung was always
+    // affordable and always bought first.
+    for (const seed of SEEDS) {
+      const result = campaign('human', seed);
+      const bought = result.runs.filter((run) =>
+        run.purchases.some((purchase) => purchase.kind === 'evolution'),
+      );
+      const first = bought[0];
+      expectTrue(`s${String(seed)} bought ${String(bought.length)} evolutions`, bought.length >= 3);
+      expectTrue(`s${String(seed)} first evolution at L${String(first?.level ?? 0)}`, (first?.level ?? 0) >= 10);
+      // ...and a staff is carried all the way to the top of its ladder.
+      const tiers = result.player.staffs;
+      const maxed = weaponIds.some((id) => tiers[id].tier >= maxStaffTier);
+      expectTrue(`s${String(seed)} maxed a staff`, maxed);
+    }
+  }, CAMPAIGN_TIMEOUT_MS);
+
+  it('holds the cadence when the player walks the endless road once a level', () => {
+    // D52 from the campaign's side: the endless road pays, so it has to be
+    // shown not to move the curve the prices were tuned against. One walk per
+    // campaign level, paid at the distance the retuned road's median run
+    // reaches on the level-20 kit (Milestone 8 log: 1903 m of 2898).
+    // One campaign a seed, both bands read off the same five: the walk is paid
+    // into the same purse, so playing them twice would be ten campaigns for one
+    // number and this file already plays ten.
+    const walked = SEEDS.map((seed) => runCampaign({ bot: 'human', seed, meta: endlessWalk() }));
+    for (const band of [EARLY, LATER]) {
+      let total = 0;
+      for (const result of walked) total += runsPerPurchase(result, band.from, band.to);
+      const measured = total / SEEDS.length;
+      const where =
+        `L${String(band.from)}-${String(band.to)} with an endless walk a level ` +
+        `${measured.toFixed(2)} (target ${String(band.target)} ± ${String(band.tolerance)})`;
+      expectTrue(where, Math.abs(measured - band.target) <= band.tolerance);
+    }
+  }, LONG_CAMPAIGN_TIMEOUT_MS);
 });
+
+/**
+ * The median endless walk on the kit the campaign holds at level 20, measured
+ * over ten seeds by the Milestone 8 balance pass. Written down rather than
+ * played, because playing one endless road is six minutes of sim and this test
+ * would play two hundred of them.
+ */
+const ENDLESS_MEDIAN_METRES = 1903;
+
+/** One endless run a campaign level, paid by `runRewards` as the app pays it. */
+function endlessWalk(): (facts: unknown, level: number) => number {
+  let level = 0;
+  return (_facts, at) => {
+    if (at === level) return 0;
+    level = at;
+    const walk = { status: 'lost', survivors: 0, endless: { metres: ENDLESS_MEDIAN_METRES } };
+    return runRewards(walk, 0, false, { bestLevel: at }).coins;
+  };
+}
 
 describe('the evolution ladder (D54)', () => {
   /**
@@ -235,15 +308,17 @@ describe('the evolution ladder (D54)', () => {
     expect(buyStaff(short, 'ember')).toBeNull();
   });
 
-  it('prices the rungs above the first as the multi-run goals they are', () => {
-    // Provisional, for the balance pass (D54): 1.6x and 2.2x the first rung.
-    // What has to be true here is only the shape — each dearer than the last,
-    // and the whole ladder worth more than the staff that carries it.
+  it('prices every rung above the last, and the climb as one goal', () => {
+    // Milestone 8 re-based this from the provisional 1.6x/2.2x of wave one on
+    // what the three rungs are actually worth, measured end to end against a
+    // damage rung of known size on a meadow and a frost level (the log). The
+    // shape is the same — each rung dearer than the one below it — and the
+    // *climb* is the multi-run goal, five to twelve clears of level 10.
     const clear = runRewards(ended('won', 150, 1), 10, true).coins;
     for (const id of weaponIds) {
       const ladder = staffPrices(id).evolve;
       const runs = ladder.reduce((total, price) => total + price, 0) / clear;
-      expectTrue(`${id} ladder is ${runs.toFixed(1)} clears of L10`, runs >= 15 && runs <= 40);
+      expectTrue(`${id} ladder is ${runs.toFixed(1)} clears of L10`, runs >= 5 && runs <= 12);
       expect(ladder[1]).toBeGreaterThan(ladder[0]);
       expect(ladder[2]).toBeGreaterThan(ladder[1]);
     }

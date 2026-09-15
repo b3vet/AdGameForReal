@@ -103,6 +103,24 @@ export function paletteHex(role: PaletteRole): string {
   return base;
 }
 
+/**
+ * The hex a role names *in a named biome*, whatever biome is in force.
+ *
+ * The endless road crossfades between two biomes' skies (D52,
+ * `./biomeSpans.ts`), and a fade needs both ends at once while the palette can
+ * only ever hold one. Nothing is cached and nothing is switched: this is a
+ * lookup, and the caller owns whatever colour it builds from the answer.
+ */
+export function paletteHexIn(id: BiomeId, role: PaletteRole): string {
+  if (id !== 'meadow') {
+    const override = lookup(biomeOverrides[id], role);
+    if (override !== null) return override;
+  }
+  const base = lookup(paletteJson, role);
+  if (base === null) throw new Error(`palette.json has no colour at role "${role}"`);
+  return base;
+}
+
 /** The `Color3` a role names. Shared; only `setBiome` ever rewrites one. */
 export function paletteColor(role: PaletteRole): Color3 {
   const cached = colors.get(role);

@@ -165,18 +165,29 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
  * Levels 1 to 20 are untouched by all of it *as recipes*, which
  * `./frost.test.ts` says, and the table above says their runs on 1 to 3 replay
  * byte for byte.
+ *
+ * Re-captured once more at the end of Milestone 8's balance pass, for 21 and 22
+ * only — 23 is byte-identical and is the control. The reason is the value model
+ * the campaign shopper gained (D46, `../campaignShop.ts`): ranked by output per
+ * coin, the Yard is bought in a different order, so the kit the campaign holds
+ * across Frostfell is one rung of `damage` and `gateBonus` stronger and one of
+ * `startCount` and `bossDamage` weaker than the lockstep shopper's was. Three
+ * ordinary levels walked over the armed ceiling at it and one boss fight ran
+ * long, so ten of the twenty recipes were re-fitted — `bite` on 21, 22, 27, 28,
+ * 29, 32, 33, 34, 37 and 38, with `hpScale` and `streamDensity` on 22 — and two
+ * of the ten are these. The bands they were fitted to are the same ones D49 set.
  */
 const FROST_GOLDEN: Readonly<Record<string, string>> = {
-  '21:1': '77edbdb0',
-  '21:2': '23d85f27',
-  '21:3': 'deeacf9c',
-  '21:4': '399f9bbf',
-  '21:5': '17ec4d65',
-  '22:1': '523f1eb9',
-  '22:2': '7730ca76',
-  '22:3': '30062643',
-  '22:4': 'a27c5296',
-  '22:5': '4e2f2df8',
+  '21:1': '46c70cce',
+  '21:2': 'f609c7fb',
+  '21:3': '7d99c729',
+  '21:4': '436aae17',
+  '21:5': '7791b9b6',
+  '22:1': '64f51834',
+  '22:2': 'f1b8fc88',
+  '22:3': '170fc9bd',
+  '22:4': '5405b50b',
+  '22:5': '112147ca',
   '23:1': '85b4e090',
   '23:2': 'bafc362e',
   '23:3': 'cd09ed97',

@@ -13,7 +13,7 @@
  * scene.
  */
 
-import { academy } from '@/data/academy-types';
+import { academy, fill } from '@/data/academy-types';
 import { weaponOf } from '@/sim';
 import type { BossKind, RunState, SimEvent, WeaponId } from '@/sim';
 
@@ -60,6 +60,13 @@ export class Hud {
   private readonly elements: HudElements;
 
   private shownCount = -1;
+  /**
+   * An endless run (D52) has no level number, so the chip counts metres
+   * instead. Held here rather than read off the state every frame because the
+   * chip is written only when the number it prints changes.
+   */
+  private endless = false;
+  private shownMetres = -1;
   private shownBossHp = -1;
   private shownBossRatio = -1;
   private shownStaff: WeaponId | null = null;
@@ -75,8 +82,13 @@ export class Hud {
   }
 
   /** Resets every transient bit of HUD state for a fresh run. */
-  begin(levelIndex: number, staff: WeaponId): void {
-    this.elements.levelLabel.textContent = `Level ${String(levelIndex)}`;
+  begin(levelIndex: number, staff: WeaponId, endless = false): void {
+    this.endless = endless;
+    this.shownMetres = -1;
+    this.elements.levelLabel.dataset['endless'] = endless ? 'true' : 'false';
+    this.elements.levelLabel.textContent = endless
+      ? fill(academy.meta.endless.hudLabel, { metres: '0' })
+      : `Level ${String(levelIndex)}`;
     this.shownCount = -1;
     this.elements.count.classList.remove(BUMP_CLASS, HURT_CLASS);
 
@@ -95,6 +107,7 @@ export class Hud {
   }
 
   update(state: Readonly<RunState>, events: readonly SimEvent[]): void {
+    if (this.endless) this.updateMetres(state);
     const count = Math.max(0, Math.round(state.squad.count));
     if (count !== this.shownCount) {
       this.elements.count.textContent = String(count);
@@ -138,6 +151,20 @@ export class Hud {
     else this.setStaff(weaponOf(state.squad), false);
 
     this.updateBoss(state, bossHit, enraged);
+  }
+
+  /**
+   * The metres chip, in place of the level chip (D52). Compared as a number
+   * before the string is built: the distance moves every frame and most of
+   * those frames do not change the metre it is standing on.
+   */
+  private updateMetres(state: Readonly<RunState>): void {
+    const metres = Math.max(0, Math.floor(state.endless?.metres ?? 0));
+    if (metres === this.shownMetres) return;
+    this.shownMetres = metres;
+    this.elements.levelLabel.textContent = fill(academy.meta.endless.hudLabel, {
+      metres: String(metres),
+    });
   }
 
   private updateBoss(state: Readonly<RunState>, hit: boolean, enraged: boolean): void {

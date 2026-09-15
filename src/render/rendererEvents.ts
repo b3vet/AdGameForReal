@@ -15,6 +15,8 @@
 import type { BossView } from './boss';
 import type { EffectsView } from './effects';
 import type { EnemyView } from './enemies';
+import { OVERCHARGE_ARC_CAP, OVERCHARGE_FROM_Z, METEOR_SHAKE } from './evolutionLook';
+import type { EvolutionView } from './evolutions';
 import type { GateView } from './gates';
 import type { ProjectileView } from './projectiles';
 import type { SquadView } from './squad';
@@ -34,6 +36,8 @@ export interface EventViews {
   boss: BossView;
   walls: WallView;
   wisp: WispView;
+  /** The Milestone 8 evolutions with a picture of their own (`./evolutions.ts`). */
+  evolutions: EvolutionView;
   shake: (strength: number, seconds: number) => void;
 }
 
@@ -206,6 +210,30 @@ export class RendererEvents {
           if (event.kind === 'boss') {
             this.views.shake(SHAKE_CHARGE.strength, SHAKE_CHARGE.seconds);
           }
+          break;
+        case 'meteor':
+          // Ember tier 4 (D54): the head, the flash, the crater and a kick
+          // deliberately under the stomp's (`METEOR_SHAKE`).
+          this.views.evolutions.onMeteor(event.x, event.z, event.radius);
+          this.views.shake(METEOR_SHAKE.strength, METEOR_SHAKE.seconds);
+          break;
+        case 'overcharge': {
+          // Storm tier 4 (D54): an arc to every body the sim reached, through
+          // the same chain visual the staff already throws, plus one brighter
+          // flash at the crowd. The event carries a count and a radius rather
+          // than a list of ids — the sim damaged them as it walked them — so
+          // the arcs are thrown at whatever the *view* has in that circle,
+          // which is the same set by construction.
+          const from = event.z + OVERCHARGE_FROM_Z;
+          enemies?.forEachNear(event.x, event.z, event.radius, OVERCHARGE_ARC_CAP, (x, z) => {
+            effects?.onChain(event.x, from, x, z);
+          });
+          if (event.targets > 0) effects?.onOverchargeFlash(event.x, from);
+          break;
+        }
+        case 'freezePulse':
+          // Frost tier 3 (D54): the cold going out, as a ring on the road.
+          this.views.evolutions.onFreezePulse(event.x, event.z, event.radius);
           break;
         case 'familiarShot':
           this.views.wisp?.onShot(event.x, event.z, event.targetId, this.positionOf);

@@ -37,6 +37,16 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
+import {
+  BARE_TINTS,
+  CAPE_LOOK,
+  CAPE_PART,
+  HAT_LOOK,
+  HAT_PART,
+  dyeAgainst,
+  isBare,
+} from './cosmetics';
+import type { WornTints } from './cosmetics';
 import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
 import type { SpriteLayer } from './sprites';
@@ -106,8 +116,46 @@ export class SquadView {
   /** 1 while this slot holds a zero-scale instance, so a hide is written once. */
   private readonly hidden = new Uint8Array(POOL.squad);
 
+  /**
+   * The hat and cape tints the player is wearing (D53), and the map they are
+   * handed to the crowds in. One map, re-written rather than rebuilt, because
+   * all three crowds are told the same thing and a level load should not leave
+   * three objects behind.
+   */
+  private worn: WornTints = BARE_TINTS;
+  private readonly partTints = new Map<string, readonly [number, number, number]>();
+  /** The two multipliers the map holds, reused across level loads. */
+  private readonly hatDye: [number, number, number] = [1, 1, 1];
+  private readonly capeDye: [number, number, number] = [1, 1, 1];
+
   constructor(scene: Scene) {
     this.scene = scene;
+  }
+
+  /**
+   * The tints the squad is wearing (D53). Called at a level load and when the
+   * Academy's backdrop is re-dressed — never per frame: one call re-tints every
+   * mage of every staff, because a crowd is one mesh drawn many times.
+   *
+   * The three crowds are told together rather than only the one in hand, so a
+   * staff gate mid-run hands over a mage already wearing the right hat.
+   */
+  setCosmetics(tints: WornTints): void {
+    this.worn = tints;
+    // A bare slot is left out rather than passed as the identity: what the
+    // crowds are given is a multiplier *against what the part already looks
+    // like* (`dyeAgainst`), and there is nothing to correct on a part nobody
+    // is dressing.
+    this.partTints.clear();
+    if (!isBare(tints.hat)) {
+      dyeAgainst(tints.hat, HAT_LOOK, this.hatDye);
+      this.partTints.set(HAT_PART, this.hatDye);
+    }
+    if (!isBare(tints.cape)) {
+      dyeAgainst(tints.cape, CAPE_LOOK, this.capeDye);
+      this.partTints.set(CAPE_PART, this.capeDye);
+    }
+    for (const crowd of this.crowds.values()) crowd.setPartTints(this.partTints);
   }
 
   /** Whether `src/physics` takes one squad death in ten (`./squadDeaths.ts`). */
@@ -142,6 +190,10 @@ export class SquadView {
       // so nothing here has to enable anything.
       this.crowds.set(id, crowd);
     });
+    // The models arrive after the first `setCosmetics` in the normal case (the
+    // load is not awaited by the title screen), so whatever is worn is applied
+    // again here rather than lost.
+    this.setCosmetics(this.worn);
   }
 
   /** New level: the starting squad is simply there, with no pop animation, and

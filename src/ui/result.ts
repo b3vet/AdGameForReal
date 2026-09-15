@@ -11,28 +11,60 @@
  * which screen is up, and this is one screen's numbers.
  */
 
-import { academy } from '@/data/academy-types';
+import { academy, fill } from '@/data/academy-types';
+import type { PlayerState } from '@/core/player';
 
+import { ResultMeta } from './resultMeta';
+import type { ResultMetaElements } from './resultMeta';
 import { replay } from './widgets';
 
 import './result.css';
+
+/** One coin line under the count-up: where it came from and what it paid. */
+export interface ResultBonus {
+  text: string;
+  coins: number;
+  /** A second line under it — the tint a bestiary rung handed over (D53). */
+  note?: string;
+}
 
 export interface ResultView {
   levelIndex: number;
   won: boolean;
   survivors: number;
   peakCount: number;
-  /** Coins this run paid, from `runRewards`. */
+  /** Coins the road itself paid, from `runRewards`. */
   coins: number;
+  /**
+   * Coins this run paid altogether: the road plus every bonus under it. This
+   * is what the count-up rolls, because it is exactly what the purse gained.
+   */
+  earnedCoins: number;
   /** The purse afterwards. */
   totalCoins: number;
   /** True when this run was the first clear of the level. */
   firstClear: boolean;
-  /** False on the last level, where there is nothing left to unlock. */
+  /** False on the last level, and on the endless road, which has no next. */
   canAdvance: boolean;
+  /** True for a walk of the endless road (D52): metres instead of a level. */
+  endless: boolean;
+  metres: number;
+  bestMetres: number;
+  endlessBest: boolean;
+  /** The coin lines under the count-up (D51 to D53). */
+  bonuses: readonly ResultBonus[];
+  /** Missions this run finished, for the ticks among those lines. */
+  missions: readonly { text: string; reward: number }[];
+  /** This level's best walk after the run, or null for an endless one. */
+  best: { survivors: number; peak: number } | null;
+  bestImproved: boolean;
+  /** Whether that best walk earns the picker's star. */
+  star: boolean;
+  /** The purse's owner, for the next-unlock row (`./nextUnlock.ts`). */
+  player: PlayerState;
 }
 
-export interface ResultElements {
+export interface ResultElements extends ResultMetaElements {
   /** The banner the verdict rides in on; `data-won` picks its colour. */
   ribbon: HTMLElement;
   kicker: HTMLElement;
@@ -42,7 +74,7 @@ export interface ResultElements {
   peak: HTMLElement;
   coins: HTMLElement;
   total: HTMLElement;
-  next: HTMLButtonElement;
+  advance: HTMLButtonElement;
   levels: HTMLButtonElement;
 }
 
@@ -73,12 +105,15 @@ const COIN_TICK_MS = 45;
 export class ResultPanel {
   private readonly elements: ResultElements;
   private readonly callbacks: ResultCallbacks;
+  /** The lists under the numbers (`./resultMeta.ts`). */
+  private readonly meta: ResultMeta;
 
   private raf: number | null = null;
 
   constructor(elements: ResultElements, callbacks: ResultCallbacks) {
     this.elements = elements;
     this.callbacks = callbacks;
+    this.meta = new ResultMeta(elements);
   }
 
   /**
@@ -89,19 +124,29 @@ export class ResultPanel {
   show(view: ResultView): void {
     const survivors = Math.max(0, Math.round(view.survivors));
     const peak = Math.max(0, Math.round(view.peakCount));
-    const coins = Math.max(0, Math.round(view.coins));
+    const coins = Math.max(0, Math.round(view.earnedCoins));
     const total = Math.max(0, Math.round(view.totalCoins));
 
+    this.meta.show(view);
     this.elements.kicker.textContent = view.won ? 'Horde slain' : 'Overwhelmed';
     // Gold for a clear, crimson for a loss, and the slide replayed either way:
     // the screen is otherwise a still image, and the banner is what says the
     // run is over before a single number has been read.
     this.elements.ribbon.dataset['won'] = view.won ? 'true' : 'false';
     replay(this.elements.ribbon, 'ribbon--in');
-    this.elements.title.textContent = `Level ${String(view.levelIndex)}`;
+    // An endless run has no level number to print (D52), and its verdict is
+    // always the wipe or the road's end rather than a horde slain.
+    this.elements.title.textContent = view.endless
+      ? academy.meta.result.endlessTitle
+      : `Level ${String(view.levelIndex)}`;
+    if (view.endless) {
+      this.elements.kicker.textContent = fill(academy.meta.endless.hudLabel, {
+        metres: String(view.metres),
+      });
+    }
     this.elements.badge.textContent = academy.result.firstClear;
     this.elements.badge.hidden = !(view.won && view.firstClear);
-    this.elements.next.hidden = !(view.won && view.canAdvance);
+    this.elements.advance.hidden = !(view.won && view.canAdvance);
     // Always offered, unlike Milestone 3's "Levels": the Academy is where the
     // coins this run just paid are spent, so a won run must not be able to
     // funnel the player straight into the next level with no way to the shop.

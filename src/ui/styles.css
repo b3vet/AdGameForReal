@@ -68,6 +68,14 @@ body {
 
 #overlay-root > * {
   grid-area: 1 / 1;
+  /*
+   * A grid item is sized by its content unless it is told otherwise, and a
+   * screen may not be wider than the phone it is on. Nothing had ever tested
+   * that until the Wardrobe's chip strips (D53), which are wider than 390 px by
+   * design and pushed the whole room — heading, panel and Back — off the right
+   * edge. With this the strips scroll inside their rows instead.
+   */
+  min-width: 0;
 }
 
 #overlay-root [hidden] {

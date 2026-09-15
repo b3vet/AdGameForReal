@@ -1,0 +1,143 @@
+/*
+ * The Wardrobe's tint chips (D53).
+ *
+ * A file of its own rather than more of `./rooms.css`, which was already at the
+ * size rule (CLAUDE.md): the other rooms are lists of priced rows and this is a
+ * strip of swatches, which is a different control with rules of its own about
+ * colour. Loaded after the rooms it stands among (`./fonts.ts`).
+ *
+ * Colour is the whole subject here, so it is worth saying once: a swatch never
+ * carries a literal (D36). A tint written as a palette role arrives as a
+ * `--tint-role` variable pointing at one of `./palette.css`'s own; one written
+ * as three multipliers arrives as three *numbers*, and the browser multiplies
+ * them into a palette colour with relative colour syntax — the same arithmetic
+ * the renderer does to the material it is drawing.
+ */
+
+/*
+ * One row per slot, each a strip of chips. The strip scrolls sideways rather
+ * than wrapping: a slot has at most six tints and a row that reflows puts the
+ * bare chip in a different place in every row, which is the one chip the player
+ * has to be able to find.
+ */
+/*
+ * The column the slot rows stand in. A flex column sizes its items to their
+ * content, and a strip of chips is wider than the panel — so without this the
+ * *screen* grows to fit it and the whole room scrolls sideways (the Phase C
+ * probe, first Wardrobe frame). The strip inside is what scrolls instead.
+ */
+.rows--tints {
+  min-width: 0;
+}
+
+.rows--tints > .tints {
+  align-self: stretch;
+  max-width: 100%;
+}
+
+.tints {
+  gap: 0.25rem;
+  padding: 0.3rem 0.45rem 0.4rem;
+  /* A grid item will not shrink below its content without this, and the strip
+     below is what is supposed to scroll — not the card, and not the panel. */
+  min-width: 0;
+}
+
+.tints__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+.tints__strip {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.15rem;
+}
+
+.tint {
+  appearance: none;
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  width: 4.1rem;
+  padding: 0.25rem 0.15rem;
+  border: none;
+  border-radius: 0.45rem;
+  background: var(--sunk);
+  cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
+/*
+ * The swatch. A palette role becomes a variable on the element; a multiplier
+ * triple is multiplied into a palette colour by the browser, which is the same
+ * arithmetic the renderer does to the material (`src/ui/wardrobe.ts`). A
+ * browser with no relative colour syntax keeps the plain chip underneath.
+ */
+.tint__swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 0.12rem color-mix(in srgb, var(--c-ink-base) 35%, transparent);
+  background: var(--tint-role, var(--paper-shade));
+}
+
+.tint__swatch[data-kind='triple'] {
+  background: var(--paper-shade);
+  background: rgb(
+    from var(--c-stone-base) calc(r * var(--tint-r, 1)) calc(g * var(--tint-g, 1))
+      calc(b * var(--tint-b, 1))
+  );
+}
+
+/* Bare: a chip with nothing in it, which is what taking a hat off looks like. */
+.tint__swatch[data-kind='none'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 0.12rem color-mix(in srgb, var(--c-ink-base) 30%, transparent);
+}
+
+.tint__name {
+  font-family: var(--font-body);
+  font-size: 0.6rem;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.tint__hint {
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+}
+
+.tint[data-owned='false'] {
+  filter: grayscale(0.9);
+  opacity: 0.7;
+}
+
+/* Worn: the gold ring every selected control in the Academy wears. */
+.tint[aria-pressed='true'] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gold-light) 70%, transparent),
+    color-mix(in srgb, var(--gold) 45%, transparent)
+  );
+  box-shadow: inset 0 0 0 0.12rem var(--gold-deep);
+}
+
+.tint[aria-pressed='true'] .tint__name {
+  color: var(--ink);
+  font-weight: 700;
+}
+

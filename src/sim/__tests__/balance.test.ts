@@ -74,14 +74,16 @@ const PEAK_MAX_RATIO = 1.4;
 const CAMPAIGN_TIMEOUT_MS = 300_000;
 
 /**
- * The levels the road is not meant to give up without upgrades (D45).
+ * The levels the road is not meant to give up without upgrades (D45, D48, D55).
  *
- * Level 5 was the first of them until the C2 follow-up moved it to 7: two
- * purchases is not a power swing, and an ordinary level 5 is what the campaign
- * measures better as. Seven turns out not to separate either — see the
- * milestone tests below.
+ * Level 5 was the first of them until the Milestone 6 follow-up moved it to 7,
+ * and 7 came off the list in Milestone 8 (D55): it never separated armed from
+ * bare at any `gateBonus` size, and the Milestone 8 balance pass measured it as
+ * an ordinary-hard level that sits inside the ordinary bands — 5 clears in ten,
+ * 0.28 of its peak walking away, a 30 second boss — so it is measured as one.
+ * The first upgrade gate is level 10.
  */
-const MILESTONES: readonly number[] = [7, 10, 15, 20, 25, 30, 35, 40];
+const MILESTONES: readonly number[] = [10, 15, 20, 25, 30, 35, 40];
 
 const isMilestone = (level: number): boolean => MILESTONES.includes(level);
 
@@ -107,6 +109,19 @@ const FROST_FROM = BANDED + 1;
  * picked against — 0.09 opens level 10 and none of the twenty goes over this.
  */
 const ARMED_CLEAR_CEILING = 0.85;
+
+/**
+ * Where the tier ceilings start: Frostfell, because that is where a level is
+ * *tuned* for a hand that has shopped (D49). The campaign first buys an
+ * evolution at level 17, but levels 15 to 20 were fitted against a bare hand
+ * and an armed one is expected to walk them — measured, the kit alone clears
+ * level 17 nine times in ten with or without a tier on it — so a ceiling there
+ * would be a band on the Milestone 6 design rather than on anything D54 added.
+ */
+const TIER_FROM = FROST_FROM;
+
+/** What a milestone may fall to for the hand that also bought tiers (D54). */
+const TIER_MILESTONE_CEILING = 0.75;
 
 /** D45's headline: a decent thumb clears an ordinary level most of the time. */
 const CLEAR_BAND: readonly [number, number] = [0.7, 0.8];
@@ -161,7 +176,18 @@ const BOSS_MAX_SECONDS = 35;
  * level index and only the crowd's own spread is left.
  */
 const FROST_BOSS_MIN_SECONDS = 20;
-const FROST_BOSS_MAX_SECONDS = 30;
+/**
+ * Widened by two seconds in Milestone 8, for one reason the value model in
+ * `../campaignShop.ts` makes unavoidable: ranked by output per coin,
+ * `bossDamage` is the worst rung in the Yard — it is worth its effect times the
+ * share of the run that is the boss fight, about a quarter — so the shopper
+ * buys it last, and the kit the campaign holds at the top of Frostfell carries
+ * one fewer rung of it than the lockstep shopper's did. Level 31 measures 30.8
+ * seconds; nothing else goes over 30. The alternative was to lower its boss's
+ * hit points, which the monotone ladder (levels 30, 31 and 32 all stand 31,100)
+ * does not have room for.
+ */
+const FROST_BOSS_MAX_SECONDS = 32;
 
 /** What the Rime Fiend's lane charge may be worth against its own stomp. */
 const CHARGE_SHARE_CEILING = 1 / 3;
@@ -224,8 +250,8 @@ function humanClearRate(level: number, player?: PlayerState, tag = ''): number {
  * coupling D45 asks the milestone levels to be tuned against, and from D49 the
  * coupling the whole of Frostfell is tuned against.
  */
-const campaignKit = (() => {
-  const campaign = runCampaign({ bot: 'human', seed: 1 });
+function kitsOf(evolutions: boolean): Map<number, PlayerState> {
+  const campaign = runCampaign({ bot: 'human', seed: 1, evolutions });
   const kit = new Map<number, PlayerState>();
   for (const entry of campaign.levels) {
     kit.set(
@@ -234,13 +260,28 @@ const campaignKit = (() => {
         upgrades: entry.held.upgrades,
         staffs: entry.held.staffs,
         evolved: entry.held.evolved,
+        tiers: entry.held.tiers,
         wispTier: entry.held.wispTier,
         unlockedLevel: entry.level,
       }),
     );
   }
   return kit;
-})();
+}
+
+const campaignKit = kitsOf(false);
+
+/**
+ * The same, for the player who *does* climb the Workbench's ladders (D54).
+ *
+ * Two campaigns rather than one because "never mandatory below level 40" is a
+ * promise about two different hands, and both have to hold. The kit above buys
+ * only the Yard, the staffs and the wisp, and the Milestone 6 and 7 bands are
+ * measured on it; this one spends a share of the same purse on evolutions
+ * instead, and what has to be true of it is the opposite — that no level it
+ * walks onto becomes a formality (`TIER_CLEAR_CEILING` below).
+ */
+const tierKit = kitsOf(true);
 
 /**
  * The hand a level is measured on: nothing through biome 1 (D35, D45), the kit
@@ -465,7 +506,6 @@ describe('balance', () => {
    * campaign does, over ten seeds, with D50's cheap first `gateBonus` rung and
    * the effect size Milestone 7 picked for it (0.09):
    *
-   *     L 7  bare 5/10  armed 5/10   (held: startCount1 gateBonus1, storm, frost)
    *     L10  bare 2/10  armed 3/10   (held: damage1 startCount1 gateBonus1, ...)
    *     L15  bare 3/10  armed 5/10
    *     L20  bare 3/10  armed 5/10
@@ -482,12 +522,9 @@ describe('balance', () => {
    * shipped size, and the Yard's rungs are dearer to pay for it (D46's cadence
    * is measured in `./economy.test.ts`, not here).
    *
-   * Level 7 is the one that does not separate at any of the three. It is also
-   * the ceiling on how hard an *early* milestone can be at all — at the bite
-   * that takes the human under 45 percent there, greedy loses half its runs
-   * too, because a level-7 crowd is small enough for one bad row to end it —
-   * so it is recorded here as an ordinary-hard level rather than an upgrade
-   * gate, and 10 is asserted no more strictly than it was.
+   * Level 7 was the one that did not separate at any of the three, at 5 of 10
+   * either way. It is off the list in Milestone 8 (D55) and measured with the
+   * ordinary levels above; 10 is asserted no more strictly than it was.
    */
   it('keeps the milestone levels well under the ordinary band without upgrades', () => {
     for (const level of MILESTONES) {
@@ -510,13 +547,37 @@ describe('balance', () => {
       expectTrue(`L${String(level)} kit`, player !== undefined);
       const bare = humanClearRate(level);
       const armed = humanClearRate(level, player, 'kit');
-      // 7 and 10 are recorded rather than asserted, for the reason above.
+      // 10 is recorded rather than asserted, for the reason above.
       if (level >= 15) {
         expectTrue(
           `L${String(level)} armed ${armed.toFixed(2)} vs bare ${bare.toFixed(2)}`,
           armed >= bare + 0.15,
         );
       }
+    }
+  }, CAMPAIGN_TIMEOUT_MS);
+
+  /**
+   * The other half of "never mandatory below level 40" (D54).
+   *
+   * The tests above are the promise to a player who never buys an evolution:
+   * the Yard alone still clears seven or eight ordinary levels in ten. This is
+   * the promise to the player who does buy them — that the coins they spent on
+   * a ladder instead of a rung did not turn the road into a formality. The two
+   * hands cost the same purse, so what has to be true is a *ceiling*, and it is
+   * measured from the level the campaign first reaches a tier (17 on seed 1).
+   *
+   * Measured with the tier kit, Milestone 8: no ordinary level of the sixteen
+   * goes over 0.85 and no milestone over 0.75.
+   */
+  it('never lets the evolution tiers the campaign buys walk a level', () => {
+    for (let level = TIER_FROM; level <= levelCount; level++) {
+      const player = tierKit.get(level);
+      expectTrue(`L${String(level)} tier kit`, player !== undefined);
+      const rate = humanClearRate(level, player, 'tiers');
+      const where = `L${String(level)} tiers ${rate.toFixed(2)}`;
+      const ceiling = isMilestone(level) ? TIER_MILESTONE_CEILING : ARMED_CLEAR_CEILING;
+      expectTrue(`${where} ceiling ${String(ceiling)}`, rate <= ceiling);
     }
   }, CAMPAIGN_TIMEOUT_MS);
 

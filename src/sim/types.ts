@@ -97,7 +97,8 @@ export interface EnemyState {
    * fire twice over. Optional like `slowUntil`: hand-made states predate it.
    */
   burnUntil?: number;
-  burnPerTick?: number;
+  /** Burn damage still owed, drained a tick at a time (D33, re-based in M8). */
+  burnLeft?: number;
   burnNextAt?: number;
   /** In the burn list right now, so a refresh does not file it twice. */
   burning?: boolean;

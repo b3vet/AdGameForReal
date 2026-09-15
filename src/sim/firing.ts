@@ -413,7 +413,7 @@ export class Firing {
     // the chill behind it. Strictly the body that was slowed before this hit,
     // not any body a frost shot killed, so the pulse is the second hit on a
     // held body rather than something every frost kill does for free.
-    if (wasSlowed) this.effects.freezePulse(state, enemy);
+    if (wasSlowed) this.effects.freezePulse(state, enemy, dealt);
     if (enemy.kind === 'boss') {
       this.events.bossKilled();
       this.onBossKilled();

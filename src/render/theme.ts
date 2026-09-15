@@ -52,6 +52,7 @@ export {
   paletteBiome,
   paletteColor,
   paletteHex,
+  paletteHexIn,
 } from './palette';
 export type { PaletteRole } from './palette';
 export { ENEMY_MAX_INSTANCES, POOL, WALL_POST_SPACING } from './pools';

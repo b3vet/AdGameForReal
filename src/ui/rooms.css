@@ -54,6 +54,15 @@
   /* A room is a list, and a short screen has to be able to reach the end of
      it; the overlay is click-through, so this is the one place that opts in. */
   max-height: 60vh;
+  /*
+   * And it may never be *wider* than the screen. A flex item does not shrink
+   * below its content without this, and the Wardrobe's chip strips are wider
+   * than a phone — so the panel, the heading and the Back button under it all
+   * slid sideways until the strip was told to scroll inside instead (the Phase
+   * C probe's first Wardrobe frame).
+   */
+  min-width: 0;
+  max-width: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
@@ -152,14 +161,50 @@
   color: var(--ink-soft);
 }
 
-/* The evolution's promise: greyed while it is unbought, gold once it is. */
-.row__effect--tier2 {
+/*
+ * The staff's three evolutions (D54), stacked under its blurb: every rung is on
+ * the card from tier 1, because a ladder the player cannot see is not a goal.
+ * Greyed while it is unbought, gold once it is held, and outlined while it is
+ * the one the price below buys.
+ */
+.row__ladder {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.row__effect--tier {
+  display: flex;
+  gap: 0.35rem;
+  align-items: baseline;
   color: var(--ink-dim);
 }
 
-.row__effect--tier2[data-active='true'] {
-  color: var(--c-gold-deep);
+.row__tiername {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.row__tierline {
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.row__effect--tier[data-active='true'] {
+  color: var(--c-gold-deep);
+}
+
+.row__effect--tier[data-active='true'] .row__tiername {
+  font-weight: 700;
+}
+
+/* The rung the button below is selling: the one thing on the card to read. */
+.row__effect--tier[data-next='true'] {
+  color: var(--ink);
+  border-left: 0.16rem solid color-mix(in srgb, var(--gold) 70%, transparent);
+  padding-left: 0.3rem;
 }
 
 .row__actions {
@@ -270,6 +315,53 @@
 
 .beast[data-seen='false'] .beast__blurb {
   font-style: italic;
+}
+
+/* --- Bestiary ladders (D53) ----------------------------------------------- */
+
+/*
+ * Kills and the three rungs they pay. The count sits where every other row
+ * puts its level, and the pips under the blurb are the ladder at a glance: a
+ * taken rung is gold, an untaken one is a hole in the parchment.
+ */
+.beast__count {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.beast__ladder {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.beast__rung {
+  flex: 1 1 0;
+  padding: 0.05rem 0;
+  border-radius: 0.3rem;
+  background: var(--sunk);
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.beast__rung[data-taken='true'] {
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  color: var(--ink);
+}
+
+.beast__next {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  color: var(--ink-dim);
 }
 
 /* Landscape: the scroll box is shortened so Back cannot be pushed off-screen. */

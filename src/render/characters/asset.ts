@@ -21,6 +21,7 @@
  *      with the triangle winding reversed to match.
  */
 
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { BakedVertexAnimationManager } from '@babylonjs/core/BakedVertexAnimation/bakedVertexAnimationManager';
 import { Constants } from '@babylonjs/core/Engines/constants';
@@ -49,10 +50,28 @@ import type { ModelAsset, VatMeta } from './manifest';
 import { tintColors } from './tint';
 import { prepareVatSampling } from './vatSampling';
 
+/**
+ * Where one source mesh's vertices ended up in the merged mesh, so a part can
+ * be re-tinted after the merge (D53: a hat and a cape are cosmetics).
+ */
+export interface PartRange {
+  /** First vertex of this part in the merged buffers. */
+  start: number;
+  count: number;
+}
+
 /** What `VatCrowd` needs to draw a character, and what the caller must dispose. */
 export interface CharacterAsset {
   /** Merged, un-mirrored, skinned to the rig the VAT was baked from. */
   readonly mesh: Mesh;
+  /**
+   * The colour buffer the merge produced, kept as the *base* a cosmetic tint
+   * multiplies (`VatCrowd.setPartTints`). Null when the manifest names no tint
+   * at all, in which case there is no buffer to multiply.
+   */
+  readonly baseColors: Float32Array | null;
+  /** Where each named source mesh landed in that buffer. */
+  readonly parts: ReadonlyMap<string, PartRange>;
   /** Kept alive because the shader only takes the VAT path when a mesh has one. */
   readonly skeleton: Skeleton;
   readonly manager: BakedVertexAnimationManager;
@@ -133,7 +152,15 @@ export async function loadCharacterAssets(
 
     const merged = mergeCharacter(sources, skeleton, model);
     const mesh = new Mesh(`${model.id}:${variant}`, scene);
-    merged.applyToMesh(mesh, false);
+    merged.data.applyToMesh(mesh, false);
+    // The colour buffer alone is updatable, so a cosmetic can dye the hat and
+    // the cape after the merge (D53, `VatCrowd.setPartTints`). Babylon silently
+    // ignores an update to a buffer that was not made updatable, which is how
+    // the first Phase C probe photographed a crowd still wearing the manifest's
+    // own violet.
+    if (merged.colors !== null) {
+      mesh.setVerticesData(VertexBuffer.ColorKind, merged.colors, true);
+    }
     material ??= pickMaterial(sources);
     mesh.material = material;
     // A clone per variant: the mesh only needs *a* skeleton for the shader to
@@ -154,6 +181,8 @@ export async function loadCharacterAssets(
 
     const asset: CharacterAsset = {
       mesh,
+      baseColors: merged.colors,
+      parts: merged.parts,
       skeleton: bones,
       manager,
       vat,
@@ -219,8 +248,10 @@ function mergeCharacter(
   sources: readonly Mesh[],
   skeleton: Skeleton,
   model: ModelAsset,
-): VertexData {
+): { data: VertexData; colors: Float32Array | null; parts: Map<string, PartRange> } {
   const parts: VertexData[] = [];
+  const ranges = new Map<string, PartRange>();
+  let vertices = 0;
   const boneIndex = new Map(skeleton.bones.map((bone, index) => [bone.name, index]));
   const bindInverse = bindSpaceInverse(sources);
   const tints = model.tints;
@@ -250,20 +281,27 @@ function mergeCharacter(
     const normals = array(data.normals);
     if (normals !== null) unmirror(normals);
     reverseWinding(data);
+    const count = positions.length / 3;
     if (anyTint) {
       data.colors = tintColors(
-        positions.length / 3,
+        count,
         tints?.[source.name],
         patches?.[source.name],
         array(data.uvs),
       );
     }
+    // Where this part landed, so a cosmetic can find its hat again (D53). The
+    // merge below concatenates in this order, which is what makes the running
+    // count the part's first vertex.
+    ranges.set(source.name, { start: vertices, count });
+    vertices += count;
     parts.push(data);
   }
 
   const first = parts[0];
   if (first === undefined) throw new Error('nothing to merge');
-  return parts.length === 1 ? first : first.merge(parts.slice(1), true);
+  const data = parts.length === 1 ? first : first.merge(parts.slice(1), true);
+  return { data, colors: array(data.colors), parts: ranges };
 }
 
 /** World-to-bind transform, taken from the first genuinely skinned source. */

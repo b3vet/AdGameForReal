@@ -32,6 +32,12 @@
   width: 100%;
 }
 
+.hud__level[data-endless='true'] {
+  /* The metres chip (D52) counts up every frame; without tabular figures the
+     chip's width would breathe with every digit. */
+  font-variant-numeric: tabular-nums;
+}
+
 .hud__level {
   grid-column: 1;
   justify-self: start;
