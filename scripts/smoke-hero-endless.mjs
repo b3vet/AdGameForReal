@@ -9,9 +9,14 @@
  * painted on the far half of the road. The other two are *rare moments* with no
  * place at all: a meteor falls every seven seconds of sim wherever the crowd is
  * aiming and a wall of ice goes up every eight, so neither can be waited for by
- * walking to a metre mark. Both are found by polling the renderer's own feature
- * stats (`src/render/rendererStats.ts`, which says why they are there) and
- * stopping the loop on the frame that has one.
+ * walking to a metre mark. Both are photographed off the renderer's own feature
+ * stats (`src/render/rendererStats.ts`, which says why they are there) — the
+ * loop stops on the frame that has one, which is the only honest test that it
+ * was drawn at all. The meteor is hunted by polling those stats and nothing
+ * else; the ice wall is *paced* by the road and by the sim's record of the wall
+ * standing on it, because the first one is a long way down the road and a page
+ * that draws a frame a second cannot afford to crawl there
+ * (`ENDLESS_PACE.glacier`).
  *
  * Two runs on one page, because one squad carries one staff: the meteor is
  * ember's tier 4 and the glacier is frost's, and the only way to photograph
@@ -88,30 +93,64 @@ const FROST_SHOTS = [{ at: 'glacier', name: 'hero-glacier' }];
  *            at 0.1 s put the head two thirds of the way down — clear of the
  *            squad-count plaque it hides behind at the top of its arc, and over
  *            the crater it is about to make.
- *   glacier  one every 8 s, standing for 5 s and rising over 0.22 s. Hunting at
- *            0.6 s a frame is eight frames inside the hold. It goes up twelve
- *            metres ahead of the squad, which is more than twenty from the
- *            camera — a pale slab the size of a thumbnail — so the settling
- *            frames at 0.2 s are the squad walking towards it while it is still
- *            standing.
- *
- *            Five of them, not ten. The squad runs at 5 m/s and a settling
- *            frame is 0.2 s, so ten of them close the whole twelve metres and
- *            leave the wall *beside* the column — and a wall goes up in the
- *            fullest lane, which is the one the bot is steering away from, so
- *            at two metres ahead and two across it slides off the bottom
- *            corner of the frame. That is the Milestone 8 glacier hero shot,
- *            the weakest picture in the set. Six metres ahead is the same slab
- *            at the distance the first gate row reads at: large enough to be
- *            the subject and far enough to stay inside the frame whichever lane
- *            it went up in.
+ *   glacier  one every 8 s, standing for 5 s and rising over 0.22 s — and it is
+ *            paced off the road rather than held at one speed, because the
+ *            first wall on this seed does not go up until 24.4 s of sim (see
+ *            `glacier` below for why, and for what that cost).
  */
 const ENDLESS_PACE = {
   cruise: 60,
   boundary: { far: 30, farTurbo: 10, near: 10, nearTurbo: 4 },
   boundaryShot: { before: 2, over: 6 },
   meteor: { hunt: 4, settleTurbo: 2, settleFrames: 3 },
-  glacier: { hunt: 12, settleTurbo: 4, settleFrames: 5 },
+  /**
+   * The glacier's three rungs, and the Milestone 8 review's fix for the one
+   * frame in the set that was timing-dependent (`hero-glacier`).
+   *
+   * What was wrong with holding one speed. `frameDt` is clamped to 0.05 s
+   * (`MAX_FRAME_DT`, `src/core/frame.ts`), so a frame moves the sim on by
+   * `0.05 * turbo` seconds however long it actually took — 0.6 s at turbo 12 —
+   * and the first wall on this seed does not go up until 24.4 s of sim: no body
+   * sits between the wall's line and the end of the squad's reach until then,
+   * and a wall only goes up where there is a river to hold. That is forty-five
+   * frames of hunting before the first wall is even possible, and a frame of
+   * this page was measured at 1.3 s of wall clock with nothing else running —
+   * a minute of hunting alone, and the set drives this page beside two others
+   * on four cores, against the four-minute `SHOT_TIMEOUT_MS`. Nothing about the
+   * run was wrong when it failed; the frames ran out.
+   *
+   * So the clock is paced by what the wall's own rule reads (`src/sim/glacier.ts`):
+   *
+   *   cruise   no block within `look` metres, so no wall can go up in front of
+   *            the squad this frame. `ENDLESS_PACE.cruise`, 3 s of sim a frame.
+   *   hunt     a block is in reach: a wall may go up at any step, so the clock
+   *            comes down to 1.2 s a frame — which is what says the wall is
+   *            seen while it is still `ahead` metres away, because the squad
+   *            runs 5 m/s and closes at most 6 of the wall's 12 m in one frame.
+   *   close    a wall is standing ahead: 0.2 s a frame, a metre of road each,
+   *            until it is `ahead` metres off.
+   *
+   * `look` is 58 m: the squad's own range (34, `projectiles.range`) plus the
+   * 24 a cruise frame covers, so a block cannot cross into the wall's window
+   * between two frames without having been seen on the near side of it first.
+   *
+   * The wall itself is found on `RunState.ice` — the sim's own record of where
+   * it stands and when it lets go — and *only for the clock*. The picture is
+   * still taken on `renderer.featureStats.glacier`, which is the only honest
+   * test that a wall was drawn at all; `drawnFrames` is how many frames of the
+   * slow clock it has to have been drawn for before the shutter, so a wall
+   * still rising out of the road is never the frame.
+   *
+   * `ahead` is six metres, which is the distance the first gate row reads at:
+   * large enough to be the subject and far enough to stay inside the frame
+   * whichever lane it went up in. Paced this way it is six metres at any frame
+   * rate, where the old fixed count of settling frames put the wall anywhere
+   * between two and eleven metres out depending on how fast the page drew.
+   * `floor` throws away a wall that is already level with the column — one
+   * cruise frame can straddle a rise — and waits for the next one, which is
+   * eight seconds of sim later and three frames away.
+   */
+  glacier: { look: 58, hunt: 24, close: 4, ahead: 6, floor: 2, drawnFrames: 2 },
 };
 
 /**
@@ -205,6 +244,54 @@ async function armEndlessPlan(page, shots, pace) {
         return stats.glacier === true;
       };
 
+      /**
+       * True while a live block stands within `look` metres of the column.
+       *
+       * The wall's own rule, read off the same list it reads (`state.enemies`
+       * is the blocks; the stream bodies are not in it and do not raise a
+       * wall): no block in front of the squad is no wall this frame, which is
+       * what lets the clock run. Deliberately wider than the rule — it asks
+       * about the whole road ahead rather than the window between the wall's
+       * line and the end of the squad's reach — because it is a *permit to
+       * fast-forward* and the cheap direction to be wrong in is slowly.
+       */
+      const blocksAhead = (state, look) => {
+        for (const enemy of state.enemies) {
+          if (!enemy.alive) continue;
+          const gap = enemy.z - state.squad.z;
+          if (gap > 0 && gap <= look) return true;
+        }
+        return false;
+      };
+
+      /**
+       * The glacier step: pace by the wall in the state, shoot on the wall the
+       * renderer drew. See `ENDLESS_PACE.glacier` for the three rungs and for
+       * what holding one speed cost.
+       */
+      const wallShot = (step, state) => {
+        const rare = clock.glacier;
+        const ice = state.ice ?? null;
+        const gap = ice === null ? 0 : ice.z - state.squad.z;
+        if (ice === null || gap < rare.floor) {
+          // Nothing standing in front of the column: down the road at whatever
+          // speed the next wall can still be caught at, and start the count
+          // again.
+          globalThis.__heroHeld = 0;
+          globalThis.__arcane?.setTurbo(
+            blocksAhead(state, rare.look) ? rare.hunt : clock.cruise,
+          );
+          return false;
+        }
+        // A wall is up ahead. The clock comes down whether or not it has been
+        // drawn yet — a wall in the state is a wall on the next frame — and
+        // the squad walks the last few metres up to it at a crawl.
+        globalThis.__arcane?.setTurbo(rare.close);
+        if (!showing(step)) return false;
+        globalThis.__heroHeld += 1;
+        return globalThis.__heroHeld >= rare.drawnFrames && gap <= rare.ahead;
+      };
+
       const holds = (step, state) => {
         if (step.at === 'boundary') {
           const span = spanMetres();
@@ -222,7 +309,9 @@ async function armEndlessPlan(page, shots, pace) {
           return over >= -clock.boundaryShot.before && over <= clock.boundaryShot.over;
         }
 
-        const rare = step.at === 'meteor' ? clock.meteor : clock.glacier;
+        if (step.at === 'glacier') return wallShot(step, state);
+
+        const rare = clock.meteor;
         if (!showing(step)) {
           // Nothing on screen: hold the clock low enough that the next one
           // cannot happen between two frames, and start the count again.
@@ -230,8 +319,8 @@ async function armEndlessPlan(page, shots, pace) {
           globalThis.__arcane?.setTurbo(rare.hunt);
           return false;
         }
-        // Found it. A beat at a crawl, so a wall that is still rising out of
-        // the road is photographed standing with a river piled against it.
+        // Found it. A beat at a crawl, so the head is photographed two thirds
+        // of the way down rather than at the top of its arc.
         globalThis.__arcane?.setTurbo(rare.settleTurbo);
         globalThis.__heroHeld += 1;
         return globalThis.__heroHeld > rare.settleFrames;
