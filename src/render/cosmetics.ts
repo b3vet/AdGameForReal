@@ -136,6 +136,39 @@ export const BARE_TINTS: WornTints = {
 };
 
 /**
+ * The dye job a crowd is wearing, kept between level loads.
+ *
+ * Here rather than in `./squad.ts` for the file-size rule (CLAUDE.md) and
+ * because it is the same reasoning as `partTintsInto` above: the map and the
+ * two multipliers it writes into are re-used rather than rebuilt, and the
+ * squad's only interest is that it has one map to hand its three crowds.
+ *
+ * `worn` is kept because the crowds arrive *after* the first dressing — the
+ * model load is not awaited by the title screen — so what the player is wearing
+ * has to survive until there is something to put it on.
+ */
+export class WornParts {
+  /** The map handed to `Crowd.setPartTints`; re-written, never rebuilt. */
+  private readonly parts = new Map<string, readonly [number, number, number]>();
+  /** The two multipliers that map holds, reused across level loads. */
+  private readonly hatDye: [number, number, number] = [1, 1, 1];
+  private readonly capeDye: [number, number, number] = [1, 1, 1];
+  private tints: WornTints = BARE_TINTS;
+
+  /** What the player is wearing, for a crowd that has only just loaded. */
+  get worn(): WornTints {
+    return this.tints;
+  }
+
+  /** Re-dyes for `tints` and answers the map to hand on. */
+  set(tints: WornTints): ReadonlyMap<string, readonly [number, number, number]> {
+    this.tints = tints;
+    partTintsInto(tints, this.parts, this.hatDye, this.capeDye);
+    return this.parts;
+  }
+}
+
+/**
  * Dresses the scene in what the player is wearing (D53): the squad's hat and
  * cape, the wisp's colour and trail, and the glow on the spell sprites.
  *
@@ -146,6 +179,28 @@ export function applyCosmetics(views: SceneViews, tints: WornTints): void {
   views.wisp.setCosmetic(tints.wisp);
   views.projectiles.setStaffGlow(tints.staffGlow);
   views.effects.setStaffGlow(tints.staffGlow);
+}
+
+/**
+ * The tints the scene is dressed in, and the check that keeps a repaint rare.
+ *
+ * Here rather than in `./Renderer.ts` (Milestone 8 Phase E) because everything
+ * it needs is in this file. The unchanged case is dropped here rather than in
+ * each view because the crowd's is the expensive one: it rewrites a vertex
+ * colour buffer per staff, and the Academy re-dresses its backdrop every time a
+ * card is tapped.
+ */
+export class SceneTints {
+  private worn: WornTints = BARE_TINTS;
+
+  /** Dresses `views` for this player (D53); false when nothing changed. */
+  apply(player: PlayerState, views: SceneViews | null): boolean {
+    const tints = wornTints(player);
+    if (sameTints(tints, this.worn)) return false;
+    this.worn = tints;
+    if (views !== null) applyCosmetics(views, tints);
+    return true;
+  }
 }
 
 /** What this player is wearing, resolved to multipliers. */

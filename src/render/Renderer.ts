@@ -7,11 +7,12 @@
  *   - Every mesh, material and label is allocated in `init`; `loadLevel` hands
  *     them out and `update` only writes transforms. Nothing is created per frame.
  *
- * This file is the object the app holds: its lifecycle, its public API and the
- * quality rung. What it used to carry inline is four files around it —
- * `./views.ts` is every view, `./rendererBoot.ts` the order they are built in,
- * `./rendererLevel.ts` what a level load and a biome switch do to them,
- * `./rendererFrame.ts` the order they are written in every frame, and
+ * This file is the object the app holds: its lifecycle and its public API.
+ * What it used to carry inline is five files around it — `./views.ts` is every
+ * view, `./rendererBoot.ts` the order they are built in, `./rendererLevel.ts`
+ * what a level load and a biome switch do to them (and which biome that is),
+ * `./rendererFrame.ts` the order they are written in every frame,
+ * `./rendererQuality.ts` the dials the degrade ladder turns, and
  * `./rendererStats.ts` what is measured off the result.
  *
  * Deep imports (`@babylonjs/core/...`) rather than the package root, so the
@@ -23,14 +24,11 @@ import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/scene
 import type { Scene } from '@babylonjs/core/scene';
 
 import { biomeOfLevel } from './biome';
-import { BiomeSpans } from './biomeSpans';
 import type { CameraRig } from './camera';
-import { BARE_TINTS, applyCosmetics, sameTints, wornTints } from './cosmetics';
-import type { WornTints } from './cosmetics';
+import { SceneTints } from './cosmetics';
 import { PreviewBackdrop } from './preview';
-import { setBiome as setPaletteBiome } from './palette';
 import { bootScene } from './rendererBoot';
-import { drawFrame, drawSquadOnly } from './rendererFrame';
+import { drawFrame, drawSquadOnly, poseStressCamera, timeScaleOf } from './rendererFrame';
 import {
   chargerBodiesOf,
   drawCallsOf,
@@ -41,8 +39,13 @@ import {
   streamBodiesOf,
 } from './rendererStats';
 import type { FeatureReadout, LabelReadout } from './rendererStats';
-import { applySpan, loadLevelInto, repaintBiome } from './rendererLevel';
-import { applyToonRampToScene } from './toonRamp';
+import { RoadBiomes, applySpan, loadLevelInto } from './rendererLevel';
+import {
+  DEFAULT_MAX_PIXEL_RATIO,
+  applyPixelRatio,
+  clampPhysicsQuality,
+  effectivePixelRatio,
+} from './rendererQuality';
 import type { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
@@ -71,24 +74,13 @@ export interface RendererOptions {
   biome?: BiomeId;
 }
 
-/**
- * What the renderer renders at before the ladder has said anything: rung 0.
- *
- * Three, not Milestone 3's two. The product owner's verdict on that build was
- * "resolution very low" and they were reading a 3x phone at 2. There is no
- * device check here on purpose — the ladder starts at native and steps down on
- * its p95 rule, which is the only test that is true of the phone in the room.
- */
-const DEFAULT_MAX_PIXEL_RATIO = 3;
-
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly preserveDrawingBuffer: boolean;
   private maxPixelRatio: number;
-  /** `?biome=`, or undefined to follow each level's own (see `RendererOptions`). */
-  private readonly forcedBiome: BiomeId | undefined;
-  /** The biome the scene is painted in right now. */
-  private biome: BiomeId = 'meadow';
+  /** Which biome the scene is painted in, and where the road changes it
+   *  (`./rendererLevel.ts`). */
+  private readonly biomes: RoadBiomes;
 
   private engine: Engine | null = null;
   private sceneRef: Scene | null = null;
@@ -98,29 +90,15 @@ export class Renderer {
   /** Every view in the scene, built in `init` (`./views.ts`). */
   private views: SceneViews | null = null;
 
-  /**
-   * Who draws a death, mirrored from the physics layer by `setPhysicsQuality`.
-   *
-   * Zero until the app says otherwise, and that is the important part: the
-   * layer is loaded without being awaited (two megabytes of Havok must not hold
-   * the title screen), so for the first seconds of the session there is no
-   * physics at all. Starting at 2 meant the renderer spent those seconds
-   * skipping the deaths it believed Havok was about to throw — every tenth
-   * stream body blinked out, and every block died without an animation.
-   */
+  /** Who draws a death, mirrored from the physics layer by `setPhysicsQuality`
+   *  and 0 until it lands (`./rendererQuality.ts`). */
   private physicsQuality = 0;
 
   /** The Academy backdrop, when one is up; see `./preview.ts`. */
   private readonly preview = new PreviewBackdrop();
 
   /** The tints the squad, the wisp and the spells are wearing (D53). */
-  private tints: WornTints = BARE_TINTS;
-
-  /**
-   * The endless road's biome spans (D52), or inactive on a campaign level. It
-   * owns the crossings; what a crossing *does* is `applySpan` below.
-   */
-  private readonly spans = new BiomeSpans();
+  private readonly tints = new SceneTints();
 
   /**
    * The biome switch a span crossing asks for, bound once: `applySpan` runs on
@@ -141,22 +119,19 @@ export class Renderer {
     this.canvas = canvas;
     this.maxPixelRatio = Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO);
     this.preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
-    this.forcedBiome = options.biome;
+    this.biomes = new RoadBiomes(options.biome);
   }
 
   async init(): Promise<void> {
-    // Before anything is built, so every material, vertex colour and painted
-    // texture in the scene is made in the right biome the first time and the
-    // boot warm-up compiles exactly what the first frame draws. A level load
-    // that changes biome afterwards goes through `setBiome`.
-    this.biome = this.forcedBiome ?? 'meadow';
-    setPaletteBiome(this.biome);
+    // Before anything is built: a level load that changes biome afterwards goes
+    // through `setBiome` (`RoadBiomes.begin`).
+    const biome = this.biomes.begin();
 
     const context = await bootScene({
       canvas: this.canvas,
       preserveDrawingBuffer: this.preserveDrawingBuffer,
-      effectivePixelRatio: this.effectivePixelRatio(),
-      biome: this.biome,
+      effectivePixelRatio: effectivePixelRatio(this.maxPixelRatio),
+      biome,
       shake: (strength, seconds) => {
         this.shake(strength, seconds);
       },
@@ -173,33 +148,14 @@ export class Renderer {
     await this.warmUp();
   }
 
-  /**
-   * True when the last `update` moved the camera by less than a pixel's worth.
-   *
-   * The title screen shows a run that never ticks, so once the camera has eased
-   * into place nothing in the scene changes and the caller can stop asking for
-   * frames until something does (see `App.frame`).
-   */
+  /** Whether the frame loop can stop asking for frames (`./preview.ts`). */
   isSettled(): boolean {
-    // Never, while the Academy backdrop is up: the drift is the whole point of
-    // the preview, and a settled frame is a paused game (`./preview.ts`).
-    if (this.preview.active) return false;
-    return this.rig?.isSettled() ?? false;
+    return this.preview.settled(this.rig);
   }
 
-  /**
-   * The Academy's backdrop follows this player (D33): the staff on the mages,
-   * the wisp beside them, and a camera that breathes rather than freezing.
-   *
-   * `null` ends the preview, which the app calls as a run starts. The staff
-   * needs nothing beyond this call — the app builds its preview through `Run`
-   * with the same player, so `state.squad.weaponId` is already the chosen one
-   * and `SquadView` draws the crowd carrying it. See `./preview.ts` for what
-   * the wisp needs.
-   */
+  /** The Academy's backdrop, for this player or `null` (`./preview.ts`). */
   setPreviewPlayer(player: PlayerState | null): void {
-    this.preview.setPlayer(player);
-    this.rig?.setDrift(this.preview.active);
+    this.preview.setPlayerOn(player, this.rig);
     // The backdrop crowd wears what the player is wearing (D53), so a tint
     // chosen in the Wardrobe is on the mages behind the Academy's own cards.
     if (player !== null) this.setCosmetics(player);
@@ -215,10 +171,7 @@ export class Renderer {
    * buffer per staff.
    */
   setCosmetics(player: PlayerState): void {
-    const tints = wornTints(player);
-    if (sameTints(tints, this.tints)) return;
-    this.tints = tints;
-    if (this.views !== null) applyCosmetics(this.views, tints);
+    this.tints.apply(player, this.views);
   }
 
   /**
@@ -271,11 +224,6 @@ export class Renderer {
   async warmUp(): Promise<void> {
     const scene = this.sceneRef;
     if (scene === null || this.disposed) return;
-    // Before the compile, never after: a plugin added to a material marks its
-    // defines dirty, and a material ramped after the pass would compile its
-    // new variant inside the first frame that drew it — exactly the stall this
-    // pass exists to remove.
-    applyToonRampToScene(scene);
     await this.warmUpTracker.run(scene);
   }
 
@@ -292,17 +240,10 @@ export class Renderer {
     this.rig?.shake(strength, seconds);
   }
 
-  /**
-   * Poses the camera at the play rig's pose for this squad, and nothing else,
-   * for a caller that draws into the scene and renders it itself: the stress
-   * scene (`src/core/stress.ts`). Without it that scene keeps the rig's
-   * *constructor* pose — the framing a one-unit squad gets — and its 500-unit
-   * crowd stands with its back rows under the bottom edge, so the frame the
-   * performance tripwire measures is not one the game ever draws (D37).
-   */
+  /** The stress scene's camera pose; see `poseStressCamera`. */
   poseCamera(squad: SquadState, dt: number): void {
     if (this.disposed) return;
-    this.rig?.update(squad, dt);
+    poseStressCamera(this.rig, squad, dt);
   }
 
   /** The stress scene's cut-down frame; see `drawSquadOnly`. */
@@ -313,13 +254,10 @@ export class Renderer {
     drawSquadOnly(views, state, dt);
   }
 
-  /**
-   * The physics layer's quality, mirrored here because it decides who draws a
-   * death: at 1 and 2 `src/physics` spawns ragdolls and shards, so the renderer
-   * only takes the block away; at 0 it plays the baked death animation itself.
-   */
+  /** The physics layer's quality, mirrored here because it decides who draws a
+   *  death (`./rendererQuality.ts`). */
   setPhysicsQuality(quality: number): void {
-    this.physicsQuality = Math.max(0, Math.min(2, Math.round(quality)));
+    this.physicsQuality = clampPhysicsQuality(quality);
     this.views?.enemies.setPhysicsQuality(this.physicsQuality);
   }
 
@@ -359,6 +297,7 @@ export class Renderer {
     this.applyPixelRatio();
   }
 
+
   /**
    * Repaints the scene in a biome (D49), and answers whether it had to; the
    * sequence itself is `repaintBiome` in `./rendererLevel.ts`.
@@ -370,19 +309,15 @@ export class Renderer {
    */
   setBiome(id: BiomeId, warm = true): boolean {
     if (this.disposed) return false;
-    // The renderer's own record, not the palette's answer: `init` switches the
-    // palette before any view exists, so a first level on a pinned biome would
-    // find the palette already there and skip the fan-out the views still need.
-    if (id === this.biome) return false;
-    this.biome = id;
-    repaintBiome(this.sceneRef, this.views, id);
+    if (!this.biomes.switchTo(id, this.sceneRef, this.views)) return false;
     if (warm) void this.warmUp();
     return true;
   }
 
-  /** Which biome the scene is painted in. The debug panel prints it. */
+  /** Which biome the scene is painted in. The debug panel prints it, and the
+   *  smoke reads it across an endless road's boundaries (D52). */
   get biomeId(): BiomeId {
-    return this.biome;
+    return this.biomes.id;
   }
 
   /** Builds the road for this level and hands every pool back to its owner. */
@@ -392,15 +327,16 @@ export class Renderer {
     // campaign level has one for its whole length and the endless road
     // alternates (D52). Set before the biome below, because a spanned road's
     // first biome is the span the squad starts in rather than the level's.
-    this.spans.setLevel(level, this.forcedBiome);
+    const spans = this.biomes.spans;
+    spans.setLevel(level, this.biomes.forced);
     // Before the views are handed the level: the road's extent, the roadside's
     // layout and the arena all land inside `loadLevel`, and they have to land
     // on the biome this level is set in (`./biome.ts`).
-    this.setBiome(biomeOfLevel(level, this.forcedBiome));
+    this.setBiome(biomeOfLevel(level, this.biomes.forced));
     // The road's near and far halves, for a spanned road; a no-op otherwise.
-    this.views?.road.setSpans(this.spans.biomes, this.spans.span);
-    applySpan(this.spans, 0, true, this.setSpanBiome, this.sceneRef, this.views);
-    loadLevelInto(this.views, this.rig, level, this.spans);
+    this.views?.road.setSpans(spans.biomes, spans.span);
+    applySpan(spans, 0, true, this.setSpanBiome, this.sceneRef, this.views);
+    loadLevelInto(this.views, this.rig, level, spans);
   }
 
   /**
@@ -419,12 +355,13 @@ export class Renderer {
     const rig = this.rig;
     if (scene === null || views === null || rig === null) return;
 
-    drawFrame({ views, rig, preview: this.preview, timeScale: this.timeScale(dt) }, state, events, dt);
+    const timeScale = timeScaleOf(this.engine, dt);
+    drawFrame({ views, rig, preview: this.preview, timeScale }, state, events, dt);
 
     // After the frame is written and before it is drawn: the camera has been
     // posed by `drawFrame`, and which span it now stands in is what decides the
     // biome this frame is painted in (D52).
-    applySpan(this.spans, rig.camera.position.z, false, this.setSpanBiome, scene, views);
+    applySpan(this.biomes.spans, rig.camera.position.z, false, this.setSpanBiome, scene, views);
 
     scene.render();
   }
@@ -463,35 +400,9 @@ export class Renderer {
     this.engine = null;
   }
 
-  /**
-   * The ratio between the sim time a frame covers and the wall clock it took.
-   * The boss's animation groups run on the scene's own clock, so this is what
-   * carries the app's hit-stop and slow-mo through to them.
-   */
-  private timeScale(dt: number): number {
-    const frame = (this.engine?.getDeltaTime() ?? 16) / 1000;
-    if (frame <= 0) return 1;
-    return Math.max(0, Math.min(8, dt / frame));
-  }
-
-  /** What the scene actually renders at: the screen's ratio under our cap. */
-  private effectivePixelRatio(): number {
-    return Math.min(screenPixelRatio(), this.maxPixelRatio);
-  }
-
-  /**
-   * Caps the backing-store resolution; `1 / level` is the effective ratio.
-   *
-   * Guarded, because `setHardwareScalingLevel` resizes the canvas and every
-   * render target hanging off it. This is called from `init`, from a rung
-   * change and from `resize` — never per frame — and the guard keeps a resize
-   * that did not change the ratio from costing a reallocation anyway.
-   */
+  /** The backing store, at the screen's ratio under our cap
+   *  (`./rendererQuality.ts`). */
   private applyPixelRatio(): void {
-    const engine = this.engine;
-    if (engine === null) return;
-    const level = 1 / this.effectivePixelRatio();
-    if (engine.getHardwareScalingLevel() === level) return;
-    engine.setHardwareScalingLevel(level);
+    applyPixelRatio(this.engine, effectivePixelRatio(this.maxPixelRatio));
   }
 }

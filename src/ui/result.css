@@ -258,6 +258,48 @@
 }
 
 /*
+ * The sheet scrolls when it has more to say than the screen has room for.
+ *
+ * Measured on this milestone's fullest sheet at 390x844 (Phase E): a streak
+ * line, a mission tick, the level's best walk and the next unlock together push
+ * the fourth button — Academy, the way to the shop the run has just paid into —
+ * about thirty pixels past the bottom edge. `html` and `body` are
+ * `overflow: hidden` (`./styles.css`), so that button is not merely off screen,
+ * it is unreachable, which is the same class of bug the landscape rules below
+ * were written for.
+ *
+ * The middle is what gives: the verdict at the top and the way out at the
+ * bottom are the two things that must never move, and a sheet that fits is
+ * unchanged — a flex item only scrolls once there is nowhere left to grow.
+ * `touch-action` is named because the page itself is `touch-action: none` (the
+ * canvas handles every gesture), so a scroll container inside it has to ask for
+ * the one axis it wants.
+ */
+.screen--result .screen__middle {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+/*
+ * ...and nothing inside it gives instead.
+ *
+ * A flex column shrinks whichever child *can* shrink before it overflows, and
+ * the one child here that can is the bonus list — it has an `overflow` of its
+ * own (`./resultMeta.css`), so its automatic minimum is zero. Without this the
+ * sheet fitted by squeezing the streak and the mission tick to a sliver: the
+ * run's own story, crushed so that a hint about the next purchase could keep
+ * its full height. Every row keeps its size now and the column scrolls, so what
+ * goes past the bottom edge is the last thing on the sheet rather than the
+ * middle of it.
+ */
+.screen--result .screen__middle > * {
+  flex-shrink: 0;
+}
+
+/*
  * Four buttons instead of two (Milestone 8): Ascend, "Same road again", Again
  * and Academy. A column of four is taller than the foot of a 844-px phone once
  * the bonus lines are above it, so the three ghost buttons share a row and only

@@ -115,6 +115,29 @@ export class RunStage {
     this.start();
   }
 
+  /**
+   * `?endless=1`: onto the endless road as soon as the physics layer has
+   * landed (D52).
+   *
+   * The wait is the whole of it. The layer's debris pools are meshes in the
+   * renderer's scene, and the warm-up pass that compiles their materials only
+   * runs once they exist (`./appLayers.ts`) — so a run started before that
+   * point pays for three shader programs inside its own first frames, which is
+   * exactly the stall the pass exists to remove. Milestone 8's smoke read it as
+   * three shaders compiled during play, and it is not reachable any other way:
+   * a player taps Play, and by then Havok is long in.
+   *
+   * Nothing else in the boot waits on it — the title screen is up before this
+   * is called, and `disposed` is what stops a page that went away in between
+   * from starting a run into a torn-down renderer.
+   */
+  autoStartEndless(physics: Promise<void>, disposed: () => boolean): void {
+    void physics.then(() => {
+      if (disposed()) return;
+      this.startEndless();
+    });
+  }
+
   /** "Same road again": the road just walked, on the seed it was walked on. */
   replay(): void {
     if (this.lastEndless) {

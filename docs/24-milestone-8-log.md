@@ -150,3 +150,50 @@
   endless); files over 400 that grew (`GameAudio.ts` 537, `Renderer.ts`
   497, `road.ts` 470, `effects.ts` 434, `asset.ts` 421, `squad.ts` 408);
   the Endless card walks a fixed seed.
+
+## 2026-09-15 — Phase E: integration (verified and committed)
+
+- `?endless=1` no longer boots into a run before Havok lands: the physics
+  init is held and the auto-start hangs off it, so the smoke's endless run
+  reports 46 programs before and after with physics at quality 2; the
+  title path is untouched. The glacier's Workbench line gained its bite
+  and shield clause.
+- Smoke: an endless run auto-started with greedy that walked 1915 of
+  2898 m across eight biome boundaries with a paced frame at the first
+  (draw peak 51, metres chip, the sheet with metres, new best, Ascend
+  hidden, and "Again" walking the endless road again); the Academy
+  screens folded into the level-6 run (streak plaque and board, Wardrobe,
+  Workbench at tier 3, bestiary ladders with no side scroll); both result
+  sheets asserted on every run (the roll equals coins plus bonuses, the
+  total and the purse agree, the mode-specific rows shown or hidden).
+  Hero set: missions and Wardrobe on the meadow page after the run frames
+  (unchanged since Milestone 5), endless boundary, meteor and glacier on
+  their own page found by polling the feature stats with a settle.
+  `smoke.mjs` split with `smoke-runs.mjs` and a `SMOKE_ONLY` filter.
+- Fixed after looking: the result sheet's last button was clipped past
+  the bottom (the sheet's middle scrolls and its children no longer
+  shrink; asserted on every run); the meteor frame had photographed a
+  freeze pulse (the endless road hands out staff gates, so the shot moves
+  ahead of the first gate and tests meteors, not marks); settles for the
+  meteor's arc and the glacier's rise.
+- Splits with identical behaviour: `GameAudio.ts` 537 → 325 with
+  `audioEvents.ts`; `Renderer.ts` 497 → 408 with `rendererQuality.ts` and
+  moves into level, frame, cosmetics and preview modules; `road.ts` 470 →
+  372 with `roadDressing.ts`; `effects.ts` 434 → 376 with
+  `evolutionBursts.ts`; `characters/asset.ts` 421 → 235 with `merge.ts`;
+  `squad.ts` 408 → 399.
+- Verified: typecheck 0 errors, lint clean, 529 tests, build OK, hosted
+  11.89 MB, artifact 15.24 MB; smoke PASS at 33 min 56 s (runs 1371 s,
+  stress 43 s, hero 620 s), draw peaks 41 / 41 / 41 / 43 / 51 / 42, 0
+  compiles in all six runs. Four targeted re-runs through the filter
+  after the fixes (under seven minutes in total) instead of a second full
+  suite. Frames judged: the Academy screens as one family with the game
+  UI; the boundary frame the cleanest in the set; the glacier the weakest
+  (it rises in the fullest lane, which on that seed is the frame's edge).
+- Carried to review: the endless smoke run is 633 s because a greedy
+  walk covers two thirds of the road (cap the run after the second
+  boundary or use a weaker bot); draw peak 51 of 52 on the spanned road;
+  the glacier hero frame; the Wardrobe's staff-glow row below the fold
+  and one tile label overrunning at 2x; the Workbench's frost card below
+  the fold; two similarly named classes in `cosmetics.ts`; the Sanctum
+  gate by level rather than ownership (pre-existing).

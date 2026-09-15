@@ -10,12 +10,14 @@
  * Nothing here allocates and nothing here mutates sim state.
  */
 
+import type { Engine } from '@babylonjs/core/Engines/engine';
+
 import type { CameraRig } from './camera';
 import type { PreviewBackdrop } from './preview';
 import { writeBossShadow } from './shadows';
 import type { SceneViews } from './views';
 import { weaponOf } from '@/sim';
-import type { RunState, SimEvent } from '@/sim';
+import type { RunState, SimEvent, SquadState } from '@/sim';
 
 export interface FrameContext {
   views: SceneViews;
@@ -122,4 +124,30 @@ export function drawSquadOnly(views: SceneViews, state: RunState, dt: number): v
   views.squad.update(state, dt, views.shadows, views.sprites);
   views.sprites.end();
   views.shadows.commit();
+}
+
+/**
+ * Poses the camera at the play rig's pose for this squad, and nothing else, for
+ * a caller that draws into the scene and renders it itself: the stress scene
+ * (`src/core/stress.ts`).
+ *
+ * Without it that scene keeps the rig's *constructor* pose — the framing a
+ * one-unit squad gets — and its 500-unit crowd stands with its back rows under
+ * the bottom edge, so the frame the performance tripwire measures is not one
+ * the game ever draws (D37).
+ */
+export function poseStressCamera(rig: CameraRig | null, squad: SquadState, dt: number): void {
+  rig?.update(squad, dt);
+}
+
+/**
+ * The ratio between the sim time a frame covers and the wall clock it took.
+ *
+ * The boss's animation groups run on the scene's own clock, so this is what
+ * carries the app's hit-stop and slow-mo through to them.
+ */
+export function timeScaleOf(engine: Engine | null, dt: number): number {
+  const frame = (engine?.getDeltaTime() ?? 16) / 1000;
+  if (frame <= 0) return 1;
+  return Math.max(0, Math.min(8, dt / frame));
 }

@@ -4,13 +4,18 @@
  * Split out of `./Renderer.ts` in Milestone 7 Phase E for the file-size rule
  * (CLAUDE.md). It is the *sequence* that matters and that is what lives here:
  * the palette moves, then the scene, then the views, then the level's own
- * layout. `Renderer` keeps the one thing a sequence cannot own — which biome
- * the scene is currently painted in — and decides when to run this.
+ * layout. `Renderer` decides when to run it.
+ *
+ * Milestone 8 Phase E moved the one piece of *state* a sequence cannot own in
+ * here with it (`RoadBiomes`): which biome the scene is painted in, and where
+ * the endless road's boundaries are (D52). It sat on `Renderer` while the
+ * answer was "the level's own" and stopped fitting when a road started
+ * changing biome as it is walked.
  */
 
 import type { Scene } from '@babylonjs/core/scene';
 
-import type { BiomeSpans } from './biomeSpans';
+import { BiomeSpans } from './biomeSpans';
 import type { CameraRig } from './camera';
 import { setBiome as setPaletteBiome } from './palette';
 import { applyBiomeToScene } from './scene';
@@ -90,4 +95,55 @@ export function loadLevelInto(
 ): void {
   views?.loadLevel(level, ROAD_START_Z, level.arenaZ + ROAD_PAST_ARENA, spans);
   rig?.reset();
+}
+
+/**
+ * Which biome the scene is painted in, and where the road changes it.
+ *
+ * One object because the two answers are one answer: a campaign level names a
+ * biome for its whole length (D49) and the endless road cycles through them a
+ * span at a time (D52), and everything downstream only ever asks "what is it
+ * now".
+ */
+export class RoadBiomes {
+  /** `?biome=`, or undefined to follow each level's own. */
+  readonly forced: BiomeId | undefined;
+  /** The endless road's spans, or inactive on a campaign level (D52). */
+  readonly spans = new BiomeSpans();
+
+  /** The biome the scene is painted in right now. */
+  private current: BiomeId = 'meadow';
+
+  constructor(forced: BiomeId | undefined) {
+    this.forced = forced;
+  }
+
+  get id(): BiomeId {
+    return this.current;
+  }
+
+  /**
+   * The biome the scene is *built* in, chosen before any view exists so every
+   * material, vertex colour and painted texture is made in it the first time
+   * and the boot warm-up compiles exactly what the first frame draws.
+   */
+  begin(): BiomeId {
+    this.current = this.forced ?? 'meadow';
+    setPaletteBiome(this.current);
+    return this.current;
+  }
+
+  /**
+   * Repaints the scene in `id`, and answers whether it had to.
+   *
+   * The record kept here rather than the palette's answer: `begin` switches the
+   * palette before any view exists, so a first level on a pinned biome would
+   * find the palette already there and skip the fan-out the views still need.
+   */
+  switchTo(id: BiomeId, scene: Scene | null, views: SceneViews | null): boolean {
+    if (id === this.current) return false;
+    this.current = id;
+    repaintBiome(scene, views, id);
+    return true;
+  }
 }

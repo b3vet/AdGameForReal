@@ -21,6 +21,7 @@
  *     this keeps a stand-in and parks it at the sim's own hover offset.
  */
 
+import type { CameraRig } from './camera';
 import { playerMods, progression } from '@/sim';
 import type { FamiliarState, FamiliarTier, PlayerState, RunState } from '@/sim';
 
@@ -32,6 +33,32 @@ export class PreviewBackdrop {
   /** True while a backdrop is being shown rather than a run being played. */
   get active(): boolean {
     return this.showing;
+  }
+
+  /**
+   * The Academy's backdrop follows this player (D33): the staff on the mages,
+   * the wisp beside them, and a camera that breathes rather than freezing.
+   *
+   * `null` ends the preview, which the app calls as a run starts. The staff
+   * needs nothing beyond this call — the app builds its preview through `Run`
+   * with the same player, so `state.squad.weaponId` is already the chosen one
+   * and `SquadView` draws the crowd carrying it.
+   */
+  setPlayerOn(player: PlayerState | null, rig: CameraRig | null): void {
+    this.setPlayer(player);
+    rig?.setDrift(this.showing);
+  }
+
+  /**
+   * True when the last frame moved the camera by less than a pixel's worth, so
+   * the caller can stop asking for frames until something changes.
+   *
+   * Never while the backdrop is up: the drift is the whole point of the
+   * preview, and a settled frame is a paused game.
+   */
+  settled(rig: CameraRig | null): boolean {
+    if (this.showing) return false;
+    return rig?.isSettled() ?? false;
   }
 
   /**

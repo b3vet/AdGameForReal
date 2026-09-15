@@ -33,6 +33,8 @@ import type { Scene } from '@babylonjs/core/scene';
 // Side-effect import: `thinInstanceCount` is added to `Mesh.prototype` here.
 import '@babylonjs/core/Meshes/thinInstanceMesh';
 
+import { applyToonRampToScene } from './toonRamp';
+
 /**
  * How long one material may take to become ready before the pass gives up on
  * it. `forceCompilationAsync` polls until `isReadyForSubMesh` says yes, and a
@@ -163,6 +165,11 @@ export class WarmUpTracker {
   async run(scene: Scene): Promise<void> {
     this.inFlight = true;
     try {
+      // The ramp before the compile, never after: a plugin added to a material
+      // marks its defines dirty, and a material ramped afterwards would compile
+      // its new variant inside the first frame that drew it — exactly the stall
+      // this pass exists to remove.
+      applyToonRampToScene(scene);
       const result = await warmUpScene(scene);
       this.compiled = result.compiled;
       this.skipped = result.skipped;

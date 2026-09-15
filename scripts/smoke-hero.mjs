@@ -13,13 +13,15 @@
  * mid-run and hand back a soft frame).
  *
  * This file is the *set*: which pages are driven, at which scales, and the
- * meadow page itself. Three files sit behind it — `./smoke-hero-page.mjs` is
+ * meadow page itself. Four files sit behind it — `./smoke-hero-page.mjs` is
  * the plumbing every page shares, `./smoke-hero-frost.mjs` is the Frostfell
- * page (D49) and `./smoke-hero-swipe.mjs` is the swipe run, which is the only
- * one that takes the wheel instead of watching.
+ * page (D49), `./smoke-hero-endless.mjs` is the endless one (D52, D54) and
+ * `./smoke-hero-swipe.mjs` is the swipe run, which is the only one that takes
+ * the wheel instead of watching.
  *
- * One meadow page and, since Milestone 7, a second for the Frostfell frames,
- * driven at the same time in one browser. They are pages on a four-core machine
+ * One meadow page, a second for the Frostfell frames since Milestone 7 and a
+ * third for the endless road since Milestone 8, driven at the same time in one
+ * browser. They are pages on a four-core machine
  * and SwiftShader is CPU-bound, so running them side by side costs about half
  * again as much wall clock as one rather than twice — which is what keeps the
  * set from being the whole budget. A third page is what `SMOKE_HERO_SCALES=2,3`
@@ -43,6 +45,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { sleep } from './smoke-browser.mjs';
+import { driveEndless } from './smoke-hero-endless.mjs';
 import { driveFrost } from './smoke-hero-frost.mjs';
 import {
   MENU_SETTLE_MS,
@@ -82,6 +85,13 @@ const SCALES = readScales(process.env.SMOKE_HERO_SCALES, DEFAULT_SCALES);
  * `SMOKE_HERO_FROST_SCALES=2,3` puts the second page back.
  */
 const FROST_SCALES = readScales(process.env.SMOKE_HERO_FROST_SCALES, [2]);
+
+/**
+ * The scales the endless page is taken at (D52, D54): the biome crossing, the
+ * meteor and the glacier. 2x only, for the same reason as every other page
+ * here; `SMOKE_HERO_ENDLESS_SCALES=2,3` puts a second one back.
+ */
+const ENDLESS_SCALES = readScales(process.env.SMOKE_HERO_ENDLESS_SCALES, [2]);
 
 /** One level, one seed, for every scale: the sets are the same run over. */
 const HERO_QUERY = '?bot=greedy&level=1&seed=1&turbo=60&screenshot=1&quality=0';
@@ -131,29 +141,87 @@ const BOSS_SHOT_HP_SHARE = 0.5;
 const RESULT_COINS_MS = 1400;
 
 /**
+ * Yesterday, as `src/core/clock.ts` writes a day: the streak is a local
+ * calendar day and a fixed string would read as "longer ago" (D51).
+ */
+function yesterdayKey() {
+  const day = new Date();
+  day.setDate(day.getDate() - 1);
+  const pad = (value) => String(value).padStart(2, '0');
+  const year = String(day.getFullYear()).padStart(4, '0');
+  return `${year}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+}
+const YESTERDAY = yesterdayKey();
+
+/**
+ * The meta layer, injected *after* the run rather than with `HERO_SAVE` (D51 to
+ * D53): a five-day streak, a board with three missions on it, the kills that
+ * open the Wardrobe's first rungs and the tints they handed over.
+ *
+ * After, because a chosen hat is on every mage in the crowd — that is what a
+ * cosmetic is — and the meadow set's run frames are the ones the milestone's
+ * *look* is read on. They stay the same picture they have been since Milestone
+ * 5, and the two screens this dresses are photographed on the way back out.
+ */
+const HERO_META = {
+  streak: { days: 5, lastDay: YESTERDAY },
+  missions: {
+    active: [
+      { id: 'roads3', progress: 2, done: false },
+      { id: 'sigils12', progress: 5, done: false },
+      { id: 'endless600', progress: 180, done: false },
+    ],
+    rolled: 3,
+  },
+  kills: { grunt: 16_000, brute: 70, charger: 20, shieldBrute: 12, demon: 9, rime: 2 },
+  // The kinds this player has met on a road, which is a different record
+  // from how many of them they have killed: without it every card reads
+  // "Not yet met" over a four-figure tally (`src/core/session.ts`).
+  bestiary: ['grunt', 'brute', 'charger', 'shieldBrute', 'demon'],
+  cosmetics: {
+    owned: ['hatBone', 'capeBone', 'hatStone', 'hatHound', 'glowBulwark', 'glowEmber'],
+    selected: { hat: 'hatStone', cape: 'capeBone', staffGlow: 'glowEmber' },
+  },
+};
+
+
+/**
  * Drives the whole set and answers what it wrote. One browser, one context per
  * page, all driven at once; a failure on any of them is pushed onto `failures`
  * exactly as a run's would be, so the smoke still fails on it.
+ *
+ * `wantedPart` names which pages to drive (`SMOKE_ONLY` in `scripts/smoke.mjs`),
+ * which is what a review uses when one frame has to be taken again rather than
+ * all nineteen.
  */
-export async function driveHeroSet(browser, baseUrl, outDir, failures, openPage) {
+export async function driveHeroSet(browser, baseUrl, outDir, failures, openPage, wantedPart) {
   const heroDir = path.join(outDir, 'hero');
   await mkdir(heroDir, { recursive: true });
   console.log(
     `[smoke] hero set: ${SCALES.map((s) => `${String(s)}x`).join(' and ')}, one level each` +
       `, swipe frames at ${EXTRA_SCALES.map((s) => `${String(s)}x`).join(' and ')}` +
-      `, Frostfell at ${FROST_SCALES.map((s) => `${String(s)}x`).join(' and ')}`,
+      `, Frostfell at ${FROST_SCALES.map((s) => `${String(s)}x`).join(' and ')}` +
+      `, endless at ${ENDLESS_SCALES.map((s) => `${String(s)}x`).join(' and ')}`,
   );
 
+  // Each page can be driven on its own (`SMOKE_ONLY`, `scripts/smoke.mjs`),
+  // which is what a review does when one frame has to be taken again.
   const sets = await Promise.all([
-    ...SCALES.map(async (scale) =>
+    ...(wantedPart('hero-meadow') ? SCALES : []).map(async (scale) =>
       driveScale(browser, baseUrl, heroDir, failures, openPage, scale).catch((error) => {
         failures.push(`hero ${String(scale)}x: ${error.message}`);
         return [];
       }),
     ),
-    ...FROST_SCALES.map(async (scale) =>
+    ...(wantedPart('hero-frost') ? FROST_SCALES : []).map(async (scale) =>
       driveFrost(browser, baseUrl, heroDir, failures, openPage, scale).catch((error) => {
         failures.push(`hero frost ${String(scale)}x: ${error.message}`);
+        return [];
+      }),
+    ),
+    ...(wantedPart('hero-endless') ? ENDLESS_SCALES : []).map(async (scale) =>
+      driveEndless(browser, baseUrl, heroDir, failures, openPage, scale).catch((error) => {
+        failures.push(`hero endless ${String(scale)}x: ${error.message}`);
         return [];
       }),
     ),
@@ -205,6 +273,23 @@ async function driveScale(browser, baseUrl, heroDir, failures, openPage, scale) 
     if (EXTRA_SCALES.includes(scale)) {
       await driveExtras(page, shot, failures, scale);
     }
+
+    // Last, with the meta layer dressed on: the Academy home with a streak
+    // plaque and a full board, and the Wardrobe behind it (D51 to D53). The
+    // home is asked for directly because this page is mid-run by now — the
+    // swipe frames leave a level-16 run on the road, and there is no Back on
+    // the HUD.
+    await page.evaluate((patch) => {
+      globalThis.__arcane?.app.showHome();
+      globalThis.__arcane?.setPlayer(patch);
+    }, HERO_META);
+    await sleep(MENU_SETTLE_MS);
+    await shot('hero-missions');
+    await page.evaluate(() => {
+      globalThis.__arcane?.openRoom('wardrobe');
+    });
+    await sleep(MENU_SETTLE_MS);
+    await shot('hero-wardrobe');
   } finally {
     await page.context().close();
   }

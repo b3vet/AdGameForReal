@@ -23,10 +23,11 @@ import type { AudioEngineV2, StaticSound } from '@babylonjs/core/AudioV2';
 
 import { audioMix } from '@/data';
 import { assetBytes, audioAssets, resolveAssetUrl } from '@/render/characters';
-import { mulberry32, weaponOf } from '@/sim';
+import { mulberry32 } from '@/sim';
 import type { RunState, SimEvent } from '@/sim';
 
-
+import { EventVoices } from './audioEvents';
+import type { ClipPlayer } from './audioEvents';
 
 /**
  * `off`   — no engine: construction failed, or the browser has no WebAudio.
@@ -41,35 +42,6 @@ const now = (): number => (typeof performance === 'undefined' ? 0 : performance.
 
 /** Seeded so a replayed run sounds the same twice (CLAUDE.md: no Math.random). */
 const PITCH_SEED = 0x51_04_c0_de;
-
-/**
- * A sliding window: at most `max` plays in any `windowMs`.
- *
- * Two event classes need this rather than a minimum interval — shots and stream
- * kills — because both arrive in bursts that an interval would thin to a
- * metronome: an interval plays one of every twenty shots, evenly spaced, which
- * is the sound of a machine and not of a volley. A window lets the first eight
- * through together and then holds, which is what a crackle is.
- */
-class Burst {
-  private start = 0;
-  private count = 0;
-
-  allow(at: number, windowMs: number, max: number): boolean {
-    if (at - this.start >= windowMs) {
-      this.start = at;
-      this.count = 0;
-    }
-    if (this.count >= max) return false;
-    this.count++;
-    return true;
-  }
-
-  reset(): void {
-    this.start = 0;
-    this.count = 0;
-  }
-}
 
 export class GameAudio {
   private engine: AudioEngineV2 | null = null;
@@ -104,15 +76,23 @@ export class GameAudio {
   /** Last time each throttled event class played, in `now()` milliseconds. */
   private readonly lastPlayed = new Map<string, number>();
 
-  private readonly shotBurst = new Burst();
-  private readonly streamKillBurst = new Burst();
-
   /**
-   * Displayed value of each gate the last time it ticked. The gate tick follows
-   * the number the player reads, so a gate taking sixty hits to climb from 6 to
-   * 9 clicks three times and not sixty.
+   * What a tick's events sound like (`./audioEvents.ts`), and the three ways
+   * it reaches the clips. Both are built once, here: `onEvents` runs on every
+   * sim tick — several per frame under `?turbo` — and nothing on that path may
+   * allocate (CLAUDE.md).
    */
-  private readonly gateShown = new Map<number, number>();
+  private readonly clips: ClipPlayer = {
+    play: (id: string, playbackRate?: number, volumeScale?: number): void => {
+      this.play(id, playbackRate, volumeScale);
+    },
+    playCue: (cue: { sound: string; playbackRate: number; volume: number }): void => {
+      this.playCue(cue);
+    },
+    throttled: (key: string, minIntervalMs: number): boolean =>
+      this.throttled(key, minIntervalMs),
+  };
+  private readonly voices = new EventVoices(this.clips, this.random);
 
   constructor(options: { muted?: boolean } = {}) {
     this.mutedFlag = options.muted ?? false;
@@ -200,9 +180,7 @@ export class GameAudio {
   /** Clears every throttle. Call when a run starts, not every frame. */
   beginRun(): void {
     this.lastPlayed.clear();
-    this.gateShown.clear();
-    this.shotBurst.reset();
-    this.streamKillBurst.reset();
+    this.voices.beginRun();
   }
 
   /** A button was tapped. Separate from `onEvents`: buttons are not sim events. */
@@ -250,178 +228,15 @@ export class GameAudio {
   }
 
   /**
-   * One tick's events. Called for every tick, including the intermediate ones
-   * `?turbo` runs between frames, so throttling here is what keeps a
-   * fast-forwarded run from sounding like static.
+   * One tick's events, handed to the map that knows what each one sounds like
+   * (`./audioEvents.ts`). Called for every tick, including the intermediate
+   * ones `?turbo` runs between frames.
    */
   onEvents(events: readonly SimEvent[], state: Readonly<RunState>): void {
     // The context can start on its own — Babylon resumes it on any interaction —
     // so the cached flag is refreshed once here rather than per event.
     if (this.engine === null || this.mutedFlag || !this.refreshUnlocked()) return;
-
-    const bossId = state.boss?.id;
-    for (const event of events) {
-      switch (event.type) {
-        case 'projectileFired':
-          this.playShot(state);
-          break;
-        case 'enemyHit':
-          if (bossId !== undefined && event.enemyId === bossId) {
-            if (!this.throttled('bossHit', audioMix.minIntervalMs.bossHit)) {
-              this.play('sfx_boss_hit');
-            }
-          } else if (!this.throttled('enemyHit', audioMix.minIntervalMs.enemyHit)) {
-            this.play('sfx_enemy_hit');
-          }
-          break;
-        case 'enemyKilled':
-          if (event.kind === 'boss') break;
-          if (event.streamId !== undefined) {
-            this.playStreamKill();
-          } else if (!this.throttled('blockKill', audioMix.minIntervalMs.blockKill)) {
-            this.play('sfx_block_kill');
-          }
-          break;
-        case 'enemyLeaked':
-          if (!this.throttled('leak', audioMix.minIntervalMs.leak)) {
-            this.play(audioMix.leak.sound, audioMix.leak.playbackRate);
-          }
-          break;
-        case 'familiarShot':
-          // The wisp fires on its own clock beside the squad, so the ceiling is
-          // an interval rather than a window: it is one voice, not a volley.
-          if (!this.throttled('familiarShot', audioMix.minIntervalMs.familiarShot)) {
-            this.playCue(audioMix.familiarShot);
-          }
-          break;
-        case 'wallBlocked':
-          // Emitted on every step the clamp holds the squad, which is sixty a
-          // second while a finger leans on a wall: one knock, then silence.
-          if (!this.throttled('wallBump', audioMix.minIntervalMs.wallBump)) {
-            this.playCue(audioMix.wallBump);
-          }
-          break;
-        case 'streamCleared':
-          if (!this.throttled('streamClear', audioMix.minIntervalMs.streamClear)) {
-            this.play(audioMix.streamClear.sound, audioMix.streamClear.playbackRate);
-          }
-          break;
-        case 'enemyShattered':
-          // A block bursting into ice is its own event. A stream body doing it
-          // is not: `enemyKilled` for the same body already played the stream
-          // kill a line above, so a second voice here is every frost kill in a
-          // river said twice. The physics layer draws the same line (it throws
-          // no shards for a stream body) and so does the renderer.
-          if (event.streamId !== undefined) break;
-          if (!this.throttled('shatter', audioMix.minIntervalMs.shatter)) this.play('sfx_shatter');
-          break;
-        case 'gateHit':
-          // `fireRate` prints as a percentage, so that is the number to follow.
-          this.playGateTick(
-            event.gateId,
-            event.kind === 'fireRate' ? event.value * 100 : event.value,
-          );
-          break;
-        case 'weaponChanged':
-          // The staff the squad just picked up, said once and deep.
-          this.play(
-            audioMix.shot.sound[event.to] ?? 'sfx_shot_ember',
-            audioMix.swap.playbackRate,
-          );
-          break;
-        case 'gatePassed':
-          if (!this.throttled('gatePass', audioMix.minIntervalMs.gatePass)) {
-            // A `sub` gate shot down to zero flips to `add` in the sim, so the
-            // kind alone does not say whether this was good news. The count does.
-            this.play(
-              event.countAfter < event.countBefore ? 'sfx_gate_pass_bad' : 'sfx_gate_pass_good',
-            );
-          }
-          break;
-        case 'unitsGained':
-          if (!this.throttled('unitsGained', audioMix.minIntervalMs.unitsGained)) {
-            this.play('sfx_units_gained');
-          }
-          break;
-        case 'unitsLost':
-          // A leak is already saying this in its own voice, one body at a time:
-          // playing both would double every tick of a stream getting through.
-          if (event.reason === 'leak') break;
-          if (!this.throttled('unitsLost', audioMix.minIntervalMs.unitsLost)) {
-            this.play('sfx_units_lost');
-          }
-          break;
-        case 'bossStomp':
-          // Per boss (D49): the Fiend's landing carries a crack of ice the
-          // demon's does not, which is two voices on one event rather than a
-          // second clip in `assets/`.
-          if (!this.throttled('stomp', audioMix.minIntervalMs.stomp)) {
-            const stomp = audioMix.bossStomp;
-            if (state.boss?.variant === 'rime') {
-              this.playCue(stomp.rime);
-              this.playCue(stomp.rimeIce);
-            } else {
-              this.playCue(stomp.demon);
-            }
-          }
-          break;
-        case 'charge':
-          // One voice at two sizes: a charger's rush, and the Rime Fiend's an
-          // octave under it. Throttled together, because they are the same
-          // sound and two of them at once is one muddy roar.
-          if (!this.throttled('charge', audioMix.minIntervalMs.charge)) {
-            this.playCue(event.kind === 'boss' ? audioMix.charge.boss : audioMix.charge.charger);
-          }
-          break;
-        case 'shieldBreak':
-          if (!this.throttled('shieldBreak', audioMix.minIntervalMs.shieldBreak)) {
-            this.playCue(audioMix.shieldBreak);
-          }
-          break;
-        // The four evolutions with a voice (D54). Every one of them is
-        // throttled harder than the events it sits among, because every one of
-        // them is a *moment* — the player is meant to notice it happened, not
-        // to hear it running underneath the volley.
-        case 'meteor':
-          if (!this.throttled('meteor', audioMix.minIntervalMs.meteor)) {
-            this.playCue(audioMix.evolutions.meteor);
-          }
-          break;
-        case 'overcharge':
-          // Only when it reached something: an arc into empty road is a
-          // cooldown spent, not an event.
-          if (
-            event.targets > 0 &&
-            !this.throttled('overcharge', audioMix.minIntervalMs.overcharge)
-          ) {
-            this.playCue(audioMix.evolutions.overcharge);
-          }
-          break;
-        case 'freezePulse':
-          if (!this.throttled('freezePulse', audioMix.minIntervalMs.freezePulse)) {
-            this.playCue(audioMix.evolutions.freezePulse);
-          }
-          break;
-        case 'glacier':
-          if (!this.throttled('glacier', audioMix.minIntervalMs.glacier)) {
-            this.playCue(audioMix.evolutions.glacier);
-          }
-          break;
-        case 'bossKilled':
-          this.play('sfx_boss_death');
-          break;
-        case 'runEnded':
-          this.play(event.status === 'won' ? 'sfx_win_fanfare' : 'sfx_lose_sting');
-          break;
-        default:
-          // projectileHit, splash, chain, enemySlowed, streamStarted,
-          // bossActivated and bossEnraged are carried by the sounds above or by
-          // the renderer's effects. `enemyActivated` is deliberately silent:
-          // since Milestone 3 it fires once per stream body, about twenty a
-          // second, and a stream walking into range is a thing you can see.
-          break;
-      }
-    }
+    this.voices.onEvents(events, state);
   }
 
   /** The count-up on the result screen. Its own entry point: it is not an event. */
@@ -463,33 +278,6 @@ export class GameAudio {
         }
       }),
     );
-  }
-
-  /** Shots: a window rather than an interval, and a little pitch each time. */
-  private playShot(state: Readonly<RunState>): void {
-    if (!this.shotBurst.allow(now(), audioMix.shot.windowMs, audioMix.shot.windowMax)) return;
-    const id = audioMix.shot.sound[weaponOf(state.squad)] ?? 'sfx_shot_ember';
-    this.play(id, 1 + (this.random() * 2 - 1) * audioMix.shot.pitchSpread);
-  }
-
-  /** One body out of a stream: eight a second, each at its own pitch. */
-  private playStreamKill(): void {
-    const mix = audioMix.streamKill;
-    if (!this.streamKillBurst.allow(now(), mix.windowMs, mix.windowMax)) return;
-    this.play(mix.sound, mix.playbackRate + (this.random() * 2 - 1) * mix.pitchSpread);
-  }
-
-  /** One click per number the gate's panel actually shows. */
-  private playGateTick(gateId: number, displayed: number): void {
-    const rounded = Math.round(displayed);
-    const previous = this.gateShown.get(gateId);
-    if (previous === rounded) return;
-    this.gateShown.set(gateId, rounded);
-    // The first hit on a gate sets the baseline rather than clicking: the
-    // player has not seen the number change yet.
-    if (previous === undefined) return;
-    if (this.throttled('gateTick', audioMix.minIntervalMs.gateTick)) return;
-    this.play('sfx_gate_tick');
   }
 
   /** A reused clip at its own pitch and level (`audio-types.ts`, `Cue`). */

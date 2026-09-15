@@ -17,7 +17,7 @@
  */
 
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import type { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { Scene } from '@babylonjs/core/scene';
 
@@ -120,6 +120,29 @@ export function applyGround(
 /** One role, resolved in `id` rather than in the biome in force. */
 function paint(material: StandardMaterial, id: BiomeId, role: PaletteRole): void {
   material.diffuseColor.copyFrom(Color3.FromHexString(paletteHexIn(id, role)));
+}
+
+/**
+ * Re-tiles a material's albedo for a length of road.
+ *
+ * Here rather than in `./road.ts` (Milestone 8 Phase E) because it is the same
+ * job as everything else in this file: a change to a ground material that has
+ * to reach the GPU past the freeze below. Both halves of a spanned road tile
+ * through it (D52), so it is handed straight to `RoadFarHalf.layout`.
+ *
+ * `diffuseTexture` is typed as the base class, which carries no uv scale — only
+ * the 2D textures do, and both the loaded albedo and the painted fallback are
+ * `Texture`s. Anything else is left alone rather than asserted about.
+ */
+export function retileTo(material: unknown, uScale: number, vScale: number): void {
+  if (!(material instanceof StandardMaterial)) return;
+  const texture = material.diffuseTexture;
+  if (!(texture instanceof Texture)) return;
+  texture.uScale = uScale;
+  texture.vScale = vScale;
+  // A frozen material is not re-bound, so a new tiling would not reach the
+  // shader either (`refreeze` below).
+  refreeze(material);
 }
 
 /**

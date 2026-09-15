@@ -50,64 +50,40 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { ArenaMarkers } from './arena';
 import { createBandOpacity } from './artTextures';
-import {
-  commitInstances,
-  createMatrixBuffer,
-  writeInstance,
-  writeRotatedInstance,
-} from './instanceBuffer';
 import { MotesView } from './motes';
 import {
   BIOME_GROUND,
-  FRINGE_OVERLAP,
   FRINGE_WIDTH,
-  KERB_GAP,
-  KERB_LENGTH,
-  KERB_OVERLAP,
-  KERB_WIDTH,
-  LANE_RUNE_WIDTH,
   ROAD_FILLER,
   ROAD_RUNOUT,
   RUNE_EMISSIVE,
   RUNE_PULSE_DEPTH,
   RUNE_PULSE_RATE,
 } from './roadLook';
+import { RoadDressing } from './roadDressing';
 import { RoadFarHalf } from './roadFar';
-import { applyGround, buildGroundAlbedos, glow, matte, refreeze } from './roadGround';
+import { applyGround, buildGroundAlbedos, glow, matte, retileTo } from './roadGround';
 import type { GroundMaterials } from './roadGround';
-import { createKerbPiece, createRoadSurface } from './roadSurface';
+import { createRoadSurface } from './roadSurface';
 import { createStoneTexture } from './textures';
 import { applyToonRamp } from './toonRamp';
 import { ARENA_COLOR, LANE_LINE_COLOR, ROAD_HALF_WIDTH, paletteBiome, paletteColor } from './theme';
 import type { BiomeGround } from './roadLook';
 import type { BiomeId } from '@/data/biome-types';
 
-/** Lane boundaries for a three-lane road: the two edges and the two splits. */
-const LINE_X = [-ROAD_HALF_WIDTH, -ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH / 3, ROAD_HALF_WIDTH];
 /**
  * The field is only there to give the road an edge to read against. It is far
  * wider than the road so its own edges never come into frame, even in landscape.
  */
 const FIELD_WIDTH = 240;
-/**
- * Kerb stones the pool holds, both sides together. A level-10 road is about
- * 560 m of dressed edge per side, which is 340 stones; the cap is what a level
- * half again as long would need, and a longer one simply stops kerbing where
- * the player will never be.
- */
-const KERB_CAPACITY = 800;
 
 export class RoadView {
   private readonly surface: Mesh;
   private readonly field: Mesh;
   /** The far half of a spanned road (D52); idle on a campaign level. */
   private readonly far: RoadFarHalf;
-  private readonly kerbs: Mesh;
-  private readonly kerbMatrices: Float32Array;
-  private readonly fringe: Mesh;
-  private readonly fringeMatrices: Float32Array;
-  private readonly runes: Mesh;
-  private readonly runeMatrices: Float32Array;
+  /** The kerbs, the verge and the lane runes (`./roadDressing.ts`). */
+  private readonly dressing: RoadDressing;
   private readonly runeMaterial: StandardMaterial;
   private readonly materials: StandardMaterial[];
   private readonly textures: BaseTexture[] = [];
@@ -197,21 +173,11 @@ export class RoadView {
     // is always above a flat ground, so there is nothing to cull.
     roadMaterial.backFaceCulling = false;
 
-    this.fringe = CreateGround('grassFringe', { width: FRINGE_WIDTH, height: 1 }, scene);
-    this.fringe.material = fringeMaterial;
-    this.fringe.position.y = -0.02;
-    this.fringeMatrices = createMatrixBuffer(this.fringe, 2);
-
-    this.kerbs = createKerbPiece(scene);
-    this.kerbs.material = kerbMaterial;
-    this.kerbMatrices = createMatrixBuffer(this.kerbs, KERB_CAPACITY);
-
-    // Four strips of one mesh rather than four meshes: the runes are the same
-    // material at four x offsets, which is exactly what thin instances are for.
-    this.runes = CreateGround('laneRunes', { width: LANE_RUNE_WIDTH, height: 1 }, scene);
-    this.runes.material = this.runeMaterial;
-    this.runes.position.y = 0.02;
-    this.runeMatrices = createMatrixBuffer(this.runes, LINE_X.length);
+    this.dressing = new RoadDressing(scene, {
+      kerb: kerbMaterial,
+      fringe: fringeMaterial,
+      rune: this.runeMaterial,
+    });
 
     this.arenaBand = CreateGround('arenaBand', { width: ROAD_HALF_WIDTH * 2, height: 1 }, scene);
     this.arenaBand.material = arenaMaterial;
@@ -308,12 +274,7 @@ export class RoadView {
    */
   freeze(): void {
     for (const material of this.materials) material.freeze();
-    // Identity world matrices for the life of the view: these are drawn
-    // entirely through their thin-instance buffers.
-    for (const mesh of [this.runes, this.kerbs, this.fringe]) {
-      mesh.computeWorldMatrix(true);
-      mesh.freezeWorldMatrix();
-    }
+    this.dressing.freeze();
     this.arena.freeze();
   }
 
@@ -346,37 +307,19 @@ export class RoadView {
     // slabs of ice — stay square however long the level is.
     const road = this.tiles.roadTile;
     const verge = this.tiles.vergeTile;
-    this.retile(this.surface.material, (ROAD_HALF_WIDTH * 2) / road, surfaceLength / road);
-    this.retile(this.field.material, FIELD_WIDTH / verge, surfaceLength / verge);
-    this.retile(this.fringe.material, FRINGE_WIDTH / verge, dressedLength / verge);
-    this.far.layout(split, surfaceEnd, dressedEnd, this.retileFor);
+    retileTo(this.surface.material, (ROAD_HALF_WIDTH * 2) / road, surfaceLength / road);
+    retileTo(this.field.material, FIELD_WIDTH / verge, surfaceLength / verge);
+    retileTo(this.dressing.fringe.material, FRINGE_WIDTH / verge, dressedLength / verge);
+    this.far.layout(split, surfaceEnd, dressedEnd, retileTo);
 
-    for (let i = 0; i < LINE_X.length; i++) {
-      writeInstance(this.runeMatrices, i, 1, 1, surfaceLength, LINE_X[i] ?? 0, 0, surfaceCentre);
-    }
-    commitInstances(this.runes, LINE_X.length);
-
-    // The verge, one strip a side. The right-hand one is turned rather than
-    // mirrored by a negative scale: a negative scale reverses the winding, and
-    // the ramp has to run road-to-field on both sides.
-    const fringeX = ROAD_HALF_WIDTH - FRINGE_OVERLAP + FRINGE_WIDTH / 2;
-    for (let i = 0; i < 2; i++) {
-      const side = i === 0 ? -1 : 1;
-      writeRotatedInstance(
-        this.fringeMatrices,
-        i,
-        1,
-        1,
-        dressedLength,
-        side < 0 ? Math.PI : 0,
-        side * fringeX,
-        0,
-        dressedCentre,
-      );
-    }
-    commitInstances(this.fringe, 2);
-
-    this.layKerbs(startZ, dressedEnd);
+    this.dressing.lay({
+      startZ,
+      surfaceLength,
+      surfaceCentre,
+      dressedEnd,
+      dressedLength,
+      dressedCentre,
+    });
 
     this.arenaBand.position.z = arenaZ;
     this.arena.place(arenaZ);
@@ -417,54 +360,13 @@ export class RoadView {
   }
 
   private allMeshes(): Mesh[] {
-    return [this.field, this.surface, this.fringe, this.kerbs, this.runes, this.arenaBand];
+    return [this.field, this.surface, ...this.dressing.meshes, this.arenaBand];
   }
 
-  /** Stones down both edges, from the road's start to where the dressing ends. */
-  private layKerbs(startZ: number, endZ: number): void {
-    const step = KERB_LENGTH + KERB_GAP;
-    const perSide = Math.max(0, Math.floor((endZ - startZ) / step));
-    const x = ROAD_HALF_WIDTH + KERB_WIDTH / 2 - KERB_OVERLAP;
-    let written = 0;
-    for (let i = 0; i < perSide && written + 2 <= KERB_CAPACITY; i++) {
-      const z = startZ + step * (i + 0.5);
-      writeInstance(this.kerbMatrices, written, 1, 1, 1, -x, 0, z);
-      written++;
-      writeInstance(this.kerbMatrices, written, 1, 1, 1, x, 0, z);
-      written++;
-    }
-    commitInstances(this.kerbs, written);
-  }
-
-  /**
-   * Re-tiles a material's albedo for a level's length.
-   *
-   * `diffuseTexture` is typed as the base class, which carries no uv scale —
-   * only the 2D textures do, and both the loaded albedo and the painted
-   * fallback are `Texture`s. Anything else is left alone rather than asserted
-   * about.
-   */
   /** Re-stretches the road at the extent it already has, if it has one. */
   private relayout(): void {
     const extent = this.extent;
     if (extent !== null) this.setExtent(extent.startZ, extent.endZ, extent.arenaZ);
   }
-
-  /** Bound once: `RoadFarHalf.layout` is handed it on every level load. */
-  private readonly retileFor = (material: unknown, uScale: number, vScale: number): void => {
-    this.retile(material, uScale, vScale);
-  };
-
-  private retile(material: unknown, uScale: number, vScale: number): void {
-    if (!(material instanceof StandardMaterial)) return;
-    const texture = material.diffuseTexture;
-    if (!(texture instanceof Texture)) return;
-    texture.uScale = uScale;
-    texture.vScale = vScale;
-    // A frozen material is not re-bound, so a new tiling would not reach the
-    // shader either (`refreeze` in `./roadGround.ts`).
-    refreeze(material);
-  }
-
 }
 

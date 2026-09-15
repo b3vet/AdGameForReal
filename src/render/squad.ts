@@ -37,7 +37,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
-import { BARE_TINTS, partTintsInto } from './cosmetics';
+import { WornParts } from './cosmetics';
 import type { WornTints } from './cosmetics';
 import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
@@ -108,17 +108,9 @@ export class SquadView {
   /** 1 while this slot holds a zero-scale instance, so a hide is written once. */
   private readonly hidden = new Uint8Array(POOL.squad);
 
-  /**
-   * The hat and cape tints the player is wearing (D53), and the map they are
-   * handed to the crowds in. One map, re-written rather than rebuilt, because
-   * all three crowds are told the same thing and a level load should not leave
-   * three objects behind.
-   */
-  private worn: WornTints = BARE_TINTS;
-  private readonly partTints = new Map<string, readonly [number, number, number]>();
-  /** The two multipliers the map holds, reused across level loads. */
-  private readonly hatDye: [number, number, number] = [1, 1, 1];
-  private readonly capeDye: [number, number, number] = [1, 1, 1];
+  /** The hat and cape tints the player is wearing (D53), dyed once for all
+   *  three crowds (`./cosmetics.ts`). */
+  private readonly dressing = new WornParts();
 
   constructor(scene: Scene) {
     this.scene = scene;
@@ -133,9 +125,8 @@ export class SquadView {
    * staff gate mid-run hands over a mage already wearing the right hat.
    */
   setCosmetics(tints: WornTints): void {
-    this.worn = tints;
-    partTintsInto(tints, this.partTints, this.hatDye, this.capeDye);
-    for (const crowd of this.crowds.values()) crowd.setPartTints(this.partTints);
+    const parts = this.dressing.set(tints);
+    for (const crowd of this.crowds.values()) crowd.setPartTints(parts);
   }
 
   /** Whether `src/physics` takes one squad death in ten (`./squadDeaths.ts`). */
@@ -173,7 +164,7 @@ export class SquadView {
     // The models arrive after the first `setCosmetics` in the normal case (the
     // load is not awaited by the title screen), so whatever is worn is applied
     // again here rather than lost.
-    this.setCosmetics(this.worn);
+    this.setCosmetics(this.dressing.worn);
   }
 
   /** New level: the starting squad is simply there, with no pop animation, and

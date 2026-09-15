@@ -19,7 +19,7 @@ export type { CharacterAsset, LoadCharacterOptions } from './asset';
 // skinned live rather than from a baked texture, so it cannot use the merge
 // above — but a hat parented to a bone has to become a weighted vertex either
 // way, and that rule may only exist once.
-export { bindSpaceInverse, reskinToParentBone } from './asset';
+export { bindSpaceInverse, reskinToParentBone } from './merge';
 export { tintColors } from './tint';
 export { StaticCrowd } from './crowd';
 export type { Crowd } from './crowd';

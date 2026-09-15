@@ -189,16 +189,17 @@ export class App implements FrameHost, AppCommands {
     this.academy.beginSession();
     this.showHome();
     this.publishHandle();
-    // `?endless=1`: straight onto the road with no end (D52). After the home
-    // screen rather than instead of it, so the Academy is what Back finds.
-    if (this.options.endless) this.startEndless();
 
     // Neither is awaited: two megabytes of Havok and twenty audio clips must
     // not hold the title screen back. Both attach themselves to whatever level
     // is loaded by the time they arrive, and nothing can play a sound before
     // the first tap anyway.
-    void this.initPhysics();
+    const physics = this.initPhysics();
     void this.audio.load();
+
+    // `?endless=1`: onto the road with no end (D52), once Havok has landed —
+    // the one thing in the app that waits for it (`RunStage.autoStartEndless`).
+    if (this.options.endless) this.runs.autoStartEndless(physics, () => this.disposed);
 
     this.driver.start();
   }

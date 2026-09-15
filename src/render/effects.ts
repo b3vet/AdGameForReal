@@ -19,14 +19,8 @@ import type { Scene } from '@babylonjs/core/scene';
 import { NO_TINT, dyeToRef } from './cosmetics';
 import type { Tint } from './cosmetics';
 import { EffectGeometry } from './effectsGeometry';
-import {
-  METEOR_BURSTS,
-  METEOR_FLASH_DURATION,
-  METEOR_FLASH_SIZE,
-  OVERCHARGE_FLASH_DURATION,
-  OVERCHARGE_FLASH_SIZE,
-  OVERCHARGE_GLOW_BOOST,
-} from './evolutionLook';
+import { meteorLanding, overchargeFlash, shatterPuff } from './evolutionBursts';
+import type { BurstSink } from './evolutionBursts';
 import type { SpriteLayer } from './sprites';
 import { bookCell, type SpriteBook } from './spriteSheets';
 import {
@@ -40,9 +34,6 @@ import {
   MUZZLE_SIZE,
   MUZZLE_Y,
   POOL,
-  SHATTER_PUFF_DURATION,
-  SHATTER_PUFF_SIZE,
-  SHATTER_PUFF_SPOKES,
   SHIELD_BREAK_COLOR,
   SHIELD_BREAK_DURATION,
   SHIELD_BREAK_RADIUS,
@@ -110,6 +101,23 @@ export class EffectsView {
   private glow: Tint = NO_TINT;
   /** Scratch for the dye; every use of it is inside one call. */
   private readonly dyed: [number, number, number] = [0, 0, 0];
+
+  /**
+   * How the tier-4 emitters in `./evolutionBursts.ts` reach this pool. Bound
+   * once rather than at each call: a meteor lands every nine seconds of a run
+   * and nothing on that path may allocate (CLAUDE.md).
+   */
+  private readonly sink: BurstSink = {
+    push: (book, x, y, z, size, life, red, green, blue): void => {
+      this.push(book, x, y, z, size, life, red, green, blue);
+    },
+    impact: (weaponId, x, z): void => {
+      this.onImpact(weaponId, x, z);
+    },
+    splash: (x, z, radius): void => {
+      this.onSplash(x, z, radius);
+    },
+  };
 
   constructor(scene: Scene, sprites: SpriteLayer) {
     this.sprites = sprites;
@@ -202,32 +210,9 @@ export class EffectsView {
     );
   }
 
-  /**
-   * Frost's evolution (D33, tier 2): the body came apart and took its
-   * neighbours with it.
-   *
-   * A ring of chips thrown out to the shatter's own radius rather than the
-   * ember splash ring, which is a torus in the ember hue and would read as a
-   * fire blast on an ice kill. The radius is the sim's — it comes off the
-   * `splash` event the shatter emits — so what the player sees is exactly how
-   * far the damage reached.
-   */
+  /** Frost tier 2 (D33): the shatter's chips (`./evolutionBursts.ts`). */
   onShatterPuff(x: number, z: number, radius: number): void {
-    const tint = tintOf('frost');
-    for (let i = 0; i < SHATTER_PUFF_SPOKES; i++) {
-      const angle = (i / SHATTER_PUFF_SPOKES) * Math.PI * 2 + 0.4;
-      this.push(
-        'frostImpact',
-        x + Math.cos(angle) * radius * 0.75,
-        IMPACT_Y,
-        z + Math.sin(angle) * radius * 0.75,
-        SHATTER_PUFF_SIZE,
-        SHATTER_PUFF_DURATION,
-        tint.r * IMPACT_GLOW_BOOST,
-        tint.g * IMPACT_GLOW_BOOST,
-        tint.b * IMPACT_GLOW_BOOST,
-      );
-    }
+    shatterPuff(this.sink, x, z, radius);
   }
 
   /**
@@ -258,57 +243,14 @@ export class EffectsView {
     }
   }
 
-  /**
-   * Ember tier 4 (D54): the flash and the rim bursts where a meteor landed.
-   *
-   * The blast ring is the ember splash's own, at the radius the sim struck at,
-   * so a meteor and a big splash agree about what a blast looks like; what
-   * separates them is the head falling into it (`./evolutions.ts`) and the
-   * bursts thrown round the rim here.
-   */
+  /** Ember tier 4 (D54): a meteor's landing (`./evolutionBursts.ts`). */
   onMeteorLanding(x: number, z: number, radius: number): void {
-    this.onSplash(x, z, radius);
-    const tint = tintOf('ember');
-    this.push(
-      'emberImpact',
-      x,
-      IMPACT_Y,
-      z,
-      radius * METEOR_FLASH_SIZE,
-      METEOR_FLASH_DURATION,
-      tint.r * IMPACT_GLOW_BOOST,
-      tint.g * IMPACT_GLOW_BOOST,
-      tint.b * IMPACT_GLOW_BOOST,
-    );
-    for (let i = 0; i < METEOR_BURSTS; i++) {
-      const angle = (i / METEOR_BURSTS) * Math.PI * 2 + 0.3;
-      this.onImpact(
-        'ember',
-        x + Math.cos(angle) * radius * 0.8,
-        z + Math.sin(angle) * radius * 0.8,
-      );
-    }
+    meteorLanding(this.sink, x, z, radius);
   }
 
-  /**
-   * Storm tier 4 (D54): the flash at the crowd when the volley arcs to
-   * everything at once. The arcs themselves are the chain visual and are thrown
-   * by `./rendererEvents.ts`, which is the half that knows where the bodies are.
-   */
+  /** Storm tier 4 (D54): the overcharge's flash (`./evolutionBursts.ts`). */
   onOverchargeFlash(x: number, z: number): void {
-    const tint = tintOf('storm');
-    dyeToRef(tint.r, tint.g, tint.b, this.glow, this.dyed);
-    this.push(
-      'stormImpact',
-      x,
-      IMPACT_Y,
-      z,
-      OVERCHARGE_FLASH_SIZE,
-      OVERCHARGE_FLASH_DURATION,
-      this.dyed[0] * OVERCHARGE_GLOW_BOOST,
-      this.dyed[1] * OVERCHARGE_GLOW_BOOST,
-      this.dyed[2] * OVERCHARGE_GLOW_BOOST,
-    );
+    overchargeFlash(this.sink, x, z, this.glow, this.dyed);
   }
 
   /** Ember's blast ring, on the ground at the radius the sim resolved it at. */

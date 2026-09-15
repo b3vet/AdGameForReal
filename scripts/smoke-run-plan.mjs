@@ -17,6 +17,7 @@ function describeShot(frame) {
   if (frame.at === 'shieldBroken') return 'a shielded brute with its shield broken';
   if (frame.at === 'charge') return 'a charger running its lane';
   if (frame.at === 'bossCharge') return "the Rime Fiend's charge";
+  if (frame.at === 'boundary') return `biome boundary ${String(frame.value)} of the endless road`;
   return 'a staff gate';
 }
 
@@ -155,6 +156,21 @@ export const PACE = {
   shieldShot: { from: 26, to: 34 },
   brokenShot: { from: 5, to: 26 },
   chargeShot: { from: 3, to: 17 },
+  /**
+   * The endless road's biome boundaries (D52), which are *places* like a metre
+   * mark — but places the squad must be photographed within a few metres of,
+   * because the picture is the crossing itself: the near half of the road in
+   * the span being left, the far half already painted in the one ahead
+   * (`src/render/roadFar.ts`).
+   *
+   * So it is a pace ladder like the gate rows', and the window is the metres
+   * either side of the boundary a frame may be taken in. `over` rather than a
+   * symmetric band: the boundary is behind the squad by the time the camera
+   * crosses it, so a frame taken a few metres past it has the line in the
+   * middle of the picture rather than at the bottom edge.
+   */
+  boundary: { far: 30, farTurbo: 10, nearTurbo: 4, near: 10 },
+  boundaryShot: { before: 2, over: 6 },
 };
 
 /** What the sim is handed back once the last paced shot has been taken. */
@@ -184,6 +200,8 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
       // the row generation moved (`staff-l10.png` and `t12-l10.png` came out
       // byte for byte alike). A shot may not be taken until the sim has moved.
       globalThis.__smokeAt = -1;
+      globalThis.__smokeBiomes = [];
+      globalThis.__smokeChip = { text: '', endless: '' };
 
       /** The nearest live enemy ahead that `pick` accepts, as metres of road. */
       const nearest = (state, pick) => {
@@ -196,6 +214,13 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
         }
         return best;
       };
+
+      /**
+       * Metres of road one biome span holds (D52), or 0 on a campaign level.
+       * Off the session's own level rather than off `endless.json`, so the
+       * smoke cannot disagree with the road it is walking.
+       */
+      const spanMetres = () => globalThis.__arcane?.app.session?.level.biomeSpan ?? 0;
 
       const isShielded = (enemy) => enemy.kind === 'shieldBrute';
       const shieldUp = (enemy) => isShielded(enemy) && (enemy.shield ?? 0) > 0;
@@ -233,6 +258,20 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
         }
         if (step.at === 'bossCharge') {
           globalThis.__arcane?.setTurbo(state.boss?.active === true ? clock.boss : clock.cruise);
+          return;
+        }
+        if (step.at === 'boundary') {
+          const span = spanMetres();
+          if (span <= 0) return;
+          const gap = span * step.value - state.squad.z;
+          const ladder = clock.boundary;
+          globalThis.__arcane?.setTurbo(
+            gap > ladder.far
+              ? clock.cruise
+              : gap > ladder.near
+                ? ladder.farTurbo
+                : ladder.nearTurbo,
+          );
         }
       };
 
@@ -268,6 +307,12 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
             state.time <= boss.charge.until
           );
         }
+        if (step.at === 'boundary') {
+          const span = spanMetres();
+          if (span <= 0) return false;
+          const over = state.squad.z - span * step.value;
+          return over >= -clock.boundaryShot.before && over <= clock.boundaryShot.over;
+        }
         return state.gates.some(
           (gate) =>
             gate.kind === 'weapon' &&
@@ -277,8 +322,24 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
         );
       };
 
+      /**
+       * Every biome the scene has been painted in, in order (D52).
+       *
+       * Recorded here rather than counted from the metres because it is the
+       * thing under test: a crossing is the renderer repainting the world, and
+       * the endless run asserts it happened twice. Outside the step guards
+       * below, so it keeps recording after the last frame has been taken.
+       */
+      const trackBiome = () => {
+        const biome = globalThis.__arcane?.app.renderer.biomeId;
+        if (biome === undefined) return;
+        const seen = globalThis.__smokeBiomes;
+        if (seen[seen.length - 1] !== biome) seen.push(biome);
+      };
+
       const tick = () => {
         globalThis.requestAnimationFrame(tick);
+        trackBiome();
         if (globalThis.__smokeStopped) return;
         const step = globalThis.__smokePlan[globalThis.__smokeStep];
         const state = globalThis.__arcane?.state();
@@ -287,6 +348,14 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
         setPace(step, state);
         if (!holds(step, state)) return;
         globalThis.__smokeAt = state.time;
+        // The HUD as it read on the frame that is about to be photographed:
+        // the endless run's metres chip (D52) is only on screen during play,
+        // and by the time the run is checked the result sheet is over it.
+        const chip = globalThis.document.querySelector('#hud-level');
+        globalThis.__smokeChip = {
+          text: chip?.textContent ?? '',
+          endless: chip?.dataset['endless'] ?? '',
+        };
         globalThis.__arcane?.app.stop();
         globalThis.__smokeStopped = true;
       };

@@ -15,7 +15,12 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { SCREENSHOT_TIMEOUT_MS, assertNotBlank, sleep } from './smoke-browser.mjs';
-import { checkRun, checkWarmUp } from './smoke-run-checks.mjs';
+import {
+  checkAgainStaysEndless,
+  checkNoSideScroll,
+  checkRun,
+  checkWarmUp,
+} from './smoke-run-checks.mjs';
 import {
   BOSS_SHOT_HP_SHARE,
   PACE,
@@ -106,20 +111,44 @@ async function playRun(page, url, run, failures, outDir, say) {
   if (run.titleShot !== undefined) written.push(await shot(run.titleShot));
 
   // Rooms: open one, photograph it, come back. The home is up again after each.
+  //
+  // `room` opens it through the debug handle rather than by clicking its card
+  // (`ArcaneDebugHandle.openRoom`), which is what the Wardrobe and the Bestiary
+  // use: a probe that had to find and click the right card would be a
+  // screenshot test of the home screen's layout.
   for (const menu of run.menuShots ?? []) {
-    await page.click(menu.open);
+    if (menu.room !== undefined) {
+      await page.evaluate((room) => {
+        globalThis.__arcane?.openRoom(room);
+      }, menu.room);
+    } else {
+      await page.click(menu.open);
+    }
     await sleep(MENU_SETTLE_MS);
     written.push(await shot(menu.name));
+    // A room whose ladders or prices are wider than the phone is a room the
+    // player has to scroll sideways to read (plan, definition of done 5).
+    if (menu.noScroll === true) await checkNoSideScroll(page, run, menu.name, failures, say);
     await page.click(menu.back ?? '#room-back');
     await sleep(300);
   }
 
   await armShotPlan(page, run.shots, BOSS_SHOT_HP_SHARE, STAFF_SHOT_RANGE, PACE);
-  // Play is a card on the home now (D33); it opens the level picker, and the
-  // picker is where the run starts.
-  await page.click('#academy-play');
-  await sleep(300);
-  await page.click('#play-button');
+  if (run.autoStart === true) {
+    // `?endless=1` put the run on the road itself, as soon as Havok landed
+    // (`App.start`), so there is no picker to walk through — and nothing to
+    // wait for either, because `checkWarmUp` above already waited for the layer
+    // whose arrival starts it.
+    await page.waitForFunction(() => globalThis.__arcane?.app.status() === 'playing', null, {
+      timeout: READY_TIMEOUT_MS,
+    });
+  } else {
+    // Play is a card on the home now (D33); it opens the level picker, and the
+    // picker is where the run starts.
+    await page.click('#academy-play');
+    await sleep(300);
+    await page.click('#play-button');
+  }
   const startedAt = Date.now();
 
   await takeShots(page, run, shot, written, failures);
@@ -133,6 +162,10 @@ async function playRun(page, url, run, failures, outDir, say) {
   await checkRun(page, run, failures, say, before, startedAt);
 
   written.push(await shot(run.endShot));
+
+  // Again on an endless sheet walks the endless road again rather than whatever
+  // level the picker was pointed at (D52). Last, because it starts a new run.
+  if (run.againStaysEndless === true) await checkAgainStaysEndless(page, run, failures, say);
 
   if (run.assertNotBlank !== undefined) {
     // Only if the frame was actually taken: a shot that was missed has already
