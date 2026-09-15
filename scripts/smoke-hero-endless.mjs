@@ -91,16 +91,27 @@ const FROST_SHOTS = [{ at: 'glacier', name: 'hero-glacier' }];
  *   glacier  one every 8 s, standing for 5 s and rising over 0.22 s. Hunting at
  *            0.6 s a frame is eight frames inside the hold. It goes up twelve
  *            metres ahead of the squad, which is more than twenty from the
- *            camera — a pale slab the size of a thumbnail — so the ten settling
- *            frames at 0.2 s are two seconds of walking towards it, and it is
- *            still standing for three more.
+ *            camera — a pale slab the size of a thumbnail — so the settling
+ *            frames at 0.2 s are the squad walking towards it while it is still
+ *            standing.
+ *
+ *            Five of them, not ten. The squad runs at 5 m/s and a settling
+ *            frame is 0.2 s, so ten of them close the whole twelve metres and
+ *            leave the wall *beside* the column — and a wall goes up in the
+ *            fullest lane, which is the one the bot is steering away from, so
+ *            at two metres ahead and two across it slides off the bottom
+ *            corner of the frame. That is the Milestone 8 glacier hero shot,
+ *            the weakest picture in the set. Six metres ahead is the same slab
+ *            at the distance the first gate row reads at: large enough to be
+ *            the subject and far enough to stay inside the frame whichever lane
+ *            it went up in.
  */
 const ENDLESS_PACE = {
   cruise: 60,
   boundary: { far: 30, farTurbo: 10, near: 10, nearTurbo: 4 },
   boundaryShot: { before: 2, over: 6 },
   meteor: { hunt: 4, settleTurbo: 2, settleFrames: 3 },
-  glacier: { hunt: 12, settleTurbo: 4, settleFrames: 10 },
+  glacier: { hunt: 12, settleTurbo: 4, settleFrames: 5 },
 };
 
 /**

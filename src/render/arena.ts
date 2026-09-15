@@ -65,6 +65,22 @@ export class ArenaMarkers {
       writeInstance(matrices, i, 1, 1, 1, (i === 0 ? -1 : 1) * x, 0, arenaZ);
     }
     commitInstances(mesh, 2);
+    // ...and then let the frustum have it back.
+    //
+    // `createMatrixBuffer` turns culling off for every pool it binds, because
+    // thin-instance bounds are not tracked as a buffer changes and a squad
+    // whose instances moved would blink out at the edge of the screen. This
+    // pair is the exception in the scene: it is written once per level and
+    // never again, so its bounds can simply be computed — and until the
+    // Milestone 8 review they were not, which drew a pillar pair standing 2.6
+    // km up the endless road on every frame of the walk to it (one draw call of
+    // the 51 the spanned road peaked at, and one on every campaign level too).
+    //
+    // `doNotSyncBoundingInfo` stays on: `freeze` computes the world matrix and
+    // would recompute the bounds off the *geometry* — the marker at the origin
+    // — throwing away what the line below just worked out from the instances.
+    mesh.alwaysSelectAsActiveMesh = false;
+    mesh.thinInstanceRefreshBoundingInfo(true);
   }
 
   /**

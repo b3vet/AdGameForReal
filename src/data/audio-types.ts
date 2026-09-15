@@ -69,8 +69,8 @@ export interface AudioMix {
     shieldBreak: number;
     /**
      * The four Milestone 8 evolutions with a voice (D54). All four are long,
-     * because all four are *rare by design* — a meteor every nine seconds, an
-     * overcharge every fifth volley, a wall every fourteen seconds — and the
+     * because all four are *rare by design* — a meteor every seven seconds, an
+     * overcharge every fourth volley, a wall every eight seconds — and the
      * one that is not rare is the freeze pulse, which can go off on every body
      * of a river that dies frozen. Its interval is what keeps a lane of ice
      * kills from being one continuous hiss.

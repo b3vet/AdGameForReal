@@ -293,3 +293,40 @@
 .mute[aria-pressed='true'] .mute__slash {
   display: inline;
 }
+
+/*
+ * The picker scrolls when the screen is shorter than its contents (Milestone 8
+ * review).
+ *
+ * Measured at 568x320 — an iPhone SE first generation in landscape, the
+ * shortest screen this game runs on, and the viewport `./styles.css` already
+ * carries a landscape block for: the Endless card (D52) is 82 px of furniture
+ * above the chips, and it pushed Play and Back 35 px past the bottom edge.
+ * `html` and `body` are `overflow: hidden`, so those two buttons were not
+ * merely off screen, they were unreachable — the same class of bug the result
+ * sheet's own scroll was written for (`./result.css`), and the one that stops a
+ * phone in that orientation being able to start a run at all.
+ *
+ * The middle is what gives, for the same reason it does on the sheet: the way
+ * out at the foot is the thing that must never move. A screen that fits is
+ * unchanged, because a flex item only scrolls once there is nowhere left to
+ * grow — which is why this is not scoped to the landscape block. `touch-action`
+ * is named because the page itself is `touch-action: none` (the canvas handles
+ * every gesture), so a scroll container inside it has to ask for its one axis.
+ */
+.screen--levels .screen__panel {
+  min-height: 0;
+}
+
+.screen--levels .screen__middle {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+/* ...and nothing inside it shrinks instead; see the note on the result sheet. */
+.screen--levels .screen__middle > * {
+  flex-shrink: 0;
+}

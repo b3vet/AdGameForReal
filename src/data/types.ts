@@ -151,6 +151,14 @@ export interface GlacierBalance {
    * there, which is the thing a player is buying.
    */
   bite: number;
+  /**
+   * Metres either side of the wall's line a body counts as *against* it.
+   *
+   * Narrow, because a held body sits *on* the line: `contact.ts` clamps
+   * whatever crossed to `ice.z` exactly, and everything still walking up to it
+   * is the squad's own business rather than the ice's.
+   */
+  grip: number;
 }
 
 /**

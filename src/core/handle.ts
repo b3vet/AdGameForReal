@@ -92,6 +92,20 @@ export interface ArcaneDebugHandle {
    */
   startEndless: (seed?: number) => void;
   /**
+   * Ends the run on the road as a loss, wherever it has got to.
+   *
+   * The picture-taking path, like `steer` below: the smoke's endless walk
+   * exists to photograph a biome crossing and to assert the sheet that follows
+   * it (D52), and the road is 2898 m long — so once the frames are taken the
+   * driver stops the run rather than paying for the two kilometres between the
+   * last picture and a wipe. A no-op outside the playing phase and on a run
+   * that has already finished.
+   *
+   * It is not a "give up" button and there is no way to reach it in play: the
+   * HUD has no way out of a run (`src/sim/rewards.ts`).
+   */
+  endRun: () => void;
+  /**
    * Sim seconds per real second, live: `?turbo` after the page has booted,
    * clamped to the same 1 to `MAX_TURBO` the query parameter is.
    *

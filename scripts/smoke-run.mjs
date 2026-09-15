@@ -70,6 +70,45 @@ export async function driveRun(page, url, run, failures, outDir) {
   }
 }
 
+/**
+ * Ends the run once it is `spans` biome boundaries in, plus a margin.
+ *
+ * A page-side watcher rather than a `waitForFunction` and a call back in, for
+ * the reason the shot plan's is one (`./smoke-run-plan.mjs`): a round trip to
+ * Node costs a frame or three, and a turbo frame is three seconds of sim.
+ *
+ * Two conditions, not one. The squad being past the line is what the run is
+ * measured in, and `__smokeBiomes` having grown to `spans + 1` entries is the
+ * renderer having actually repainted at each of them — which is what the run
+ * asserts afterwards. Stopping on the metres alone could end a run one frame
+ * before the crossing it exists to prove.
+ *
+ * The span itself is read off the session's own level rather than off
+ * `endless.json`, so the driver cannot disagree with the road it is walking.
+ */
+function stopAfterSpans(page, endAfter) {
+  return page.evaluate(({ spans, margin }) => {
+    const tick = () => {
+      const state = globalThis.__arcane?.state();
+      // No run yet: keep watching. A run that has already ended on its own is
+      // nothing to stop, so the watcher is done.
+      if (state === null || state === undefined) {
+        globalThis.requestAnimationFrame(tick);
+        return;
+      }
+      if (state.status !== 'running') return;
+      const span = globalThis.__arcane?.app.session?.level.biomeSpan ?? 0;
+      const painted = (globalThis.__smokeBiomes ?? []).length;
+      if (span > 0 && state.squad.z >= span * spans + margin && painted > spans) {
+        globalThis.__arcane?.endRun();
+        return;
+      }
+      globalThis.requestAnimationFrame(tick);
+    };
+    globalThis.requestAnimationFrame(tick);
+  }, endAfter);
+}
+
 async function playRun(page, url, run, failures, outDir, say) {
   const shot = async (name) => {
     const file = path.join(outDir, name);
@@ -158,6 +197,10 @@ async function playRun(page, url, run, failures, outDir, say) {
   await page.evaluate((turbo) => {
     globalThis.__arcane?.setTurbo(turbo);
   }, PACED_TAIL_TURBO);
+
+  // A run may say where it has seen enough (`endAfter` in `./smoke-runs.mjs`):
+  // the endless road is 2898 m and its frames are all in the first two spans.
+  if (run.endAfter !== undefined) await stopAfterSpans(page, run.endAfter);
 
   await checkRun(page, run, failures, say, before, startedAt);
 

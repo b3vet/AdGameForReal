@@ -37,7 +37,7 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import type { Crowd } from './characters';
-import { WornParts } from './cosmetics';
+import { CrowdDye } from './cosmetics';
 import type { WornTints } from './cosmetics';
 import { loadCrowds } from './models';
 import type { ShadowLayer } from './shadows';
@@ -110,7 +110,7 @@ export class SquadView {
 
   /** The hat and cape tints the player is wearing (D53), dyed once for all
    *  three crowds (`./cosmetics.ts`). */
-  private readonly dressing = new WornParts();
+  private readonly dressing = new CrowdDye();
 
   constructor(scene: Scene) {
     this.scene = scene;

@@ -175,11 +175,9 @@ export class Picker {
       if (number !== null) number.textContent = String(level);
       chip.setAttribute(
         'aria-label',
-        star
-          ? fill(copy.starLabel, { level: String(level) })
-          : milestone
-            ? fill(copy.milestoneLabel, { level: String(level) })
-            : `Level ${String(level)}`,
+        fill(star ? copy.starLabel : milestone ? copy.milestoneLabel : copy.levelLabel, {
+          level: String(level),
+        }),
       );
       chip.disabled = level > view.unlockedLevel;
       chip.setAttribute('aria-pressed', level === view.selectedLevel ? 'true' : 'false');

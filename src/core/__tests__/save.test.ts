@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { defaultPlayer } from '../player';
+import { defaultPlayer, maxStaffTier } from '../player';
 import {
   SAVE_KEY,
   SAVE_KEY_V1,
@@ -218,6 +218,35 @@ describe('save v3 round trip', () => {
     // "Unlocked at tier 0" is not a wisp; the lowest bound tier is 1.
     expect(save.player.familiar).toEqual({ unlocked: true, tier: 1 });
     expect(save.player.bestiary).toEqual(['grunt']);
+  });
+
+  /**
+   * D54 widened the Workbench's ladder from two rungs to four, so the ceiling a
+   * stored tier is held under is a number that has already moved once. A save
+   * from a *later* build — or a hand-edited one — must come back inside the
+   * ladder this build sells rather than lighting a rung it has no price for.
+   */
+  it('holds a staff tier inside the ladder this build knows', () => {
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: 3,
+        unlockedLevel: 9,
+        player: {
+          staffs: {
+            ember: { unlocked: true, tier: 99 },
+            storm: { unlocked: true, tier: 0 },
+            frost: { unlocked: true, tier: 2.7 },
+          },
+        },
+      }),
+    );
+
+    const { player } = loadSave();
+    expect(player.staffs.ember.tier).toBe(maxStaffTier);
+    // An owned staff is never below tier 1, and a fraction is a floor.
+    expect(player.staffs.storm.tier).toBe(1);
+    expect(player.staffs.frost.tier).toBe(2);
   });
 });
 

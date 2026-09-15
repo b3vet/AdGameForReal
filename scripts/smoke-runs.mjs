@@ -242,8 +242,9 @@ export const RUNS = [
      *
      * Bare, with no save at all: a greedy walk on nothing bought reaches about
      * 1900 to 2400 m of the 2898 m road (measured on the sim over five seeds),
-     * which is nine to eleven spans — so the two crossings are not close to the
-     * margin, and the record it sets is the first one.
+     * which is nine to eleven spans — so the two crossings this run is stopped
+     * after (`endAfter`) are not close to the margin, and the record it sets is
+     * the first one.
      */
     label: 'endless greedy',
     query: `?endless=1&bot=greedy&seed=3&turbo=${TURBO}&screenshot=1`,
@@ -259,9 +260,32 @@ export const RUNS = [
       hidden: ['#next-button', '#result-best'],
     },
     againStaysEndless: true,
-    // The road is about 400 s of sim — twice a campaign level — and at turbo
-    // 60 that is a hundred and thirty frames of a crowd that reaches the cap.
-    // The default three minutes is the budget for a level a third as long.
+    /**
+     * Stopped two spans in, rather than walked to the wipe.
+     *
+     * The run exists for the crossing, the metres chip and the sheet behind
+     * them, and every one of those is true by the second boundary. Left to
+     * itself a greedy walk reached 1915 m of the 2898 m road — two thirds of it
+     * — and the Milestone 8 review measured that tail at 633 s of this
+     * container's wall clock, a third of the whole smoke, for a stretch of road
+     * nothing photographs and nothing asserts. So the driver ends the run
+     * through the debug handle once the squad is past the second boundary and
+     * the renderer has repainted at both (`stopAfterSpans` in
+     * `./smoke-run.mjs`).
+     *
+     * Nothing is weakened: the two crossings are still asserted, the draw-call
+     * and shader counts are still measured over everything the run drew, and
+     * the sheet still owes the same identity — a stopped run is a lost run, and
+     * an endless run is paid by distance whichever way it ended (D52).
+     *
+     * The margin is forty metres past the line — eight seconds of road — because
+     * the camera trails the squad and it is the *camera* crossing that repaints
+     * the world. The watcher waits for that repaint as well, so the margin is
+     * slack rather than the test.
+     */
+    endAfter: { spans: 2, margin: 40 },
+    // Still generous: what is left is the walk to the second boundary at the
+    // pace ladder's own speed, not the whole road.
     endTimeoutMs: 600_000,
   },
   {

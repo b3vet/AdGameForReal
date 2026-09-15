@@ -254,9 +254,14 @@ export class Overlay {
 
   /** One of the four rooms, painted from the player's state. */
   showRoom(room: RoomId, player: PlayerState, bump: RoomBump | null = null): void {
+    // The screen first, then what is in it. Both happen in one task so nothing
+    // is ever painted half-dressed, and the order matters to exactly one room:
+    // the Wardrobe scrolls each slot's strip to the tint being worn, which is a
+    // measurement, and an element inside a `hidden` screen measures as zero
+    // (`Wardrobe.show`).
+    this.showOnly(this.roomScreen);
     this.rooms.show(room, player, bump);
     this.academy.setCoins(player.coins);
-    this.showOnly(this.roomScreen);
   }
 
   /** `endless` swaps the HUD's level chip for a metres one (D52). */

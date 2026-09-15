@@ -28,6 +28,15 @@
  */
 .rows--tints {
   min-width: 0;
+  /*
+   * Tighter than the rooms' own 0.4rem: four slot rows have to stand inside the
+   * panel's 60vh on a 390x844 phone, and before the Milestone 8 review the
+   * fourth — Staff glow — hung 39 px below the fold with its unlock hints cut
+   * off. Every saving below is a few pixels a row, measured rather than
+   * guessed; together they take the four rows from 515 px to 446, against the
+   * 476 the panel has at that size.
+   */
+  gap: 0.3rem;
 }
 
 .rows--tints > .tints {
@@ -36,8 +45,8 @@
 }
 
 .tints {
-  gap: 0.25rem;
-  padding: 0.3rem 0.45rem 0.4rem;
+  gap: 0.2rem;
+  padding: 0.22rem 0.45rem 0.3rem;
   /* A grid item will not shrink below its content without this, and the strip
      below is what is supposed to scroll — not the card, and not the panel. */
   min-width: 0;
@@ -58,7 +67,7 @@
   min-width: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 0.15rem;
+  padding-bottom: 0.1rem;
 }
 
 .tint {
@@ -66,9 +75,18 @@
   flex: 0 0 auto;
   display: grid;
   justify-items: center;
-  gap: 0.1rem;
-  width: 4.1rem;
-  padding: 0.25rem 0.15rem;
+  gap: 0.08rem;
+  /*
+   * Wide enough for the longest tint name on one line. At 4.1rem "Quarry
+   * Cloak" and "Bulwark Glow" wrapped and "Houndcrest" simply ran out of its
+   * own box into the chip beside it (the Milestone 8 review read it off
+   * `hero-wardrobe-2x.png`). The strip already scrolls sideways — a slot holds
+   * up to six tints and four never fitted — so the price of the extra half-rem
+   * is that the fourth chip is cut a little further in, which is the cue that
+   * says the row continues.
+   */
+  width: 4.6rem;
+  padding: 0.2rem 0.15rem;
   border: none;
   border-radius: 0.45rem;
   background: var(--sunk);
@@ -99,9 +117,17 @@
   );
 }
 
-/* Bare: a chip with nothing in it, which is what taking a hat off looks like. */
+/*
+ * Bare: a chip with nothing in it, which is what taking a hat off looks like.
+ *
+ * The ring is the whole of it, so it gets an opaque stand-in first: iOS 15 to
+ * 16.1 has no `color-mix` (D41) and drops a declaration that uses one whole,
+ * which on a transparent swatch would leave nothing on screen at all — and this
+ * is the one chip in every row the player has to be able to find.
+ */
 .tint__swatch[data-kind='none'] {
   background: transparent;
+  box-shadow: inset 0 0 0 0.12rem var(--c-stone-base);
   box-shadow: inset 0 0 0 0.12rem color-mix(in srgb, var(--c-ink-base) 30%, transparent);
 }
 
@@ -110,6 +136,9 @@
   font-size: 0.6rem;
   line-height: 1.1;
   text-align: center;
+  /* A name longer than the chip breaks rather than running into its neighbour;
+     the widened chip above is what keeps every shipped name on one line. */
+  overflow-wrap: anywhere;
   color: var(--ink-soft);
 }
 
@@ -117,7 +146,13 @@
   font-family: var(--font-display);
   font-size: 0.55rem;
   font-weight: 700;
+  /* Two lines of a kill ladder — "100 Rimehound" — at the body font's own
+     leading is most of a row's height; the hint is two short words and reads
+     tight. */
+  line-height: 1.05;
   letter-spacing: 0.04em;
+  text-align: center;
+  overflow-wrap: anywhere;
   color: var(--ink-dim);
 }
 

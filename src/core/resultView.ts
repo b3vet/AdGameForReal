@@ -14,12 +14,10 @@
 import { academy, fill } from '@/data/academy-types';
 
 import type { RunPayout } from './academy';
+import { earnsStar } from './meta';
 import type { PlayerState } from './player';
 import type { RunSession } from './session';
 import type { ResultBonus, ResultView } from '@/ui';
-
-/** The share of peak a walk has to arrive with to earn the picker's star. */
-const STAR_SHARE = 0.6;
 
 /**
  * The sheet for a finished run.
@@ -58,7 +56,7 @@ export function resultView(
     missions: payout.completed.map((mission) => ({ text: mission.text, reward: mission.reward })),
     best,
     bestImproved: payout.bestImproved,
-    star: best !== null && best.peak > 0 && best.survivors >= best.peak * STAR_SHARE,
+    star: earnsStar(best),
     player,
   };
 }

@@ -303,7 +303,8 @@
         "holdSeconds": 5,
         "ahead": 12,
         "minBodies": 1,
-        "bite": 0.3
+        "bite": 0.3,
+        "grip": 0.6
       }
     }
   }

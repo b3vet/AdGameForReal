@@ -202,6 +202,11 @@ export class RoadFarHalf {
         );
       }
     }
+    // Enables the verge when it has instances and disables it when it has
+    // none, which is the whole of what this half owes it: the `setEnabled(true)`
+    // that used to follow undid the second half of that, so a far half starting
+    // past the dressed road — the last span of a level — left an empty mesh in
+    // the draw list (Milestone 8 review).
     commitInstances(this.fringe, dressed > 0 ? 2 : 0);
 
     for (const mesh of [this.field, this.surface]) {
@@ -209,7 +214,6 @@ export class RoadFarHalf {
       mesh.freezeWorldMatrix();
       mesh.setEnabled(true);
     }
-    this.fringe.setEnabled(true);
   }
 
   dispose(): void {

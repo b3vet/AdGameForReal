@@ -104,7 +104,7 @@ export class EffectsView {
 
   /**
    * How the tier-4 emitters in `./evolutionBursts.ts` reach this pool. Bound
-   * once rather than at each call: a meteor lands every nine seconds of a run
+   * once rather than at each call: a meteor lands every seven seconds of a run
    * and nothing on that path may allocate (CLAUDE.md).
    */
   private readonly sink: BurstSink = {

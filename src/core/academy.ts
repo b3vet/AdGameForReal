@@ -23,7 +23,7 @@ import { systemClock, today } from './clock';
 import type { Clock } from './clock';
 import { selectCosmetic, wardrobeView } from './cosmetics';
 import type { WardrobeView } from './cosmetics';
-import { applyRunMeta } from './meta';
+import { applyRunMeta, earnsStar } from './meta';
 import { missionBoard, rollMissions } from './missions';
 import type { MissionView } from './missions';
 import { streakView } from './streak';
@@ -378,19 +378,17 @@ export function bestClearedLevel(player: PlayerState): number {
 }
 
 /**
- * Levels whose best walk arrived with at least `STAR_SHARE` of the crowd the
- * run ever held — the picker's star (D45's own band: a good player ends with 35
- * to 65 percent of peak, so the star is the top of it).
+ * Levels whose best walk earned the picker's star (`earnsStar` in `./meta.ts`,
+ * which is where the share itself lives — the result sheet promises the same
+ * star and the two may not disagree).
  */
-const STAR_SHARE = 0.6;
-
 function starredLevels(player: PlayerState): readonly number[] {
   const stars: number[] = [];
   for (const key of Object.keys(player.levelBest)) {
     const best = player.levelBest[key];
     const level = Number.parseInt(key, 10);
     if (best === undefined || !Number.isFinite(level)) continue;
-    if (best.peak > 0 && best.survivors >= best.peak * STAR_SHARE) stars.push(level);
+    if (earnsStar(best)) stars.push(level);
   }
   return stars;
 }

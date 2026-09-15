@@ -117,7 +117,7 @@
           },
           {
             "name": "Overcharge",
-            "line": "Every fifth volley arcs to everything in range."
+            "line": "Every fourth volley arcs to everything in range."
           }
         ]
       },
@@ -315,6 +315,7 @@
       "hudLabel": "{metres} m"
     },
     "picker": {
+      "levelLabel": "Level {level}",
       "milestoneLabel": "Milestone level {level}",
       "starLabel": "Level {level}, walked well"
     },

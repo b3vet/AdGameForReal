@@ -24,9 +24,6 @@ import type { Lane, RunState, WeaponId } from './types';
 import { weaponOf } from './weapons';
 import type { Balance, GlacierBalance } from '@/data/types';
 
-/** Metres either side of the line a body counts as *against* the wall. */
-const GRIP = 0.6;
-
 export class Glacier {
   private readonly tuning: GlacierBalance;
   private readonly balance: Balance;
@@ -94,19 +91,20 @@ export class Glacier {
    * exactly the row a run is decided on. The whole wall is worth `bite` seconds
    * of the squad's own fire a second, however many bodies are leaning on it.
    *
-   * The window is narrow because a held body sits *on* the line: `contact.ts`
-   * clamps whatever crossed to `ice.z` exactly, and everything still walking
-   * up to it is the squad's own business.
+   * The window is narrow (`GlacierBalance.grip`) because a held body sits *on*
+   * the line: `contact.ts` clamps whatever crossed to `ice.z` exactly, and
+   * everything still walking up to it is the squad's own business.
    */
   private grind(state: RunState, dt: number): void {
     const ice = state.ice;
     if (ice == null || this.tuning.bite <= 0) return;
     const width = this.balance.road.laneWidth;
-    const reach = GRIP + this.balance.enemies.footprintMax;
+    const grip = this.tuning.grip;
+    const reach = grip + this.balance.enemies.footprintMax;
 
     this.held = 0;
     this.targets.forEachNear(ice.z, reach, (enemy) => {
-      if (Math.abs(enemy.z - ice.z) > GRIP || laneOf(enemy.x, width) !== ice.lane) return true;
+      if (Math.abs(enemy.z - ice.z) > grip || laneOf(enemy.x, width) !== ice.lane) return true;
       this.held++;
       return true;
     });
@@ -114,7 +112,7 @@ export class Glacier {
 
     const each = (this.output(state) * this.tuning.bite * dt) / this.held;
     this.targets.forEachNear(ice.z, reach, (enemy) => {
-      if (Math.abs(enemy.z - ice.z) > GRIP || laneOf(enemy.x, width) !== ice.lane) return true;
+      if (Math.abs(enemy.z - ice.z) > grip || laneOf(enemy.x, width) !== ice.lane) return true;
       this.hit(state, enemy, each);
       return state.status === 'running';
     });

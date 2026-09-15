@@ -57,6 +57,8 @@ export class Wardrobe {
 
   /** Every chip, by slot then manifest order; built on the first visit. */
   private readonly chips = new Map<string, ChipParts>();
+  /** Each slot's scrolling strip, so the worn chip can be brought into view. */
+  private readonly strips = new Map<CosmeticSlot, HTMLElement>();
   private built = false;
 
   constructor(elements: WardrobeElements, callbacks: WardrobeCallbacks, bind: BindButton) {
@@ -74,6 +76,33 @@ export class Wardrobe {
     }
     for (const slot of view.slots) {
       for (const choice of slot.choices) this.paintChip(slot.id, choice);
+      this.revealWorn(slot.id, slot.choices);
+    }
+  }
+
+  /**
+   * Scrolls a slot's strip to the tint being worn.
+   *
+   * A row holds up to six tints and shows about three and a half of them
+   * (`wardrobe.css`), so the one the player is actually wearing can be off the
+   * right-hand edge — which makes the room answer "what am I wearing" with a
+   * blank. Written as `scrollLeft` rather than `scrollIntoView` on purpose: the
+   * strip sits inside the room's own vertical scroller, and `scrollIntoView`
+   * would move that one too.
+   */
+  private revealWorn(slot: CosmeticSlot, choices: readonly CosmeticChoiceView[]): void {
+    const strip = this.strips.get(slot);
+    if (strip === undefined) return;
+    const worn = choices.find((choice) => choice.selected);
+    if (worn === undefined) return;
+    const parts = this.chips.get(key(slot, worn.id));
+    if (parts === undefined) return;
+
+    const left = parts.button.offsetLeft;
+    const right = left + parts.button.offsetWidth;
+    if (left < strip.scrollLeft) strip.scrollLeft = left;
+    else if (right > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollLeft = right - strip.clientWidth;
     }
   }
 
@@ -100,6 +129,7 @@ export class Wardrobe {
       this.chips.set(key(slot, choice.id), { button, swatch, name: label, hint });
     }
     row.append(strip);
+    this.strips.set(slot, strip);
     this.elements.root.append(row);
   }
 

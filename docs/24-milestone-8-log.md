@@ -197,3 +197,55 @@
   and one tile label overrunning at 2x; the Workbench's frost card below
   the fold; two similarly named classes in `cosmetics.ts`; the Sanctum
   gate by level rather than ownership (pre-existing).
+
+## 2026-09-15 — Phase F: independent review and fixes (verified and committed)
+
+- Smoke budget: the endless run ends once it is two biome boundaries in
+  (a `Run.abandon()` flag acted on inside a tick so the run-ended event
+  goes out with that tick; a guarded `endRun()` on the debug handle; the
+  driver waits for both the distance and two repaints), 633 s → 83 s with
+  every assertion kept; the whole smoke 33 min 56 s → 24 min 22 s (runs
+  789 s, stress 47 s, hero 624 s). Two-run concurrency still fails, now
+  on the 90 s ready wait for the endless auto-start while another page
+  holds the cores. One draw call found: the arena markers, a static pool,
+  were drawn on every frame of every road because the thin-instance
+  binder marks every pool always-active; culling is back on for that
+  mesh (peak 51 → 50 on the spanned road).
+- Fixed: the star rule lived twice (sheet and picker) and is now one
+  function; a tints gate recorded "applied" before checking for a scene;
+  the far half's fringe re-enabled at zero instances; the glacier's grip
+  was an inline number; the Workbench copy said "fifth volley" against a
+  dial of four; stale interval comments; a literal aria label. Landscape
+  568×320: the picker's Play and Back and the Academy's Wardrobe card and
+  board were past the fold and unreachable (`overflow: hidden`), and the
+  result sheet's middle had squeezed to nothing; the picker and Academy
+  middles scroll with the actions pinned, and the sheet's four buttons
+  sit in one row. Wardrobe: all four rows fit without a scroll, no label
+  overruns at three widths, the bare "Plain" swatch has an opaque stand-in
+  for iOS 15 to 16.1, and each strip scrolls to the worn chip (the screen
+  is shown before the room paints). The glacier hero frame reframed by a
+  shorter settle. A test pins the staff-tier clamp.
+- Reviewed sound: save v3 and repair paths, the streak at noon across
+  month and year ends and a clock set back, the mission deck and pay-once
+  rules, tier crossings and cosmetics ownership through the room and the
+  handle, the value model absent from the bundle, endless end states and
+  the reward cap, goldens 1 to 3 byte-identical, the far half disabled on
+  campaign levels, warm-up across crossings, pooled evolution views and
+  their disposal.
+- Not fixed, reported: the Workbench and bestiary panels scroll with no
+  visible affordance on phones (overlay scrollbars; a sticky fade cue is
+  the sketch); both biomes' prop kinds draw on every frame of a spanned
+  road (most of its extra calls); a per-prop array allocation at level
+  load on the endless road; an unused `ownCosmetics`; files over ~400
+  that grew (`types.ts` 743, `Run.ts` 471, `firing.ts` 425, `crowd.ts`
+  404, the smoke check and plan scripts); per-step closures in the burn
+  spread and glacier grind (the splash's own pattern since Milestone 4);
+  no timezone-pinned test for the streak; the Sanctum gate by level.
+- Docs now known inaccurate and left as written (immutable): the plan's
+  contract says a locked staff is tier 0, but the save keeps `unlocked`
+  as the flag and holds a locked staff at 1; the `worth` block in
+  progression.json is not in the contract; overcharge fires every fourth
+  volley, not fifth.
+- Review verification: typecheck 0 errors, lint clean, 530 tests, build
+  OK, hosted 11.89 MB, smoke PASS. The tech lead re-ran the smoke and the
+  suite once more on the final tree before publishing.

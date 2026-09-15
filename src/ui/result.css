@@ -319,3 +319,40 @@
 .screen--result .screen__actions > .button:not(.button--ghost) {
   flex-basis: 100%;
 }
+
+/*
+ * Landscape: the four buttons share one row (Milestone 8 review).
+ *
+ * The rule above gives the gold button a line of its own and the three ghosts
+ * a line to share, which is right on a 390x844 phone and is three stacked rows
+ * on a 568x320 one — about 190 px of a 320 px screen. Measured there: the
+ * middle of the sheet was squeezed to *nothing*, so the run's own numbers were
+ * not on it at all, and Academy still hung 28 px past the bottom edge, where
+ * `overflow: hidden` makes it unreachable. It is the bug the portrait scroll
+ * above was written for, in the orientation that has the least height and the
+ * most width.
+ *
+ * So in landscape the row is wider than the phone-shaped column and each
+ * button asks for less of it: four across, one row, and the hundred and thirty
+ * pixels that buys go back to the numbers.
+ */
+@media (orientation: landscape) {
+  .screen--result .screen__actions {
+    width: min(100%, 34rem);
+  }
+
+  /*
+   * And a smaller plate on each. The button face is `clamp(1.05rem, 4.6vw,
+   * 1.25rem)`, which on a 568 px-wide screen is the 1.25rem ceiling — a 20 px
+   * display face whose own minimum width is 146 px, so only three of the four
+   * ever fitted across however small their flex basis was. A 320 px screen
+   * cannot afford that on four buttons, and what it buys back is the whole of
+   * the sheet's middle.
+   */
+  .screen--result .screen__actions > .button,
+  .screen--result .screen__actions > .button:not(.button--ghost) {
+    flex-basis: 6rem;
+    padding: 0.35rem 0.5rem 0.25rem;
+    font-size: clamp(0.85rem, 2.2vw, 1rem);
+  }
+}

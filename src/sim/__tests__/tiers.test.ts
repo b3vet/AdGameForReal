@@ -63,7 +63,7 @@ describe('what a tier may be worth', () => {
       `meteor ${Math.min(share, CEILING).toFixed(2)} of output`,
     );
 
-    // The arc's floor on its own gap is what turns "every fifth volley" into a
+    // The arc's floor on its own gap is what turns "every fourth volley" into a
     // beat, so it — not `everyVolleys` — is what bounds the share.
     const arc = balance.evolutions.storm.overcharge;
     const arcShare = arc.secondsOfFire / arc.minSeconds;
@@ -355,7 +355,7 @@ describe('frost tier 4: the glacier', () => {
 
   function glacierRun(tier: StaffTier, seconds: number): { run: Run; events: SimEvent[] } {
     const tuning = testBalance();
-    // The shipped clock is a wall every fourteen seconds; the rule under test
+    // The shipped clock is a wall every eight seconds; the rule under test
     // is what a wall *does*, so the test turns the clock up rather than
     // playing three minutes of road. The interval stays longer than the hold,
     // which is what leaves a gap between one wall and the next.

@@ -41,7 +41,7 @@ export interface FeatureReadout {
    * in the air, and whether an ice wall is standing.
    *
    * They are here for the same reason the chargers are: both are rare — a
-   * meteor every nine seconds, a wall every fourteen — so a probe that wants a
+   * meteor every seven seconds, a wall every eight — so a probe that wants a
    * picture of one cannot find it by taking frames and hoping. It polls this
    * and shoots the frame that has one.
    */

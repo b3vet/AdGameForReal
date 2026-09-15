@@ -146,8 +146,13 @@ export const BARE_TINTS: WornTints = {
  * `worn` is kept because the crowds arrive *after* the first dressing — the
  * model load is not awaited by the title screen — so what the player is wearing
  * has to survive until there is something to put it on.
+ *
+ * Named for what it holds rather than for what it is made of: it was
+ * `WornParts` until the Milestone 8 review, one letter from the `WornTints`
+ * *interface* it takes as an argument, in a file that also has a `SceneTints`
+ * and a `wornTints`.
  */
-export class WornParts {
+export class CrowdDye {
   /** The map handed to `Crowd.setPartTints`; re-written, never rebuilt. */
   private readonly parts = new Map<string, readonly [number, number, number]>();
   /** The two multipliers that map holds, reused across level loads. */
@@ -195,10 +200,17 @@ export class SceneTints {
 
   /** Dresses `views` for this player (D53); false when nothing changed. */
   apply(player: PlayerState, views: SceneViews | null): boolean {
+    // Nothing to dress, so nothing is remembered either: recording the tints
+    // here would make the *next* call — the first one with a scene behind it —
+    // read as "unchanged" and leave the player in the artist's colours for the
+    // rest of the session. Unreachable while `App.start` awaits `init` before
+    // anything is dressed, and exactly the kind of order this class must not
+    // depend on.
+    if (views === null) return false;
     const tints = wornTints(player);
     if (sameTints(tints, this.worn)) return false;
     this.worn = tints;
-    if (views !== null) applyCosmetics(views, tints);
+    applyCosmetics(views, tints);
     return true;
   }
 }

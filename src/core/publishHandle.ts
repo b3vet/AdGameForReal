@@ -75,6 +75,15 @@ export function publishHandle(app: App, sources: HandleSources): ArcaneDebugHand
       if (session === null || session.finished) return;
       session.takeWheel(x);
     },
+    endRun: () => {
+      // Only a run that is actually on the road, for the reason `steer` above
+      // is guarded: on the title screen or on a result sheet there is nothing
+      // to end, and a finished run must not be finished twice.
+      if (app.status() !== 'playing') return;
+      const session = app.session;
+      if (session === null || session.finished) return;
+      session.run.abandon();
+    },
     setTurbo: (value: number) => {
       app.setTurbo(value);
     },

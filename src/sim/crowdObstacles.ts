@@ -25,7 +25,7 @@ const PULSE_STRIDE = 6;
 /**
  * Pushes from something that is not a body, live at once (D54).
  *
- * Four, because the only thing that makes one is a meteor every nine seconds
+ * Four, because the only thing that makes one is a meteor every seven seconds
  * and they last a third of a second: the buffer is a ring rather than a
  * failure, so a tuning that made them overlap drops the oldest instead of
  * losing the newest.

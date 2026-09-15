@@ -171,6 +171,8 @@ export interface AcademyCopy {
       hudLabel: string;
     };
     picker: {
+      /** `{level}` — what an ordinary chip reads as to a screen reader. */
+      levelLabel: string;
       /** `{level}` — the label a milestone chip carries for a screen reader. */
       milestoneLabel: string;
       /** `{level}` — the label a starred chip carries. */

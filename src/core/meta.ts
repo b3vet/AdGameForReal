@@ -140,3 +140,20 @@ function better(candidate: LevelBest, previous: LevelBest): boolean {
   }
   return candidate.peak > previous.peak;
 }
+
+/**
+ * The share of the crowd a walk has to arrive with to earn the picker's star
+ * (D45's own band: a good player ends with 35 to 65 percent of peak, so the
+ * star is the top of it).
+ *
+ * Here rather than beside either of its two readers, because there are two —
+ * the picker's marks (`./academy.ts`) and the result sheet's (`./resultView.ts`)
+ * — and a star the sheet promised that the picker then did not draw is exactly
+ * the kind of disagreement one copy of a number cannot have.
+ */
+const STAR_SHARE = 0.6;
+
+/** True when this best walk earns the star. Null — a level never cleared — does not. */
+export function earnsStar(best: LevelBest | null): boolean {
+  return best !== null && best.peak > 0 && best.survivors >= best.peak * STAR_SHARE;
+}

@@ -369,3 +369,33 @@
     padding: 0.45rem;
   }
 }
+
+/*
+ * The home scrolls when the screen is shorter than its cards (Milestone 8
+ * review).
+ *
+ * Milestone 8 put a fifth card on this board (the Wardrobe, D53) and a missions
+ * board under it (D51). Measured at 568x320, the shortest screen the game runs
+ * on: the Wardrobe card's foot landed 59 px past the bottom edge and the
+ * missions board 179 px past it, and `html` and `body` are `overflow: hidden`
+ * — so a card that is past the edge is unreachable rather than merely unseen.
+ *
+ * The panel itself is the scroller here, because unlike the picker and the
+ * result sheet this screen has no actions pinned under it: everything on it is
+ * the list. A board that fits is unchanged — a flex item only scrolls once
+ * there is nowhere left to grow. `touch-action` is named because the page is
+ * `touch-action: none` (the canvas handles every gesture); `pointer-events` is
+ * what the overlay withholds by default and what a scroll container has to have
+ * (`.room__panel` in `./rooms.css` opts in for the same reason).
+ */
+.screen--academy .screen__panel {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+.screen--academy .screen__panel > * {
+  flex-shrink: 0;
+}

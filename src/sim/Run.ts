@@ -86,6 +86,9 @@ export class Run {
   /** Left-over time from the previous `tick`, carried into the next fixed step. */
   private accumulator = 0;
 
+  /** Set by `abandon`, acted on by the next `tick`. Debug only; see `abandon`. */
+  private abandoned = false;
+
   /** The player's upgrades, resolved once (D35). `NO_MODS` when there is none. */
   private readonly mods: PlayerMods;
   private readonly walls: readonly WallDef[];
@@ -253,6 +256,13 @@ export class Run {
    */
   tick(dt: number): SimEvent[] {
     this.events.reset();
+    // A run stopped from outside ends *here*, so its `runEnded` goes out with
+    // this tick's events rather than into a buffer `reset` throws away.
+    if (this.abandoned) {
+      this.abandoned = false;
+      this.finish('lost');
+      return this.events.list;
+    }
     if (this.runState.status !== 'running') return this.events.list;
 
     this.accumulator += dt;
@@ -270,6 +280,24 @@ export class Run {
     if (steps >= MAX_STEPS_PER_TICK) this.accumulator = 0;
 
     return this.events.list;
+  }
+
+  /**
+   * Ends the run at the next tick, as a loss, without a body being touched.
+   *
+   * Nothing in the game calls it and nothing may — a run ends on a wipe, on the
+   * boss, or at the end of the endless road, and a fourth way out is a fourth
+   * thing the economy has to price. It is for the one caller that has to stop a
+   * run it is not playing: the smoke's endless walk, through
+   * `ArcaneDebugHandle.endRun`, which photographs two biome crossings and has
+   * no business walking the other two kilometres to reach a result sheet.
+   *
+   * Flagged rather than finished on the spot because `tick` is where the event
+   * buffer is emptied: a `runEnded` written between two ticks is dropped by the
+   * next `reset`, and the defeat sting rides on it.
+   */
+  abandon(): void {
+    this.abandoned = true;
   }
 
   private step(dt: number): void {
