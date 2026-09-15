@@ -296,4 +296,42 @@ describe('GameAudio', () => {
     audio.setMuted(false);
     expect(engine.volume).toBe(1);
   });
+
+  /**
+   * Backgrounding (D34, Milestone 9 section B). iOS keeps a WebAudio context
+   * running under a lock screen, so without this a run interrupted by a phone
+   * call keeps playing in the player's pocket — and the thing that must *not*
+   * happen is the fix reaching into the player's own mute, which is written to
+   * the save and would then survive the call.
+   */
+  it('goes quiet in the background and comes back to the player choice', async () => {
+    const audio = await playing();
+
+    audio.setSuspended(true);
+    expect(audio.suspended).toBe(true);
+    expect(engine.volume).toBe(0);
+    // Nothing new starts either, so nothing is queued up to shout on the way
+    // back in.
+    audio.onEvents([{ type: 'enemyKilled', enemyId: 1, kind: 'brute', x: 0, z: 0 }], state);
+    audio.playTap();
+    expect(plays('sfx_block_kill')).toBe(0);
+    expect(plays('sfx_ui_tap')).toBe(0);
+
+    audio.setSuspended(false);
+    expect(engine.volume).toBe(1);
+    expect(audio.muted).toBe(false);
+    audio.onEvents([{ type: 'enemyKilled', enemyId: 2, kind: 'brute', x: 0, z: 0 }], state);
+    expect(plays('sfx_block_kill')).toBe(1);
+  });
+
+  it('stays muted through a background and back when the player asked for it', async () => {
+    const audio = await playing();
+    audio.setMuted(true);
+
+    audio.setSuspended(true);
+    audio.setSuspended(false);
+
+    expect(audio.muted).toBe(true);
+    expect(engine.volume).toBe(0);
+  });
 });

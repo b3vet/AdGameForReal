@@ -28,6 +28,7 @@
   width: 100%;
   margin-top: 0.35rem;
   max-height: 26vh;
+  max-height: 26dvh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;

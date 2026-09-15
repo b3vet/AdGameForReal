@@ -1,10 +1,16 @@
 /**
- * The ten-second readout behind the debug panel's "Capture" button.
+ * The timed readout behind the debug panel's "Capture" button.
  *
- * Ten seconds of per-frame numbers reduced to min / median / max — short enough
- * to paste into a chat message, which is the whole point: the product owner
- * plays a hosted link on a phone and needs one block of text that says whether
- * it ran (docs/09-milestone-3-plan.md, "Performance plan" item 6).
+ * A window of per-frame numbers reduced to one summary — short enough to paste
+ * into a chat message, which is the whole point: the product owner plays a
+ * hosted link on a phone and needs one block of text that says whether it ran
+ * (docs/09-milestone-3-plan.md, "Performance plan" item 6).
+ *
+ * Milestone 9 made the summary a *value* as well as a block of text
+ * (`CaptureSummary`): the device report quotes the same numbers in its own
+ * layout (`src/core/report.ts`), and re-parsing the text would have been two
+ * formats to keep in step. The text is still composed here, because it is
+ * composed to fit a 390 px panel and nothing else knows that.
  *
  * Samples land in typed arrays allocated once and re-used by every later
  * capture, so a recording frame costs four stores and no allocation (CLAUDE.md:
@@ -13,9 +19,15 @@
 
 import type { RunState } from '@/sim';
 
-import type { DebugStats } from './debug';
+import type { DebugStats } from './debugStats';
 
 export const CAPTURE_SECONDS = 10;
+
+/**
+ * The longest window anything asks for: `?perf`'s scripted run (`src/core/
+ * perf.ts`). It is here because it is what sizes the sample buffers.
+ */
+export const MAX_CAPTURE_SECONDS = 30;
 
 /**
  * A frame longer than this is a hitch (Milestone 4, "Polish"). Sixty frames a
@@ -26,6 +38,9 @@ export const SPIKE_MS = 20;
 
 /** How far back the panel's live spike count looks. */
 export const SPIKE_WINDOW_SECONDS = 10;
+
+/** Where in a sorted window the "worst realistic frame" is read. */
+const PERCENTILE = 0.95;
 
 /**
  * Spike timestamps kept for the live count. A window with more spikes than
@@ -39,8 +54,8 @@ const SPIKE_CAPACITY = 512;
  * How many of the last `SPIKE_WINDOW_SECONDS` of frames took longer than
  * `SPIKE_MS`, as a rolling count.
  *
- * The capture answers the same question for its own ten seconds; this one is
- * for the panel, which is up the whole time the product owner is playing. One
+ * The capture answers the same question for its own window; this one is for the
+ * panel, which is up the whole time the product owner is playing. One
  * `Float64Array` allocated once, a head and a length: recording a frame is two
  * stores and no allocation, which matters because the thing being measured is
  * allocation-driven hitching.
@@ -84,26 +99,70 @@ export class SpikeWindow {
 }
 
 /**
- * Sample slots: ten seconds at 240 fps, which no phone will reach. A capture
- * that somehow overruns it stops sampling rather than growing the buffer.
+ * Sample slots: the longest window at 270 frames a second, which no phone will
+ * reach. A capture that somehow overruns it stops sampling rather than growing
+ * the buffer.
  */
-const CAPACITY = 2600;
+const CAPACITY = 8192;
 
 interface Buffers {
-  fps: Float32Array;
+  /** Wall-clock milliseconds between drawn frames; the frame rate comes off it. */
+  frame: Float32Array;
   sim: Float32Array;
   render: Float32Array;
   physics: Float32Array;
+}
+
+/** Min, median, 95th percentile and max of one column of samples. */
+export interface Spread {
+  min: number;
+  median: number;
+  p95: number;
+  max: number;
+}
+
+/**
+ * One finished capture, as numbers. `text` is the same capture composed for the
+ * panel; the device report lays the numbers out its own way.
+ */
+export interface CaptureSummary {
+  seconds: number;
+  frames: number;
+  /** Wall-clock frame intervals, in milliseconds. */
+  frameMs: Spread;
+  /** The frame rate it felt like: the median interval, as fps. */
+  fpsMedian: number;
+  /**
+   * The frame rate at the slow end: the 95th-percentile *interval*, as fps.
+   * Reading it off the intervals rather than off a second array of frame rates
+   * is exact — fps is a monotonic function of the interval, so the 95th
+   * percentile of one is the 5th percentile of the other.
+   */
+  fpsP95: number;
+  /** Frames over `SPIKE_MS` in the window; the milestone's hitch counter. */
+  over20: number;
+  drawPeak: number;
+  rungPeak: number;
+  pixelRatio: number;
+  devicePixelRatio: number;
+  sim: Spread;
+  render: Spread;
+  physics: Spread;
+  /** Null when the capture never saw a run (taken on a menu). */
+  run: { level: number; squadMin: number; squadMax: number } | null;
+  /** The pasteable block, composed to fit a 390 px panel. */
+  text: string;
 }
 
 export class CaptureRecorder {
   private buffers: Buffers | null = null;
   private recording = false;
   private samples = 0;
-  /** One behind `samples`: a frame rate needs the frame before it. */
-  private fpsSamples = 0;
+  /** One behind `samples`: an interval needs the frame before it. */
+  private frameSamples = 0;
   private startedAt = 0;
   private lastSampleAt = 0;
+  private wanted = CAPTURE_SECONDS;
 
   private drawCallsPeak = 0;
   private rungPeak = 0;
@@ -113,23 +172,24 @@ export class CaptureRecorder {
   private squadMin = 0;
   private squadMax = 0;
   private sawRun = false;
-  /** Frames over `SPIKE_MS` in this capture; the milestone's hitch counter. */
   private over20 = 0;
 
   get active(): boolean {
     return this.recording;
   }
 
-  start(nowMs: number): void {
+  /** `seconds` is clamped to what the buffers hold; see `CAPACITY`. */
+  start(nowMs: number, seconds: number = CAPTURE_SECONDS): void {
     this.buffers ??= {
-      fps: new Float32Array(CAPACITY),
+      frame: new Float32Array(CAPACITY),
       sim: new Float32Array(CAPACITY),
       render: new Float32Array(CAPACITY),
       physics: new Float32Array(CAPACITY),
     };
+    this.wanted = Math.min(MAX_CAPTURE_SECONDS, Math.max(1, seconds));
     this.recording = true;
     this.samples = 0;
-    this.fpsSamples = 0;
+    this.frameSamples = 0;
     this.startedAt = nowMs;
     this.lastSampleAt = 0;
     this.drawCallsPeak = 0;
@@ -149,7 +209,7 @@ export class CaptureRecorder {
 
   /** Whole seconds still to run, for the button's label. */
   secondsLeft(nowMs: number): number {
-    const left = CAPTURE_SECONDS - (nowMs - this.startedAt) / 1000;
+    const left = this.wanted - (nowMs - this.startedAt) / 1000;
     return Math.max(0, Math.ceil(left));
   }
 
@@ -165,7 +225,7 @@ export class CaptureRecorder {
     dt: number,
     state: Readonly<RunState> | null,
     stats: DebugStats,
-  ): string | null {
+  ): CaptureSummary | null {
     if (!this.recording) return null;
 
     const buffers = this.buffers;
@@ -181,9 +241,7 @@ export class CaptureRecorder {
       // a capture, so this one number is measured, not inherited.
       const since = nowMs - this.lastSampleAt;
       if (this.lastSampleAt > 0 && since > 0) {
-        buffers.fps[this.fpsSamples++] = 1000 / since;
-        // The same wall-clock gap the frame rate is computed from: a hitch is
-        // a frame that took too long, not a frame the loop clamped.
+        buffers.frame[this.frameSamples++] = since;
         if (since > SPIKE_MS) this.over20++;
       }
       this.lastSampleAt = nowMs;
@@ -206,47 +264,67 @@ export class CaptureRecorder {
     }
 
     const elapsed = (nowMs - this.startedAt) / 1000;
-    if (elapsed < CAPTURE_SECONDS) return null;
+    if (elapsed < this.wanted) return null;
 
     this.recording = false;
     return this.summarise(elapsed);
   }
 
-  /**
-   * Seven short lines: nothing here may be wider than the panel is at 390 px,
-   * because a readout that needs a horizontal scroll is not a readout.
-   */
-  private summarise(elapsed: number): string {
+  private summarise(elapsed: number): CaptureSummary {
     const buffers = this.buffers;
     const count = this.samples;
-    const header = `arcane-rush ${elapsed.toFixed(1)}s / ${String(count)} frames`;
-    if (buffers === null || count === 0) return `${header}\nno frames drawn`;
-
-    const fps = spread(buffers.fps, this.fpsSamples);
-    const sim = spread(buffers.sim, count);
-    const render = spread(buffers.render, count);
-    const physics = spread(buffers.physics, count);
-    const run = this.sawRun
-      ? `lvl ${String(this.level)} squad ${String(this.squadMin)}-${String(this.squadMax)}`
-      : 'no run';
-
-    return [
-      header,
-      `fps ${triple(fps, 0)}  over20 ${String(this.over20)}`,
-      `sim ${triple(sim, 2)} ms`,
-      `rnd ${triple(render, 2)} ms`,
-      `phy ${triple(physics, 2)} ms`,
-      `draws peak ${String(this.drawCallsPeak)} rung ${String(this.rungPeak)} ` +
-        `px ${this.pixelRatio.toFixed(2)}/${this.devicePixelRatio.toFixed(2)}`,
-      `${run} (min/med/max)`,
-    ].join('\n');
+    const empty: Spread = { min: 0, median: 0, p95: 0, max: 0 };
+    const frameMs = buffers === null ? empty : spread(buffers.frame, this.frameSamples);
+    const summary: CaptureSummary = {
+      seconds: elapsed,
+      frames: count,
+      frameMs,
+      fpsMedian: rate(frameMs.median),
+      fpsP95: rate(frameMs.p95),
+      over20: this.over20,
+      drawPeak: this.drawCallsPeak,
+      rungPeak: this.rungPeak,
+      pixelRatio: this.pixelRatio,
+      devicePixelRatio: this.devicePixelRatio,
+      sim: buffers === null ? empty : spread(buffers.sim, count),
+      render: buffers === null ? empty : spread(buffers.render, count),
+      physics: buffers === null ? empty : spread(buffers.physics, count),
+      run: this.sawRun
+        ? { level: this.level, squadMin: this.squadMin, squadMax: this.squadMax }
+        : null,
+      text: '',
+    };
+    summary.text = compose(summary, count > 0);
+    return summary;
   }
 }
 
-interface Spread {
-  min: number;
-  median: number;
-  max: number;
+/**
+ * Eight short lines: nothing here may be wider than the panel is at 390 px,
+ * because a readout that needs a horizontal scroll is not a readout.
+ */
+function compose(summary: CaptureSummary, drew: boolean): string {
+  const header = `arcane-rush ${summary.seconds.toFixed(1)}s / ${String(summary.frames)} frames`;
+  if (!drew) return `${header}\nno frames drawn`;
+
+  const run =
+    summary.run === null
+      ? 'no run'
+      : `lvl ${String(summary.run.level)} squad ${String(summary.run.squadMin)}-` +
+        `${String(summary.run.squadMax)}`;
+
+  return [
+    header,
+    `fps med ${summary.fpsMedian.toFixed(0)} p95 ${summary.fpsP95.toFixed(0)}` +
+      `  >${String(SPIKE_MS)}ms ${String(summary.over20)}`,
+    `frm ${triple(summary.frameMs, 1)} ms`,
+    `sim ${triple(summary.sim, 2)} ms`,
+    `rnd ${triple(summary.render, 2)} ms`,
+    `phy ${triple(summary.physics, 2)} ms`,
+    `draws peak ${String(summary.drawPeak)} rung ${String(summary.rungPeak)} ` +
+      `px ${summary.pixelRatio.toFixed(2)}/${summary.devicePixelRatio.toFixed(2)}`,
+    `${run} (med/p95/max)`,
+  ].join('\n');
 }
 
 /**
@@ -254,17 +332,25 @@ interface Spread {
  * capture is being summarised, and `subarray` is a view, so this costs no copy.
  */
 function spread(values: Float32Array, count: number): Spread {
+  if (count <= 0) return { min: 0, median: 0, p95: 0, max: 0 };
   const view = values.subarray(0, count);
   view.sort();
   return {
     min: view[0] ?? 0,
     median: view[count >> 1] ?? 0,
+    p95: view[Math.min(count - 1, Math.floor(PERCENTILE * (count - 1)))] ?? 0,
     max: view[count - 1] ?? 0,
   };
 }
 
+/** Milliseconds per frame as frames per second; 0 for an empty window. */
+function rate(intervalMs: number): number {
+  return intervalMs > 0 ? 1000 / intervalMs : 0;
+}
+
+/** The three the panel has room for: the middle, the bad, and the worst. */
 function triple(value: Spread, digits: number): string {
   return (
-    `${value.min.toFixed(digits)}/${value.median.toFixed(digits)}/${value.max.toFixed(digits)}`
+    `${value.median.toFixed(digits)}/${value.p95.toFixed(digits)}/${value.max.toFixed(digits)}`
   );
 }

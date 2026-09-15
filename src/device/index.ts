@@ -7,20 +7,28 @@
  * from a browser costs a platform check and nothing else: every native call
  * lives behind `isNative()`.
  *
- *   platform.ts  which shell we are in
- *   shell.ts     status bar, splash, wake lock
- *   haptics.ts   sim events to the Taptic Engine, and `onSimEvents` for the app
- *   simTap.ts    how haptics get fed today, without an edit to `src/core`
+ *   platform.ts   which shell we are in
+ *   shell.ts      status bar, splash, wake lock, portrait lock
+ *   lifecycle.ts  foreground and background, from the plugin or the browser
+ *   haptics.ts    sim events to the Taptic Engine, and `onSimEvents` for the app
+ *   simTap.ts     how haptics get fed today, without an edit to `src/core`
  *
  * The wrapper adds nothing the browser build lacks except these (plan, "Device
  * build"): the game is the same `dist/` build either way.
+ *
+ * `./lifecycle.ts` is the one module here that is *not* native-only — a browser
+ * tab is backgrounded exactly as an app is, and the sim clock has to stop
+ * either way — so it is exported for `src/core/App.ts` to wire on every build
+ * rather than started by `initDevice` below.
  */
 
 import { initShell } from './shell';
 import { isNative } from './platform';
 import { startSimTap } from './simTap';
 
-export { onSimEvents, hapticsActive } from './haptics';
+export { onRunAwards, onSimEvents, hapticsActive } from './haptics';
+export { appVisibility, stopWatchingAppVisibility, watchAppVisibility } from './lifecycle';
+export type { AppVisibility } from './lifecycle';
 export { isIOS, isNative, platformName } from './platform';
 export type { DevicePlatform } from './platform';
 

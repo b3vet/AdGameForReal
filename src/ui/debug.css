@@ -12,12 +12,31 @@
 .debug {
   justify-self: start;
   align-self: end;
+  /*
+   * Positioned only so it paints on top.
+   *
+   * Every screen is `position: relative` (`./styles.css`), and a positioned
+   * sibling paints above the in-flow content of an unpositioned one whatever
+   * the document order says. The panel is the last child of `#overlay-root`
+   * and had been drawing *under* the Academy's parchment the whole time —
+   * invisible on the home screen and on the result sheet, and visible during a
+   * run only because the HUD is transparent where the panel sits. Milestone 9's
+   * device report is what made it impossible to miss: thirty lines of report
+   * behind an opaque panel. No layout changes; `grid-area` places it as before.
+   */
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: start;
   gap: 0.3rem;
-  /* The overlay root already insets by the safe area, so this clears the notch. */
-  margin: 0.5rem;
+  /*
+   * Clears the home indicator and, in landscape, the notch on the left edge.
+   * The overlay root used to carry the inset for everything under it; since
+   * Milestone 9 each screen insets its own column (`./styles.css`), and this
+   * panel is a sibling of the screens rather than inside one.
+   */
+  margin: calc(var(--safe-top) + 0.5rem) calc(var(--safe-right) + 0.5rem)
+    calc(var(--safe-bottom) + 0.5rem) calc(var(--safe-left) + 0.5rem);
   /* Wide enough for the longest line the panel composes: about fifty monospace
      characters at 10px, which on a 390 px phone is the Chrome-only audio-plus-
      heap row and, without it, the ladder's (`rung / p95 / >20ms`).
@@ -34,7 +53,8 @@
 }
 
 .debug__text,
-.debug__capture {
+.debug__capture,
+.debug__report {
   margin: 0;
   padding: 0.5rem 0.6rem;
   max-width: 100%;
@@ -57,6 +77,37 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-gold-light) 35%, transparent);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/*
+ * The device report (Milestone 9). It replaces the live readout rather than
+ * sitting under it, because the two together are taller than a phone — see
+ * `showReport` in `./debug.ts`. It wraps for the same reason the capture
+ * summary does, and harder: the user-agent line is one unbroken word about a
+ * hundred characters long and it must not push the panel off the screen.
+ */
+.debug__report {
+  /* Opaque, where the readout above is 88 percent: this block is read off a
+     photograph, and the Academy's parchment behind it printed straight through
+     the missions board and into the numbers. */
+  background: var(--c-ink-base);
+  color: var(--c-sky-horizon);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-sky-horizon) 35%, transparent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The three buttons in one row. They wrap on a narrow screen rather than
+ * squeezing, so every label stays readable and every target stays thumb-sized;
+ * the row itself is inert, the buttons opt back in.
+ */
+.debug__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  max-width: 100%;
+  pointer-events: none;
 }
 
 .debug__button {

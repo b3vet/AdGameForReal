@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
+// One copy of the version, read from `package.json` by the main config.
+import { appVersion } from './vite.config';
+
 /**
  * Hosted-link build (decision D11, hosted variant).
  *
@@ -39,6 +42,9 @@ export default defineConfig({
   // `import.meta.env` replacements it normally injects. Our source never reads
   // them, but a dependency might, so they are defined here explicitly.
   define: {
+    // The device report's header (`src/core/report.ts`).
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_KIND__: JSON.stringify('hosted'),
     'import.meta.env.MODE': JSON.stringify('production'),
     'import.meta.env.DEV': 'false',
     'import.meta.env.PROD': 'true',

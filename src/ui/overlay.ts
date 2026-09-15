@@ -34,7 +34,7 @@ import { Academy } from './academy';
 import type { AcademyView } from './academy';
 import { Confetti } from './confetti';
 import { DebugPanel } from './debug';
-import type { DebugStats } from './debug';
+import type { DebugStats, ReportSource } from './debug';
 import { Hud } from './hud';
 import { ResultPanel } from './result';
 import type { ResultBonus, ResultView } from './result';
@@ -204,7 +204,10 @@ export class Overlay {
         root: requireElement(root, '#debug-panel'),
         text: requireElement(root, '#debug-text'),
         summary: requireElement(root, '#debug-capture'),
+        report: requireElement(root, '#debug-report'),
         button: requireElement<HTMLButtonElement>(root, '#debug-capture-button'),
+        copyButton: requireElement<HTMLButtonElement>(root, '#debug-report-button'),
+        showButton: requireElement<HTMLButtonElement>(root, '#debug-show-button'),
       },
       this.listeners.signal,
     );
@@ -297,6 +300,36 @@ export class Overlay {
 
   setDebugEnabled(enabled: boolean): void {
     this.debugPanel.setEnabled(enabled);
+  }
+
+  /**
+   * The debug panel's device report (Milestone 9, `src/core/report.ts`). Thin
+   * doors rather than a getter on the panel itself: the app fills the report
+   * in, `?perf` drives a scripted capture through it, and
+   * `window.__arcane.report()` reads it back — and none of them has any other
+   * business inside the panel.
+   */
+  setReportSource(source: ReportSource): void {
+    this.debugPanel.setReportSource(source);
+  }
+
+  report(): string {
+    return this.debugPanel.report();
+  }
+
+  /** Starts a capture of `seconds` from outside; the button starts its own. */
+  startCapture(seconds: number): void {
+    this.debugPanel.startCapture(seconds);
+  }
+
+  get captureActive(): boolean {
+    return this.debugPanel.captureActive;
+  }
+
+  /** Renders the report in the panel, and puts it on the clipboard. */
+  async showAndCopyReport(): Promise<boolean> {
+    this.debugPanel.showReport(true);
+    return this.debugPanel.copyReport();
   }
 
   /** False lets the app skip gathering numbers only the panel would read. */

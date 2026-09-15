@@ -1,12 +1,15 @@
 # Running Arcane Rush on your iPhone
 
 Written for the product owner. Everything below happens on the Mac, in order.
-Nothing in this guide changes the game: the device build is the same web build
-(decision D34), wrapped by Capacitor so it runs as an app with haptics, no
-status bar and no browser chrome.
 
-You do the Xcode half once. After that, shipping a new version to the phone is
-two commands.
+Nothing here changes the game: the device build is the same web build (decision
+D34) wrapped by Capacitor so it runs as an app — full screen, no browser
+chrome, no status bar, with haptics. The Xcode half is done once. After that,
+putting a new version on the phone is one command and a Cmd+R.
+
+Unlike earlier versions of this guide, **the iOS project is already in the
+repository** (D57). There is nothing to generate, no orientation to tick, no
+plist to edit. Clone, install, run three commands, sign, play.
 
 ---
 
@@ -14,202 +17,350 @@ two commands.
 
 | Thing | Notes |
 |---|---|
-| A Mac | Any Mac that runs a current macOS. |
-| Xcode | Free from the Mac App Store (~10 GB, slow download). Open it once after installing, accept the licence, and let it install its extra components. |
-| Command line tools | `xcode-select --install` in Terminal. If Xcode was installed first, this is usually already done. |
-| Node 22 | Same as the repo uses (`node -v` should say v22.x). |
-| An Apple ID | The free one you already have is enough to run the game on your own phone. A paid Apple Developer account ($99/year) is only needed for TestFlight — see the end. |
-| An iPhone | iOS 16.2 or newer for the full look (the UI kit mixes its colours with `color-mix`, which Safari added in 16.2; on iOS 15 to 16.1 the game plays with plain fallback colours), plus its cable. |
+| A Mac | Any Mac running a current macOS. |
+| Xcode | Free from the Mac App Store (~10 GB, slow). Open it once after installing, accept the licence, and let it install its extra components. |
+| Command line tools | `xcode-select --install` in Terminal. Usually already done if Xcode was installed first. |
+| Node 22 | `node -v` should say `v22.x`. Anything older will install different packages than the lock file expects. |
+| An Apple ID | The free one you already have is enough to run the game on your own phone. A paid Apple Developer Program membership ($99/year) is only needed for TestFlight — section 7. |
+| An iPhone | iOS 16.2 or newer for the full look (the UI kit mixes colours with `color-mix`, which Safari added in 16.2; on iOS 15 to 16.1 the game plays with plain fallback colours). Plus its cable. |
 
-**You do not need CocoaPods.** Capacitor 8 creates the iOS project with Swift
-Package Manager by default, and Xcode resolves the packages itself the first
-time it opens the project. (If you ever need the old CocoaPods layout instead,
-it is `npx cap add ios --packagemanager cocoapods`, it needs `brew install
-cocoapods`, and then the thing you open is `ios/App/App.xcworkspace` rather than
-`ios/App/App.xcodeproj`. You should not need this.)
+**You do not need CocoaPods.** Capacitor 8 builds the iOS project with Swift
+Package Manager, and Xcode resolves the packages itself the first time it opens
+the project. The thing you open is `ios/App/App.xcodeproj`, and
+`npm run cap:open` opens it for you.
 
 ---
 
-## 1. First time: create the iOS project
+## 1. First time: from a fresh clone to Xcode
 
-In Terminal, in the repo:
+Four commands, and one thing that is not a command.
 
 ```bash
-npm install          # picks up the Capacitor packages
-npm run build        # the web build the app will ship
-npm run cap:preflight   # optional: checks the build and the config, prints these steps
-npx cap add ios      # ONCE, EVER. Creates the ios/ folder.
+git clone <the repository url>
+cd AdGameForReal
+npm ci
 ```
 
-`npx cap add ios` prints a lot and ends with `sync finished`. It creates `ios/`,
-which is **part of the repo** — commit it (`git add ios && git commit`). It
-carries the Xcode project, the app icons and your signing settings, and we do
-not want to regenerate it every time. Build products inside it (`ios/App/build`,
-`ios/App/Pods`, `DerivedData`) are already ignored.
+`npm ci` installs exactly what the lock file says, which is what everything
+below is tested against. (`npm install` also works but may drift.) It takes a
+few minutes the first time.
 
-If it fails, read the last line: almost always a missing Xcode or command line
-tools, both of which section 0 fixes.
+**Then drop your art.** The repository ships placeholders so that it builds an
+app before you have done anything, but they are placeholders. Replace two files:
+
+```
+assets/app/icon.png      1024 x 1024, square, opaque — iOS rounds the corners itself
+assets/app/splash.png    2732 x 2732, subject inside the middle 40%
+```
+
+`docs/ART.md` has the exact sizes, the safe zones, and the prompts to paste into
+your image generator. Nothing else in `assets/app/` has to change.
+
+Then:
+
+```bash
+npm run cap:assets     # cuts your two files into every icon and splash size iOS wants
+npm run cap:sync       # builds the game and copies it into the iOS project
+npm run cap:open       # opens Xcode
+```
+
+If you want to know whether you are ready before you start, this says so and
+prints the one command you are due next:
+
+```bash
+npm run cap:preflight
+```
+
+It checks the art and its pixel sizes, the config, the project, the Info.plist
+keys, the privacy manifest, the version stamp, the plugins and whether the
+built game is current — everything about the device build that can be checked
+without Xcode. It ends with a line reading `next: <command>`. Run that.
 
 ---
 
 ## 2. First time: sign and run
 
-```bash
-npm run cap:sync     # builds the web app and copies it into ios/
-npm run cap:open     # opens the project in Xcode
-```
-
-In Xcode:
+Xcode is now open on the **App** project. Once, ever:
 
 1. In the left sidebar click the blue **App** project at the top, then the
    **App** target, then the **Signing & Capabilities** tab.
 2. Tick **Automatically manage signing**.
 3. **Team**: pick your Apple ID. If the list is empty, choose *Add an
-   Account…*, sign in with your Apple ID, and then pick the team that appears
-   (it is called "Your Name (Personal Team)").
-4. If Xcode complains that the bundle identifier is unavailable, change
-   **Bundle Identifier** to something unique — e.g. `com.yourname.arcanerush`.
-   **The app id lives in two places and both have to say the same thing**:
-   Xcode's *Bundle Identifier* field here, and `appId` in `capacitor.config.ts`
-   (the placeholder is `com.arcanerush.app`). Change both, then run
-   `npm run cap:sync` again. If they disagree, `cap sync` quietly writes the
-   config's id back over the project's and Xcode asks you to sign all over
-   again.
-5. **General > Deployment Info > iPhone Orientation**: leave **Portrait** ticked
-   and untick the landscape boxes. The game is portrait only.
-6. Plug the phone in, unlock it, and tap **Trust** on the phone if asked.
-7. At the top of the Xcode window, next to the App scheme, open the destination
-   dropdown and pick your iPhone (not a simulator — the simulator has no GPU
-   worth measuring and no haptics).
-8. Press **Run** (the play button, or Cmd+R).
+   Account…*, sign in, and then pick the team that appears — it is called
+   "Your Name (Personal Team)".
+4. If Xcode says the bundle identifier is unavailable, see section 4 before
+   changing it: it lives in two files and both have to agree.
+5. Plug the phone in, unlock it, and tap **Trust** on the phone if asked.
+6. At the top of the Xcode window, next to the App scheme, open the destination
+   dropdown and pick your iPhone — **not** a simulator. The simulator has no GPU
+   worth measuring and no haptics.
+7. Press **Run** (the play button, or Cmd+R).
+
+There is deliberately no step here about orientation, the status bar or the
+display name. All three are in the project already (section 9).
 
 The first run ends with the app installed but refused by the phone:
 
 > Untrusted Developer
 
-On the phone: **Settings > General > VPN & Device Management > Developer App >
-your Apple ID > Trust**. Then press Run in Xcode again (or just tap the app's
-icon).
+On the phone: **Settings → General → VPN & Device Management → Developer App →
+your Apple ID → Trust**. Then press Run in Xcode again, or just tap the app's
+icon.
 
 With a free Apple ID the app stops launching after **seven days**. Pressing Run
-in Xcode again gives you another seven. A paid account makes this a year.
+in Xcode again gives you another seven. A paid account makes it a year.
 
 ---
 
 ## 3. Every time after that
 
-You only ever repeat this:
-
 ```bash
-npm run cap:sync     # build + copy into the iOS project
-npm run cap:open     # only if Xcode is not already open
+git pull
+npm ci                 # only when the pull changed package-lock.json; harmless otherwise
+npm run cap:sync       # build + copy + stamp the version
 ```
 
-then Run (Cmd+R) in Xcode. `npx cap add ios` is never run again.
+then Run (Cmd+R) in Xcode. If Xcode is closed, `npm run cap:open` first.
 
-If you pulled a commit that adds or removes a Capacitor plugin, `cap:sync`
-handles that too — it is what installs the native side of a plugin.
+`npx cap add ios` is never run again — the project is in the repository.
+
+Two things `cap:sync` does that matter:
+
+- It is what installs the native side of a plugin, so a pull that adds one
+  needs nothing else from you.
+- It stamps the version and build number from `package.json` into the Xcode
+  project, so the number in the App Store and the number in the repository can
+  never disagree. (`npm run cap:version` on its own does just that part.)
 
 ---
 
-## 4. What to report back
+## 4. If you change the bundle identifier
 
-Play three or four levels, then send us:
+The app id is in **two** places and they must say the same thing:
 
-1. **Frame rate.** Triple-tap the wordmark on the title screen (or the level
-   chip during a run) to toggle the debug panel. Report the `fps` line, the
-   `quality` rung (0 means nothing has been degraded; it only ever goes up), the
-   `draws` line, and — this is the one that matters most — the `>20ms N/10s`
-   count (frames that took longer than 20 ms in the last ten seconds), read
-   during a busy fight. The `Capture 10s` button records a window of the same
-   numbers. A photo of the panel is a perfect report.
-2. **Touch feel.** Does the squad track your thumb, or lag behind it? Does a
-   drag that starts on a button still steer? Anything that feels heavy or
-   sticky compared to playing the link in Safari.
-3. **Haptics.** You should feel exactly three things: a medium bump on each boss
-   stomp, a heavy one when the boss dies, and a short success buzz when you win
-   a level. Nothing during ordinary shooting. Tell us if it is too much, too
-   little, or in the wrong place.
-4. **Thermals, after ten minutes of continuous play.** Is the phone hot to hold?
+- `appId` in `capacitor.config.ts` — the placeholder is `com.arcanerush.app`
+- **Bundle Identifier** in Xcode's Signing & Capabilities
+
+Change `capacitor.config.ts` first, then run `npm run cap:sync`, which writes it
+into the Xcode project for you. If you change it only in Xcode, the next
+`cap sync` quietly writes the config's id back over yours and Xcode asks you to
+sign all over again. `npm run cap:preflight` fails loudly if the two ever drift.
+
+Changing the id after the app is installed makes a **new app** on the phone, not
+an update — a second icon, and a fresh save. Pick one and keep it.
+
+---
+
+## 5. What to send back
+
+Play three or four levels, then send us the report and the six answers.
+
+### The report (do this first)
+
+Triple-tap the wordmark on the title screen, or the level chip during a run, to
+show the debug panel in the bottom-left corner. It has three buttons:
+
+- **Capture 10s** — records ten seconds of frame numbers into a short summary.
+  Press it during a busy fight, not on a menu.
+- **Copy report** — puts the whole device report on the clipboard: the phone and
+  iOS version, the screen size and pixel ratio, what the GPU calls itself, the
+  quality rung the game settled on, the last capture's numbers, the last run's
+  summary, and where your save has got to. **Paste it at the top of the message
+  you send us**, above anything you write. It is the one thing that makes every
+  other answer comparable between builds.
+- **Show report** — prints the same text into the panel, for when the clipboard
+  refuses to cooperate. Photograph it and send the photo.
+
+The report contains no identifier of any kind. It is the phone, the GPU, the
+numbers and your progress — nothing about you (D6).
+
+Best order: play a level, press **Capture 10s** during the heaviest fight, let
+it finish, then press **Copy report** on the result sheet. The capture is in the
+report.
+
+### Then, in your own words
+
+1. **Touch feel.** Does the squad track your thumb, or lag behind it? Does a
+   drag that starts on a button still steer? Anything heavier or stickier than
+   playing the link in Safari.
+2. **Haptics.** You should feel a light tick as you pass a gate row, a firmer
+   one when a shielded brute's shield goes, when a charger sets off and on each
+   boss stomp, a heavy one on a meteor crater, on the Rime Fiend starting its
+   charge and when a boss dies, a success buzz when you win a level or when a
+   mission or a bestiary tier pays out, and a warning buzz on a wipe. **Nothing
+   at all during ordinary shooting.** Tell us if it is too much, too little, or
+   in the wrong place.
+3. **Thermals, after ten minutes of continuous play.** Is the phone hot to hold?
    Did the frame rate fall, and did the `quality` rung climb (which means the
    game noticed and stepped itself down)? Roughly how much battery did ten
-   minutes cost?
-5. **Launch.** How long from tapping the icon to the Academy, and whether the
-   colour flashes on the way. It should not: the launch splash, the native
-   background and the page all paint the same daylight sky, `#bfe4f5`
-   (`APP_BACKGROUND` in `capacitor.config.ts`, the `html, body` rule in
-   `src/ui/styles.css`), so the only thing that appears is the scene fading up
-   over it. A flash of any other colour — the old dark indigo especially —
-   means the two have drifted apart, and it is one constant either side.
-6. **The phone.** Model and iOS version, so the numbers mean something.
+   minutes cost? Press **Copy report** again at the end of the ten minutes and
+   send that one too — the two together are the story.
+4. **Launch.** How long from tapping the icon to the Academy, and how the
+   colour behaves on the way. The launch storyboard, the native background and
+   the splash art are one colour, `#bfe4f5`; the page under the canvas is
+   currently `#8fc6f2`, a slightly deeper blue, so one faint step is expected
+   and is on our list. A *hard* flash — white, black, or the old dark indigo — is a
+   bug: tell us what colour and at what moment.
+5. **Pause and resume.** Switch away mid-run — swipe to the home screen, or pull
+   down Notification Centre — wait a few seconds, and come back. The run should
+   be exactly where you left it, not further on, and the sound should come back
+   with it.
+6. **Safe areas.** On a notched phone: does anything sit under the notch or
+   under the home-indicator bar? Buttons, the coin chip, the level chip, the
+   result sheet's buttons.
+
+### If you want the scripted performance run
+
+There is a 30-second scripted capture on level 20 that plays itself and shows
+the report at the end. It needs a query string, which an app has no address bar
+for, so it is a Web Inspector job (section 6): with the app running and the
+inspector attached, type this in the console and press return.
+
+```js
+location.search = '?perf'
+```
+
+It reloads, plays itself, and leaves the report on screen. Press **Copy report**
+when it stops.
 
 ---
 
-## 5. When something is wrong
+## 6. When something is wrong
 
 | What you see | What it is |
 |---|---|
-| White or black screen, no game | The web build was not copied. Run `npm run cap:sync` and Run again. |
-| The old version of the game | Same: `cap:sync` before every Run. |
-| The splash sits there | The game failed to boot; the splash gives up after 8 seconds by itself. Use the Web Inspector (below) to read the error. |
-| A dark flash before the game | `APP_BACKGROUND` in `capacitor.config.ts` and the `html, body` background in `src/ui/styles.css` have drifted apart. Both are `#bfe4f5`; make them agree and `npm run cap:sync`. |
-| "Untrusted Developer" | Section 2, step after Run. |
-| "The app could not be launched" after a week | Free-account expiry: press Run in Xcode again. |
-| Signing errors in red | Signing & Capabilities: team not set, or a bundle id someone else already used. Change the bundle id (section 2, step 4). |
-| Status bar visible over the game | Tell us — `src/device/shell.ts` hides it at boot and that call failed. |
+| White or black screen, no game | The web build was not copied. `npm run cap:sync`, then Run again. |
+| The old version of the game | The same: `cap:sync` before every Run. |
+| The splash sits there | The game failed to boot; the splash gives up after 8 seconds on its own. Use the Web Inspector below to read the error. |
+| A hard colour flash before the game — white, black, or dark indigo | The native shell colour and the page background have drifted apart. `npm run cap:preflight` says so in one line, and it is one constant either side. Tell us; it is not yours to fix. |
+| "Untrusted Developer" | Section 2, the step after Run. |
+| "The app could not be launched" after a week | Free-account expiry. Press Run in Xcode again. |
+| Signing errors in red | Signing & Capabilities: team not set, or a bundle id someone else already used. Section 4. |
+| Status bar visible over the game | Tell us. It is off in the Info.plist *and* hidden again at boot, so both failed. |
+| The app rotates to landscape | Tell us. Same: locked in the Info.plist and again at boot. |
+| `npm ci` fails on a package | Check `node -v` is 22.x. |
+| Xcode: "Missing package product CapacitorApp" | Xcode has not fetched the Swift packages yet. **File → Packages → Resolve Package Versions**, then build again. |
+| Xcode build error mentioning `capacitor.config.json` or `public` | Those are generated, not committed. `npm run cap:sync` creates them. |
+| The screen goes black or flat-grey for a moment mid-run, then the scene comes back | A **WebGL context loss**. iOS throws the graphics context away under memory pressure and when the app has been in the background a while; the renderer notices and rebuilds. This is handled, and the run is meant to survive it. |
+| ...and the run does **not** survive it | That is the bug. Tell us what you were doing, whether you had just come back from the background, whether the textures came back wrong (flat colours, black models), and whether the HUD still responded. |
+| Everything is flat and untextured after a resume | The same thing, half-recovered. Worth a photo. |
 
-**Web Inspector** (the console, for anything weird): on the phone, *Settings >
-Apps > Safari > Advanced > Web Inspector* on. On the Mac, Safari > Settings >
-Advanced > "Show features for web developers", then **Develop > [your iPhone] >
-App**. You get the full console and network panel of the running game.
+**Web Inspector** — the console, for anything strange. On the phone: *Settings →
+Apps → Safari → Advanced → Web Inspector* on. On the Mac: Safari → Settings →
+Advanced → "Show features for web developers", then **Develop → [your iPhone] →
+App**. You get the full console of the running game, including the scripted run
+in section 5.
 
 ---
 
-## 6. Later: TestFlight
+## 7. Later: TestFlight
 
-Only when we want other people playing it, and only with a paid **Apple
-Developer Program** membership ($99/year). The outline, so it is not a surprise:
+Only when other people should be playing it, and only with a paid **Apple
+Developer Program** membership. `docs/STORE.md` holds the listing — name,
+description, keywords, age rating, privacy answers, screenshots — so that none
+of it is invented on the night. The mechanics:
 
 1. Join the Apple Developer Program with the same Apple ID.
-2. In App Store Connect, create an app record with our bundle id
-   (`com.arcanerush.app`, or whatever you chose) and a name.
-3. In Xcode, set the team to the paid team, pick **Any iOS Device** as the
-   destination, and **Product > Archive**.
-4. In the Organizer window that opens: **Distribute App > TestFlight & App
-   Store**, and let Xcode upload it.
-5. Answer the export-compliance question (the game uses no encryption beyond
-   standard HTTPS) and the privacy questions (we collect nothing: no ads, no
-   IAP, no analytics — that is a standing decision, D6).
-6. Add testers in App Store Connect. They install TestFlight and get the build.
+2. In App Store Connect, create an app record with the bundle id from section 4
+   and the name from `docs/STORE.md`.
+3. Make sure the version is what you want to ship: it comes from
+   `package.json` (`0.9.0` → build `900`). Bump it there, run
+   `npm run cap:sync`, and both numbers follow. A second upload of the *same*
+   version needs a higher build number: `npm run cap:version -- --build 901`.
+4. In Xcode: set the team to the paid team, pick **Any iOS Device** as the
+   destination, then **Product → Archive**.
+5. In the Organizer window that opens: **Distribute App → TestFlight & App
+   Store**, and let Xcode upload.
+6. Export compliance is not asked — the Info.plist already answers it
+   (`ITSAppUsesNonExemptEncryption` false). The privacy answers are already in
+   the app's privacy manifest, and `docs/STORE.md` section 5 has the same
+   answers for the App Store Connect form.
+7. **Internal testers** (up to 100, on your own account) get the build as soon
+   as it finishes processing, with no review.
+8. **External testers** (up to 10,000, by link or email) need a short
+   **Beta App Review** on the first build of each version — usually a day.
+   For that Apple wants a beta description, a contact email, and the review
+   notes from `docs/STORE.md` section 9. Later builds of the same version go
+   out without another review.
 
-Before that we owe the app a real icon and launch image; that is a job for us,
-not for you.
+A TestFlight build expires after 90 days.
 
 ---
 
-## 7. Later: Android
+## 8. Later: Android
 
-Not installed yet, on purpose: iOS first (D4). When we want it, we add
-`@capacitor/android`, run `npx cap add android` once, and you install Android
-Studio. The same `cap:sync` flow applies. One known wrinkle for later: on
-Android 16 the status bar's background colour and overlay settings are no longer
-under an app's control, so the shell there will look slightly different.
+The Android project is in the repository too (`android/`), generated the same
+way and carrying the same portrait lock, version stamp and adaptive icon. It is
+not the platform being tested — iOS first (D4) — and nobody has built it on a
+device yet, so treat it as ready rather than proven.
+
+When it is wanted: install Android Studio, then
+
+```bash
+npm run cap:sync:android
+npm run cap:open:android
+```
+
+and Run. `npm run cap:assets` already generated its launcher icons and splash
+screens from the same two files as iOS.
+
+One known wrinkle: from Android 16 the status bar's background and overlay
+settings are no longer under an app's control, so the shell there looks slightly
+different from iOS however it is configured.
 
 ---
 
-## 8. What the wrapper actually contains
+## 9. What the wrapper actually contains
 
-For reference, nothing here needs doing:
+Reference. Nothing here needs doing.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `npm run cap:preflight` | Every check that does not need Xcode, then the one command you are due next. |
+| `npm run cap:assets` | Cuts `assets/app/*` into the iOS and Android icon and splash catalogues. Run after changing the art, never otherwise. |
+| `npm run cap:version` | Stamps `package.json`'s version and a derived build number into both native projects. `cap:sync` runs it. |
+| `npm run cap:sync` | `npm run build`, then the stamp, then `npx cap sync ios`. The one command before every Run. |
+| `npm run cap:open` | Opens `ios/App/App.xcodeproj` in Xcode. |
+| `npm run cap:sync:android`, `npm run cap:open:android` | The same two for Android. |
+
+### Files
 
 | File | What it does |
 |---|---|
-| `capacitor.config.ts` | App id (the one that must match Xcode's Bundle Identifier), app name, the `dist/` folder to ship, the full-screen WebView settings, and the splash, background and status bar settings — the shell colour is `#bfe4f5`, the same daylight sky `src/ui/styles.css` paints. Every field is commented. |
+| `capacitor.config.ts` | App id, app name, the `dist/` folder to ship, the full-screen WebView settings, and the splash, background and status bar settings. Every field is commented; the shell colour is the constant `APP_BACKGROUND`. |
+| `ios/` | The Xcode project, committed (D57). Yours to open and sign; not yours to hand-edit. |
+| `android/` | The Gradle project, committed, same deal. |
+| `assets/app/` | The two files you replace, plus the Android adaptive-icon layers. `docs/ART.md`. |
 | `src/device/platform.ts` | Answers "are we in the app, and is it iOS". Everything else asks it first, which is why the browser builds never call anything native. |
-| `src/device/shell.ts` | Hides the status bar, holds the splash until the game's first frame (and drops it after 8 s regardless), and keeps the screen awake during play. |
-| `src/device/haptics.ts` | Boss stomp, boss death, level won. Throttled, and inert in a browser. |
-| `src/device/simTap.ts` | How haptics get told about those three events without touching the game loop. |
-| `scripts/cap-preflight.mjs` | `npm run cap:preflight`: checks the web build exists and the config parses, then prints the steps above. |
+| `src/device/shell.ts` | Hides the status bar, locks the orientation, holds the launch splash until the game's first frame (and drops it after 8 s regardless), and keeps the screen awake during play. |
+| `src/device/lifecycle.ts` | Pause on background, resume on foreground, and a save flushed on the way out. |
+| `src/device/haptics.ts` | The taps listed in section 5, throttled as a group, and inert in a browser. |
+| `src/core/report.ts` | The text behind **Copy report**. |
+| `scripts/cap-preflight.mjs` | `npm run cap:preflight`, with `cap-native.mjs` (the checks that read the two projects) and `cap-facts.mjs` (the paths and the PNG and plist readers) behind it. |
+| `scripts/cap-version.mjs` | `npm run cap:version`. |
 
-The iOS folder itself (`ios/`) is generated by `npx cap add ios` and then
-committed; it is Xcode's project, not ours to hand-edit, apart from the signing
-and orientation settings in section 2.
+### The iOS settings that are already set
+
+These are the reason section 2 has no checklist of Xcode toggles in it. They
+live in `ios/App/App/Info.plist` and the Xcode project, and
+`npm run cap:preflight` checks every row below — a plist or privacy-manifest key
+that has drifted fails it outright, a device-family change warns.
+
+| Setting | Value | Why |
+|---|---|---|
+| `CFBundleDisplayName` | `Arcane Rush` | The name under the icon. |
+| `UISupportedInterfaceOrientations` | Portrait only | The road, the camera and every HUD plaque are built for one orientation. |
+| `UIRequiresFullScreen` | true | No Split View or Stage Manager window handing the game an aspect ratio it has never seen. |
+| `UIStatusBarHidden` | true | The bar is gone from the first frame, not from whenever the plugin call lands — it sits exactly where the level chip and the squad count are. |
+| `UIViewControllerBasedStatusBarAppearance` | true | `@capacitor/status-bar` does nothing at all without it. |
+| `ITSAppUsesNonExemptEncryption` | false | Export compliance, answered once here instead of on every upload. |
+| `UIRequiredDeviceCapabilities` | `arm64` | The Capacitor template still asks for 32-bit `armv7`. |
+| `CFBundleShortVersionString` / `CFBundleVersion` | `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` | Both stamped from `package.json` by `cap:version`; no literal numbers anywhere. |
+| `TARGETED_DEVICE_FAMILY` | `1` | iPhone only. It also means the App Store never asks for iPad screenshots. |
+| `PrivacyInfo.xcprivacy` | no tracking, no collected data | Plus the three required-reason APIs WebKit's own storage uses: app-scoped user defaults (`CA92.1`), file timestamps inside the app container (`C617.1`), and the free-space check before a write (`E174.1`). Capacitor's frameworks declare none, so this file is where they live. |
+
+The Android project carries the equivalents: `android:screenOrientation="portrait"`,
+`versionCode` / `versionName` from the same stamp, and the adaptive icon
+`cap:assets` generates.

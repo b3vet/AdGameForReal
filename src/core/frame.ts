@@ -147,6 +147,21 @@ export class FrameDriver {
   private lastFrameTime = 0;
 
   /**
+   * The app is in the background (`src/device/lifecycle.ts`).
+   *
+   * Separate from "the loop is stopped", because the two have different owners
+   * and must not undo each other: `stop`/`start` is the smoke test holding a
+   * frame still while it photographs it, and this is the phone being taken
+   * away. While it is set, `start` does nothing at all — so a run that ends, a
+   * level that loads or a screenshot that finishes *behind* a locked screen
+   * cannot quietly bring the loop back with the app still off screen.
+   */
+  private suspended = false;
+
+  /** Whether `pause` interrupted a running loop, so `resume` knows what to undo. */
+  private runningWhenSuspended = false;
+
+  /**
    * Worst draw-call count since the last `resetPeak`. Tracked on every frame
    * rather than only under `?debug`, because it is what the smoke test reads to
    * hold the frame budget (plan, "Performance"): one counter read per frame.
@@ -181,7 +196,10 @@ export class FrameDriver {
   }
 
   start(): void {
-    if (this.rafId !== null) return;
+    if (this.rafId !== null || this.suspended) return;
+    // Zero, not `performance.now()`: the first frame after a start reports a
+    // delta of nothing, which is what makes a pause drop the time spent away
+    // instead of handing it to the sim in one lump (see `pause`).
     this.lastFrameTime = 0;
     this.rafId = requestAnimationFrame(this.frame);
   }
@@ -190,6 +208,44 @@ export class FrameDriver {
     if (this.rafId === null) return;
     cancelAnimationFrame(this.rafId);
     this.rafId = null;
+  }
+
+  /**
+   * The app went to the background: no frames, and no clock.
+   *
+   * A backgrounded page gets no `requestAnimationFrame` callbacks anyway, so
+   * the frames take care of themselves; the clock does not. `lastFrameTime`
+   * would still be holding the timestamp of the frame before the phone was
+   * locked, and the first frame back would compute a `realDt` of however many
+   * minutes that was. `frameDt` is clamped (`MAX_FRAME_DT`) so the sim itself
+   * survives that, but `realDt` is deliberately *not*: it drives the
+   * result-screen beat (`FrameHost.onFrameEnd`), and a five-minute one would
+   * skip the whole ending in a single frame.
+   *
+   * So: stop, and let `start` re-zero the clock on the way back. Idempotent.
+   */
+  pause(): void {
+    if (this.suspended) return;
+    this.suspended = true;
+    this.runningWhenSuspended = this.rafId !== null;
+    this.stop();
+  }
+
+  /**
+   * Back on screen. Restarts the loop with a fresh clock, but only if it was
+   * running when the phone was taken away — a page backgrounded while the
+   * smoke test is holding a frame still comes back held.
+   */
+  resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    if (this.runningWhenSuspended) this.start();
+    this.runningWhenSuspended = false;
+  }
+
+  /** True while the app is in the background. The debug report prints it. */
+  get isSuspended(): boolean {
+    return this.suspended;
   }
 
   /** The title backdrop changed (new preview, resize): draw it again. */

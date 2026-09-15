@@ -52,8 +52,12 @@
 
 .room__panel {
   /* A room is a list, and a short screen has to be able to reach the end of
-     it; the overlay is click-through, so this is the one place that opts in. */
+     it; the overlay is click-through, so this is the one place that opts in.
+     `dvh` second, for the browser that has it: on the hosted playtest link a
+     `vh` is measured through the URL bar, so 60 of them is more of the screen
+     than the player can see. */
   max-height: 60vh;
+  max-height: 60dvh;
   /*
    * And it may never be *wider* than the screen. A flex item does not shrink
    * below its content without this, and the Wardrobe's chip strips are wider
@@ -370,6 +374,7 @@
      screen has goes to the list, which scrolls. */
   .room__panel {
     max-height: 52vh;
+    max-height: 52dvh;
   }
 
   .row,

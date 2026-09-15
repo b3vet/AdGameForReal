@@ -1,6 +1,6 @@
 {
   "name": "arcane-rush",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "Portrait lane-defense auto-shooter (Babylon.js).",
@@ -15,20 +15,28 @@
     "build:artifact": "node scripts/build-artifact.mjs",
     "build:hosted": "node scripts/build-hosted.mjs",
     "cap:preflight": "node scripts/cap-preflight.mjs",
-    "cap:sync": "npm run build && npx cap sync ios",
-    "cap:open": "npx cap open ios"
+    "cap:assets": "npx @capacitor/assets generate --ios --android --assetPath assets/app --iconBackgroundColor '#3b2a7a' --iconBackgroundColorDark '#3b2a7a' --splashBackgroundColor '#bfe4f5' --splashBackgroundColorDark '#bfe4f5'",
+    "cap:version": "node scripts/cap-version.mjs",
+    "cap:sync": "npm run build && npm run cap:version && npx cap sync ios",
+    "cap:sync:android": "npm run build && npm run cap:version && npx cap sync android",
+    "cap:open": "npx cap open ios",
+    "cap:open:android": "npx cap open android"
   },
   "dependencies": {
     "@babylonjs/core": "9.25.0",
     "@babylonjs/havok": "1.3.14",
     "@babylonjs/loaders": "9.25.0",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
     "@capacitor/core": "8.5.2",
     "@capacitor/haptics": "8.0.2",
     "@capacitor/ios": "8.5.2",
+    "@capacitor/screen-orientation": "8.0.1",
     "@capacitor/splash-screen": "8.0.2",
     "@capacitor/status-bar": "8.0.3"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
     "@capacitor/cli": "8.5.2",
     "@eslint/js": "10.0.1",
     "@types/node": "26.5.0",

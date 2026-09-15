@@ -2,8 +2,11 @@
  * Debug panel: frame cost, squad count, live projectiles, enemies alive, the
  * horde on screen and the numbers floating over it, physics, audio, draw calls,
  * time scale and the last few sim events, as a monospace block in the
- * bottom-left corner, plus a "Capture" button that records ten seconds of those
- * numbers into one pasteable summary.
+ * bottom-left corner, plus three buttons — "Capture", which records a window of
+ * those numbers into one pasteable summary, "Copy report", which puts the whole
+ * device report on the clipboard (`src/core/report.ts`), and "Show report",
+ * which renders that report in the panel so a photograph carries it when the
+ * clipboard will not.
  *
  * Reached with `?debug` or, because the hosted playtest wrapper may swallow the
  * query string, by triple-tapping the wordmark or the level chip (`./taps.ts`).
@@ -16,7 +19,7 @@
  * does not otherwise make.
  */
 
-import type { GateKind, RunState, SimEvent } from '@/sim';
+import type { RunState, SimEvent } from '@/sim';
 
 import {
   CAPTURE_SECONDS,
@@ -25,6 +28,11 @@ import {
   SPIKE_WINDOW_SECONDS,
   SpikeWindow,
 } from './capture';
+import type { CaptureSummary } from './capture';
+import { browserSurface, copyText } from './clipboard';
+import type { CopySurface } from './clipboard';
+import { describeEvent } from './debugEvents';
+import type { DebugStats } from './debugStats';
 import './debug.css';
 
 /** How many event lines the panel keeps. */
@@ -38,7 +46,19 @@ const AVERAGE_WEIGHT = 0.1;
 
 const IDLE_LABEL = `Capture ${String(CAPTURE_SECONDS)}s`;
 /** Same label plus a tick: the capture is over *and* the clipboard took it. */
-const COPIED_LABEL = `${IDLE_LABEL} ✓`;
+const CAPTURE_COPIED_LABEL = `${IDLE_LABEL} ✓`;
+
+const COPY_LABEL = 'Copy report';
+const COPIED_LABEL = 'Copied ✓';
+const COPY_FAILED_LABEL = 'Copy failed';
+const SHOW_LABEL = 'Show report';
+const HIDE_LABEL = 'Hide report';
+
+/** How long a button holds its "it worked" label before going back. */
+const CONFIRM_MS = 2000;
+
+/** Before the app has handed the panel a report source (`setReportSource`). */
+const NO_REPORT = 'arcane-rush report\n\n  -  no source (the app has not booted)';
 
 /** Wall clock for the capture window. Presentation only; the sim has its own. */
 const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
@@ -49,69 +69,19 @@ interface LogEntry {
 }
 
 /**
- * What the app knows about the frame it just ran. The app owns one instance and
- * overwrites it every frame, so nothing here may hold on to it.
+ * How the panel asks for the device report. The app supplies it
+ * (`src/core/publishHandle.ts`); the two things only the panel can see — the
+ * last capture and the last run state — are handed back in.
  */
-export interface DebugStats {
-  /** The whole `Run.tick` sequence, in milliseconds. */
-  simMs: number;
-  /** The whole `Renderer.update`, including `scene.render`. */
-  renderMs: number;
-  /** `PhysicsLayer.onEvents` plus `update`. */
-  physicsMs: number;
-  /** From the renderer's instrumentation; 0 when it has none yet. */
-  drawCalls: number;
-  /** Worst draw-call count since the run started; the smoke's budget is on this. */
-  drawCallsPeak: number;
-  /** Stream bodies the renderer wrote into the crowd last frame (D29). */
-  streamBodies: number;
-  /** Chargers drawn last frame (D49); `POOL.chargers` is what it can run into. */
-  chargers: number;
-  /** World number labels drawn last frame, and the glyphs they cost. */
-  labels: number;
-  labelGlyphs: number;
-  /** Glyphs the atlas budget refused; anything but 0 means numbers went missing. */
-  labelsDropped: number;
-  /**
-   * What Milestone 4 put on the road (`Renderer.featureStats`): fence pieces
-   * drawn, whether the wisp is out, its sparks in flight, and bodies burning.
-   * Each has a pool a level can quietly run into, and all four are invisible in
-   * a frame that is simply missing them — a wall that never draws and a wisp
-   * that was never bound look the same.
-   */
-  walls: number;
-  wisp: boolean;
-  sparks: number;
-  burning: number;
-  /** The app-level time scale: 1 normal, 0 during hit-stop. */
-  timeScale: number;
-  ragdolls: number;
-  shards: number;
-  /** Live Havok bodies behind those: eleven per ragdoll, one per shard. */
-  physicsBodies: number;
-  physicsQuality: number;
-  /** Which rung of the app's degrade ladder is in force; 0 is everything on. */
-  qualityRung: number;
-  /** The ladder's last three-second window, as a 95th-percentile frame in ms. */
-  qualityP95: number;
-  /** Why the rung last moved: `start`, `level`, `p95` or `pinned`. */
-  qualityReason: string;
-  /** JS heap in MB where the browser reports it (Chrome only), else 0. */
-  heapMb: number;
-  /** Collections seen since boot; a rising count means the frame allocates. */
-  heapDrops: number;
-  /** Backing-store pixels per CSS pixel, which the ladder's top rungs lower. */
-  pixelRatio: number;
-  /** What the screen offers, so a lowered `pixelRatio` reads as a decision. */
-  devicePixelRatio: number;
-  /** `off`, `loading`, `locked` or `unlocked`, plus a mute marker. */
-  audio: string;
-  /** Clips decoded and playable, so a silent game says which kind of silent. */
-  audioClips: number;
-}
+export type ReportSource = (
+  capture: CaptureSummary | null,
+  state: Readonly<RunState> | null,
+) => string;
+
+export type { DebugStats };
 
 /**
- * The panel's markup (`index.html`). The root is inert; only the button takes
+ * The panel's markup (`index.html`). The root is inert; only the buttons take
  * pointer events, so the rest of the panel never eats a drag.
  */
 export interface DebugElements {
@@ -119,7 +89,11 @@ export interface DebugElements {
   text: HTMLElement;
   /** The last capture's summary. Hidden until there is one. */
   summary: HTMLElement;
+  /** The device report, rendered for a photograph. Hidden until asked for. */
+  report: HTMLElement;
   button: HTMLButtonElement;
+  copyButton: HTMLButtonElement;
+  showButton: HTMLButtonElement;
 }
 
 export class DebugPanel {
@@ -128,6 +102,8 @@ export class DebugPanel {
   private readonly capture = new CaptureRecorder();
   /** Frames over 20 ms in the last ten seconds — Milestone 4's hitch hunt. */
   private readonly spikes = new SpikeWindow();
+  /** Where a copy is attempted; the tests hand in their own (`./clipboard.ts`). */
+  private readonly surface: CopySurface;
 
   private enabled = false;
   private fps = 0;
@@ -138,13 +114,49 @@ export class DebugPanel {
   private shownLabel = '';
   private spikeCount = 0;
 
-  constructor(elements: DebugElements, signal: AbortSignal) {
+  private source: ReportSource | null = null;
+  private lastSummary: CaptureSummary | null = null;
+  /**
+   * The last run the panel was handed, live or finished.
+   *
+   * A reference, never a copy: the report's run section is read *after* a run
+   * as often as during one — the owner taps "Copy report" on the result sheet —
+   * and the app clears its session the moment the Academy comes back. One dead
+   * run held by a panel that is only up when someone is looking at it is a
+   * cheaper price than a per-frame snapshot of six numbers.
+   */
+  private lastState: Readonly<RunState> | null = null;
+  private reportShown = false;
+  private confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    elements: DebugElements,
+    signal: AbortSignal,
+    surface: CopySurface = browserSurface(),
+  ) {
     this.elements = elements;
+    this.surface = surface;
     this.setLabel(IDLE_LABEL);
+    elements.copyButton.textContent = COPY_LABEL;
+    elements.showButton.textContent = SHOW_LABEL;
     elements.button.addEventListener(
       'click',
       () => {
         this.onCaptureClick();
+      },
+      { signal },
+    );
+    elements.copyButton.addEventListener(
+      'click',
+      () => {
+        void this.copyReport();
+      },
+      { signal },
+    );
+    elements.showButton.addEventListener(
+      'click',
+      () => {
+        this.showReport(!this.reportShown);
       },
       { signal },
     );
@@ -164,6 +176,72 @@ export class DebugPanel {
     // A hidden panel stops being fed frames, so a capture left running would
     // hang half-recorded until the panel came back.
     if (!enabled && this.capture.active) this.stopCapture();
+    if (!enabled) this.clearConfirm();
+  }
+
+  /** Where the report comes from; see `ReportSource`. */
+  setReportSource(source: ReportSource): void {
+    this.source = source;
+  }
+
+  /** The report as text, for the clipboard, the panel and `__arcane.report()`. */
+  report(): string {
+    const source = this.source;
+    if (source === null) return NO_REPORT;
+    try {
+      return source(this.lastSummary, this.lastState);
+    } catch {
+      // The report is the thing a broken build is reported *with*, so it may
+      // not be the thing that breaks. A source that throws is a dash.
+      return NO_REPORT;
+    }
+  }
+
+  /** The last finished capture, or null. Read by the report and by `?perf`. */
+  get lastCapture(): CaptureSummary | null {
+    return this.lastSummary;
+  }
+
+  get captureActive(): boolean {
+    return this.capture.active;
+  }
+
+  /** Starts a capture of `seconds`; `?perf` asks for a long one. */
+  startCapture(seconds: number = CAPTURE_SECONDS): void {
+    this.elements.summary.hidden = true;
+    this.showReport(false);
+    this.capture.start(now(), seconds);
+    this.setLabel(`Recording ${String(this.capture.secondsLeft(now()))}s`);
+  }
+
+  /**
+   * Renders the report in the panel in place of the live readout.
+   *
+   * In place of, not beside: the report is thirty lines and the readout is
+   * twenty, and the two together run off the top of a 390x844 phone — and this
+   * exists to be photographed.
+   */
+  showReport(shown: boolean): void {
+    this.reportShown = shown;
+    // A snapshot, not a live view: what is wanted is the numbers as they were
+    // when the button was pressed, held still long enough to photograph.
+    if (shown) this.elements.report.textContent = this.report();
+    this.elements.report.hidden = !shown;
+    this.elements.text.hidden = shown;
+    this.elements.summary.hidden = shown || this.lastSummary === null;
+    this.elements.showButton.textContent = shown ? HIDE_LABEL : SHOW_LABEL;
+  }
+
+  /**
+   * Puts the report on the clipboard and says so on the button for two seconds.
+   * A refused clipboard renders the report instead, so the next thing the owner
+   * does is take a photograph rather than wonder what happened.
+   */
+  async copyReport(): Promise<boolean> {
+    const copied = await copyText(this.report(), this.surface);
+    this.confirm(this.elements.copyButton, copied ? COPIED_LABEL : COPY_FAILED_LABEL, COPY_LABEL);
+    if (!copied) this.showReport(true);
+    return copied;
   }
 
   update(
@@ -174,6 +252,7 @@ export class DebugPanel {
     stats: DebugStats,
   ): void {
     if (!this.enabled) return;
+    if (state !== null) this.lastState = state;
 
     // Exponential smoothing: raw per-frame numbers jitter too much to read, and
     // a phone's hot spot shows up as a rising average, not as one bad frame.
@@ -186,7 +265,7 @@ export class DebugPanel {
       this.physicsMs += (stats.physicsMs - this.physicsMs) * AVERAGE_WEIGHT;
     }
 
-    for (const event of events) this.push(describe(event));
+    for (const event of events) this.push(describeEvent(event));
 
     if (this.capture.active) {
       const summary = this.capture.add(now(), dt, state, stats);
@@ -197,7 +276,9 @@ export class DebugPanel {
     if (this.sinceRefresh < REFRESH_INTERVAL) return;
     this.sinceRefresh = 0;
 
-    this.elements.text.textContent = this.compose(state, phase, stats);
+    // Composing the readout into a hidden element is a dozen strings a second
+    // nobody can see; the report is what is on screen.
+    if (!this.reportShown) this.elements.text.textContent = this.compose(state, phase, stats);
     if (this.capture.active) {
       this.setLabel(`Recording ${String(this.capture.secondsLeft(now()))}s`);
     }
@@ -209,9 +290,7 @@ export class DebugPanel {
       this.stopCapture();
       return;
     }
-    this.elements.summary.hidden = true;
-    this.capture.start(now());
-    this.setLabel(`Recording ${String(CAPTURE_SECONDS)}s`);
+    this.startCapture();
   }
 
   private stopCapture(): void {
@@ -219,19 +298,38 @@ export class DebugPanel {
     this.setLabel(IDLE_LABEL);
   }
 
-  private finishCapture(summary: string): void {
-    this.elements.summary.textContent = summary;
-    this.elements.summary.hidden = false;
+  private finishCapture(summary: CaptureSummary): void {
+    this.lastSummary = summary;
+    this.elements.summary.textContent = summary.text;
+    this.elements.summary.hidden = this.reportShown;
     this.setLabel(IDLE_LABEL);
-    copyToClipboard(summary, (copied) => {
-      this.setLabel(copied ? COPIED_LABEL : IDLE_LABEL);
+    void copyText(summary.text, this.surface).then((copied) => {
+      this.setLabel(copied ? CAPTURE_COPIED_LABEL : IDLE_LABEL);
     });
   }
 
+  /** The capture button's label, which is rewritten ten times a second. */
   private setLabel(label: string): void {
     if (label === this.shownLabel) return;
     this.shownLabel = label;
     this.elements.button.textContent = label;
+  }
+
+  /** Holds `label` on a button for two seconds, then puts `idle` back. */
+  private confirm(button: HTMLButtonElement, label: string, idle: string): void {
+    this.clearConfirm();
+    button.textContent = label;
+    this.confirmTimer = setTimeout(() => {
+      this.confirmTimer = null;
+      button.textContent = idle;
+    }, CONFIRM_MS);
+  }
+
+  private clearConfirm(): void {
+    if (this.confirmTimer === null) return;
+    clearTimeout(this.confirmTimer);
+    this.confirmTimer = null;
+    this.elements.copyButton.textContent = COPY_LABEL;
   }
 
   /**
@@ -319,108 +417,8 @@ export class DebugPanel {
   }
 }
 
-/**
- * Best effort, never fatal: an insecure context has no `navigator.clipboard` at
- * all and a permission can be denied. The summary is on screen either way, so a
- * failed copy only changes the button's label.
- */
-function copyToClipboard(text: string, onDone: (copied: boolean) => void): void {
-  try {
-    const clipboard: Clipboard | undefined = navigator.clipboard;
-    if (clipboard === undefined) {
-      onDone(false);
-      return;
-    }
-    void clipboard.writeText(text).then(
-      () => {
-        onDone(true);
-      },
-      () => {
-        onDone(false);
-      },
-    );
-  } catch {
-    onDone(false);
-  }
-}
-
 function countAlive(items: readonly { alive: boolean }[]): number {
   let alive = 0;
   for (const item of items) if (item.alive) alive++;
   return alive;
-}
-
-function describe(event: SimEvent): string {
-  switch (event.type) {
-    case 'projectileFired':
-      return 'fire';
-    case 'projectileHit':
-      return `impact ${event.weaponId}`;
-    case 'gateHit':
-      return `gateHit ${event.kind} ${gateValue(event.kind, event.value)}`;
-    case 'gatePassed':
-      return (
-        `gate ${event.kind} ${gateValue(event.kind, event.value)} ` +
-        `${String(event.countBefore)}>${String(event.countAfter)}`
-      );
-    case 'enemyActivated':
-      return `activate #${String(event.enemyId)}`;
-    case 'enemyHit':
-      return `hit #${String(event.enemyId)} hp ${event.hp.toFixed(0)}`;
-    case 'enemyKilled':
-      return `kill #${String(event.enemyId)} ${event.kind}`;
-    case 'enemyLeaked':
-      return `leak #${String(event.enemyId)} str ${String(event.streamId)}`;
-    case 'streamStarted':
-      return `stream ${String(event.streamId)} lane ${String(event.lane)} x${String(event.count)}`;
-    case 'streamCleared':
-      return `stream ${String(event.streamId)} done leak ${String(event.leaked)}`;
-    case 'enemyShattered':
-      return `shatter #${String(event.enemyId)}`;
-    case 'enemySlowed':
-      return `slow #${String(event.enemyId)} ${event.seconds.toFixed(1)}s`;
-    case 'enemyBurning':
-      return `burn #${String(event.enemyId)} ${event.seconds.toFixed(1)}s`;
-    case 'familiarShot':
-      return `wisp >#${String(event.targetId)}`;
-    case 'wallBlocked':
-      return `wall ${event.boundary > 0 ? 'right' : 'left'}`;
-    case 'splash':
-      return `splash r${event.radius.toFixed(1)}`;
-    case 'chain':
-      return `chain #${String(event.from)}>#${String(event.to)}`;
-    case 'weaponChanged':
-      return `staff ${event.from}>${event.to}`;
-    case 'unitsGained':
-      return `+${event.amount.toFixed(0)} units`;
-    case 'unitsLost':
-      return `-${event.amount.toFixed(1)} units (${event.reason})`;
-    case 'bossActivated':
-      return 'boss active';
-    case 'bossStomp':
-      return 'boss stomp';
-    case 'bossEnraged':
-      return `boss enraged #${String(event.enemyId)}`;
-    case 'bossKilled':
-      return 'boss killed';
-    case 'runEnded':
-      return `runEnded ${event.status} surv ${String(event.survivors)}`;
-    default:
-      // An event the sim added and the panel has not been taught yet. Printing
-      // its name is more use than the `undefined` an exhaustive switch would
-      // leave in the log.
-      return (event as { type: string }).type;
-  }
-}
-
-/**
- * Gate values are floats now, so the raw number is fifteen digits of noise in a
- * panel eight lines tall. Rounded the way the gate's own panel rounds it, and
- * `fireRate` in the percent the player reads rather than in hundredths.
- */
-function gateValue(kind: GateKind, value: number): string {
-  const scaled = kind === 'fireRate' ? value * 100 : value;
-  const rounded = Math.round(scaled);
-  // `Math.round` hands back `-0`, which prints as "-0" once a sign is glued on.
-  return String(rounded === 0 ? 0 : rounded);
 }

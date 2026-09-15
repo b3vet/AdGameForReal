@@ -8,10 +8,17 @@ artifacts/
 .DS_Store
 *.local
 
-# iOS build products only. `ios/` itself is committed once `npx cap add ios`
-# creates it on the Mac (D34, docs/DEVICE.md): it carries the Xcode project,
-# the signing settings and the app icons, and it also ships its own .gitignore
-# for the rest of the noise (the synced web copy, xcuserdata).
+# Native build products only. `ios/` and `android/` themselves are committed
+# (D57): they carry the Xcode and Gradle projects, the signing settings and the
+# icon catalogues, so the owner's first build is open-and-sign rather than
+# generate-then-sign. Each one also ships its own .gitignore for the rest of the
+# noise — the synced copy of `dist/`, the generated capacitor.config.json,
+# xcuserdata, `.gradle/`, `local.properties`. The lines below are belt and
+# braces on top of those, and every one of them is a build product.
 ios/App/Pods/
 ios/App/build/
+ios/App/output/
 DerivedData/
+android/.gradle/
+android/local.properties
+android/.idea/

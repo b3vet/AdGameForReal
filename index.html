@@ -8,6 +8,27 @@
     />
     <meta name="color-scheme" content="light" />
     <meta name="description" content="Arcane Rush: a portrait lane-defense auto-shooter." />
+
+    <!--
+      The app marks (docs/ART.md), all of them written by `scripts/app-art.mjs`
+      into `public/`, which Vite copies to `dist/` verbatim. The paths are
+      absolute because the page is served from the root in every build that has
+      a head at all — the two single-file builds keep only the title, the styles
+      and the body, so none of this reaches a playtest link.
+
+      The favicon is the vector mark rather than a PNG: a tab icon is 16 px in
+      one browser and 64 px in another, and the same file also serves the
+      manifest's `any` size.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- The shell colour of `capacitor.config.ts` and of the manifest's
+         `theme_color`. Written out here because this file is hand-kept, not
+         generated; keep the three in step (docs/ART.md). -->
+    <meta name="theme-color" content="#bfe4f5" />
+
     <title>Arcane Rush</title>
   </head>
   <body>
@@ -506,11 +527,19 @@
       <canvas id="confetti" hidden></canvas>
 
       <!-- ?debug, or a triple-tap on the wordmark or the level chip. Monospace,
-           bottom-left; only the capture button takes pointer events. -->
+           bottom-left; only the buttons take pointer events. The report block
+           replaces the live readout while it is up (src/ui/debug.ts): the two
+           together are taller than a phone, and the report exists to be
+           photographed when the clipboard refuses it. -->
       <div id="debug-panel" class="debug" hidden>
         <pre id="debug-text" class="debug__text"></pre>
         <pre id="debug-capture" class="debug__capture" hidden></pre>
-        <button id="debug-capture-button" class="debug__button" type="button">Capture 10s</button>
+        <pre id="debug-report" class="debug__report" hidden></pre>
+        <div class="debug__buttons">
+          <button id="debug-capture-button" class="debug__button" type="button">Capture 10s</button>
+          <button id="debug-report-button" class="debug__button" type="button">Copy report</button>
+          <button id="debug-show-button" class="debug__button" type="button">Show report</button>
+        </div>
       </div>
     </div>
 

@@ -254,10 +254,17 @@
   transform: translateY(1px);
 }
 
+/*
+ * Placed against the screen's own box, which is now the full glass
+ * (`#overlay-root` in `./styles.css` stopped padding itself in Milestone 9), so
+ * the notch is cleared here rather than inherited. The Academy's coin bar
+ * reserves 3.4rem on its right for this button and is itself inside the safe
+ * column, so the two still cannot meet.
+ */
 .mute--title {
   position: absolute;
-  top: 0.75rem;
-  right: 0.9rem;
+  top: calc(var(--safe-top) + 0.75rem);
+  right: calc(var(--safe-right) + 0.9rem);
 }
 
 .mute__icon {

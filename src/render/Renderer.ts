@@ -25,6 +25,7 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { biomeOfLevel } from './biome';
 import type { CameraRig } from './camera';
+import { reuploadThinInstances, watchContextLoss } from './contextLoss';
 import { SceneTints } from './cosmetics';
 import { PreviewBackdrop } from './preview';
 import { bootScene } from './rendererBoot';
@@ -72,6 +73,14 @@ export interface RendererOptions {
    * level the campaign has not reached yet.
    */
   biome?: BiomeId;
+  /**
+   * The GPU took the context away, and gave it back (`./contextLoss.ts`). The
+   * renderer stops drawing in between on its own; these are for the owner of
+   * the frame loop, which has to stop *asking* for frames and start again.
+   * Both are optional, so a dev scene or a test can leave them out.
+   */
+  onContextLost?: () => void;
+  onContextRestored?: () => void;
 }
 
 export class Renderer {
@@ -115,11 +124,20 @@ export class Renderer {
 
   private disposed = false;
 
+  /** True between `webglcontextlost` and the end of Babylon's rebuild. */
+  private contextLost = false;
+  /** Takes the two listeners and the observer off again; see `./contextLoss.ts`. */
+  private unwatchContext: (() => void) | null = null;
+  private readonly onContextLost: (() => void) | undefined;
+  private readonly onContextRestored: (() => void) | undefined;
+
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
     this.maxPixelRatio = Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO);
     this.preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
     this.biomes = new RoadBiomes(options.biome);
+    this.onContextLost = options.onContextLost;
+    this.onContextRestored = options.onContextRestored;
   }
 
   async init(): Promise<void> {
@@ -142,10 +160,30 @@ export class Renderer {
     this.rig = context.rig;
     this.views = context.views;
 
+    // Before the warm-up rather than after it: a context lost during the boot
+    // pass is exactly the case a phone under memory pressure produces, and an
+    // unwatched loss there is a black screen with no way back.
+    this.unwatchContext = watchContextLoss(this.canvas, context.engine, {
+      onLost: () => {
+        this.handleContextLost();
+      },
+      onRestored: () => {
+        this.handleContextRestored();
+      },
+    });
+
     // Last: every pooled material compiled while the title screen is still
     // being put together, so the first bolt, the first gate and the first
     // ragdoll of a run do not each cost a frame (`./warmup.ts`).
     await this.warmUp();
+  }
+
+  /**
+   * True while the GPU context is gone. The frame loop is paused by the app in
+   * that window, and `update` draws nothing even if something asks.
+   */
+  get isContextLost(): boolean {
+    return this.contextLost;
   }
 
   /** Whether the frame loop can stop asking for frames (`./preview.ts`). */
@@ -349,7 +387,7 @@ export class Renderer {
    * order itself is `./rendererFrame.ts`.
    */
   update(state: RunState, events: readonly SimEvent[], dt: number): void {
-    if (this.disposed) return;
+    if (this.disposed || this.contextLost) return;
     const scene = this.sceneRef;
     const views = this.views;
     const rig = this.rig;
@@ -387,6 +425,8 @@ export class Renderer {
     if (this.disposed) return;
     this.disposed = true;
 
+    this.unwatchContext?.();
+    this.unwatchContext = null;
     this.views?.dispose();
     this.views = null;
     this.rig?.dispose();
@@ -404,5 +444,46 @@ export class Renderer {
    *  (`./rendererQuality.ts`). */
   private applyPixelRatio(): void {
     applyPixelRatio(this.engine, effectivePixelRatio(this.maxPixelRatio));
+  }
+
+  /**
+   * The GPU took the context away. Every `update` from here is dropped, and the
+   * app is told so it can stop asking for frames; the scene graph, the pools
+   * and the run itself are untouched, because none of them is on the GPU.
+   */
+  private handleContextLost(): void {
+    if (this.contextLost) return;
+    this.contextLost = true;
+    // Not `console.error`: a lost context is a normal thing for iOS to do, and
+    // an error would fail the smoke test (`scripts/smoke-browser.mjs`).
+    console.warn('[arcane-rush] WebGL context lost; frames are paused');
+    this.onContextLost?.();
+  }
+
+  /**
+   * Babylon has rebuilt its side (`./contextLoss.ts` lists what that covers).
+   * What is left is ours: the backing store's size, which is set through the
+   * engine rather than the canvas, and the materials, which Babylon would
+   * otherwise recompile one at a time inside the player's first frames back.
+   */
+  private handleContextRestored(): void {
+    if (!this.contextLost || this.disposed) return;
+    this.contextLost = false;
+
+    this.engine?.resize();
+    this.applyPixelRatio();
+    // The roadside, the arena walls and everything else whose matrices were
+    // written once at a level load. Babylon cannot do this one; see
+    // `reuploadThinInstances` for the measurement and the reason.
+    const scene = this.sceneRef;
+    if (scene !== null) {
+      const meshes = reuploadThinInstances(scene);
+      console.warn(`[arcane-rush] re-uploaded ${String(meshes)} thin-instance buffers`);
+    }
+    // Not awaited: the app is about to start drawing again, and a warm-up is
+    // idempotent — a material that is already ready resolves on the first check
+    // (`./warmup.ts`).
+    void this.warmUp();
+    this.onContextRestored?.();
   }
 }

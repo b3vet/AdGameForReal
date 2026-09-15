@@ -37,6 +37,21 @@ body {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  /*
+   * The three things a WKWebView does to a long press that a game must not do
+   * (Milestone 9 Phase B): the callout bubble ("Copy / Look Up") over the
+   * result sheet's numbers, the blue selection drag across a heading, and the
+   * grey flash under a tapped card. A drag here is the squad's steering input
+   * and it is often held for a second or more, which is exactly the gesture all
+   * three of those are listening for.
+   *
+   * The two selection properties are inherited, so this covers the overlay as
+   * well; `./kit.css` and the room stylesheets still say it on their own
+   * controls, which is harmless and keeps each control readable on its own.
+   */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #game-canvas {
@@ -46,7 +61,14 @@ body {
   height: 100%;
   display: block;
   outline: none;
+  /* The play surface. Said again rather than inherited: this is the element the
+     drag actually lands on, and a future rule on `body` must not be able to let
+     a gesture through to it by accident. */
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* The icon sprite is a definition, not a picture: it must take no space. */
@@ -57,13 +79,22 @@ body {
   overflow: hidden;
 }
 
-/* Overlay layers sit above the canvas but stay click-through except on controls. */
+/*
+ * Overlay layers sit above the canvas but stay click-through except on controls.
+ *
+ * Full-bleed, and the safe area is inset by each screen's own column instead
+ * (`.screen__inner`, `.mute--title`, `.debug`). It used to be padded here, which
+ * was one rule for every screen and wrong for the two that paint a background:
+ * the result sheet's parchment and the Academy's warm wash stopped at the
+ * padding box, so a notched phone showed a 47-px strip of live road above the
+ * sheet and a 34-px one under it. A screen is the full screen; what has to
+ * clear the notch is the text and the buttons in it.
+ */
 #overlay-root {
   position: fixed;
   inset: 0;
   display: grid;
   pointer-events: none;
-  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
 
 #overlay-root > * {
@@ -105,7 +136,20 @@ body {
      squad count off the screen's centre line. */
   min-width: 0;
   height: 100%;
-  padding: 5vh 1rem calc(4vh + 0.5rem);
+  /*
+   * The safe area lives here rather than on `#overlay-root`, so a screen's
+   * background reaches the edges of the glass while its contents clear the
+   * notch and the home indicator. `env()` is read once into the tokens
+   * (`./tokens.css`), which is also what lets the inset probe simulate a phone
+   * by setting four custom properties.
+   */
+  padding: calc(var(--safe-top) + 5vh) calc(var(--safe-right) + 1rem)
+    calc(var(--safe-bottom) + 4vh + 0.5rem) calc(var(--safe-left) + 1rem);
+  /* `dvh` wherever the browser has it (Safari 15.4+): on the hosted playtest
+     link `vh` counts the strip the URL bar is sitting on. An older browser
+     drops this declaration whole and keeps the `vh` one above. */
+  padding: calc(var(--safe-top) + 5dvh) calc(var(--safe-right) + 1rem)
+    calc(var(--safe-bottom) + 4dvh + 0.5rem) calc(var(--safe-left) + 1rem);
 }
 
 /* --- Panels --------------------------------------------------------------- */
@@ -180,8 +224,16 @@ body {
   background: none;
 }
 
+/*
+ * The HUD sits closer to the top than a menu does — the count and the boss bar
+ * want the road under them — so it keeps its own, tighter band, with the same
+ * safe insets under it.
+ */
 .screen--hud .screen__inner {
-  padding: 0.75rem 1rem calc(2.5vh + 0.5rem);
+  padding: calc(var(--safe-top) + 0.75rem) calc(var(--safe-right) + 1rem)
+    calc(var(--safe-bottom) + 2.5vh + 0.5rem) calc(var(--safe-left) + 1rem);
+  padding: calc(var(--safe-top) + 0.75rem) calc(var(--safe-right) + 1rem)
+    calc(var(--safe-bottom) + 2.5dvh + 0.5rem) calc(var(--safe-left) + 1rem);
 }
 
 .screen__top {
@@ -285,9 +337,14 @@ body {
  * screen, with nothing on the console to say so.
  */
 @media (orientation: landscape) {
+  /* The safe insets stay: a phone on its side keeps its notch, and it is now on
+     the long edge, which is where the left and right insets in the shorthand
+     above come from. */
   .screen__inner {
-    padding-top: 3vh;
-    padding-bottom: 3vh;
+    padding-top: calc(var(--safe-top) + 3vh);
+    padding-bottom: calc(var(--safe-bottom) + 3vh);
+    padding-top: calc(var(--safe-top) + 3dvh);
+    padding-bottom: calc(var(--safe-bottom) + 3dvh);
   }
 
   .screen__top {

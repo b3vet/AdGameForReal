@@ -8,8 +8,10 @@
  * inside one frame is `./frame`; the run on the road and the pins that say
  * which road is next are `./appRun.ts`; the Academy's screens and the road
  * behind them are `./menus.ts`; what a tap asks for is `./controls.ts`; the
- * sound and the debug panel are `./appPrefs.ts`; and everything about the meta
- * layer — the player, the purse and what a run pays — is `./academy.ts` (D33).
+ * sound and the debug panel are `./appPrefs.ts`; what happens when the phone
+ * takes the app away or the GPU takes the context away is `./appLifecycle.ts`;
+ * and everything about the meta layer — the player, the purse and what a run
+ * pays — is `./academy.ts` (D33).
  *
  * The `title` phase covers all of the Academy: which of its screens is up is
  * the menu stage's business, not the state machine's.
@@ -23,6 +25,7 @@ import { fontsReady, Overlay } from '@/ui';
 
 import { AcademyController } from './academy';
 import type { RunPayout } from './academy';
+import { AppLifecycle } from './appLifecycle';
 import { overlayCallbacks } from './controls';
 import type { AppCommands } from './controls';
 import { FrameDriver } from './frame';
@@ -37,6 +40,7 @@ import { RunStage } from './appRun';
 import { startDevScene } from './devScenes';
 import type { DevScene } from './devScenes';
 import { MenuStage } from './menus';
+import { runPerfCapture } from './perf';
 import type { RoomId } from './player';
 import { publishHandle } from './publishHandle';
 import { QualityLadder } from './quality';
@@ -78,6 +82,12 @@ export class App implements FrameHost, AppCommands {
   private input: AppInput | null = null;
   /** The sound and the debug panel, and the save behind them (`./appPrefs.ts`). */
   private readonly prefs: AppPrefs;
+  /**
+   * Background, foreground and a lost GPU context (`./appLifecycle.ts`). Built
+   * here because the renderer below reports a lost context through it, and a
+   * context can be lost inside `Renderer.init`.
+   */
+  private readonly lifecycle: AppLifecycle;
 
   /** Set by `dispose`, so the loads still in flight there hand back their work. */
   private disposed = false;
@@ -93,10 +103,25 @@ export class App implements FrameHost, AppCommands {
       // `?biome=frost` pins the look; without it every level brings its own
       // (D49), which `Renderer.loadLevel` reads off the level itself.
       ...(this.options.biome === null ? {} : { biome: this.options.biome }),
+      // iOS drops the context on a backgrounded web view; the frame loop is
+      // what has to stop and start again (`./appLifecycle.ts`).
+      onContextLost: () => {
+        this.lifecycle.onContextLost();
+      },
+      onContextRestored: () => {
+        this.lifecycle.onContextRestored();
+      },
     });
     this.juice = new Juice(canvas, this.renderer, this.options.turbo === 1);
     this.audio = new GameAudio({ muted: this.options.muted });
     this.driver = new FrameDriver(this);
+    this.lifecycle = new AppLifecycle({
+      driver: this.driver,
+      audio: this.audio,
+      markDirty: () => {
+        this.driver.markPreviewDirty();
+      },
+    });
     this.ladder = new QualityLadder({
       forced: this.options.qualityRung,
       apply: (rung, index) => {
@@ -168,6 +193,10 @@ export class App implements FrameHost, AppCommands {
       },
     });
     this.prefs.restore(this.options.debug);
+    // The page is up, so a `visibilitychange` from here on is a real one. On a
+    // device this is the app-state plugin instead; either way the sim clock
+    // stops when the game is not on screen (`./appLifecycle.ts`).
+    this.lifecycle.start();
     // The renderer exists now, so the rung the ladder settled on at
     // construction is applied to it for real.
     this.ladder.applyCurrent();
@@ -202,6 +231,11 @@ export class App implements FrameHost, AppCommands {
     if (this.options.endless) this.runs.autoStartEndless(physics, () => this.disposed);
 
     this.driver.start();
+
+    // `?perf`: the scripted capture (`./perf.ts`). After the loop is running,
+    // because every wait in it is a wait for something the loop does — and
+    // after Havok, so the run it measures is the run the phone actually plays.
+    if (this.options.perf) void physics.then(() => this.startPerfCapture());
   }
 
   /** `'title' | 'playing' | 'result'` — the state machine's current node. */
@@ -265,6 +299,7 @@ export class App implements FrameHost, AppCommands {
   dispose(): void {
     this.disposed = true;
     this.stop();
+    this.lifecycle.stop();
     this.input?.detach();
     this.input = null;
     this.devScene?.dispose();
@@ -378,6 +413,7 @@ export class App implements FrameHost, AppCommands {
     publishHandle(this, {
       physics: () => this.physicsLayer,
       qualityRung: () => this.ladder.rung,
+      qualityReason: () => this.ladder.reason,
       peakDrawCalls: () => this.driver.peakDrawCalls,
       peakChargerBodies: () => this.driver.peakChargerBodies,
       repaintMenu: () => {
@@ -386,6 +422,24 @@ export class App implements FrameHost, AppCommands {
       openRoom: (room) => {
         this.openRoom(room);
       },
+    });
+  }
+
+  /** `?perf`: the scripted level-20 capture that ends in a report (`./perf.ts`). */
+  private startPerfCapture(): void {
+    if (this.disposed) return;
+    void runPerfCapture({
+      level: this.options.level,
+      startLevel: (level) => {
+        this.startLevel(level);
+      },
+      warming: () => this.renderer.shaderStats.warming,
+      startCapture: (seconds) => {
+        this.overlay.startCapture(seconds);
+      },
+      captureActive: () => this.overlay.captureActive,
+      finish: () => this.overlay.showAndCopyReport(),
+      disposed: () => this.disposed,
     });
   }
 

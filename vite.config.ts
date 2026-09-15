@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { cp } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,6 +6,18 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
+
+/**
+ * What the device report calls this build (`src/core/report.ts`).
+ *
+ * The version is read from `package.json` rather than written twice: it is what
+ * `npm run cap:version` stamps into the iOS project, so a report from the phone
+ * and the build in Xcode have to agree, and the only way to be sure of that is
+ * for both to read the same field.
+ */
+export const appVersion: string = (
+  JSON.parse(readFileSync(path.resolve(ROOT, 'package.json'), 'utf8')) as { version: string }
+).version;
 
 /**
  * Copies `assets/` into the build output.
@@ -42,6 +55,13 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  // Stamped into the bundle for the device report. `web` covers the dev server,
+  // `npm run build` and the build Capacitor wraps — the report says `native`
+  // there from the platform, not from the bundler (`src/core/report.ts`).
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_KIND__: JSON.stringify('web'),
   },
   build: {
     target: 'es2022',

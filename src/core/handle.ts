@@ -68,6 +68,12 @@ export interface ArcaneDebugHandle {
     failed: number;
     warming: boolean;
   };
+  /**
+   * The device report as plain text (`src/core/report.ts`): the same block the
+   * panel's "Copy report" button puts on the clipboard, for a probe that has no
+   * clipboard to read and for a console on a phone that has no panel up.
+   */
+  report: () => string;
   /** The player's meta state: coins, upgrades, staffs, wisp, bestiary. */
   player: () => Readonly<PlayerState>;
   /** The Milestone 8 meta layer, as views (D51 to D53). See `ArcaneMetaView`. */

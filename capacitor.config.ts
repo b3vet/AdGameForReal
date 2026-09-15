@@ -12,8 +12,10 @@
  *   - `server`. Leaving it out keeps the default `capacitor://localhost` scheme
  *     on iOS. The scheme is the save data's origin, so changing it later throws
  *     away every `localStorage` save on the device (`src/core/save.ts`).
- *   - `android`. No Android package is installed yet (`docs/DEVICE.md`, "Android
- *     later"); the platform gets its own block when it is added.
+ *   - `plugins.ScreenOrientation`. The plugin has no configuration; the lock is
+ *     `UISupportedInterfaceOrientations` in `ios/App/App/Info.plist` and
+ *     `android:screenOrientation` in the Android manifest, with a belt-and-braces
+ *     call at boot from `src/device`.
  */
 
 import type { CapacitorConfig } from '@capacitor/cli';
@@ -23,13 +25,21 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * launch splash, the frame before Babylon's first render, and the strip behind
  * a rotation.
  *
- * The page's own background, character for character (`src/ui/styles.css`, the
- * `html, body` rule: "a daylight sky, not a black flash"). The milestone plan
- * gave the old dark indigo of Milestone 2, and against D28's daylight art that
- * made launch go deep purple -> sky -> scene — two colour changes before the
- * game appears. With this one they are the same colour and the only thing that
- * ever fades in is the scene. Keep the two in step: if `styles.css` changes,
- * change this and re-run `npm run cap:sync`.
+ * A daylight sky, not a black flash. The milestone plan gave the old dark indigo
+ * of Milestone 2, and against D28's daylight art that made launch go deep purple
+ * -> sky -> scene: two colour changes before the game appears.
+ *
+ * It is also the colour `scripts/app-art.mjs` reads out of this file for the
+ * splash's edges and the colour the launch storyboard paints
+ * (`ios/App/App/Base.lproj/LaunchScreen.storyboard`), so those three cannot
+ * drift.
+ *
+ * The *page* under the canvas is a fourth surface, and it is `--c-sky-mid`
+ * (`#8fc6f2`) rather than this (`src/ui/styles.css`, the `html, body` rule).
+ * That is a real half-step at launch, and `npm run cap:preflight` warns about it
+ * in one line every time it runs. Closing it is one value moving to meet the
+ * other — whichever way, re-run `node scripts/app-art.mjs` and
+ * `npm run cap:sync` afterwards so the splash edges follow.
  */
 const APP_BACKGROUND = '#bfe4f5';
 
@@ -89,6 +99,20 @@ const config: CapacitorConfig = {
      * owner reads the debug panel's numbers off the phone and how we get a
      * console for a crash; there is nothing to protect in this build yet.
      */
+    webContentsDebuggingEnabled: true,
+  },
+
+  /**
+   * Android exists as a generated project (`android/`) so that the day it is
+   * wanted nothing has to be created, but iOS is the platform being tested
+   * (D4). Only the two settings that would otherwise be wrong are here; the rest
+   * of the Android shell is the defaults on purpose.
+   */
+  android: {
+    /** The same shell colour as iOS, for the same reason. */
+    backgroundColor: APP_BACKGROUND,
+
+    /** chrome://inspect, the counterpart of Safari's Web Inspector above. */
     webContentsDebuggingEnabled: true,
   },
 

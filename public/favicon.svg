@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#6d4fd6"/>
+       <stop offset="1" stop-color="#3b2a7a"/>
+     </linearGradient>
+     <radialGradient id="halo">
+       <stop offset="0" stop-color="#a48cff" stop-opacity="0.62"/>
+       <stop offset="1" stop-color="#a48cff" stop-opacity="0"/>
+     </radialGradient>
+    <linearGradient id="hat-cone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a48cff"/>
+      <stop offset="1" stop-color="#6d4fd6"/>
+    </linearGradient>
+    <linearGradient id="hat-band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd97a"/>
+      <stop offset="0.55" stop-color="#f2b33d"/>
+      <stop offset="1" stop-color="#b5741c"/>
+    </linearGradient>
+    <!-- The light falls from the upper left, so the far side of the cone rolls
+         into shadow. A ramp rather than a second shape: a hard edge down the
+         middle of a cone reads as a fold in it. -->
+    <linearGradient id="hat-roll" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0.38" stop-color="#1e1633" stop-opacity="0"/>
+      <stop offset="1" stop-color="#1e1633" stop-opacity="0.34"/>
+    </linearGradient>
+    <radialGradient id="hat-wisp">
+      <stop offset="0.3" stop-color="#f2b33d" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#f2b33d" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="hat-cone-clip"><path d="M152 380 C 176 278 232 148 296 60 C 307 42 333 47 335 74 C 345 188 359 288 368 380 C 332 402 188 402 152 380 Z"/></clipPath></defs><rect width="64" height="64" fill="url(#bg)"/><circle cx="32" cy="28.16" r="23.04" fill="url(#halo)"/><svg x="5" y="5" width="54" height="54" viewBox="62 28 416 416">
+    <g>
+      <!-- Brim first, cone over it: the brim's far edge is hidden by the cone
+           exactly as it is on a hat, so no second layer is needed. It takes the
+           crown's own ramp, which each element resolves against its own box, so
+           the brim is light where the crown meets it and falls away at the
+           front lip. Lighter than the crown, not darker, because the brim is
+           the one part of the mark that sits against the deep end of the
+           background and a brim in shadow there disappears. -->
+      <ellipse cx="260" cy="384" rx="190" ry="52" fill="url(#hat-cone)"/>
+      <path d="M152 380 C 176 278 232 148 296 60 C 307 42 333 47 335 74 C 345 188 359 288 368 380 C 332 402 188 402 152 380 Z" fill="url(#hat-cone)"/>
+      <g clip-path="url(#hat-cone-clip)">
+        <path d="M120 30 L400 30 L400 410 L120 410 Z" fill="url(#hat-roll)"/>
+        <path d="M110 296 L420 288 L420 352 L110 360 Z" fill="url(#hat-band)"/>
+      </g>
+      <rect x="234" y="298" width="62" height="50" rx="10" fill="none"
+            stroke="#b5741c" stroke-width="11"/>
+      <rect x="240" y="304" width="50" height="38" rx="7" fill="none"
+            stroke="#ffd97a" stroke-width="5"/>
+      <!-- The wisp familiar, off the tip: the one round shape in a mark made of
+           straight edges, which is what keeps the silhouette from reading as a
+           traffic cone at 60 px. -->
+      <circle cx="152" cy="152" r="58" fill="url(#hat-wisp)"/>
+      <circle cx="152" cy="152" r="30" fill="#f2b33d"/>
+      <circle cx="152" cy="152" r="17" fill="#ffd97a"/>
+    </g></svg></svg>

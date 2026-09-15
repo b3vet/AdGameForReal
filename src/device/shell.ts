@@ -1,12 +1,13 @@
 /**
  * The native shell around the web build (decision D34): full screen, no status
- * bar, no launch flash, no screen dimming mid-run.
+ * bar, no launch flash, no screen dimming mid-run, and portrait only.
  *
- * All of it is iOS-facing but none of it is iOS-only: the same three calls are
+ * All of it is iOS-facing but none of it is iOS-only: the same four calls are
  * what Android will want when that platform is added. Everything is guarded by
  * `isNative`, so calling `initShell` in a browser does nothing at all.
  */
 
+import { ScreenOrientation } from '@capacitor/screen-orientation';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar } from '@capacitor/status-bar';
 
@@ -114,6 +115,21 @@ export function initShell(): void {
   // The status bar is dead space over a portrait game, and the level chip and
   // the count sit right under it.
   ignore('hiding the status bar', StatusBar.hide());
+
+  /*
+   * Portrait, for the life of the app: the game is authored against a 390x844
+   * phone (`src/render/labels.ts`), the road runs up the screen, and the drag
+   * that steers is a thumb across the short edge. The layout does have
+   * landscape rules — a 568x320 window is the shortest screen it can be asked
+   * to draw — but that is for a desktop browser and the hosted playtest link,
+   * not for a phone that has been tipped over mid-run.
+   *
+   * The Info.plist also declares portrait only (Phase C), which is what stops
+   * the *launch* being landscape; this is what holds it afterwards on a device
+   * whose plist says otherwise. There is deliberately no `unlock`: nothing in
+   * this game ever wants the other orientation.
+   */
+  ignore('locking to portrait', ScreenOrientation.lock({ orientation: 'portrait' }));
 
   // `launchAutoHide: false` in `capacitor.config.ts` means the splash is ours
   // to take down — this is the call that does it.

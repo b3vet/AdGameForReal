@@ -3,7 +3,7 @@
 Every file in `assets/` and where it came from. Written and maintained by the
 asset pipeline agent (Milestone 2, Phase A). Definition of done item 11.
 
-Everything here is **CC0** except the two fonts under `assets/fonts/`, which are **OFL 1.1** (licence texts in `assets/licenses/ofl-*.txt`). The licence text of each pack is copied verbatim
+Everything here is **CC0** except the two fonts under `assets/fonts/`, which are **OFL 1.1** (licence texts in `assets/licenses/ofl-*.txt`), and `assets/app/` plus `public/`, which are **our own work** — placeholder app art drawn from the palette by `scripts/app-art.mjs`, with no third-party source and no licence to carry (docs/ART.md). The licence text of each pack is copied verbatim
 into `assets/licenses/`; the quoted lines below are from those files.
 
 ## How to rebuild
@@ -13,16 +13,19 @@ node scripts/fetch-assets.mjs    # download the packs, trim, write assets/
 node scripts/fetch-ui.mjs        # assets/ui/*.svg, recoloured from palette.json
 node scripts/bake-vat.mjs        # assets/vat/*.bin + *.json from the models
 node scripts/audio-convert.mjs   # assets/audio/*.wav from the cached Kenney zips
+node scripts/app-art.mjs         # assets/app/* and public/*, drawn from palette.json
 ```
 
 `scripts/glb.mjs` is the glTF/GLB document surgery the first of those uses; it
 knows nothing about the network or our asset list, which is why it is separate.
 
-All of them are idempotent. `fetch-assets.mjs` needs Playwright's Chromium for
-one step — the two ambientCG albedos are decoded, composited and re-encoded in a
-browser page, because there is no JPEG decoder in Node and no image dependency
-may be added. It is the same browser the smoke test uses (`npx playwright
-install chromium`), and nothing else in the script touches it.
+All of them are idempotent. Two need Playwright's Chromium: `fetch-assets.mjs`
+for one step — the two ambientCG albedos are decoded, composited and re-encoded
+in a browser page, because there is no JPEG decoder in Node and no image
+dependency may be added — and `app-art.mjs` for all of its output, which is SVG
+rasterised the same way, for the same reason. It is the browser the smoke test
+uses (`npx playwright install chromium`); nothing else in `fetch-assets.mjs`
+touches it.
 
 Downloads are cached in `node_modules/.asset-cache/`
 (git-ignored because `node_modules/` is); delete it to force a refetch. If a
@@ -103,14 +106,16 @@ the game's about screen when there is one.
 
 ## Files
 
-Sizes are the shipped file, after trimming. `assets/` totals **4.8 MB**, against
+Sizes are the shipped file, after trimming. `assets/` totals **5.5 MB**, against
 a 12 MB budget (it was 3.0 MB before the Milestone 3 re-bake added a clip to
 each character, 3.4 MB before Milestone 5's UI kit added 10 KB of SVG, 3.6 MB
 before Milestone 5's art track added the dungeon pieces and the two albedos —
 435 KB in all — and 3.9 MB before Milestone 7 added Frostfell and the two new
 monsters: 748 KB of models, 138 KB of baked animation, 97 KB of props and
 159 KB of textures, 1.14 MB in all; Milestone 7 Phase E's softer ice grade then
-gave 33 KB of that back).
+gave 33 KB of that back). Milestone 9 added the 944 KB of `assets/app/`, which
+is the only part of `assets/` a *player* never downloads — it is the app icon
+and the launch splash, read by the store tooling and never by the game.
 
 ### Models — `assets/models/`
 
@@ -377,6 +382,35 @@ than the manifest loader: `scripts/inline-assets.mjs` rewrites
 `url(/assets/ui/…)` into a `data:` URI for the single-file builds. The `ui`
 entries in `assets.json` are the inventory record that tells the inliner which
 files those are.
+
+### App art — `assets/app/`
+
+The app icon and the launch splash (decision D57), plus the web icons in
+`public/`. **Not downloaded and not CC0: this is our own work**, drawn by
+`node scripts/app-art.mjs` out of `src/data/palette.json` as an SVG and
+rasterised in the same headless Chromium the textures go through. It is
+placeholder art — the product owner replaces the icon and the splash with their
+own AI-generated images and runs `npm run cap:assets`, and `docs/ART.md` carries
+the sizes, the safe zones and the prompts.
+
+| File | Size | Source | Use |
+|---|---|---|---|
+| `app/icon.png` | 232 KB | ours, `scripts/app-art.mjs` | The app icon, 1024×1024. No rounded corners (iOS masks them) and no alpha channel (the App Store rejects one): Chromium writes an opaque screenshot as 8-bit RGB, so nothing has to strip it. |
+| `app/icon-foreground.png` | 125 KB | ours, `scripts/app-art.mjs` | Android adaptive icon, foreground layer, 1024×1024 RGBA. The mark sits inside the centre 66 percent, which is all a launcher guarantees to show. |
+| `app/icon-background.png` | 187 KB | ours, `scripts/app-art.mjs` | Android adaptive icon, background layer, 1024×1024. The arcane gradient and nothing else. |
+| `app/splash.png` | 198 KB | ours, `scripts/app-art.mjs` | The launch screen, 2732×2732. Hat and Cinzel wordmark inside the centre 40 percent (a phone crops the square to a portrait strip); the top and bottom edges are exactly `APP_BACKGROUND` from `capacitor.config.ts`, so the launch does not flash. |
+| `app/splash-dark.png` | 202 KB | ours, `scripts/app-art.mjs` | The same composition on a night sky, for dark mode. |
+
+These do **not** reach the single-file builds: nothing in `assets.json` names
+them and no stylesheet references them, so `scripts/inline-assets.mjs` never
+sees them and a playtest link carries none of their bytes. They do land in
+`dist/assets/app/` — `vite.config.ts` copies the whole of `assets/` — and from
+there into the app bundle, which is 944 KB of an install that already carries
+them as native catalogue entries.
+
+The web set (`public/favicon.svg`, `apple-touch-icon.png`, `icon-192.png`,
+`icon-512.png`, `manifest.webmanifest`, 111 KB in all) is written by the same
+script and lives outside `assets/` because Vite copies `public/` itself.
 
 ### Licences — `assets/licenses/`
 

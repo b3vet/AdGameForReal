@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	The app's privacy manifest (Milestone 9, docs/25-milestone-9-plan.md section
+	C; the answers it encodes are written out in docs/STORE.md).
+
+	Two things live in here. The first three keys are the truthful, and very
+	short, answer to "what does this app do with people's data": nothing. No
+	ads, no IAP, no analytics SDK, no network calls at all — a standing decision
+	(D6) and not an oversight. The save is `localStorage` on the device
+	(src/core/save.ts) and never leaves it.
+
+	The fourth key, NSPrivacyAccessedAPITypes, is the different question Apple
+	asks: which "required reason" APIs does the binary reach, and why. Capacitor
+	ships its own manifests inside the framework (Capacitor.framework and the
+	Cordova compatibility framework) and both declare an empty list, so anything
+	this app's process touches has to be declared here. What it touches is
+	WebKit's storage: WKWebView backs `localStorage` with files in the app
+	container and with app-scoped user defaults, and it looks at their metadata
+	and at free space while managing them. That is where all three entries below
+	come from — not from our own Swift, of which there is almost none.
+
+	Deliberately *not* declared: NSPrivacyAccessedAPICategorySystemBootTime and
+	NSPrivacyAccessedAPICategoryActiveKeyboards. Nothing in the app or its five
+	plugins reads either; the game's own clocks are `performance.now()` and the
+	device date used for the daily streak, which are not required-reason APIs.
+-->
+<plist version="1.0">
+<dict>
+	<!-- No tracking, and so no tracking domains to list. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!-- Nothing is collected, so there is nothing to describe. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!--
+				CA92.1: read and write user defaults that only this app can see.
+				WKWebView keeps per-app WebKit preferences there, and nothing we
+				write is shared with another app or an App Group.
+			-->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!--
+				C617.1: timestamps of files inside the app's own container.
+				WebKit stats its storage files, and Capacitor's asset handler
+				reads the size of the bundled web files to answer range requests
+				(WebViewAssetHandler.swift). Both are inside the container; none
+				of it is sent anywhere.
+			-->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!--
+				E174.1: check that there is space before writing. WebKit asks
+				before it grows the storage quota that `localStorage` writes
+				into, which is every time the game saves.
+			-->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

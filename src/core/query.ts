@@ -16,6 +16,7 @@
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  *   ?biome=frost    pin every level to one biome, whatever the level says
  *   ?endless=1      boot straight onto the endless road instead of a level
+ *   ?perf           the scripted performance run; see `PERF_LEVEL` below
  */
 
 import type { BiomeId } from '@/data/biome-types';
@@ -64,6 +65,19 @@ export interface QueryOptions {
    */
   biome: BiomeId | null;
   /**
+   * The scripted performance run (Milestone 9, section D): level `PERF_LEVEL`
+   * under the greedy bot, the debug panel up, a thirty-second capture once the
+   * warm-up is done, and the device report shown and copied at the end
+   * (`./perf.ts`).
+   *
+   * It is one flag rather than four because it is one *thing the owner does*:
+   * open the link on the phone, put it down, pick it up and paste. Every part
+   * of it can still be asked for separately — `?level=20&bot=greedy&debug` is
+   * the same run without the scripting — and an explicit parameter beside
+   * `?perf` wins, so `?perf&level=8` certifies level 8.
+   */
+  perf: boolean;
+  /**
    * Boot straight onto the endless road (D52) rather than the Academy.
    *
    * A probe affordance like `?biome=`: Endless is a card on the picker, and a
@@ -86,6 +100,17 @@ export interface QueryOptions {
  */
 export const MAX_TURBO = 60;
 
+/**
+ * The level `?perf` certifies on.
+ *
+ * Twenty is the campaign's last meadow level: the widest crowd, the fullest
+ * road and the demon at the end of it, which is the frame the phone has to
+ * hold. A save that has not got there yet runs the highest level it has
+ * unlocked instead — a report from level 6 is worth having, and a locked level
+ * 20 the player has never seen is not the run they are about to play.
+ */
+export const PERF_LEVEL = 20;
+
 export function clampLevel(level: number, levelCount: number): number {
   if (!Number.isFinite(level)) return 1;
   return Math.min(Math.max(1, Math.floor(level)), levelCount);
@@ -95,16 +120,25 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
   const params = new URLSearchParams(search);
   const save = loadSave();
 
+  const perf = parseFlag(params.get('perf'));
+
   const levelParam = Number.parseInt(params.get('level') ?? '', 10);
+  // `?perf` picks the level itself — `PERF_LEVEL`, or the highest the save has
+  // reached when that is lower — unless the URL named one, which wins.
+  const perfLevel = Math.min(PERF_LEVEL, save.unlockedLevel);
   const level = Number.isFinite(levelParam)
     ? clampLevel(levelParam, levelCount)
-    : clampLevel(save.unlockedLevel, levelCount);
+    : clampLevel(perf ? perfLevel : save.unlockedLevel, levelCount);
 
   const botParam = params.get('bot');
-  const bot: BotKind | null =
+  const namedBot: BotKind | null =
     botParam === 'greedy' || botParam === 'human' || botParam === 'random' || botParam === 'worst'
       ? botParam
       : null;
+  // Nobody is holding the phone during a scripted capture, and an unsteered
+  // squad walks into the first curse it meets — so the run needs a driver, and
+  // greedy is the one that plays the road rather than surviving it.
+  const bot: BotKind | null = namedBot ?? (perf ? 'greedy' : null);
 
   const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
   const qualityParam = Number.parseInt(params.get('quality') ?? '', 10);
@@ -115,7 +149,9 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     level,
     bot,
     seed: Number.isFinite(seedParam) ? seedParam : null,
-    debug: params.has('debug'),
+    // The scripted run ends by showing the report in the panel, so the panel
+    // has to be up. Like `?debug`, that is written to the save on the way past.
+    debug: params.has('debug') || perf,
     scene: parseScene(sceneParam),
     turbo: Number.isFinite(turboParam) ? Math.min(MAX_TURBO, Math.max(1, turboParam)) : 1,
     physicsQuality: parseQuality(params.get('physics')),
@@ -123,6 +159,7 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     muted: save.muted,
     biome: parseBiome(params.get('biome')),
     endless: parseFlag(params.get('endless')),
+    perf,
   };
 }
 

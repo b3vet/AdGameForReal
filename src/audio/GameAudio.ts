@@ -71,6 +71,18 @@ export class GameAudio {
    */
   private revealOwed = false;
   private mutedFlag: boolean;
+  /**
+   * The app is in the background (`src/device/lifecycle.ts`, D34).
+   *
+   * A second flag rather than a share of `mutedFlag`, because it answers a
+   * different question and has a different owner. `mutedFlag` is the player's
+   * choice and is written to the save; this is the phone taking the app away —
+   * a call, the lock screen, the app switcher — and it must not touch that
+   * choice, or a run interrupted by a notification would come back silent for
+   * good. Either one silences the engine (`silent` below); only the player's
+   * one survives a return to the foreground.
+   */
+  private suspendedFlag = false;
   private disposed = false;
 
   /** Last time each throttled event class played, in `now()` milliseconds. */
@@ -102,6 +114,20 @@ export class GameAudio {
     return this.mutedFlag;
   }
 
+  /** True while the app is in the background. */
+  get suspended(): boolean {
+    return this.suspendedFlag;
+  }
+
+  /**
+   * Whether anything at all may be heard right now: the player's mute, or the
+   * app being off screen. Every gate in this file asks this rather than
+   * `mutedFlag`, so a new reason to be quiet is one line here.
+   */
+  private get silent(): boolean {
+    return this.mutedFlag || this.suspendedFlag;
+  }
+
   get status(): AudioStatus {
     if (this.engine === null) return this.loading ? 'loading' : 'off';
     if (this.loading) return 'loading';
@@ -126,7 +152,7 @@ export class GameAudio {
         // Babylon's own unmute button would land on top of our title screen.
         // The game has its own mute control and unlocks on the Play tap.
         disableDefaultUI: true,
-        volume: this.mutedFlag ? 0 : 1,
+        volume: this.silent ? 0 : 1,
       });
       if (this.disposed) {
         engine.dispose();
@@ -177,6 +203,25 @@ export class GameAudio {
     this.syncVolume();
   }
 
+  /**
+   * The app went to the background, or came back (D34).
+   *
+   * iOS keeps a WebAudio context running under a lock screen and behind the app
+   * switcher, so without this a paused run keeps singing in the player's
+   * pocket. The engine's master volume is what is turned down — a clip already
+   * playing goes quiet with it — and `play` and `onEvents` stop starting new
+   * ones, so nothing queues up to shout on the way back.
+   *
+   * The context itself is left running: suspending and resuming it costs a
+   * gesture to unlock again on some browsers, which the player would have to
+   * find by tapping a button, and the run they came back to has none.
+   */
+  setSuspended(suspended: boolean): void {
+    if (this.suspendedFlag === suspended) return;
+    this.suspendedFlag = suspended;
+    this.syncVolume();
+  }
+
   /** Clears every throttle. Call when a run starts, not every frame. */
   beginRun(): void {
     this.lastPlayed.clear();
@@ -210,7 +255,7 @@ export class GameAudio {
    * holds it over to the next tap rather than dropping it (`revealOwed`).
    */
   playRoomReveal(): void {
-    if (!this.mutedFlag && !this.refreshUnlocked()) {
+    if (!this.silent && !this.refreshUnlocked()) {
       this.revealOwed = true;
       return;
     }
@@ -235,7 +280,7 @@ export class GameAudio {
   onEvents(events: readonly SimEvent[], state: Readonly<RunState>): void {
     // The context can start on its own — Babylon resumes it on any interaction —
     // so the cached flag is refreshed once here rather than per event.
-    if (this.engine === null || this.mutedFlag || !this.refreshUnlocked()) return;
+    if (this.engine === null || this.silent || !this.refreshUnlocked()) return;
     this.voices.onEvents(events, state);
   }
 
@@ -299,7 +344,7 @@ export class GameAudio {
    * otherwise leave every later play of that clip quiet too.
    */
   private play(id: string, playbackRate = 1, volumeScale = 1): void {
-    if (this.mutedFlag || !this.unlocked) return;
+    if (this.silent || !this.unlocked) return;
     const sound = this.sounds.get(id);
     if (sound === undefined) return;
     try {
@@ -314,7 +359,7 @@ export class GameAudio {
   private syncVolume(): void {
     const engine = this.engine;
     if (engine === null) return;
-    engine.volume = this.mutedFlag ? 0 : 1;
+    engine.volume = this.silent ? 0 : 1;
     this.refreshUnlocked();
   }
 

@@ -17,6 +17,7 @@
 
 import type { GameAudio } from '@/audio';
 import { levelCount } from '@/data';
+import { onRunAwards } from '@/device';
 import type { PhysicsLayer } from '@/physics';
 import type { Renderer } from '@/render/Renderer';
 import { weaponOf } from '@/sim';
@@ -230,6 +231,13 @@ export class RunStage {
     const level = deps.options.level;
     const payout = deps.academy.payRun(session, level);
     this.lastPayout = payout;
+
+    // The one buzz the sim cannot describe (D34, Milestone 9 section B): a
+    // mission finished or a bestiary tier crossed is a fact about the *save*,
+    // decided here, not an event any tick emitted. Two counts rather than the
+    // payout, so `src/device` keeps knowing nothing about the meta layer; a
+    // no-op in every browser.
+    onRunAwards(payout.completed.length, payout.awards.length);
 
     deps.overlay.showResult(resultView(session, level, payout, levelCount, deps.academy.player));
   }

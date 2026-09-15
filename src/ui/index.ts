@@ -4,4 +4,9 @@
 export { fontsReady } from './fonts';
 export { Overlay } from './overlay';
 export type { AcademyView, OverlayCallbacks, ResultBonus, ResultView, RoomBump } from './overlay';
-export type { DebugStats } from './debug';
+export type { DebugStats } from './debugStats';
+export type { ReportSource } from './debug';
+// The device report quotes a capture's numbers in its own layout
+// (`src/core/report.ts`), so the shape crosses out of `src/ui`.
+export type { CaptureSummary, Spread } from './capture';
+export { MAX_CAPTURE_SECONDS } from './capture';
