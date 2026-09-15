@@ -18,10 +18,12 @@
  * order, is `src/core/App.ts`: the device layer knows about platforms, not
  * about the game.
  *
- * Two sources for one signal, because the two shells report it differently:
+ * One signal, two sources, because the two shells report it differently:
  * `@capacitor/app`'s `appStateChange` on a device, `visibilitychange` in a
- * browser. Both are de-duplicated against the last state delivered, so a shell
- * that fires both (a WKWebView does) still hands the app one transition.
+ * browser. Exactly one is subscribed to, and every transition is de-duplicated
+ * against the last one delivered anyway — iOS repeats an app-state change
+ * across a lock and an app-switcher flick, and pausing an already-paused clock
+ * would be harmless while resuming an already-running one would not.
  */
 
 import { App as CapacitorApp } from '@capacitor/app';
@@ -35,17 +37,18 @@ export type VisibilityListener = (visibility: AppVisibility) => void;
 
 let listener: VisibilityListener | null = null;
 let current: AppVisibility = 'foreground';
+/**
+ * Whether a source is already subscribed. Its own flag rather than a null check
+ * on the two below, because the native one arrives a bridge round trip later
+ * and a second `watchAppVisibility` inside that window would subscribe twice.
+ */
+let watching = false;
 /** The native subscription, kept only so `stopWatchingAppVisibility` can undo it. */
 let pluginHandle: PluginListenerHandle | null = null;
 /** Takes the `visibilitychange` listener off in one call, as `Overlay` does. */
 let webListeners: AbortController | null = null;
 
-/**
- * Hands one transition to the app. The guard is the whole point: iOS delivers
- * `appStateChange` and `visibilitychange` for the same lock, and pausing an
- * already-paused clock twice would be harmless but resuming one twice would
- * mean two frame loops.
- */
+/** Hands one transition to the app; see the note above about the guard. */
 function deliver(next: AppVisibility): void {
   if (next === current) return;
   current = next;
@@ -61,13 +64,13 @@ export function watchAppVisibility(onChange: VisibilityListener): void {
   // Whatever the shell thinks now, the app is on screen: `start` is called from
   // a frame the player is looking at.
   current = 'foreground';
-  if (webListeners !== null || pluginHandle !== null) return;
+  if (watching) return;
+  watching = true;
 
   if (isNative()) {
-    // A promise across the native bridge. A plugin that fails to attach leaves
-    // the web listener below unattached too, which is a game that keeps running
-    // in the background — annoying, never broken — so it is logged and dropped
-    // rather than thrown into a boot.
+    // A promise across the native bridge. Failing to attach costs a game that
+    // keeps ticking behind a lock screen — annoying, never broken — so it is
+    // logged and dropped rather than thrown into a boot.
     void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
       deliver(isActive ? 'foreground' : 'background');
     })
@@ -95,6 +98,7 @@ export function watchAppVisibility(onChange: VisibilityListener): void {
 export function stopWatchingAppVisibility(): void {
   listener = null;
   current = 'foreground';
+  watching = false;
   webListeners?.abort();
   webListeners = null;
   const handle = pluginHandle;
