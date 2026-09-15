@@ -91,6 +91,13 @@ export const RUNS = [
     query: `?bot=random&level=4&seed=2&turbo=${TURBO}&screenshot=1`,
     shots: [],
     endShot: 'end-random.png',
+    // The pause-and-resume check (Milestone 9, definition of done 3) rides this
+    // run and no other, because this is the only run with an empty shot list:
+    // the check holds the sim clock at turbo 1 for two seconds, and on a run
+    // with a shot plan that would move where every frame after it was taken
+    // (`checkVisibilityPause`). Two seconds of the smoke's budget, once, on a
+    // run whose only picture is the sheet at the end of it.
+    visibilityPause: true,
   },
   {
     /**

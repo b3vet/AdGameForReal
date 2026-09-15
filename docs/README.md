@@ -41,6 +41,7 @@ Index:
 | `24-milestone-8-log.md` | Milestone 8 process log (append-only) |
 | `25-milestone-9-plan.md` | Milestone 9 plan, approved: device and store readiness — art pipeline with placeholders and prompts, native shell polish, committed projects and guides, device report |
 | `26-milestone-9-log.md` | Milestone 9 process log (append-only) |
+| `DEVICE.md` | Clone-to-phone guide for the owner's Mac: install, art, assets, sync, Xcode, signing, what to report, TestFlight, Android |
 | `ART.md` | App icon and splash: files, sizes, safe zones, the regenerate command, and the prompts for the owner's image generator |
 | `STORE.md` | App Store metadata draft and submission checklist |
 | `ASSETS.md` | Asset inventory: every file in `assets/` with source, licence, and use (maintained by the asset pipeline) |

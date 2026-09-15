@@ -32,6 +32,15 @@ export const appVersion: string = (
  * `fs.cp` rather than a plugin: no dependency, and it is one call.
  */
 function copyGameAssets(): Plugin {
+  /**
+   * The one subtree that must not be copied. `assets/app/` is the icon and
+   * splash *source* (docs/ART.md, D57): 944 KB that `@capacitor/assets` reads on
+   * the owner's Mac to generate the native catalogues, and that no page ever
+   * requests — the web build's own marks are the small ones in `public/`.
+   * Shipping it would put a second megabyte of PNG in `dist/` and in the app
+   * bundle `npx cap sync` copies.
+   */
+  const appArt = path.resolve(ROOT, 'assets', 'app');
   let outDir = 'dist';
   return {
     name: 'arcane-rush:copy-assets',
@@ -44,6 +53,8 @@ function copyGameAssets(): Plugin {
     async closeBundle() {
       await cp(path.resolve(ROOT, 'assets'), path.resolve(ROOT, outDir, 'assets'), {
         recursive: true,
+        // Returning false for a directory skips the whole subtree.
+        filter: (source) => source !== appArt,
       });
     },
   };

@@ -54,10 +54,20 @@ const PLIST_KEYS = [
   ['UIViewControllerBasedStatusBarAppearance', '<true/>', '@capacitor/status-bar is inert without it'],
 ];
 
-/** The required-reason APIs WebKit's own storage needs (docs/DEVICE.md, §9). */
+/**
+ * The required-reason APIs WebKit's own storage needs (docs/DEVICE.md, §9).
+ *
+ * All three that `PrivacyInfo.xcprivacy` declares, not a sample of them: the
+ * point of the check is that a regenerate or an Xcode plist rewrite cannot
+ * quietly drop one, and a category dropped is an upload rejected by App Store
+ * Connect months later. The codes are Apple's own — CA92.1 "access info from
+ * same app", C617.1 "inside app container", E174.1 "check for sufficient space
+ * before writing".
+ */
 const PRIVACY_REASONS = [
   ['NSPrivacyAccessedAPICategoryUserDefaults', 'CA92.1'],
   ['NSPrivacyAccessedAPICategoryFileTimestamp', 'C617.1'],
+  ['NSPrivacyAccessedAPICategoryDiskSpace', 'E174.1'],
 ];
 
 export async function checkProjects(report, app) {

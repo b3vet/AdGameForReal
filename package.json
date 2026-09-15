@@ -15,12 +15,14 @@
     "build:artifact": "node scripts/build-artifact.mjs",
     "build:hosted": "node scripts/build-hosted.mjs",
     "cap:preflight": "node scripts/cap-preflight.mjs",
-    "cap:assets": "npx @capacitor/assets generate --ios --android --assetPath assets/app --iconBackgroundColor '#3b2a7a' --iconBackgroundColorDark '#3b2a7a' --splashBackgroundColor '#bfe4f5' --splashBackgroundColorDark '#bfe4f5'",
+    "cap:assets": "npx @capacitor/assets generate --ios --android --assetPath assets/app --iconBackgroundColor '#3b2a7a' --iconBackgroundColorDark '#3b2a7a' --splashBackgroundColor '#8fc6f2' --splashBackgroundColorDark '#8fc6f2' && node scripts/cap-assets-clean.mjs",
     "cap:version": "node scripts/cap-version.mjs",
     "cap:sync": "npm run build && npm run cap:version && npx cap sync ios",
     "cap:sync:android": "npm run build && npm run cap:version && npx cap sync android",
     "cap:open": "npx cap open ios",
-    "cap:open:android": "npx cap open android"
+    "cap:open:android": "npx cap open android",
+    "device:probe:safe-area": "npm run build && node scripts/probe-safe-area.mjs",
+    "device:probe:context-loss": "npm run build && node scripts/probe-context-loss.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "9.25.0",

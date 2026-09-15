@@ -287,7 +287,7 @@ export function collectReport(
   capture: CaptureSummary | null,
   state: Readonly<RunState> | null,
 ): string {
-  const platform = deps.platform();
+  const platform = attempt(deps.platform) ?? '';
   return buildReport({
     version: APP_VERSION,
     // Inside the app the build kind is "native" whatever bundler made it: the
@@ -297,12 +297,31 @@ export function collectReport(
     platform,
     userAgent: browserAgent(),
     screen: browserScreen(),
-    gpu: readGl(deps.gl()),
-    quality: deps.quality(),
+    gpu: readGl(attempt(deps.gl)),
+    quality: attempt(deps.quality),
     capture,
     run: state,
-    save: deps.save(),
+    save: attempt(deps.save),
   });
+}
+
+/**
+ * One source, or null if it threw.
+ *
+ * The report is read at the two worst moments there are: a phone that has just
+ * lost its GPU context, and a boot that has not finished. Every source here is
+ * a getter into live state — the renderer's ratios read the engine, the save's
+ * headline reads the purse — and any of them may be reaching for something that
+ * is not there yet. A section that prints `-` is a report; an exception is a
+ * button that does nothing, on the one screen whose whole job is to say what
+ * went wrong.
+ */
+function attempt<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
 }
 
 function browserAgent(): string {

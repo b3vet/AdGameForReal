@@ -24,11 +24,12 @@ the shapes and colours of the real thing have something to be measured against.
 | `public/icon-192.png`, `public/icon-512.png` | 192, 512 | The web manifest's icons. |
 | `public/manifest.webmanifest` | — | Name, colours, `display: standalone`, `orientation: portrait`, the icons. |
 
-Every PNG is kept **under 400 KB**. They are copied into the app bundle rather
-than downloaded by a player, so the limit is modest housekeeping rather than a
-budget — but a 2732×2732 image with a radial or diagonal gradient across it
-costs half a megabyte on its own, which is why the placeholder skies are
-vertical ramps.
+Every PNG is kept **under 400 KB**. Nobody ever downloads one: `assets/app/` is
+the *source* `npm run cap:assets` cuts the native catalogues from, and
+`vite.config.ts` keeps it out of `dist/` for that reason, so the limit is modest
+housekeeping rather than a budget — but a 2732×2732 image with a radial or
+diagonal gradient across it costs half a megabyte on its own, which is why the
+placeholder skies are vertical ramps.
 
 ## Safe zones
 
@@ -47,12 +48,15 @@ The three that matter, because art that ignores them gets cut:
   46 percent). Everything that must be seen goes inside the centre 40 percent
   in *both* axes; the rest of the square is sky that gets thrown away.
 
-The splash's top and bottom edges are exactly `APP_BACKGROUND` (`#bfe4f5` in
+The splash's top and bottom edges are exactly `APP_BACKGROUND` (`#8fc6f2` in
 `capacitor.config.ts`), which is also the colour the native shell paints before
-the web view draws and the `theme_color` in the manifest and in `index.html`.
-Those four are one colour on purpose: if they diverge, the launch flashes.
+the web view draws, the colour the launch storyboard paints, the `theme_color`
+in the manifest and in `index.html`, and the page under the canvas
+(`--c-sky-mid`, the `html, body` rule in `src/ui/styles.css`). Those are one
+colour on purpose: if they diverge, the launch flashes.
 `scripts/app-art.mjs` reads it out of `capacitor.config.ts` so the art cannot
-drift from the shell; `index.html`'s `<meta name="theme-color">` is hand-kept
+drift from the shell, and `npm run cap:preflight` compares the shell against the
+page every time it runs; `index.html`'s `<meta name="theme-color">` is hand-kept
 and has to be changed with it.
 
 Two consequences of that, both deliberate:
@@ -90,11 +94,15 @@ native catalogues:
   descriptions) and `drawable-*/splash.png` for every density and orientation,
   day and night.
 
+It ends by deleting any PNG left in those two iOS catalogues that the
+regenerated `Contents.json` no longer names (`scripts/cap-assets-clean.mjs`) —
+Capacitor's project template ships placeholder launch images of its own, and
+without that step a regenerated project leaves a megabyte of orphans behind.
+
 Then `npm run cap:sync` and build. No code path reads the source files, so a bad
-icon is one re-run away from a good one. They do get *copied*: `vite.config.ts`
-copies the whole of `assets/` into `dist/`, so `dist/assets/app/` carries a
-second copy of the 944 KB into the app bundle. Harmless, and a one-line filter
-in that plugin would drop it if the bundle size ever matters.
+icon is one re-run away from a good one, and nothing copies them anywhere: the
+`assets/` copy in `vite.config.ts` skips `assets/app/` by name, so `dist/` — and
+so the app bundle — carries the catalogues and not the 944 KB of sources.
 
 To regenerate the *placeholders* — after a palette change, say —
 `node scripts/app-art.mjs`. It is idempotent: it only writes, and the same
@@ -153,7 +161,7 @@ values so the result sits inside the game's own palette
 > the middle of that band stays calm, uncluttered and low in contrast, because
 > the game's title is laid over it; the outer edges are plain sky and plain
 > grass with nothing in them, and the top and bottom edges of the square are a
-> pale sky blue close to #bfe4f5. No text, no lettering, no title, no logo, no
+> pale sky blue close to #8fc6f2. No text, no lettering, no title, no logo, no
 > border, no frame, no vignette, no UI elements. Not photorealistic, no
 > realistic textures, no faces, no character looking at the camera, no
 > watermark.
@@ -175,7 +183,7 @@ the tallest portrait it will give you, then pad it to a square:
 
 - Put the portrait image in the middle of a 2732×2732 canvas and fill the bars
   left and right with the image's own sky colour at the top and grass colour at
-  the bottom — or, simplest and safest, with flat `#bfe4f5`, the shell colour.
+  the bottom — or, simplest and safest, with flat `#8fc6f2`, the shell colour.
 - Do not scale the portrait up to fill the square: that pushes the subject
   outside the centre 40 percent and a phone crops it away.
 

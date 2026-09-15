@@ -80,3 +80,62 @@
   duplicate art copy in `dist/assets/app`; the smoke server's manifest
   MIME; the orphan splash files the generator recreates; probe script
   lines in package.json; `Renderer.ts` 489, `frame.ts` 457, `App.ts` 454.
+
+## 2026-09-15 — Wave two: integration and review (verified and committed)
+
+- The native shell takes the page's colour: `APP_BACKGROUND` is
+  `--c-sky-mid` (`#8fc6f2`) with the launch storyboard, the theme colour,
+  the manifest and the asset generator's flags following; the placeholders
+  and catalogues regenerated, the preflight no longer warns. Correction:
+  the orphan splash files come from Capacitor's iOS template, not the
+  generator; a clean-up step after `cap:assets` now removes any catalogue
+  image its manifest does not name, so the command leaves the tree clean.
+- A test timeout of two minutes (every test over four seconds already
+  carries its own budget; the slowest without one is under four, so this is
+  thirty times headroom and still fails a hang in minutes). Smoke PASS on
+  the quiet tree in 21 min 21 s with a mid-run visibility pause check
+  riding the shotless random run at turbo 1 (the clock held exactly across
+  a second of wall time, then ran on); context loss stays a probe, both
+  probes have script lines and rows in the device guide. The duplicate
+  art copy filtered out of `dist` (944 KB); the manifest MIME in the
+  smoke server.
+- Review fixes: the frame loop's `stop` during a pause was ignored and a
+  level load during a pause was lost (a start is now remembered across a
+  pause and acted on at resume; a zero timestamp no longer reads as "no
+  previous frame"); a native listener resolving after its stop leaked
+  through a generation epoch; the report survives a throwing source with a
+  dash; a renderer disposed mid-boot no longer leaves a live engine and
+  two canvas listeners behind; the preflight checks the third
+  required-reason category; `cap:version` rejects pre-release strings and
+  overflowing parts. `frame.ts` 491 → 396 with `frameStats.ts`. Docs ART,
+  ASSETS and DEVICE corrected for the colour and the filter.
+- Not fixed, reported: the haptic throttle is global across weights (a
+  light gate tap can swallow a heavy meteor 50 ms later; a feel call after
+  the playtest); the context-loss re-upload restores matrix buffers only,
+  complete today because every custom buffer is rewritten each frame (the
+  invariant is written beside the code); `Renderer.ts` 502 and `App.ts`
+  454 have no clean seam; the hosted build has 90 KB of headroom under
+  its ceiling.
+- Verified on the quiet tree: typecheck 0 errors, lint clean, 579 tests,
+  build OK, hosted 11.91 MB, artifact 15.26 MB, preflight PASS with
+  `next: npm run cap:open` after a sync, smoke PASS, both device probes
+  PASS. Corrections to the wave-one entry: the loop remembers a start
+  during a pause rather than refusing it; `frame.ts` is 396 and
+  `Renderer.ts` 502.
+
+## Milestone 9 status
+
+| Definition of done | Status |
+|---|---|
+| 1. Fresh clone on a Mac: install, drop two PNGs, `cap:assets`, `cap:sync`, `cap:open`, sign, run; the guide says exactly that and the preflight proves what it can | Done here as far as a Mac-less container can prove: projects committed, plist and manifest checked, next command printed; the Xcode steps are the owner's |
+| 2. Placeholders and prompts; favicon and manifest | Done |
+| 3. Safe areas at 390×844 with 47 and 34 px insets; pause and resume in the smoke; context loss simulated with the run continuing | Done: probe and smoke check green |
+| 4. Haptics wired and throttled with tests; the report copies | Done |
+| 5. All checks, smoke, hosted build, log, ledger | Done: D56 and D57, hosted build Version 19 |
+
+Open for the product owner: the haptic throttle across weights; iPhone
+only in the project (one line to revert for iPad); the age-rating
+severity and the secondary category marked in `docs/STORE.md`; the
+ladder's numbers live in code rather than data if the phone needs them
+moved; the generated Android landscape splash drawables are dead weight
+on a portrait app.

@@ -29,19 +29,24 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * of Milestone 2, and against D28's daylight art that made launch go deep purple
  * -> sky -> scene: two colour changes before the game appears.
  *
- * It is also the colour `scripts/app-art.mjs` reads out of this file for the
- * splash's edges and the colour the launch storyboard paints
- * (`ios/App/App/Base.lproj/LaunchScreen.storyboard`), so those three cannot
- * drift.
+ * It is exactly the page under the canvas — `--c-sky-mid` in
+ * `src/ui/palette.css`, the `html, body` rule in `src/ui/styles.css` — so launch
+ * paints one colour from the first frame the shell owns to the first frame the
+ * game owns. The shell takes the page's colour rather than the page taking the
+ * shell's, because the page's is a palette role the whole scene is lit against
+ * and the shell's was only ever a hand-picked blue. `npm run cap:preflight`
+ * compares the two every time it runs and warns if they drift again.
  *
- * The *page* under the canvas is a fourth surface, and it is `--c-sky-mid`
- * (`#8fc6f2`) rather than this (`src/ui/styles.css`, the `html, body` rule).
- * That is a real half-step at launch, and `npm run cap:preflight` warns about it
- * in one line every time it runs. Closing it is one value moving to meet the
- * other — whichever way, re-run `node scripts/app-art.mjs` and
- * `npm run cap:sync` afterwards so the splash edges follow.
+ * Four surfaces read this one value, and none of them may be edited alone:
+ *   - `scripts/app-art.mjs` parses it out of this file for the splash edges;
+ *   - `ios/App/App/Base.lproj/LaunchScreen.storyboard` paints it behind Splash;
+ *   - the `cap:assets` line in package.json passes it as the splash background;
+ *   - `public/manifest.webmanifest` (generated) and the `theme-color` meta in
+ *     `index.html` (hand-kept) carry it for the browser.
+ * After changing it: `node scripts/app-art.mjs`, `npm run cap:assets`,
+ * `npm run cap:sync`.
  */
-const APP_BACKGROUND = '#bfe4f5';
+const APP_BACKGROUND = '#8fc6f2';
 
 /** Matches the splash fade in `src/device/shell.ts`; short, because the web
  * build is already drawing by the time it starts. */

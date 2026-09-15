@@ -77,6 +77,21 @@ import type { Scene } from '@babylonjs/core/scene';
  * still hold: `matrixData` is the `Float32Array` `createMatrixBuffer` handed
  * over, and asking for an update pushes it back to the GPU. It runs once per
  * restore over a few dozen meshes, which is nothing beside the frame after it.
+ *
+ * ## Why `matrix` is the whole list
+ *
+ * Nothing here is hand-kept: it walks `scene.meshes`, so a pool added tomorrow
+ * is covered the day it is added. What it re-uploads is the `matrix` buffer and
+ * nothing else, and that is complete because of an invariant the pools already
+ * keep — every pool with a *custom* thin-instance buffer (`spriteRect`,
+ * `glyphTint`, `quadScroll`, `decalInner`,
+ * `bakedVertexAnimationSettingsInstanced`) rebuilds and re-uploads it on every
+ * frame it draws, so a lost one is back before anyone sees it. Only the
+ * matrices of the pools written *once*, at a level load, have nobody to put
+ * them back. A future pool that writes a custom buffer once and then leaves it
+ * would break that invariant, and would have to be re-uploaded here — Babylon
+ * offers no way to enumerate a mesh's user buffers, so it would be a call
+ * beside this one rather than a loop.
  */
 export function reuploadThinInstances(scene: Scene): number {
   let touched = 0;

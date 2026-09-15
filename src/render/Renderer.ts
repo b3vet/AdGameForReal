@@ -160,6 +160,17 @@ export class Renderer {
     this.rig = context.rig;
     this.views = context.views;
 
+    // `dispose` may have run while `bootScene` was still awaiting — a page torn
+    // down mid-boot, which is what the probes and the dev harnesses do. It found
+    // every field above still null and so took nothing down. Now that they are
+    // filled in, do it properly: otherwise a live engine, a live scene and the
+    // two canvas listeners below outlive the renderer nobody is holding.
+    if (this.disposed) {
+      this.disposed = false;
+      this.dispose();
+      return;
+    }
+
     // Before the warm-up rather than after it: a context lost during the boot
     // pass is exactly the case a phone under memory pressure produces, and an
     // unwatched loss there is a black screen with no way back.

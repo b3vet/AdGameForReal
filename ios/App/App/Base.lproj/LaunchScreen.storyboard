@@ -15,8 +15,8 @@
                     <imageView key="view" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Splash" id="snD-IY-ifK">
                         <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                         <autoresizingMask key="autoresizingMask"/>
-                        <!-- #bfe4f5: the same daylight sky as APP_BACKGROUND in capacitor.config.ts and the html/body rule in src/ui/styles.css, so a splash image that does not exactly fill the screen still cannot flash white (light mode) or black (dark). -->
-                        <color key="backgroundColor" red="0.74901960784313726" green="0.89411764705882357" blue="0.96078431372549022" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <!-- #8fc6f2 (--c-sky-mid): the same daylight sky as APP_BACKGROUND in capacitor.config.ts and the html/body rule in src/ui/styles.css, so a splash image that does not exactly fill the screen still cannot flash white (light mode) or black (dark). -->
+                        <color key="backgroundColor" red="0.5607843137254902" green="0.77647058823529413" blue="0.94901960784313721" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                     </imageView>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>

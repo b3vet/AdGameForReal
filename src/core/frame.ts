@@ -22,6 +22,7 @@ import type { RunState, SimEvent } from '@/sim';
 import type { Overlay } from '@/ui';
 import type { DebugStats } from '@/ui';
 
+import { FrameStatsCollector } from './frameStats';
 import type { Juice } from './juice';
 import { PhysicsEventQueue } from './physicsEvents';
 import type { RunSession } from './session';
@@ -61,29 +62,6 @@ export const NO_EVENTS: readonly SimEvent[] = [];
 /** Wall clock for the debug panel's cost readouts; never used by the sim. */
 const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
 
-/**
- * Chrome's non-standard heap readout, where it exists. Absent on Safari — which
- * is the device that matters — so this is a desktop tripwire for the allocation
- * audit, not a measurement anyone ships on.
- */
-interface HeapMemory {
-  usedJSHeapSize: number;
-}
-
-function heapBytes(): number {
-  if (typeof performance === 'undefined') return 0;
-  const memory = (performance as unknown as { memory?: HeapMemory }).memory;
-  return memory === undefined ? 0 : memory.usedJSHeapSize;
-}
-
-/**
- * A drop of this many bytes between two frames reads as a collection rather
- * than as noise. A steady-state frame that allocates nothing never triggers
- * one; a frame that allocates a few kilobytes triggers one every few seconds,
- * which is the signal the audit is looking for.
- */
-const HEAP_DROP_BYTES = 256 * 1024;
-
 /** What the loop needs from the app. Everything here is read once a frame. */
 export interface FrameHost {
   readonly renderer: Renderer;
@@ -108,43 +86,31 @@ export interface FrameHost {
 }
 
 export class FrameDriver {
-  /** Re-used every frame: the debug panel reads it, nothing else may write it. */
-  readonly stats: DebugStats = {
-    simMs: 0,
-    renderMs: 0,
-    physicsMs: 0,
-    drawCalls: 0,
-    drawCallsPeak: 0,
-    streamBodies: 0,
-    chargers: 0,
-    labels: 0,
-    labelGlyphs: 0,
-    labelsDropped: 0,
-    walls: 0,
-    wisp: false,
-    sparks: 0,
-    burning: 0,
-    timeScale: 1,
-    ragdolls: 0,
-    shards: 0,
-    physicsBodies: 0,
-    physicsQuality: 0,
-    qualityRung: 0,
-    qualityP95: 0,
-    qualityReason: 'start',
-    heapMb: 0,
-    heapDrops: 0,
-    pixelRatio: 0,
-    devicePixelRatio: 1,
-    audio: 'off',
-    audioClips: 0,
-  };
+  /** The debug panel's numbers, gathered off each frame (`./frameStats.ts`). */
+  private readonly collector = new FrameStatsCollector();
+
+  /** The struct the panel holds for the life of the app. */
+  get stats(): DebugStats {
+    return this.collector.stats;
+  }
 
   private readonly host: FrameHost;
   private readonly physicsEvents = new PhysicsEventQueue();
 
   private rafId: number | null = null;
-  private lastFrameTime = 0;
+
+  /**
+   * The timestamp of the last frame, or null when the next one is the first
+   * after a start.
+   *
+   * Null rather than 0, because 0 is a timestamp a frame can genuinely be
+   * handed: `requestAnimationFrame` counts from `document.timeline`'s origin,
+   * and the first callback of a freshly created document can arrive at exactly
+   * zero. With 0 as the sentinel that frame reports no time, sets the sentinel
+   * again, and makes the frame *after* it report no time either — two sim steps
+   * of nothing where one was meant.
+   */
+  private lastFrameTime: number | null = null;
 
   /**
    * The app is in the background (`src/device/lifecycle.ts`).
@@ -152,13 +118,22 @@ export class FrameDriver {
    * Separate from "the loop is stopped", because the two have different owners
    * and must not undo each other: `stop`/`start` is the smoke test holding a
    * frame still while it photographs it, and this is the phone being taken
-   * away. While it is set, `start` does nothing at all — so a run that ends, a
-   * level that loads or a screenshot that finishes *behind* a locked screen
-   * cannot quietly bring the loop back with the app still off screen.
+   * away. While it is set, `start` asks for no frame at all — so a run that
+   * ends, a level that loads or a screenshot that finishes *behind* a locked
+   * screen cannot quietly bring the loop back with the app still off screen. It
+   * is remembered, not lost (`runningWhenSuspended`), and acted on by `resume`.
    */
   private suspended = false;
 
-  /** Whether `pause` interrupted a running loop, so `resume` knows what to undo. */
+  /**
+   * Whether the loop should be running once the app comes back.
+   *
+   * Set by `pause` from what it interrupted, and then kept up to date by
+   * `start` and `stop` for as long as the app is away: those two are the app
+   * saying what it wants, and it goes on saying it behind a lock screen. A run
+   * that ends and a level that loads both call `start`, and without this the
+   * player would come back to a level that had been loaded onto a stopped loop.
+   */
   private runningWhenSuspended = false;
 
   /**
@@ -177,10 +152,6 @@ export class FrameDriver {
    */
   private peakChargers = 0;
 
-  /** Heap watch, `?debug` only: the last sample and how often it has fallen. */
-  private lastHeap = 0;
-  private heapDrops = 0;
-
   /**
    * Whether the title screen's frame still needs drawing. The preview session
    * never ticks, so once the camera has eased into place the scene is identical
@@ -196,15 +167,25 @@ export class FrameDriver {
   }
 
   start(): void {
-    if (this.rafId !== null || this.suspended) return;
-    // Zero, not `performance.now()`: the first frame after a start reports a
-    // delta of nothing, which is what makes a pause drop the time spent away
-    // instead of handing it to the sim in one lump (see `pause`).
-    this.lastFrameTime = 0;
+    if (this.suspended) {
+      // Not dropped: remembered. The app wants to be drawing, and `resume` is
+      // the thing that is allowed to act on that.
+      this.runningWhenSuspended = true;
+      return;
+    }
+    if (this.rafId !== null) return;
+    // Cleared, not set to a clock reading: the first frame after a start
+    // reports a delta of nothing, which is what makes a pause drop the time
+    // spent away instead of handing it to the sim in one lump (see `pause`).
+    this.lastFrameTime = null;
     this.rafId = requestAnimationFrame(this.frame);
   }
 
   stop(): void {
+    // Cleared before the early return, so a `stop` that arrives while the app
+    // is in the background is honoured: the smoke test holding a frame still
+    // has said it does not want the loop, and `resume` must not hand it back.
+    this.runningWhenSuspended = false;
     if (this.rafId === null) return;
     cancelAnimationFrame(this.rafId);
     this.rafId = null;
@@ -226,21 +207,26 @@ export class FrameDriver {
    */
   pause(): void {
     if (this.suspended) return;
+    const running = this.rafId !== null;
     this.suspended = true;
-    this.runningWhenSuspended = this.rafId !== null;
+    // After `stop`, which clears the flag on purpose (see it).
     this.stop();
+    this.runningWhenSuspended = running;
   }
 
   /**
-   * Back on screen. Restarts the loop with a fresh clock, but only if it was
-   * running when the phone was taken away — a page backgrounded while the
-   * smoke test is holding a frame still comes back held.
+   * Back on screen. Restarts the loop with a fresh clock, but only if the app
+   * wants it running — which is what it was doing when the phone was taken
+   * away, as amended by any `start` or `stop` that arrived while it was gone. A
+   * page backgrounded while the smoke test is holding a frame still comes back
+   * held; a level loaded behind a lock screen comes back drawing.
    */
   resume(): void {
     if (!this.suspended) return;
     this.suspended = false;
-    if (this.runningWhenSuspended) this.start();
+    const wanted = this.runningWhenSuspended;
     this.runningWhenSuspended = false;
+    if (wanted) this.start();
   }
 
   /** True while the app is in the background. The debug report prints it. */
@@ -279,7 +265,8 @@ export class FrameDriver {
     // result-screen countdown. Clamping the countdown would make it frame-rate
     // dependent — a beat of 0.8 s takes sixteen seconds at one frame a second,
     // which is what a software rasteriser gives a big crowd.
-    const realDt = this.lastFrameTime === 0 ? 0 : (time - this.lastFrameTime) / 1000;
+    const previous = this.lastFrameTime;
+    const realDt = previous === null ? 0 : (time - previous) / 1000;
     const frameDt = Math.min(MAX_FRAME_DT, realDt);
     this.lastFrameTime = time;
 
@@ -401,57 +388,12 @@ export class FrameDriver {
     this.host.physics()?.unitFell(x, z, vx, vz);
   };
 
+  /** Hands the frame's numbers to the panel; see `./frameStats.ts`. */
   private updateDebug(
     state: Readonly<RunState> | null,
     events: readonly SimEvent[],
     dt: number,
   ): void {
-    const host = this.host;
-    if (!host.overlay.debugEnabled) return;
-
-    this.trackHeap();
-
-    const physics = host.physics();
-    this.stats.drawCalls = host.renderer.drawCalls;
-    this.stats.drawCallsPeak = this.peak;
-    this.stats.streamBodies = host.renderer.streamBodies;
-    this.stats.chargers = host.renderer.chargerBodies;
-    const labels = host.renderer.labelStats;
-    this.stats.labels = labels.labels;
-    this.stats.labelGlyphs = labels.glyphs;
-    this.stats.labelsDropped = labels.dropped;
-    const features = host.renderer.featureStats;
-    this.stats.walls = features.walls;
-    this.stats.wisp = features.wisp;
-    this.stats.sparks = features.sparks;
-    this.stats.burning = features.burning;
-    this.stats.ragdolls = physics?.stats.ragdolls ?? 0;
-    this.stats.shards = physics?.stats.shards ?? 0;
-    this.stats.physicsBodies = physics?.stats.bodies ?? 0;
-    this.stats.physicsQuality = physics?.stats.quality ?? 0;
-    this.stats.pixelRatio = host.renderer.pixelRatio;
-    this.stats.devicePixelRatio = host.renderer.devicePixelRatio;
-    this.stats.audio = host.audio.muted ? `${host.audio.status} muted` : host.audio.status;
-    this.stats.audioClips = host.audio.loadedCount;
-
-    host.overlay.updateDebug(state, events, dt, host.phaseName(), this.stats);
-  }
-
-  /**
-   * The allocation tripwire.
-   *
-   * Read it as a *relative* number, not an absolute one: the panel it reports
-   * to composes a dozen strings of its own every frame, so `?debug` is itself
-   * the loudest allocator on screen and the count is never zero. What it is
-   * for is comparison — the same level, the same length of play, before and
-   * after a change. A count that jumps is a new allocation in the loop.
-   */
-  private trackHeap(): void {
-    const bytes = heapBytes();
-    if (bytes === 0) return;
-    if (this.lastHeap - bytes > HEAP_DROP_BYTES) this.heapDrops++;
-    this.lastHeap = bytes;
-    this.stats.heapMb = bytes / (1024 * 1024);
-    this.stats.heapDrops = this.heapDrops;
+    this.collector.publish(this.host, state, events, dt, this.peak);
   }
 }

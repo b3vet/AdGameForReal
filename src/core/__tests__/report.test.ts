@@ -271,4 +271,42 @@ describe('collectReport', () => {
       `build      ${BUILD_KIND}`,
     );
   });
+
+  /**
+   * Every source is a getter into live state — the renderer's ratios read the
+   * engine, the save's headline reads the purse — and the report is read at the
+   * two worst moments there are: a boot that has not finished, and a phone that
+   * has just lost its GPU context. A source that throws must cost its own
+   * section a dash and nothing else, because this is the button a broken build
+   * is reported *with*.
+   */
+  it('prints a dash for a source that throws, and keeps the rest', () => {
+    const boom = (): never => {
+      throw new Error('read before init()');
+    };
+
+    const report = collectReport(
+      {
+        platform: () => 'ios',
+        gl: boom,
+        quality: boom,
+        save: boom,
+      },
+      null,
+      null,
+    );
+
+    expect(report).toContain(`arcane-rush ${APP_VERSION} report`);
+    // The section that could be read is still there...
+    expect(report).toContain('platform   ios');
+    expect(report).toContain('build      native');
+    // ...and the three that could not are a dash apiece, not an exception.
+    expect(report).toContain('gpu        -');
+    // An empty section is its heading and one dash row (`pushSection`), so the
+    // owner can tell "nothing to report" from "this build is older than the
+    // section".
+    expect(report).toContain(`\nquality\n${' '.repeat(13)}-`);
+    expect(report).toContain(`\nsave\n${' '.repeat(13)}-`);
+    expect(report).not.toContain('undefined');
+  });
 });

@@ -115,7 +115,8 @@ monsters: 748 KB of models, 138 KB of baked animation, 97 KB of props and
 159 KB of textures, 1.14 MB in all; Milestone 7 Phase E's softer ice grade then
 gave 33 KB of that back). Milestone 9 added the 944 KB of `assets/app/`, which
 is the only part of `assets/` a *player* never downloads — it is the app icon
-and the launch splash, read by the store tooling and never by the game.
+and the launch splash, read by the store tooling and never by the game, and the
+one subtree `vite.config.ts` keeps out of `dist/`.
 
 ### Models — `assets/models/`
 
@@ -401,12 +402,14 @@ the sizes, the safe zones and the prompts.
 | `app/splash.png` | 198 KB | ours, `scripts/app-art.mjs` | The launch screen, 2732×2732. Hat and Cinzel wordmark inside the centre 40 percent (a phone crops the square to a portrait strip); the top and bottom edges are exactly `APP_BACKGROUND` from `capacitor.config.ts`, so the launch does not flash. |
 | `app/splash-dark.png` | 202 KB | ours, `scripts/app-art.mjs` | The same composition on a night sky, for dark mode. |
 
-These do **not** reach the single-file builds: nothing in `assets.json` names
-them and no stylesheet references them, so `scripts/inline-assets.mjs` never
-sees them and a playtest link carries none of their bytes. They do land in
-`dist/assets/app/` — `vite.config.ts` copies the whole of `assets/` — and from
-there into the app bundle, which is 944 KB of an install that already carries
-them as native catalogue entries.
+These reach **no build at all**. Nothing in `assets.json` names them and no
+stylesheet references them, so `scripts/inline-assets.mjs` never sees them and a
+playtest link carries none of their bytes; and `vite.config.ts`, which otherwise
+copies the whole of `assets/` into `dist/`, skips this one subtree by name. It
+used to copy it, which put 944 KB into every build and from there into the app
+bundle — an install that already carries the same pictures as native catalogue
+entries. The generator reads them from the repository and the phone reads the
+catalogues; a `dist/` is never in between.
 
 The web set (`public/favicon.svg`, `apple-touch-icon.png`, `icon-192.png`,
 `icon-512.png`, `manifest.webmanifest`, 111 KB in all) is written by the same

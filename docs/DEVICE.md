@@ -196,11 +196,13 @@ report.
    minutes cost? Press **Copy report** again at the end of the ten minutes and
    send that one too — the two together are the story.
 4. **Launch.** How long from tapping the icon to the Academy, and how the
-   colour behaves on the way. The launch storyboard, the native background and
-   the splash art are one colour, `#bfe4f5`; the page under the canvas is
-   currently `#8fc6f2`, a slightly deeper blue, so one faint step is expected
-   and is on our list. A *hard* flash — white, black, or the old dark indigo — is a
-   bug: tell us what colour and at what moment.
+   colour behaves on the way. The launch storyboard, the native background, the
+   splash art and the page under the canvas are all one colour, `#8fc6f2`, so
+   launch should be one flat daylight blue until the road appears on it. Any
+   colour change at all before the game draws — a step to a paler or deeper
+   blue, a white or black frame — is a bug: tell us what colour and at what
+   moment. (The exception is a phone in **dark mode**, which paints one pale
+   frame before the dark splash; that one is known.)
 5. **Pause and resume.** Switch away mid-run — swipe to the home screen, or pull
    down Notification Centre — wait a few seconds, and come back. The run should
    be exactly where you left it, not further on, and the sound should come back
@@ -232,7 +234,7 @@ when it stops.
 | White or black screen, no game | The web build was not copied. `npm run cap:sync`, then Run again. |
 | The old version of the game | The same: `cap:sync` before every Run. |
 | The splash sits there | The game failed to boot; the splash gives up after 8 seconds on its own. Use the Web Inspector below to read the error. |
-| A hard colour flash before the game — white, black, or dark indigo | The native shell colour and the page background have drifted apart. `npm run cap:preflight` says so in one line, and it is one constant either side. Tell us; it is not yours to fix. |
+| A colour flash before the game — white, black, or a different blue | The native shell colour and the page background have drifted apart. `npm run cap:preflight` says so in one line, and it is one constant either side. Tell us; it is not yours to fix. |
 | "Untrusted Developer" | Section 2, the step after Run. |
 | "The app could not be launched" after a week | Free-account expiry. Press Run in Xcode again. |
 | Signing errors in red | Signing & Capabilities: team not set, or a bundle id someone else already used. Section 4. |
@@ -340,6 +342,8 @@ Reference. Nothing here needs doing.
 | `src/core/report.ts` | The text behind **Copy report**. |
 | `scripts/cap-preflight.mjs` | `npm run cap:preflight`, with `cap-native.mjs` (the checks that read the two projects) and `cap-facts.mjs` (the paths and the PNG and plist readers) behind it. |
 | `scripts/cap-version.mjs` | `npm run cap:version`. |
+| `scripts/probe-safe-area.mjs` | `npm run device:probe:safe-area` — builds, then walks every screen at 390x844 with a 47 px notch and a 34 px home indicator simulated, and fails if anything readable or pressable is inside either band. Nothing you need to run; it is how section 6's answer is checked here. |
+| `scripts/probe-context-loss.mjs` | `npm run device:probe:context-loss` — builds, then takes the WebGL context away mid-run and gives it back, and fails unless the run survives and the next frame is drawn. The iOS behaviour section 5 asks about, reproduced on this side. |
 
 ### The iOS settings that are already set
 

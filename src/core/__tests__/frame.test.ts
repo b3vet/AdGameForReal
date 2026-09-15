@@ -194,6 +194,65 @@ describe('FrameDriver across a pause', () => {
     expect(pending).toBeNull();
   });
 
+  /**
+   * A level that loads behind a lock screen.
+   *
+   * `App` stops the loop while it builds a level and starts it again when the
+   * level is up (`loadLevel`), and neither half knows where the phone is. If
+   * the `start` on the way out is simply dropped because the app happens to be
+   * away, the player comes back to a level that was loaded onto a loop nobody
+   * ever restarted — a still picture with a working HUD over it.
+   */
+  it('remembers a start that arrives while the app is away', () => {
+    const driver = new FrameDriver(fakeHost(fakeSession()));
+    driver.start();
+    step(1000);
+    driver.stop();
+
+    driver.pause();
+    // The level load: stop, build, start — all of it off screen.
+    driver.stop();
+    driver.start();
+    expect(pending).toBeNull();
+
+    driver.resume();
+    expect(pending).not.toBeNull();
+    step(2000);
+    expect(ticks).toHaveLength(2);
+  });
+
+  /**
+   * And the other way round: the smoke test holds a frame still with `stop`,
+   * and a page backgrounded after that has to come back held. The `stop` is the
+   * last thing said, so it is the thing that counts.
+   */
+  it('honours a stop that arrives while the app is away', () => {
+    const driver = new FrameDriver(fakeHost(fakeSession()));
+    driver.start();
+    step(1000);
+
+    driver.pause();
+    driver.stop();
+    driver.resume();
+    expect(pending).toBeNull();
+  });
+
+  /**
+   * The first frame of a page can carry timestamp zero — `requestAnimationFrame`
+   * counts from the document timeline's origin — and exactly one frame may
+   * report no time for it. A second one would be a sim step quietly skipped.
+   */
+  it('reports no time once when the first frame lands at timestamp zero', () => {
+    const driver = new FrameDriver(fakeHost(fakeSession()));
+    driver.start();
+
+    step(0);
+    expect(ticks).toEqual([0]);
+
+    step(16.67);
+    expect(ticks.at(-1)).toBeCloseTo(0.01667, 5);
+  });
+
   /** Both are idempotent: iOS delivers the same transition more than once. */
   it('takes a second pause and a second resume', () => {
     const driver = new FrameDriver(fakeHost(fakeSession()));

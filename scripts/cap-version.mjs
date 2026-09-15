@@ -40,12 +40,22 @@ export const APP_GRADLE = path.join(ROOT, 'android', 'app', 'build.gradle');
 export async function expectedVersion(buildOverride) {
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
   const version = String(pkg.version);
-  const parts = version.split('.').map((n) => Number.parseInt(n, 10));
-  if (parts.length !== 3 || parts.some((n) => !Number.isInteger(n) || n < 0)) {
+  // Anchored, so `0.9.0-rc.1` is rejected rather than parsed as 0.9.0 and
+  // stamped as a build that has already been uploaded.
+  const parts = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (parts === null) {
     throw new Error(`package.json version "${version}" is not major.minor.patch`);
   }
-  const [major, minor, patch] = parts;
-  // Two digits each for minor and patch: 0.9.0 -> 900, 1.0.0 -> 10000.
+  const [major, minor, patch] = parts.slice(1).map((n) => Number.parseInt(n, 10));
+  // Two digits each for minor and patch: 0.9.0 -> 900, 1.0.0 -> 10000. Which is
+  // also the ceiling: 0.9.100 and 0.10.0 would both derive 1000, and a build
+  // number that repeats is an upload App Store Connect refuses.
+  if (minor > 99 || patch > 99) {
+    throw new Error(
+      `package.json version "${version}" has a minor or patch above 99; the derived ` +
+        'build number would collide with another version (see the note at the top of this file)',
+    );
+  }
   const derived = major * 10000 + minor * 100 + patch;
   return { version, build: buildOverride ?? derived };
 }

@@ -23,6 +23,9 @@ const MIME = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // `public/manifest.webmanifest`: served as octet-stream the browser rejects
+  // it and logs an error, which the smoke counts as a failure (`openPage`).
+  '.webmanifest': 'application/manifest+json',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',

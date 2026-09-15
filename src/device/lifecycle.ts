@@ -45,6 +45,17 @@ let current: AppVisibility = 'foreground';
 let watching = false;
 /** The native subscription, kept only so `stopWatchingAppVisibility` can undo it. */
 let pluginHandle: PluginListenerHandle | null = null;
+/**
+ * Bumped by every `stopWatchingAppVisibility`.
+ *
+ * The native subscription is a promise across the bridge, and a stop can land
+ * inside the round trip: `App.dispose` is one `await` away from `App.start` in
+ * a page that boots and is torn down again (the probes do exactly that). The
+ * handle would then arrive *after* the stop that was meant to remove it, be
+ * stored, and never be removed — and the next `watchAppVisibility` would
+ * subscribe a second time on top of it.
+ */
+let generation = 0;
 /** Takes the `visibilitychange` listener off in one call, as `Overlay` does. */
 let webListeners: AbortController | null = null;
 
@@ -68,6 +79,7 @@ export function watchAppVisibility(onChange: VisibilityListener): void {
   watching = true;
 
   if (isNative()) {
+    const epoch = generation;
     // A promise across the native bridge. Failing to attach costs a game that
     // keeps ticking behind a lock screen — annoying, never broken — so it is
     // logged and dropped rather than thrown into a boot.
@@ -75,6 +87,11 @@ export function watchAppVisibility(onChange: VisibilityListener): void {
       deliver(isActive ? 'foreground' : 'background');
     })
       .then((handle) => {
+        // A stop landed while the bridge was answering; see `generation`.
+        if (epoch !== generation) {
+          void handle.remove().catch(() => undefined);
+          return;
+        }
         pluginHandle = handle;
       })
       .catch((error: unknown) => {
@@ -99,6 +116,7 @@ export function stopWatchingAppVisibility(): void {
   listener = null;
   current = 'foreground';
   watching = false;
+  generation++;
   webListeners?.abort();
   webListeners = null;
   const handle = pluginHandle;

@@ -29,6 +29,7 @@ import {
   armShotPlan,
   takeShots,
 } from './smoke-run-plan.mjs';
+import { checkVisibilityPause } from './smoke-visibility.mjs';
 
 /**
  * How long the Academy's own screens are given to paint before they are
@@ -173,6 +174,21 @@ async function playRun(page, url, run, failures, outDir, say) {
   }
 
   await armShotPlan(page, run.shots, BOSS_SHOT_HP_SHARE, STAFF_SHOT_RANGE, PACE);
+
+  // The clock is taken down to real time *before* the run starts, for the
+  // pause-and-resume check below. At this run's own turbo one frame is three
+  // seconds of sim and thirty metres of road, so a check that waited for the
+  // run to be on the road and only then slowed down would already be measuring
+  // a different part of the level. Handed back the moment the check is done.
+  const heldTurbo =
+    run.visibilityPause === true
+      ? await page.evaluate(() => {
+          const before = globalThis.__arcane?.app.turbo ?? 1;
+          globalThis.__arcane?.setTurbo(1);
+          return before;
+        })
+      : null;
+
   if (run.autoStart === true) {
     // `?endless=1` put the run on the road itself, as soon as Havok landed
     // (`App.start`), so there is no picker to walk through — and nothing to
@@ -188,6 +204,12 @@ async function playRun(page, url, run, failures, outDir, say) {
     await sleep(300);
     await page.click('#play-button');
   }
+
+  // Definition of done 3: the sim clock stops while the page is away and starts
+  // again when it comes back. On a run with no shot list, at the very start of
+  // it (`./smoke-runs.mjs` says which run and why).
+  if (heldTurbo !== null) await checkVisibilityPause(page, run, failures, say, heldTurbo);
+
   const startedAt = Date.now();
 
   await takeShots(page, run, shot, written, failures);
