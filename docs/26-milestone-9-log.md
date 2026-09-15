@@ -11,3 +11,72 @@
 - Plan written as document 25. Wave one launched with four agents: A art
   pipeline, B native shell polish, C project and guides, D device report.
   Wave two is one integration-and-review agent.
+
+## 2026-09-15 — Wave one: art, shell, projects and guides, device report (verified and committed)
+
+- A, art: `scripts/app-art.mjs` renders one palette-driven hat mark
+  through headless Chromium into the icon (1024, no alpha), the Android
+  adaptive layers, and the light and dark splashes (2732, subject inside
+  the centre 40 percent, edges exactly the shell colour read out of
+  capacitor.config.ts so launch cannot flash); every PNG under 400 KB
+  and byte-identical across runs; `public/` gains the favicon, apple
+  touch icon, manifest icons and a web manifest linked from index.html;
+  the single-file builds carry none of it. `docs/ART.md` holds the files,
+  sizes, safe zones, the regenerate command and the three prompts for
+  the owner's generator (icon, splash, dark variant).
+- B, shell: safe-area padding moved from the overlay root to each
+  screen's column so the result sheet and the Academy paint under the
+  notch and home indicator (probed at 390×844 with 47 and 34 px insets:
+  every box inside the limits, the sheet covering the glass); touch
+  rules on html, body and the canvas; `dvh` beside every `vh` that sizes
+  layout; portrait lock at boot; pause and resume from the app-state
+  plugin on native and visibility on the web through one lifecycle
+  signal, the frame loop refusing to start while suspended and reporting
+  a zero-length frame on the way back (a four-minute gap runs no steps),
+  audio suspended and the save flushed on background; WebGL context loss
+  answered with preventDefault, the rebuild hung off Babylon's own
+  restore observable, and the one thing Babylon does not restore, thin
+  instance buffers written once, re-uploaded from the arrays we hold (19
+  meshes on level 1; without it the roadside came back as specks at the
+  origin); haptics for gate pass, shield break, a charger setting off, a
+  meteor, a boss charge, the wipe, and mission or tier awards, throttled
+  to one impact per 120 ms. Probe scripts for the insets and the context
+  loss live in `scripts/`.
+- C, projects: both native projects generated here without Xcode or
+  Android Studio and committed with build products ignored; Info.plist
+  portrait only, full screen, status bar hidden, encryption declared,
+  arm64, version and build from package.json (0.9.0 → 900, derived and
+  idempotent); a privacy manifest declaring no tracking, no collected
+  data, and the required-reason APIs WebKit's storage and Capacitor's
+  asset handler use (user defaults, file timestamps, disk space); the
+  launch storyboard painted the shell colour; iPhone only (a judgement
+  call, one line to revert); plugins pinned (app, screen-orientation,
+  android, the assets generator); scripts `cap:assets`, `cap:version`,
+  `cap:sync`, `cap:open` and their Android twins; the preflight split
+  into three files and checking art sizes from PNG headers, plist keys,
+  the manifest's registration, the version stamp, plugin registration
+  and freshness, and printing the owner's next command; `docs/DEVICE.md`
+  rewritten for clone → install → drop art → assets → sync → open →
+  sign → run; `docs/STORE.md` drafted with counted fields and two
+  decisions marked for the owner. Finding: the shell colour `#bfe4f5`
+  has drifted from the page background `#8fc6f2`, so launch steps
+  through two blues; a preflight warning names it.
+- D, report: a six-section plain-text device report (device, quality,
+  capture, run, save) behind "Copy report" with a WebView fallback and
+  "Show report" for a screenshot; `?perf` boots the highest reached
+  level up to 20 with the bot, waits for warm-up, captures 30 s and shows
+  and copies the report; version and build kind stamped into every
+  bundle; the capture block now reads median and p95; the debug panel had
+  been painting under the screens since the Academy shipped (fixed with
+  one positioning rule). Rung 0 at native pixel ratio 3 confirmed by
+  reading; the ladder's numbers are code constants rather than data.
+- Verified on the quiet box: typecheck 0 errors, lint clean, build OK,
+  preflight PASS, 575 tests. Under four concurrent suites on four cores
+  the same suite had timed out in nine files; nothing under the sim
+  changed, and each named file passed alone.
+- Carried to wave two: the shell colour (decision: move the shell to the
+  page's colour and regenerate the art and catalogues); a test timeout
+  sized for the campaign sweeps; the smoke on the quiet tree; the
+  duplicate art copy in `dist/assets/app`; the smoke server's manifest
+  MIME; the orphan splash files the generator recreates; probe script
+  lines in package.json; `Renderer.ts` 489, `frame.ts` 457, `App.ts` 454.
