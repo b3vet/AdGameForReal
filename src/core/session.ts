@@ -72,7 +72,7 @@ export class RunSession {
 
   /**
    * `seed` overrides the level's own (`levels.json`) and the query's, which is
-   * what makes "same road again" a thing the result sheet can offer: the run's
+   * what makes Retry on the result sheet walk the road just walked: the run's
    * seed comes back off `RunSession.seed` and goes straight into the next one.
    *
    * `endless` walks the road with no level number and no boss instead (D52).
@@ -169,7 +169,8 @@ export class RunSession {
 
     for (const event of events) {
       if (event.type === 'bossActivated') {
-        this.seen.add(this.bossId);
+        // The body that woke: the endless road stands both bosses (document 28).
+        this.seen.add(this.run.state.boss?.variant ?? this.bossId);
         continue;
       }
       if (event.type !== 'enemyActivated') continue;
@@ -193,7 +194,7 @@ export class RunSession {
    *
    * `dt` is unclamped wall-clock time: the beat is a beat, not a frame count.
    * The unlock happens as soon as the run is won rather than when the player
-   * taps Ascend, so closing the tab on the result screen keeps the progress.
+   * taps Continue, so closing the tab on the result screen keeps the progress.
    */
   advanceEnding(dt: number, levelIndex: number): boolean {
     if (this.countdown === null) {

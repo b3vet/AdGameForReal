@@ -42,6 +42,10 @@ Index:
 | `25-milestone-9-plan.md` | Milestone 9 plan, approved: device and store readiness — art pipeline with placeholders and prompts, native shell polish, committed projects and guides, device report |
 | `26-milestone-9-log.md` | Milestone 9 process log (append-only) |
 | `27-device-playtest-fixes.md` | After Milestone 9: the stretched scene in the iOS app, a pause button and menu, and sound clips that failed to load in the app (logged in 26) |
+| `28-playtest-round-2.md` | The owner's second round of device notes: result sheet, coin chip, button feel, picker, Endless difficulty, one gate per row, performance (logged in 26) |
+| `29-playtest-round-3.md` | The owner's third round: a Rime Fiend charge that hurts nobody, a picker that forgets the newest level, and the request for a level-design plan (logged in 26) |
+| `30-level-design-plan-draft.md` | Level design and difficulty draft plan v1: beats instead of dice, measured on the bots; awaiting the owner's answers |
+| `31-level-design-plan.md` | Level design and difficulty plan, approved: authored beat scripts for levels 1 to 40, losses on the road, milestone spikes, three phases |
 | `DEVICE.md` | Clone-to-phone guide for the owner's Mac: install, art, assets, sync, Xcode, signing, what to report, TestFlight, Android |
 | `ART.md` | App icon and splash: files, sizes, safe zones, the regenerate command, and the prompts for the owner's image generator |
 | `STORE.md` | App Store metadata draft and submission checklist |

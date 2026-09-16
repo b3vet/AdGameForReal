@@ -155,7 +155,7 @@ try {
   check('debug panel', await page.evaluate(measure, ['#debug-panel']));
 
   // --- Academy home ---------------------------------------------------------
-  const HOME = ['#academy-coins', '#academy-streak', '#title-wordmark', '#mute-title', '.card', '#academy-missions'];
+  const HOME = ['#coin-chip', '#academy-streak', '#title-wordmark', '#mute-title', '.card', '#academy-missions'];
   check('academy home', await page.evaluate(measure, HOME));
   await shoot(page, 'safe-area-title');
 
@@ -181,7 +181,7 @@ try {
   // in `rooms.css`), so a row below the fold is reachable rather than lost.
   check(
     'yard',
-    await page.evaluate(measure, ['#room-title', '#room-coins', '#room-back', '.room__panel']),
+    await page.evaluate(measure, ['#room-title', '#coin-chip', '#room-back', '.room__panel']),
   );
   await shoot(page, 'safe-area-room');
 
@@ -200,11 +200,11 @@ try {
   check(
     'result sheet',
     await page.evaluate(measure, [
+      '#coin-chip',
       '#result-ribbon',
       '#result-title',
       '#retry-button',
-      '#levels-button',
-      '#replay-button',
+      '#home-button',
     ]),
   );
   // The sheet is a full-bleed background: it has to reach the glass, not stop

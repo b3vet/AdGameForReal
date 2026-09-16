@@ -30,8 +30,34 @@ export function createCrowdState(capacity: number): CrowdState {
 }
 
 /**
+ * A box on the road: `x ± halfWidth` across, `zLo` to `zHi` along. It is the
+ * ground the Rime Fiend's body covers on one step of its charge
+ * (`bossCharge.ts`), and a unit inside it is a unit under the body.
+ */
+export interface Swath {
+  x: number;
+  halfWidth: number;
+  zLo: number;
+  zHi: number;
+}
+
+function inside(crowd: CrowdState, i: number, swath: Readonly<Swath>): boolean {
+  const z = crowd.z[i] ?? 0;
+  return Math.abs((crowd.x[i] ?? 0) - swath.x) <= swath.halfWidth && z >= swath.zLo && z <= swath.zHi;
+}
+
+/** Live units of any group standing inside `swath`. */
+export function countWithin(crowd: CrowdState, swath: Readonly<Swath>): number {
+  let count = 0;
+  for (let i = 0; i < crowd.capacity; i++) {
+    if ((crowd.alive[i] ?? 0) !== 0 && inside(crowd, i, swath)) count++;
+  }
+  return count;
+}
+
+/**
  * The live unit standing nearest `(x, z)`, or -1 if there is none. `group` is
- * -1 for "anyone".
+ * -1 for "anyone"; `within`, when given, rules out everyone outside it.
  *
  * A linear scan, deliberately: it is asked once per unit a blow takes — a
  * handful a second at the arena, a few dozen when a block lands — and a scan
@@ -39,12 +65,19 @@ export function createCrowdState(capacity: number): CrowdState {
  * every step for the sake of it. Ties go to the lower index, so the answer does
  * not depend on the order the crowd happens to be laid out in.
  */
-export function nearestLive(crowd: CrowdState, group: number, x: number, z: number): number {
+export function nearestLive(
+  crowd: CrowdState,
+  group: number,
+  x: number,
+  z: number,
+  within?: Readonly<Swath>,
+): number {
   let best = -1;
   let bestGap = Infinity;
   for (let i = 0; i < crowd.capacity; i++) {
     if ((crowd.alive[i] ?? 0) === 0) continue;
     if (group >= 0 && (crowd.group[i] ?? 0) !== group) continue;
+    if (within !== undefined && !inside(crowd, i, within)) continue;
     const dx = (crowd.x[i] ?? 0) - x;
     const dz = (crowd.z[i] ?? 0) - z;
     const gap = dx * dx + dz * dz;

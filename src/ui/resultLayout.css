@@ -1,0 +1,131 @@
+/*
+ * The result sheet's column: the verdict and the numbers as one group, the
+ * scroll it falls back on, and the three ways out at its foot (docs/28).
+ *
+ * Split out of `./result.css` when the owner's second device round reworked
+ * both halves and that file passed the size rule (CLAUDE.md): that file is the
+ * pieces, this one is where they stand. Imported by `./result.ts` after it.
+ */
+
+/*
+ * The column: the chip's band above it (`./coinChip.css`), the verdict, the
+ * numbers, and the way out on the foot above the home indicator.
+ *
+ * The owner's second device round found this sheet scrolling on a 440x956
+ * phone with a band of empty parchment at the top (docs/28). So the column
+ * starts under the chip rather than a twentieth of the screen further down,
+ * the gaps between its groups follow the screen's height, and the foot is the
+ * safe area plus a small margin. `vh` first, for the browser that has no `dvh`.
+ */
+.screen--result > .screen__inner {
+  gap: clamp(0.5rem, 1.8vh, 1.1rem);
+  gap: clamp(0.5rem, 1.8dvh, 1.1rem);
+  padding-bottom: calc(var(--safe-bottom) + clamp(0.6rem, 2.4vh, 1.5rem));
+  padding-bottom: calc(var(--safe-bottom) + clamp(0.6rem, 2.4dvh, 1.5rem));
+}
+
+/*
+ * The verdict and the numbers are one group, centred in the room above the
+ * buttons: the auto margins split what is left over above the ribbon and under
+ * the last line. On a full sheet there is nothing left and the group starts
+ * under the chip; on a win with one bonus line a 956-px phone no longer shows
+ * a band of empty parchment between the title and the coins.
+ */
+.screen--result .screen__top {
+  margin-top: auto;
+}
+
+/*
+ * The middle still scrolls when it has more to say than the screen has room
+ * for, as a last resort rather than the plan.
+ *
+ * Measured on Milestone 8's fullest sheet at 390x844 (Phase E): a streak line,
+ * a mission tick, the level's best walk and the next unlock together pushed the
+ * way out about thirty pixels past the bottom edge. `html` and `body` are
+ * `overflow: hidden` (`./styles.css`), so a button there is not merely off
+ * screen, it is unreachable. The sheet is sized to fit a phone upright now; a
+ * phone on its side, or a run that crosses a handful of bestiary rungs at once
+ * on a 667-px screen, still has this to fall back on.
+ *
+ * The middle is what gives: the verdict at the top and the way out at the
+ * bottom are the two things that must never move, and a sheet that fits is
+ * unchanged — a flex item only scrolls once there is nowhere left to grow.
+ * `touch-action` is named because the page itself is `touch-action: none` (the
+ * canvas handles every gesture), so a scroll container inside it has to ask for
+ * the one axis it wants.
+ */
+.screen--result .screen__middle {
+  gap: 0.5rem;
+  margin-top: 0;
+  margin-bottom: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+/*
+ * ...and nothing inside it gives instead.
+ *
+ * A flex column shrinks whichever child *can* shrink before it overflows, and
+ * the one child here that can is the bonus list — it has an `overflow` of its
+ * own (`./resultMeta.css`), so its automatic minimum is zero. Without this the
+ * sheet fitted by squeezing the streak and the mission tick to a sliver. Every
+ * row keeps its size and the column scrolls instead, so what goes past the
+ * bottom edge is the last thing on the sheet rather than the middle of it.
+ */
+.screen--result .screen__middle > * {
+  flex-shrink: 0;
+}
+
+/*
+ * Three buttons (docs/28): Continue, Retry and Home. Continue — the thing a
+ * player who has just cleared a level came here to press — has a line of its
+ * own; Retry and Home share the one under it, and have it to themselves when
+ * there is nothing to continue to. A grid rather than a wrapping row, so the
+ * two ghosts are always the same width whatever their words.
+ */
+.screen--result .screen__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 0.5rem;
+  row-gap: 0.35rem;
+}
+
+.screen--result .screen__actions > .button:not(.button--ghost) {
+  grid-column: 1 / -1;
+}
+
+/*
+ * Landscape: the buttons share one row (Milestone 8 review).
+ *
+ * Two rows are about 130 px of a 320 px phone on its side, and the middle of
+ * the sheet was squeezed to nothing by the Milestone 8 layout's three — the
+ * run's own numbers were not on it at all. So in landscape the row is wider
+ * than the phone-shaped column and each button asks for less of it: every
+ * visible button across one row, however many there are.
+ */
+@media (orientation: landscape) {
+  .screen--result .screen__actions {
+    grid-template-columns: none;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    width: min(100%, 30rem);
+  }
+
+  .screen--result .screen__actions > .button:not(.button--ghost) {
+    grid-column: auto;
+  }
+
+  /*
+   * And a smaller plate on each. The button face is `clamp(1.05rem, 4.6vw,
+   * 1.25rem)`, which on a 568 px-wide screen is the 1.25rem ceiling, and a
+   * 320 px screen cannot afford that on a row of buttons; what it buys back is
+   * the sheet's middle.
+   */
+  .screen--result .screen__actions > .button {
+    padding: 0.35rem 0.5rem 0.25rem;
+    font-size: clamp(0.85rem, 2.2vw, 1rem);
+  }
+}

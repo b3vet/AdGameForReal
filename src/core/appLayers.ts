@@ -75,6 +75,7 @@ export interface QualityDeps {
  */
 export function applyQuality(rung: QualityRung, deps: QualityDeps): void {
   deps.renderer.setMaxPixelRatio(rung.pixelRatio);
+  deps.renderer.setCrowdDetail(rung.crowdDetail);
   const physics = deps.physics;
   if (physics === null) return;
 

@@ -218,6 +218,16 @@ export class EventVoices {
             clips.playCue(event.kind === 'boss' ? audioMix.charge.boss : audioMix.charge.charger);
           }
           break;
+        case 'chargeHit':
+          // The Rime Fiend's charge landing on the column (document 29) is a
+          // three-metre body arriving on ice, which is what its stomp already
+          // says: the same two voices, on the stomp's throttle so a landing and
+          // a stomp can never pile up into one roar.
+          if (!clips.throttled('stomp', audioMix.minIntervalMs.stomp)) {
+            clips.playCue(audioMix.bossStomp.rime);
+            clips.playCue(audioMix.bossStomp.rimeIce);
+          }
+          break;
         case 'shieldBreak':
           if (!clips.throttled('shieldBreak', audioMix.minIntervalMs.shieldBreak)) {
             clips.playCue(audioMix.shieldBreak);

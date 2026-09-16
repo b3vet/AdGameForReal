@@ -250,7 +250,8 @@ export class App implements FrameHost, AppCommands {
     // because every wait in it is a wait for something the loop does — and
     // after Havok, so the run it measures is the run the phone actually plays.
     if (this.options.perf) {
-      const host = perfHost(this, this.options.level, () => this.disposed);
+      const level = this.options.level ?? this.menus.playLevel;
+      const host = perfHost(this, level, () => this.disposed);
       void physics.then(() => runPerfCapture(host));
     }
   }
@@ -290,14 +291,12 @@ export class App implements FrameHost, AppCommands {
     this.runs.startEndless(seed);
   }
 
-  /** "Same road again": the road just walked, on the seed it was walked on. */
-  replayRun(): void {
-    this.runs.replay();
-  }
-
-  /** Again: the road just walked, re-rolled — the endless one included. */
+  /**
+   * Retry on the result sheet: the road just walked, on the seed it was walked
+   * on — the endless one included (`RunStage.replay`).
+   */
   retryRun(): void {
-    this.runs.retry();
+    this.runs.replay();
   }
 
   stop(): void {
@@ -396,9 +395,9 @@ export class App implements FrameHost, AppCommands {
     this.menus.selectLevel(level);
   }
 
-  /** Ascend: the level after the one just cleared. */
+  /** Continue on the result sheet: the level after the one just cleared. */
   nextLevel(): void {
-    this.startLevel(this.options.level + 1);
+    this.runs.next();
   }
 
   /** Re-paints whatever menu is up after a debug injection. */
@@ -406,9 +405,9 @@ export class App implements FrameHost, AppCommands {
     if (this.currentPhase === 'title') this.menus.repaint();
   }
 
-  /** Play: the road the picker is pointed at, from the top (`./appRun.ts`). */
+  /** Play: the level the picker names, read at the tap (docs/29). */
   startRun(): void {
-    this.runs.start();
+    this.runs.startLevel(this.menus.playLevel);
   }
 
   // --- Wiring --------------------------------------------------------------

@@ -683,7 +683,7 @@
     "streamDensity": 0.82,
     "boss": {
       "hp": 18500,
-      "bite": 0.45
+      "bite": 0.38
     },
     "gateValues": {
       "mul": {
@@ -1295,7 +1295,7 @@
     "streamPressure": 0.93,
     "streamDensity": 0.88,
     "boss": {
-      "hp": 31400,
+      "hp": 31100,
       "bite": 0.81,
       "kind": "rime"
     },

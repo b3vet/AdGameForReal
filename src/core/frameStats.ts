@@ -13,12 +13,19 @@
  *   - the struct is allocated once and written in place. The panel holds the
  *     same object for the life of the app, and nothing on the frame path may
  *     allocate (CLAUDE.md);
- *   - it is only filled while `?debug` is up. Reading Babylon's counters and
- *     the physics layer's stats is a dozen property reads and a `performance`
- *     call, which is nothing next to a frame but is not free either, and no
- *     shipping build has a panel to spend it on.
+ *   - it is only filled while `?debug` is up — except the frame's cost split
+ *     and the two peaks, which are a few subtractions and a comparison and are
+ *     written every frame (`costs`, `trackPeaks`). Reading Babylon's counters
+ *     and the physics layer's stats is a dozen property reads, which is
+ *     nothing next to a frame but is not free either, and no shipping build
+ *     has a panel to spend it on.
+ *
+ * The draw-call and charger peaks moved here from the loop in the performance
+ * pass after the second device playtest (docs/28, note 5), with the split of
+ * the render into the views and `scene.render`: all of it is measurement.
  */
 
+import type { Renderer } from '@/render/Renderer';
 import type { RunState, SimEvent } from '@/sim';
 import type { DebugStats } from '@/ui';
 
@@ -53,6 +60,15 @@ export class FrameStatsCollector {
     simMs: 0,
     renderMs: 0,
     physicsMs: 0,
+    viewsMs: 0,
+    drawMs: 0,
+    frameMs: 0,
+    rafCallbacks: 0,
+    activeMeshes: 0,
+    triangles: 0,
+    crowdWhole: 0,
+    crowdSmall: 0,
+    crowdCulled: 0,
     drawCalls: 0,
     drawCallsPeak: 0,
     streamBodies: 0,
@@ -94,27 +110,113 @@ export class FrameStatsCollector {
   private heapDrops = 0;
 
   /**
+   * Worst draw-call count since the last `resetPeaks`. Tracked on every frame
+   * rather than only under `?debug`, because it is what the smoke test reads to
+   * hold the frame budget (plan, "Performance"): one counter read per frame.
+   */
+  private peakDraws = 0;
+  /**
+   * Worst charger count since the last `resetPeaks`, tracked exactly like the
+   * draw calls beside it and for one reader: the Frostfell smoke run asserts a
+   * charger was actually drawn (D49). A single-frame sample cannot say that — a
+   * charger is on the road for two seconds of a ninety-second run — and a peak
+   * can, for one getter read per frame.
+   */
+  private peakChargers = 0;
+
+  get peakDrawCalls(): number {
+    return this.peakDraws;
+  }
+
+  get peakChargerBodies(): number {
+    return this.peakChargers;
+  }
+
+  resetPeaks(): void {
+    this.peakDraws = 0;
+    this.peakChargers = 0;
+  }
+
+  /** Every drawn frame: the two peaks above. */
+  trackPeaks(renderer: Renderer): void {
+    const draws = renderer.drawCalls;
+    if (draws > this.peakDraws) this.peakDraws = draws;
+    const chargers = renderer.chargerBodies;
+    if (chargers > this.peakChargers) this.peakChargers = chargers;
+  }
+
+  /**
+   * Where a run frame's time went, from the loop's four clock readings and the
+   * renderer's own `scene.render` time. Written every frame, panel or not, like
+   * the three it has always written: it is four subtractions.
+   *
+   * The render is split in two because the two halves answer different
+   * questions on a phone: `viewsMs` is ours (the views writing buffers), and
+   * `drawMs` is Babylon's walk of the scene and the GL calls it makes.
+   */
+  costs(
+    simStart: number,
+    renderStart: number,
+    physicsStart: number,
+    physicsEnd: number,
+    drawMs: number,
+  ): void {
+    const stats = this.stats;
+    stats.simMs = renderStart - simStart;
+    stats.renderMs = physicsStart - renderStart;
+    stats.drawMs = Math.min(drawMs, stats.renderMs);
+    stats.viewsMs = stats.renderMs - stats.drawMs;
+    stats.physicsMs = physicsEnd - physicsStart;
+  }
+
+  /**
+   * The whole frame callback up to the panel, and the display's callbacks so
+   * far — drawn or skipped by the pacer — which is how a capture learns the
+   * display's own rate (`src/ui/capture.ts`).
+   */
+  frameDone(frameMs: number, rafCallbacks: number): void {
+    this.stats.frameMs = frameMs;
+    this.stats.rafCallbacks = rafCallbacks;
+  }
+
+  /** A frame with no run on the road: nothing was measured. */
+  idle(rafCallbacks: number): void {
+    const stats = this.stats;
+    stats.simMs = 0;
+    stats.renderMs = 0;
+    stats.viewsMs = 0;
+    stats.drawMs = 0;
+    stats.physicsMs = 0;
+    stats.frameMs = 0;
+    stats.rafCallbacks = rafCallbacks;
+  }
+
+  /**
    * Fills the struct off the live app and hands it to the panel.
    *
    * `dt` is the frame's own length and is 0 for an intermediate `?turbo` chunk,
    * which drew no frame and so must not move the panel's frame-rate average.
-   * `drawPeak` is the loop's own counter rather than a reading, because the
-   * worst frame since the last reset is not something the scene remembers.
    */
   publish(
     host: FrameHost,
     state: Readonly<RunState> | null,
     events: readonly SimEvent[],
     dt: number,
-    drawPeak: number,
   ): void {
     if (!host.overlay.debugEnabled) return;
 
     this.trackHeap();
 
     const physics = host.physics();
-    this.stats.drawCalls = host.renderer.drawCalls;
-    this.stats.drawCallsPeak = drawPeak;
+    const renderer = host.renderer;
+    this.stats.drawCalls = renderer.drawCalls;
+    this.stats.drawCallsPeak = this.peakDraws;
+    this.stats.activeMeshes = renderer.activeMeshes;
+    this.stats.triangles = renderer.triangles;
+    const crowd = renderer.crowdStats;
+    this.stats.crowdWhole = crowd.whole;
+    this.stats.crowdSmall = crowd.small;
+    this.stats.crowdCulled = crowd.culled;
     this.stats.streamBodies = host.renderer.streamBodies;
     this.stats.chargers = host.renderer.chargerBodies;
     const labels = host.renderer.labelStats;

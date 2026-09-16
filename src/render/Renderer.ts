@@ -8,12 +8,13 @@
  *     them out and `update` only writes transforms. Nothing is created per frame.
  *
  * This file is the object the app holds: its lifecycle and its public API.
- * What it used to carry inline is five files around it — `./views.ts` is every
+ * What it used to carry inline is six files around it — `./views.ts` is every
  * view, `./rendererBoot.ts` the order they are built in, `./rendererLevel.ts`
  * what a level load and a biome switch do to them (and which biome that is),
  * `./rendererFrame.ts` the order they are written in every frame,
- * `./rendererQuality.ts` the dials the degrade ladder turns, and
- * `./rendererStats.ts` what is measured off the result.
+ * `./rendererQuality.ts` the dials the degrade ladder turns,
+ * `./rendererSurface.ts` the canvas, its pixel ratio and the GPU context under
+ * the scene, and `./rendererStats.ts` what is measured off the result.
  *
  * Deep imports (`@babylonjs/core/...`) rather than the package root, so the
  * single-file artifact build stays small.
@@ -23,28 +24,31 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Scene } from '@babylonjs/core/scene';
 
-import { clearReadout } from './backingFit';
 import type { CanvasReadout } from './backingFit';
-import { BackingStore } from './backingStore';
 import { biomeOfLevel } from './biome';
 import type { CameraRig } from './camera';
-import { reuploadThinInstances, watchContextLoss } from './contextLoss';
+import { setCrowdDetailScale } from './characters';
+import { reuploadThinInstances } from './contextLoss';
 import { SceneTints } from './cosmetics';
 import { PreviewBackdrop } from './preview';
 import { bootScene } from './rendererBoot';
 import { drawFrame, drawSquadOnly, poseStressCamera, timeScaleOf } from './rendererFrame';
 import {
+  activeMeshesOf,
   chargerBodiesOf,
+  crowdStatsOf,
   drawCallsOf,
   featureStatsOf,
   labelStatsOf,
   pixelRatioOf,
   screenPixelRatio,
   streamBodiesOf,
+  trianglesOf,
 } from './rendererStats';
-import type { FeatureReadout, LabelReadout } from './rendererStats';
+import type { CrowdDrawStats, FeatureReadout, LabelReadout } from './rendererStats';
 import { RoadBiomes, applySpan, loadLevelInto } from './rendererLevel';
-import { DEFAULT_MAX_PIXEL_RATIO, clampPhysicsQuality, effectivePixelRatio } from './rendererQuality';
+import { DEFAULT_MAX_PIXEL_RATIO, clampPhysicsQuality } from './rendererQuality';
+import { RendererSurface } from './rendererSurface';
 import type { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
@@ -84,20 +88,13 @@ export interface RendererOptions {
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly preserveDrawingBuffer: boolean;
-  private maxPixelRatio: number;
+  /** The canvas, its backing store and the GPU context (`./rendererSurface.ts`). */
+  private readonly surface: RendererSurface;
   /** Which biome the scene is painted in, and where the road changes it
    *  (`./rendererLevel.ts`). */
   private readonly biomes: RoadBiomes;
 
   private engine: Engine | null = null;
-  /**
-   * Keeps the backing store the canvas's shape (`./backingStore.ts`). Set the
-   * moment the engine exists, well before the other fields below: the boot is
-   * exactly the window it has to cover.
-   */
-  private backing: BackingStore | null = null;
-  /** Told when the backing store changes size; see `setResizeListener`. */
-  private resizeListener: (() => void) | null = null;
   private sceneRef: Scene | null = null;
   private rig: CameraRig | null = null;
   private instrumentation: SceneInstrumentation | null = null;
@@ -125,25 +122,29 @@ export class Renderer {
     this.setBiome(id, false);
   };
 
+  /** See `drawMs`. */
+  private lastDrawMs = 0;
+
   /** Warm-up bookkeeping; see `warmUp` and `./warmup.ts`. */
   private readonly warmUpTracker = new WarmUpTracker();
 
   private disposed = false;
 
-  /** True between `webglcontextlost` and the end of Babylon's rebuild. */
-  private contextLost = false;
-  /** Takes the two listeners and the observer off again; see `./contextLoss.ts`. */
-  private unwatchContext: (() => void) | null = null;
-  private readonly onContextLost: (() => void) | undefined;
-  private readonly onContextRestored: (() => void) | undefined;
-
   constructor(canvas: HTMLCanvasElement, options: RendererOptions = {}) {
     this.canvas = canvas;
-    this.maxPixelRatio = Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO);
     this.preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
     this.biomes = new RoadBiomes(options.biome);
-    this.onContextLost = options.onContextLost;
-    this.onContextRestored = options.onContextRestored;
+    this.surface = new RendererSurface(
+      canvas,
+      Math.max(1, options.maxPixelRatio ?? DEFAULT_MAX_PIXEL_RATIO),
+      {
+        onContextLost: options.onContextLost,
+        onContextRestored: options.onContextRestored,
+        restoreScene: () => {
+          this.restoreScene();
+        },
+      },
+    );
   }
 
   async init(): Promise<void> {
@@ -154,19 +155,13 @@ export class Renderer {
     const context = await bootScene({
       canvas: this.canvas,
       preserveDrawingBuffer: this.preserveDrawingBuffer,
-      effectivePixelRatio: effectivePixelRatio(this.maxPixelRatio),
+      effectivePixelRatio: this.surface.effectiveRatio,
       biome,
       shake: (strength, seconds) => {
         this.shake(strength, seconds);
       },
       onEngine: (engine) => {
-        if (this.disposed) return;
-        this.backing = new BackingStore(this.canvas, engine, {
-          wantedRatio: () => effectivePixelRatio(this.maxPixelRatio),
-          onResized: () => {
-            this.resizeListener?.();
-          },
-        });
+        this.surface.attachEngine(engine);
       },
     });
     this.engine = context.engine;
@@ -186,17 +181,8 @@ export class Renderer {
       return;
     }
 
-    // Before the warm-up rather than after it: a context lost during the boot
-    // pass is exactly the case a phone under memory pressure produces, and an
-    // unwatched loss there is a black screen with no way back.
-    this.unwatchContext = watchContextLoss(this.canvas, context.engine, {
-      onLost: () => {
-        this.handleContextLost();
-      },
-      onRestored: () => {
-        this.handleContextRestored();
-      },
-    });
+    // Before the warm-up; see `RendererSurface.watchContext`.
+    this.surface.watchContext(context.engine);
 
     // Last: every pooled material compiled while the title screen is still
     // being put together, so the first bolt, the first gate and the first
@@ -209,7 +195,7 @@ export class Renderer {
    * that window, and `update` draws nothing even if something asks.
    */
   get isContextLost(): boolean {
-    return this.contextLost;
+    return this.surface.isContextLost;
   }
 
   /** Whether the frame loop can stop asking for frames (`./preview.ts`). */
@@ -270,6 +256,23 @@ export class Renderer {
 
   get featureStats(): FeatureReadout {
     return featureStatsOf(this.views);
+  }
+
+  /** Milliseconds the last `scene.render` took; the rest of `update` is ours. */
+  get drawMs(): number {
+    return this.lastDrawMs;
+  }
+
+  get activeMeshes(): number {
+    return activeMeshesOf(this.sceneRef);
+  }
+
+  get triangles(): number {
+    return trianglesOf(this.sceneRef);
+  }
+
+  get crowdStats(): Readonly<CrowdDrawStats> {
+    return crowdStatsOf(this.sceneRef);
   }
 
   /** Shader programs compiled so far, and what the warm-up pass did (`./warmup.ts`). */
@@ -355,12 +358,18 @@ export class Renderer {
    * feels first. `src/core/quality.ts` owns when this is called.
    */
   setMaxPixelRatio(ratio: number): void {
-    const clamped = Math.max(1, ratio);
-    if (clamped === this.maxPixelRatio) return;
-    this.maxPixelRatio = clamped;
-    this.applyPixelRatio();
+    this.surface.setMaxPixelRatio(ratio);
   }
 
+  /**
+   * How many crowd units are drawn from the full mesh rather than the
+   * low-polygon copy, as a multiple of the tuned budget (`quality.json`): 0
+   * draws every unit from the copy and 1000 every unit whole
+   * (`./characters/crowdDraw.ts`). For the ladder and the probes.
+   */
+  setCrowdDetail(scale: number): void {
+    setCrowdDetailScale(scale);
+  }
 
   /**
    * Repaints the scene in a biome (D49), and answers whether it had to; the
@@ -413,7 +422,7 @@ export class Renderer {
    * order itself is `./rendererFrame.ts`.
    */
   update(state: RunState, events: readonly SimEvent[], dt: number): void {
-    if (this.disposed || this.contextLost) return;
+    if (this.disposed || this.surface.isContextLost) return;
     const scene = this.sceneRef;
     const views = this.views;
     const rig = this.rig;
@@ -421,7 +430,7 @@ export class Renderer {
 
     // Before anything reads the render size: the labels size themselves off it
     // inside `drawFrame`, and the camera takes its aspect from it.
-    this.backing?.check();
+    this.surface.check();
     const timeScale = timeScaleOf(this.engine, dt);
     drawFrame({ views, rig, preview: this.preview, timeScale }, state, events, dt);
 
@@ -430,7 +439,9 @@ export class Renderer {
     // biome this frame is painted in (D52).
     applySpan(this.biomes.spans, rig.camera.position.z, false, this.setSpanBiome, scene, views);
 
+    const drawStart = performance.now();
     scene.render();
+    this.lastDrawMs = performance.now() - drawStart;
   }
 
   /**
@@ -445,43 +456,26 @@ export class Renderer {
     this.views?.events.apply(events);
   }
 
-  /**
-   * Looks at the canvas again and fits the backing store to it. The store
-   * already does this on its own for every change it can see; this is for a
-   * caller that knows of one it cannot.
-   */
+  /** Refits the backing store to the canvas; see `RendererSurface.resize`. */
   resize(): void {
-    this.backing?.refit();
+    this.surface.resize();
   }
 
-  /**
-   * Who to tell when the backing store changes size, which clears the canvas:
-   * the frame loop, which may be holding a settled frame it would otherwise
-   * never draw again. One listener; `null` takes it off.
-   */
+  /** Who to tell when the backing store changes size; see `RendererSurface`. */
   setResizeListener(listener: (() => void) | null): void {
-    this.resizeListener = listener;
+    this.surface.setResizeListener(listener);
   }
 
-  /**
-   * The canvas's CSS box, backing store and drawing buffer, and whether they
-   * are one shape, written into `out`; zeroes before `init`. The debug panel's
-   * per-frame copy, so nothing is allocated.
-   */
+  /** The canvas three ways, into `out`; see `RendererSurface.readCanvas`. */
   readCanvas(out: CanvasReadout): void {
-    if (this.backing === null) clearReadout(out);
-    else this.backing.readout(out);
+    this.surface.readCanvas(out);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
 
-    this.unwatchContext?.();
-    this.unwatchContext = null;
-    this.backing?.dispose();
-    this.backing = null;
-    this.resizeListener = null;
+    this.surface.dispose();
     this.views?.dispose();
     this.views = null;
     this.rig?.dispose();
@@ -495,41 +489,15 @@ export class Renderer {
     this.engine = null;
   }
 
-  /** The backing store, at the screen's ratio under our cap
-   *  (`./rendererQuality.ts`) and under whatever the browser will allocate
-   *  (`./backingStore.ts`). */
-  private applyPixelRatio(): void {
-    this.backing?.fit();
-  }
-
   /**
-   * The GPU took the context away. Every `update` from here is dropped, and the
-   * app is told so it can stop asking for frames; the scene graph, the pools
-   * and the run itself are untouched, because none of them is on the GPU.
+   * After a context restore (`RendererSurface`), the two things Babylon's
+   * rebuild leaves to us: every thin-instance matrix buffer written once at a
+   * level load, which it cannot restore at all; and the materials, which it
+   * would otherwise recompile one at a time inside the player's first frames
+   * back.
    */
-  private handleContextLost(): void {
-    if (this.contextLost) return;
-    this.contextLost = true;
-    // Not `console.error`: a lost context is a normal thing for iOS to do, and
-    // an error would fail the smoke test (`scripts/smoke-browser.mjs`).
-    console.warn('[arcane-rush] WebGL context lost; frames are paused');
-    this.onContextLost?.();
-  }
-
-  /**
-   * Babylon has rebuilt its side (`./contextLoss.ts` lists what that covers).
-   * Three things are left, and they are ours: the backing store's size, which
-   * is set through the engine rather than the canvas (and which the shell may
-   * have changed while the context was gone); every thin-instance
-   * matrix buffer written once at a level load, which Babylon cannot restore at
-   * all; and the materials, which it would otherwise recompile one at a time
-   * inside the player's first frames back.
-   */
-  private handleContextRestored(): void {
-    if (!this.contextLost || this.disposed) return;
-    this.contextLost = false;
-
-    this.backing?.refit();
+  private restoreScene(): void {
+    if (this.disposed) return;
     // The roadside, the arena walls and everything else whose matrices were
     // written once at a level load. Babylon cannot do this one; see
     // `reuploadThinInstances` for the measurement and the reason.
@@ -542,6 +510,5 @@ export class Renderer {
     // idempotent — a material that is already ready resolves on the first check
     // (`./warmup.ts`).
     void this.warmUp();
-    this.onContextRestored?.();
   }
 }

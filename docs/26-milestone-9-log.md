@@ -195,3 +195,70 @@ on a portrait app.
   three-digit count the level chip wraps and the sound button touches the
   staff badge (older than this change). The owner's new art and their
   Xcode signing changes are in the working tree and were not committed.
+
+## 2026-09-17 — Playtest rounds 2 and 3 (docs 28 to 31)
+
+- Round 2 (doc 28), twelve notes from the owner's phone, four agents with a
+  slot kept free.
+  - UI-1: the two replay buttons never walked different roads (campaign
+    levels have a fixed seed; Endless "Again" re-rolled to the seed "Same
+    road" pinned), so one Retry, with Continue and Home. No purse line, no
+    next-unlock row, no scrolling at 375×667, 390×844 and 440×956 (the
+    fullest sheet still scrolls its bonus list in landscape). One coin chip,
+    pinned top left under the safe area on every non-run screen. On the way:
+    the confetti canvas had been sizing the won sheet's grid on a landscape
+    phone. D61.
+  - UI-2: the kit button's press shrank its bottom border by 5 px and moved
+    the panel; the depth is now painted outside the box (measured 0 px of
+    movement for every control kind). Scroll bars hidden everywhere; every
+    radius square except the round buttons, held by a test. The picker leads
+    with a Play card; Endless is a quiet card locked until level 3. D62.
+  - SIM: the double gate was one path, 18 rows in 4,946 on the human bot:
+    stragglers cut off on the step the column crossed a row, placed behind
+    it, took a second gate. One gate per row now; level 19 and 34 retuned by
+    one number each to keep their boss-duration bands. Endless gets a boss
+    at the end of every span and steeper batches; the human bot on the
+    level-20 kit went from a 1,964 m median to 1,169 m (then 1,083 m with
+    round 3's charge), nine runs in ten ending between the second and fourth
+    boss. D63, D64.
+  - PERF: on the Mac's GPU at the phone's 1320×2868, about 70 percent of a
+    busy frame was the crowd's triangles (up to 4 M a frame), and resolution
+    steps barely moved it; Havok's step hid inside `scene.render`; a 120 Hz
+    display doubled the work. Crowd culling and a load-time low-polygon copy,
+    a 60 fps pacer, a leaner Havok step and a ladder that drops crowd detail
+    and then ratio 2.5 before 2: GPU time 31 to 41 percent lower in every
+    busy scene, frame JS 16 to 37 percent lower under a 4× CPU throttle. The
+    phone is the judge; the report now says where the time goes. D65, D66.
+    The Endless smoke run peaks at 54 draw calls (the mid-road boss and its
+    ragdolls); its ceiling is 56, the campaign's stays 52. D67.
+- Round 3 (doc 29), asked for while round 2 was being integrated.
+  - FIX-PICKER: one mutable level did three jobs, and only Continue moved it
+    forward, so Home after a clear reopened the picker on the old level. The
+    URL's level, the picker's level and the walked level now have one owner
+    each; 16 tests over every path. D68.
+  - FIX-CHARGE: the Rime Fiend's charge took 6 percent of the squad spread
+    along its whole path from its stand, 43 percent of those deaths before
+    the body reached the column, nothing extra at impact, and no lane check.
+    It now kills whoever is under its body when it lands, up to 7 percent,
+    after a 0.6 s lane commitment a thumb can answer; the landing has its own
+    ring, burst, shake, haptic and voice. Frostfell bands hold (clear 0.725).
+    D69.
+  - DESIGN (game-expert): 560 bot runs measured the owner's complaint: the
+    boss takes 74 to 81 percent of the human bot's losses, 62 to 67 percent
+    of threats cost greedy nothing, blocks wake 26 m out, 98 to 100 percent
+    of gate rows carry a curse greedy never takes, and threats land in the
+    best lane at chance. Draft plan: document 30. The owner answered its
+    questions with the recommended defaults on 2026-09-17; the approved plan
+    is document 31. D70.
+- Verified on the integrated tree: typecheck and lint clean, 754 tests (6
+  skipped), smoke PASS in 330 s (after D67), preflight PASS after
+  `cap:sync`, a Release simulator build (iPhone 17 Pro Max, iOS 26.3) on the
+  home, the picker opening on the newest level, a level 3 run to a lost
+  sheet with Retry and Home and the chip in place, and no app errors in the
+  log.
+- Left: the owner's device report after rounds 2 and 3; the bots never dodge
+  the Rime Fiend, so Frostfell bands describe a player who never does; old
+  Endless bests above about 1,600 m are now out of reach; `Run.ts` 500
+  lines, `crowd.ts` 406, `Renderer.ts` 514, `academy.ts` 403, `overlay.ts`
+  408, `boss.ts` 397 are at or past the file-size rule. Phase 1 of document
+  31 starts on this commit.

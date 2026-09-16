@@ -30,6 +30,7 @@
 import type { RunState } from '@/sim';
 import type { CaptureSummary } from '@/ui';
 
+import { captureRows } from './reportCapture';
 import { canvasRows, readCanvas } from './reportCanvas';
 import type { ReportCanvas } from './reportCanvas';
 
@@ -113,7 +114,11 @@ export function buildReport(input: ReportInput): string {
     canvasRows(input.canvas).map(([label, value]) => row(label, value)),
   );
   pushSection(lines, 'quality', qualityRows(input.quality));
-  pushSection(lines, 'capture', captureRows(input.capture));
+  pushSection(
+    lines,
+    'capture',
+    captureRows(input.capture).map(([label, value]) => row(label, value)),
+  );
   pushSection(lines, 'run', runRows(input.run));
   pushSection(lines, 'save', saveRows(input.save));
   return lines.join('\n');
@@ -162,31 +167,6 @@ function qualityRows(quality: ReportQuality | null): string[] {
     row('pixels', `${ratio(quality.pixelRatio)} of ${ratio(quality.devicePixelRatio)}`),
     row('physics', String(quality.physics)),
   ];
-}
-
-/**
- * The capture's numbers, not its pasteable block: the block is composed to fit
- * a 390 px panel and this one is read in a chat window, so the two are allowed
- * to disagree about width. The frame rate is quoted twice on purpose — the
- * median is what it feels like and the p95 is what it stumbles at, and a device
- * that holds 60 with a p95 of 41 is a different report from one that sits at 45.
- */
-function captureRows(capture: CaptureSummary | null): string[] {
-  if (capture === null) return [];
-  return [
-    row('window', `${capture.seconds.toFixed(1)}s, ${String(capture.frames)} frames`),
-    row('fps', `med ${ms(capture.fpsMedian, 0)} p95 ${ms(capture.fpsP95, 0)}`),
-    row('frame p95', `${ms(capture.frameMs.p95, 1)} ms (med ${ms(capture.frameMs.median, 1)})`),
-    row('>20ms', String(capture.over20)),
-    row('draws', `peak ${String(capture.drawPeak)}, rung peak ${String(capture.rungPeak)}`),
-    row('sim', spread(capture.sim)),
-    row('render', spread(capture.render)),
-    row('physics', spread(capture.physics)),
-  ];
-}
-
-function spread(value: { median: number; p95: number }): string {
-  return `med ${ms(value.median, 2)} p95 ${ms(value.p95, 2)} ms`;
 }
 
 /**

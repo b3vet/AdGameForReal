@@ -8,6 +8,16 @@
  * the Play card is pointed at, and the never-ticked run behind the cards that
  * makes the home screen a place rather than a menu.
  *
+ * The level is worked out each time the picker opens rather than remembered
+ * (docs/29): the newest level the player has unlocked, whichever way they came
+ * back — a clear left by Home, a loss, a walk through the rooms, a fresh boot.
+ * A chip tap points Play somewhere else for that visit to the picker only; the
+ * level a finished run replays or continues from is the run's own
+ * (`RunStage.level`), so nothing here has to follow the road. The home's
+ * backdrop follows the same rule, because it is the road Play is about to
+ * offer: after a clear it is the level that clear opened, and after level 20 it
+ * is already Frostfell.
+ *
  * The backdrop is the part worth reading twice. It is a real `RunSession` built
  * with the real `PlayerState`, so the crowd carries the chosen staff and the
  * wisp is beside it without anything here knowing what a staff or a wisp is
@@ -31,7 +41,11 @@ import { RunSession } from './session';
 export interface MenuDeps {
   renderer: Renderer;
   academy: AcademyController;
-  /** Shared with `App`: `level` is which level the Play card is pointed at. */
+  /**
+   * The URL's: the seed and the bot the backdrop is built with, and `level`,
+   * which pins the picker for the page's life when the URL names one (the
+   * smoke boots a fresh save on `?level=23` and walks it through Play).
+   */
   options: QueryOptions;
   physics: () => PhysicsLayer | null;
   /** The backdrop changed, so the frame loop owes it a draw (`./frame.ts`). */
@@ -45,6 +59,11 @@ export class MenuStage {
   private preview: RunSession | null = null;
   /** Which level the standing preview was built for; 0 when there is none. */
   private previewLevel = 0;
+  /**
+   * A chip tapped on the picker that is up, or null. Dropped whenever the
+   * picker opens and whenever the home does, so it lasts one visit.
+   */
+  private chosen: number | null = null;
 
   constructor(deps: MenuDeps) {
     this.deps = deps;
@@ -55,29 +74,37 @@ export class MenuStage {
     return this.preview;
   }
 
-  /** The Academy home, over a fresh backdrop of the selected level. */
-  showHome(): void {
-    this.loadPreview();
-    this.deps.academy.showHome(this.deps.options.level);
+  /**
+   * The level Play starts: the chip tapped on this visit to the picker, or
+   * else the newest level. Read when Play is tapped, never stored anywhere.
+   */
+  get playLevel(): number {
+    return this.chosen ?? this.newestLevel();
   }
 
-  /** The level picker, behind the home's Play card. */
-  showLevels(): void {
-    this.deps.academy.showLevels(this.deps.options.level);
+  /** The Academy home, over a fresh backdrop of the newest level. */
+  showHome(): void {
+    this.chosen = null;
+    // The save before the level: a won run writes its unlock straight to
+    // storage (`RunSession.advanceEnding`), and the newest level is read off
+    // the player that comes back.
+    this.deps.academy.reload();
+    this.loadPreview();
+    this.deps.academy.showHome(this.playLevel);
   }
 
   /** A card was tapped: `play` is the picker, the rest are rooms. */
   openRoom(room: RoomId): void {
-    if (room === 'play') this.showLevels();
+    if (room === 'play') this.openPicker();
     else this.deps.academy.openRoom(room);
   }
 
   selectLevel(level: number): void {
-    this.deps.options.level = clampLevel(level, levelCount);
+    this.chosen = clampLevel(level, levelCount);
     // The backdrop is the level the player is about to walk, so it changes
     // with the chip rather than only when Play is tapped.
     this.loadPreview();
-    this.showLevels();
+    this.deps.academy.showLevels(this.playLevel);
   }
 
   /**
@@ -86,8 +113,15 @@ export class MenuStage {
    * generated level and a new player means a new one.
    */
   repaint(): void {
-    if (this.deps.academy.menu === 'home') this.showHome();
-    else this.deps.academy.repaint(this.deps.options.level);
+    const menu = this.deps.academy.menu;
+    if (menu === 'home') {
+      this.showHome();
+      return;
+    }
+    // An injected unlock moves the newest level, and the picker's backdrop
+    // with it.
+    if (menu === 'levels') this.loadPreview();
+    this.deps.academy.repaint(this.playLevel);
   }
 
   /**
@@ -107,21 +141,38 @@ export class MenuStage {
     this.previewLevel = 0;
   }
 
+  /**
+   * The picker, opened from the home: on the newest level every time
+   * (docs/29), whatever chip the last visit left pressed.
+   */
+  private openPicker(): void {
+    this.chosen = null;
+    this.loadPreview();
+    this.deps.academy.showLevels(this.playLevel);
+  }
+
+  /**
+   * The level the picker opens on: the URL's, when it names one, or else the
+   * highest the player has unlocked, inside the campaign.
+   */
+  private newestLevel(): number {
+    return (
+      this.deps.options.level ?? clampLevel(this.deps.academy.player.unlockedLevel, levelCount)
+    );
+  }
+
   private loadPreview(): void {
     // Before the early return and before the frame is marked dirty: this is
     // what puts the chosen staff and the owned wisp on the backdrop and starts
     // the camera's drift (`src/render/preview.ts`). A standing preview that is
     // re-shown still needs it, because `end` cleared it.
     this.deps.renderer.setPreviewPlayer(this.deps.academy.player);
-    if (this.preview !== null && this.previewLevel === this.deps.options.level) return;
+    const level = this.playLevel;
+    if (this.preview !== null && this.previewLevel === level) return;
 
-    const preview = new RunSession(
-      this.deps.options.level,
-      this.deps.options,
-      this.deps.academy.player,
-    );
+    const preview = new RunSession(level, this.deps.options, this.deps.academy.player);
     this.preview = preview;
-    this.previewLevel = this.deps.options.level;
+    this.previewLevel = level;
     this.deps.renderer.loadLevel(preview.level);
     this.deps.physics()?.loadLevel(preview.level);
     this.deps.renderer.update(preview.state, NO_EVENTS, 0);

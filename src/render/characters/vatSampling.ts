@@ -61,6 +61,17 @@ import '@babylonjs/core/Shaders/ShadersInclude/bakedVertexAnimationDeclaration';
  * A `speed` of zero still holds one still pose, which is what an enemy block
  * that has not activated yet is drawn with: the phase collapses to the
  * instance's own offset and stops moving.
+ *
+ * Every influence after the first is read only when it carries weight. Babylon
+ * reads all four, and a bone read is four texture fetches, so a vertex cost
+ * sixteen fetches whatever it was bound to; most of a KayKit character is
+ * bound to one or two bones (the mage averages 1.94 of 4: 1,857 vertices on
+ * one bone, 947 on two, 1,400 on three, 100 on four), so the branch halves the
+ * fetches. It changes nothing on screen: a skipped term is a matrix times zero,
+ * and adding it was adding nothing. It is the small part of the crowd's cost
+ * (docs/28, note 5): on the Mac's GPU, one influence instead of four saved
+ * 0.6 ms of the stress scene's 7.5, and the large part was the crowd's
+ * on-screen triangles (`./simplify.ts`).
  */
 const BLOCK = `#ifdef BAKED_VERTEX_ANIMATION_TEXTURE
 {
@@ -71,25 +82,25 @@ const BLOCK = `#ifdef BAKED_VERTEX_ANIMATION_TEXTURE
 #endif
 float VATStartFrame=BVASNAME.x;float VATEndFrame=BVASNAME.y;float VATOffsetFrame=BVASNAME.z;float VATSpeed=BVASNAME.w;float VATSpan=max(1.0,VATEndFrame-VATStartFrame);float VATFrameNum=VATStartFrame+mod(bakedVertexAnimationTime*VATSpeed+VATOffsetFrame,VATSpan);mat4 VATInfluence;VATInfluence=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[0],VATFrameNum)*matricesWeights[0];
 #if NUM_BONE_INFLUENCERS>1
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[1],VATFrameNum)*matricesWeights[1];
+if(matricesWeights[1]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[1],VATFrameNum)*matricesWeights[1];}
 #endif
 #if NUM_BONE_INFLUENCERS>2
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[2],VATFrameNum)*matricesWeights[2];
+if(matricesWeights[2]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[2],VATFrameNum)*matricesWeights[2];}
 #endif
 #if NUM_BONE_INFLUENCERS>3
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[3],VATFrameNum)*matricesWeights[3];
+if(matricesWeights[3]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndices[3],VATFrameNum)*matricesWeights[3];}
 #endif
 #if NUM_BONE_INFLUENCERS>4
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[0],VATFrameNum)*matricesWeightsExtra[0];
+if(matricesWeightsExtra[0]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[0],VATFrameNum)*matricesWeightsExtra[0];}
 #endif
 #if NUM_BONE_INFLUENCERS>5
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[1],VATFrameNum)*matricesWeightsExtra[1];
+if(matricesWeightsExtra[1]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[1],VATFrameNum)*matricesWeightsExtra[1];}
 #endif
 #if NUM_BONE_INFLUENCERS>6
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[2],VATFrameNum)*matricesWeightsExtra[2];
+if(matricesWeightsExtra[2]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[2],VATFrameNum)*matricesWeightsExtra[2];}
 #endif
 #if NUM_BONE_INFLUENCERS>7
-VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[3],VATFrameNum)*matricesWeightsExtra[3];
+if(matricesWeightsExtra[3]>0.0){VATInfluence+=readMatrixFromRawSamplerVAT(bakedVertexAnimationTexture,matricesIndicesExtra[3],VATFrameNum)*matricesWeightsExtra[3];}
 #endif
 finalWorld=finalWorld*VATInfluence;}
 #endif

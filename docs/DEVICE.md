@@ -215,8 +215,10 @@ report.
 
 ### If you want the scripted performance run
 
-There is a 30-second scripted capture on level 20 that plays itself and shows
-the report at the end. It needs a query string, which an app has no address bar
+There is a scripted capture on level 20 that plays itself and shows the report
+at the end: it plays 35 seconds of the level first and then records 45, so the
+numbers are the thick of the road and the boss, about a minute and a half in
+all. It needs a query string, which an app has no address bar
 for, so it is a Web Inspector job (section 6): with the app running and the
 inspector attached, type this in the console and press return.
 

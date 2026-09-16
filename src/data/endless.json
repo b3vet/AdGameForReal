@@ -1,16 +1,16 @@
 {
   "seed": 90210,
   "rows": 160,
-  "rowsPerBiome": 12,
+  "rowsPerBiome": 18,
   "rowsPerVirtualLevel": 6,
   "milestoneEveryRows": 20,
   "staffGateEveryRows": 24,
   "startCount": 8,
   "dials": {
-    "peakTarget": { "start": 12, "growth": 1.055, "cap": 500 },
-    "hpScale": { "start": 0.25, "growth": 1.018, "cap": 4 },
-    "pressure": { "start": 0.45, "growth": 1.021, "cap": 8 },
-    "density": { "start": 0.8, "growth": 1.01, "cap": 3 }
+    "peakTarget": { "start": 12, "growth": 1.07, "cap": 500 },
+    "hpScale": { "start": 0.3, "growth": 1.022, "cap": 5 },
+    "pressure": { "start": 0.5, "growth": 1.022, "cap": 6 },
+    "density": { "start": 0.8, "growth": 1.012, "cap": 3 }
   },
   "mix": {
     "gateRows": 0.54,
@@ -20,6 +20,25 @@
     "chargerRows": 0.06,
     "shieldRows": 0.06,
     "wallRows": 0.06
+  },
+  "mixLate": {
+    "gateRows": 0.5,
+    "mixedRows": 0.22,
+    "hordeRows": 0.1,
+    "bruteRows": 0.12,
+    "chargerRows": 0.1,
+    "shieldRows": 0.12,
+    "wallRows": 0.06
+  },
+  "mixRampRows": 90,
+  "bosses": {
+    "firstRow": 16,
+    "everyRows": 18,
+    "breatherRows": 1,
+    "kinds": ["demon", "rime"],
+    "hp": { "start": 3500, "growth": 2.7, "cap": 5000000 },
+    "bite": { "start": 0.35, "growth": 1.12, "cap": 1 },
+    "holdSeconds": 3.2
   },
   "biomes": ["meadow", "frost"],
   "gateValues": {

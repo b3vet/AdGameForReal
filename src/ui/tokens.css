@@ -108,6 +108,18 @@
   --button-gold: url('/assets/ui/button-gold.svg');
   --button-stone: url('/assets/ui/button-stone.svg');
 
+  /* --- Corners ------------------------------------------------------------ */
+  /*
+   * Two shapes and no third (docs/28, note 12). The kit's frames are cut
+   * square, so every plate, pill, badge, tab and bar is too: a rounded body
+   * inside a square gold frame was the streak plaque's whole problem. `--round`
+   * is for what is round by nature, the sound and pause buttons and a dot or a
+   * colour swatch. `src/ui/__tests__/corners.test.ts` holds every stylesheet
+   * to these two names.
+   */
+  --corner: 0;
+  --round: 999px;
+
   /* --- Motion ------------------------------------------------------------- */
   --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
   --pop: cubic-bezier(0.2, 1.6, 0.4, 1);

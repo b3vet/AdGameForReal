@@ -241,25 +241,9 @@
       -->
       <section id="title-screen" class="screen screen--academy">
         <div class="screen__inner">
-          <div class="academy__bar">
-            <div id="academy-coins" class="coins frame frame--inset">
-              <span class="icon coins__icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24"><use href="#i-coin" /></svg
-              ></span>
-              <span id="academy-coin-value" class="coins__value">0</span>
-            </div>
-
-            <!-- The daily streak (D51). A plaque rather than a button: it is
-                 advanced by finishing a road, never by tapping. -->
-            <div id="academy-streak" class="streak frame frame--inset" data-started="false">
-              <span class="icon streak__icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24"><use href="#i-streak" /></svg
-              ></span>
-              <span id="streak-days" class="streak__days"></span>
-              <span id="streak-hint" class="streak__hint"></span>
-            </div>
-          </div>
-
+          <!-- The coin chip and the streak plaque beside it stand in
+               `#purse-bar`, after the screens: the chip is on every menu
+               screen and has to be the same element on all of them. -->
           <div class="screen__top">
             <!--
               The logo treatment (Milestone 5): a gold gradient poured into the
@@ -306,9 +290,13 @@
         </button>
       </section>
 
-      <!-- Level picker, behind the Academy's Play card. Two pages of ten; the
-           page tabs hide themselves while there is only one page.
-           scripts/smoke-run.mjs clicks #play-button — keep that id stable. -->
+      <!-- Level picker, behind the Academy's Play card. Two pages of ten, with
+           the page tabs over the chips (they hide themselves while there is
+           only one page); then Play, the loudest thing on the screen, naming
+           the level it starts; then Endless as a quiet card, shut until the
+           level academy.json names (docs/28); then Back.
+           scripts/smoke-run.mjs clicks #play-button and
+           scripts/probe-safe-area.mjs measures #picker-endless — keep both. -->
       <section id="levels-screen" class="screen screen--levels" hidden>
         <div class="screen__inner">
           <div class="screen__top">
@@ -318,50 +306,58 @@
 
           <div class="screen__panel frame frame--panel">
             <div class="screen__middle">
-              <!-- Endless (D52): a mode beside the campaign, so it stands above
-                   the chips rather than among them. -->
-              <div id="picker-endless" class="endless frame frame--card">
-                <span class="icon endless__icon" aria-hidden="true"
-                  ><svg viewBox="0 0 24 24"><use href="#i-endless" /></svg
-                ></span>
-                <span class="endless__body">
-                  <span id="endless-title" class="endless__title">Endless</span>
-                  <span id="endless-blurb" class="endless__blurb">One road, no end.</span>
-                  <span id="endless-best" class="endless__best"></span>
-                </span>
-                <button id="endless-button" class="button button--row" type="button">
-                  Endless
-                </button>
-              </div>
-
               <p id="picker-caption" class="picker__caption">Level</p>
+              <div id="picker-pages" class="pager"></div>
               <!-- Filled by src/ui/picker.ts from the save's unlocked level. -->
               <div id="level-picker" class="picker"></div>
-              <div id="picker-pages" class="pager"></div>
             </div>
 
-            <div class="screen__actions">
-              <button id="play-button" class="button" type="button">Play</button>
+            <div class="screen__actions picker__actions">
+              <!-- The home's Play card, grown (src/ui/picker.css). -->
+              <button
+                id="play-button"
+                class="card card--play picker__play frame frame--card"
+                type="button"
+              >
+                <span class="icon card__icon" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" focusable="false"><use href="#i-room-play" /></svg
+                ></span>
+                <span class="card__body">
+                  <span id="play-title" class="card__title">Play</span>
+                  <span id="play-level" class="card__hint">Level 1</span>
+                </span>
+              </button>
+
+              <!-- Endless (D52): a mode beside the campaign. The whole card is
+                   the button, as the home's cards are. -->
+              <button
+                id="picker-endless"
+                class="card endless frame frame--inset"
+                type="button"
+                data-locked="false"
+              >
+                <span id="endless-icon" class="icon card__icon" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" focusable="false"><use href="#i-endless" /></svg
+                ></span>
+                <span class="card__body">
+                  <span id="endless-title" class="card__title">Endless</span>
+                  <span id="endless-blurb" class="card__hint">One road, no end.</span>
+                </span>
+                <span id="endless-best" class="endless__best"></span>
+              </button>
+
               <button id="levels-back" class="button button--ghost" type="button">Back</button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- The four rooms share one screen: the heading, the coin chip and the
-           Back button are the same furniture, and only the body swaps. Each
-           room's body is built once, on the first visit, by src/ui/rooms.ts. -->
+      <!-- The rooms share one screen: the heading and the Back button are the
+           same furniture, and only the body swaps. Each room's body is built
+           once, on the first visit, by src/ui/rooms.ts. The coin chip over it
+           is `#purse-bar`'s. -->
       <section id="room-screen" class="screen screen--room" hidden>
         <div class="screen__inner">
-          <div class="room__bar">
-            <div id="room-coins" class="coins frame frame--inset">
-              <span class="icon coins__icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24"><use href="#i-coin" /></svg
-              ></span>
-              <span id="room-coin-value" class="coins__value">0</span>
-            </div>
-          </div>
-
           <div class="screen__top">
             <h2 id="room-title" class="screen__title screen__title--panel">Yard</h2>
             <div class="flourish" aria-hidden="true"></div>
@@ -479,7 +475,11 @@
         </div>
       </section>
 
-      <!-- Result: coins earned, survivors, peak count, Ascend / Again / Levels. -->
+      <!-- Result: the verdict, what the run paid, what survived, and the way
+           out — Continue after a clear, Retry, Home (docs/28). Sized to fit a
+           phone without scrolling (src/ui/result.css). The purse is the coin
+           chip in `#purse-bar`, which counts up with the coins. The three
+           button ids are a contract with scripts/smoke-run-checks.mjs. -->
       <section id="result-screen" class="screen screen--result" hidden>
         <div class="screen__inner">
           <div class="screen__top">
@@ -493,6 +493,8 @@
           </div>
 
           <div class="screen__middle">
+            <!-- A grid: the coins, and the metres on an endless run, take a
+                 whole line; survivors and peak share one. -->
             <dl class="stats">
               <div class="stats__row stats__row--coins frame frame--card">
                 <dt class="stats__key">
@@ -507,7 +509,11 @@
               </div>
               <!-- Endless only (D52): metres walked, and the record. The row
                    is hidden on a campaign run, where the level is the score. -->
-              <div id="result-metres-row" class="stats__row frame frame--card" hidden>
+              <div
+                id="result-metres-row"
+                class="stats__row stats__row--wide frame frame--card"
+                hidden
+              >
                 <dt class="stats__key">
                   <span class="icon stats__icon" aria-hidden="true"
                     ><svg viewBox="0 0 24 24"><use href="#i-endless" /></svg
@@ -520,7 +526,7 @@
                 </dd>
               </div>
 
-              <div class="stats__row frame frame--card">
+              <div class="stats__row stats__row--half frame frame--card">
                 <dt class="stats__key">
                   <span class="icon stats__icon" aria-hidden="true"
                     ><svg viewBox="0 0 24 24"><use href="#i-drill-recruits" /></svg
@@ -529,7 +535,7 @@
                 </dt>
                 <dd id="result-survivors" class="stats__value">0</dd>
               </div>
-              <div class="stats__row frame frame--card">
+              <div class="stats__row stats__row--half frame frame--card">
                 <dt class="stats__key">
                   <span class="icon stats__icon" aria-hidden="true"
                     ><svg viewBox="0 0 24 24"><use href="#i-drill-damage" /></svg
@@ -539,6 +545,7 @@
                 <dd id="result-peak" class="stats__value">0</dd>
               </div>
             </dl>
+
             <!-- What the meta layer paid on top of the road (D51 to D53):
                  the streak, the missions this run finished, the bestiary rungs
                  it crossed. Built by src/ui/resultMeta.ts; empty when the run
@@ -546,34 +553,44 @@
             <div id="result-bonuses" class="bonuses" hidden></div>
 
             <p id="result-best" class="result__best" hidden></p>
-
-            <p class="result__total">Purse <span id="result-total">0</span></p>
-
-            <!-- The nearest thing the Academy still sells, against the purse
-                 the run has just filled. -->
-            <div id="result-next" class="unlock frame frame--inset" hidden>
-              <span id="result-next-heading" class="unlock__heading">Next unlock</span>
-              <span id="result-next-name" class="unlock__name"></span>
-              <span class="unlock__price">
-                <span class="icon unlock__coin" aria-hidden="true"
-                  ><svg viewBox="0 0 24 24"><use href="#i-coin" /></svg
-                ></span>
-                <span id="result-next-price">0</span>
-              </span>
-              <span id="result-next-short" class="unlock__short"></span>
-            </div>
           </div>
 
+          <!-- The words are academy.json's (`result`); these are placeholders. -->
           <div class="screen__actions">
-            <button id="next-button" class="button" type="button" hidden>Ascend</button>
-            <button id="replay-button" class="button button--ghost" type="button">
-              Same road again
-            </button>
-            <button id="retry-button" class="button button--ghost" type="button">Again</button>
-            <button id="levels-button" class="button button--ghost" type="button">Academy</button>
+            <button id="next-button" class="button" type="button" hidden>Continue</button>
+            <button id="retry-button" class="button button--ghost" type="button">Retry</button>
+            <button id="home-button" class="button button--ghost" type="button">Home</button>
           </div>
         </div>
       </section>
+
+      <!--
+        The purse (docs/28): one coin chip for every screen that is not a run —
+        the home, the picker, the rooms and the result sheet — pinned under the
+        safe area in the top-left corner, opposite the home's mute button. After
+        the screens so it paints over the result sheet's parchment, and one
+        element so it cannot sit anywhere else on any of them. src/ui/overlay.ts
+        hides it on the HUD, where the level chip has that corner.
+      -->
+      <div id="purse-bar" class="purse" hidden>
+        <div id="coin-chip" class="coins frame frame--inset">
+          <span class="icon coins__icon" aria-hidden="true"
+            ><svg viewBox="0 0 24 24"><use href="#i-coin" /></svg
+          ></span>
+          <span id="coin-chip-value" class="coins__value">0</span>
+        </div>
+
+        <!-- The daily streak (D51), beside the purse on the home only. A plaque
+             rather than a button: it is advanced by finishing a road, never by
+             tapping. -->
+        <div id="academy-streak" class="streak frame frame--inset" data-started="false" hidden>
+          <span class="icon streak__icon" aria-hidden="true"
+            ><svg viewBox="0 0 24 24"><use href="#i-streak" /></svg
+          ></span>
+          <span id="streak-days" class="streak__days"></span>
+          <span id="streak-hint" class="streak__hint"></span>
+        </div>
+      </div>
 
       <!-- Win confetti. Last before the debug panel so it paints over the result. -->
       <canvas id="confetti" hidden></canvas>

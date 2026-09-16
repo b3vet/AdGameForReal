@@ -1,0 +1,73 @@
+/*
+ * The coin chip's place (docs/28), and the band every menu screen leaves for it.
+ *
+ * The chip's own look — the dark plate, the struck coin, the bump — is the
+ * Academy's (`./academy.css`), because it *is* the Academy's chip: this file
+ * only says where it stands now that it is one element for five screens rather
+ * than a child of two of them. Imported by `./coinChip.ts`.
+ */
+
+:root {
+  /*
+   * The row the chip stands in: level with the home's mute button, which is
+   * placed at the same distance under the safe area and is the same height
+   * (`.mute--title` in `./screens.css`), so the two read as one top bar.
+   */
+  --purse-top: 0.75rem;
+  --purse-height: 2.6rem;
+  /* What a screen leaves above its own content so its heading clears the row. */
+  --purse-band: calc(var(--purse-top) + var(--purse-height) + 0.6rem);
+}
+
+/*
+ * Pinned to the overlay's box, which is the full glass, so the insets are added
+ * here. The right edge stops short of the mute button's plate, so a long streak
+ * line on the home wraps rather than running under it.
+ */
+.purse {
+  position: absolute;
+  top: calc(var(--safe-top) + var(--purse-top));
+  left: calc(var(--safe-left) + 0.9rem);
+  right: calc(var(--safe-right) + 0.9rem + var(--purse-height) + 0.5rem);
+  display: flex;
+  align-items: center;
+  height: var(--purse-height);
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* The mute button's height, so the chip's edges line up with the plate's. */
+.purse .coins {
+  flex: none;
+  height: var(--purse-height);
+}
+
+/*
+ * The band: each menu screen's column starts under the chip's row rather than
+ * at its own old top margin. One rule for the four, rather than a spacer in
+ * each screen's markup, so a heading added to any of them later still clears
+ * the chip. It replaces the `5vh` the column used to start at, which is about
+ * the same on a tall phone and was too little on a short one to clear a chip
+ * pinned above it.
+ */
+.screen--academy > .screen__inner,
+.screen--levels > .screen__inner,
+.screen--room > .screen__inner,
+.screen--result > .screen__inner {
+  padding-top: calc(var(--safe-top) + var(--purse-band));
+}
+
+/*
+ * Except the result sheet on its side, where the band is the one thing a
+ * 320-px screen can give back: the ribbon and the title are centred and
+ * narrow and a phone on its side is wide, so they can stand level with the
+ * chip in its corner, and the stats, which are as wide as the column, start
+ * below it anyway (measured at 568x320 and 844x390). Here rather than beside
+ * the sheet's other rules so the two answers to the same question cannot be
+ * put in the wrong order by an import.
+ */
+@media (orientation: landscape) {
+  .screen--result > .screen__inner {
+    padding-top: calc(var(--safe-top) + var(--purse-top));
+  }
+}

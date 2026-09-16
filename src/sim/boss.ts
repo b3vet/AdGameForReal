@@ -8,11 +8,15 @@
  */
 
 import { RimeCharge } from './bossCharge';
-import type { EnemyState, Lane, SquadState } from './types';
+import type { Swath } from './crowdState';
+import type { CrowdState, EnemyState, Lane, SquadState } from './types';
 import type { Balance } from '@/data/types';
 
 /** Slack for the stand-off distance, which lands on `contactDistance` exactly. */
 const CONTACT_EPSILON = 1e-6;
+
+/** What `chargeSwath` holds before the first charge hands over its own. */
+const NO_SWATH: Readonly<Swath> = { x: 0, halfWidth: 0, zLo: 0, zHi: 0 };
 
 export interface BossStep {
   activated: boolean;
@@ -21,12 +25,16 @@ export interface BossStep {
   stomped: boolean;
   stompKills: number;
   contactKills: number;
-  /** Rime Fiend only (D49): true on the step a lane charge begins. */
+  /** Rime Fiend only (D49): true on the step it commits to a lane charge. */
   charged: boolean;
   /** The lane it charged, valid on the step `charged` is true. */
   chargeLane: Lane;
-  /** Units its charge ran over this step, taken nearest the boss itself. */
+  /** True on the step its charge first lands on somebody, once per charge. */
+  chargeLanded: boolean;
+  /** Units standing under the charging body this step, all to be killed. */
   chargeKills: number;
+  /** Where they stand: the body's footprint this step (document 29). */
+  chargeSwath: Readonly<Swath>;
 }
 
 export class BossController {
@@ -45,8 +53,17 @@ export class BossController {
     contactKills: 0,
     charged: false,
     chargeLane: 0,
+    chargeLanded: false,
     chargeKills: 0,
+    chargeSwath: NO_SWATH,
   };
+
+  /** A new boss, fought from the top: the endless road's next stop (document 28). */
+  reset(): void {
+    this.stompTimer = 0;
+    this.contactCarry = 0;
+    this.rime.reset();
+  }
 
   update(
     boss: EnemyState,
@@ -56,6 +73,7 @@ export class BossController {
     dt: number,
     bite = 1,
     time = 0,
+    crowd?: CrowdState,
   ): BossStep {
     const out = this.result;
     out.activated = false;
@@ -64,6 +82,7 @@ export class BossController {
     out.stompKills = 0;
     out.contactKills = 0;
     out.charged = false;
+    out.chargeLanded = false;
     out.chargeKills = 0;
     if (!boss.alive) return out;
 
@@ -89,12 +108,14 @@ export class BossController {
     // line itself up, close, grind or stomp — it is somewhere else — so the
     // whole of the standing fight below is skipped for those seconds.
     if (boss.variant === 'rime') {
-      const charge = this.rime.update(boss, squad, balance, dt, enraged, time);
+      const charge = this.rime.update(boss, squad, crowd, balance, dt, enraged, time);
       if (charge.started) {
         out.charged = true;
         out.chargeLane = charge.lane;
       }
+      out.chargeLanded = charge.landed;
       out.chargeKills = charge.kills;
+      out.chargeSwath = charge.swath;
       if (charge.busy) return out;
     }
 

@@ -29,14 +29,15 @@ import HavokPhysics from '@babylonjs/havok';
 // over for real. `deathStyle.ts` has no imports of its own precisely so both
 // sides can reach the same answer from an enemy id alone.
 import { MAX_FALLEN_PER_FRAME, usesRagdoll } from '@/render/deathStyle';
-import { laneCenter } from '@/sim';
 import type { LevelDef, RunState, SimEvent } from '@/sim';
 
 import { DebrisBursts } from './bursts';
+import { awayFromSquad, gatePosition } from './eventPlaces';
 import { GroundCollider } from './ground';
 // Where the WASM comes from: a URL to fetch in dev and production, the bytes
 // themselves in the single-file builds (plan, "Asset delivery in builds").
 import { havokLoaderOptions } from './havokLoader';
+import { PrestepGate } from './prestep';
 import { RagdollPool } from './RagdollPool';
 import { ShardPool } from './ShardPool';
 import {
@@ -71,15 +72,6 @@ export interface PhysicsStats {
   quality: number;
 }
 
-const scratchDirection = new Vector3();
-/**
- * Returned by the two lookups below. Reused because `onEvents` runs on every
- * frame of every run and may not allocate (CLAUDE.md).
- */
-const scratchAway = { dx: 0, dz: 1 };
-const scratchGate = { x: 0, z: 0 };
-const DOWN_ROAD = { dx: 0, dz: 1 } as const;
-
 export class PhysicsLayer {
   readonly stats: PhysicsStats = { ragdolls: 0, shards: 0, bodies: 0, quality: 0 };
 
@@ -98,6 +90,8 @@ export class PhysicsLayer {
   private bursts: DebrisBursts | null = null;
   private ground: GroundCollider | null = null;
   private plugin: HavokPlugin | null = null;
+  /** Which bodies Havok has to be told about next step (`./prestep.ts`). */
+  private gate: PrestepGate | null = null;
   private ready = false;
   private disposed = false;
 
@@ -152,8 +146,15 @@ export class PhysicsLayer {
       this.plugin = plugin;
     }
 
-    this.shards = new ShardPool(this.scene, SHARD_CAPACITY);
-    this.ragdolls = await RagdollPool.create(this.scene, RAGDOLL_CAPACITY, this.ragdollModelId);
+    const gate = new PrestepGate(this.scene);
+    this.gate = gate;
+    this.shards = new ShardPool(this.scene, SHARD_CAPACITY, gate);
+    this.ragdolls = await RagdollPool.create(
+      this.scene,
+      RAGDOLL_CAPACITY,
+      this.ragdollModelId,
+      gate,
+    );
     this.ragdolls.setLiveCap(RAGDOLL_LIVE_CAP[this.quality] ?? 0);
     // In a try of its own: a mage rig that will not build must not cost the
     // game its enemy corpses, its shards and its stomps, and the renderer draws
@@ -163,6 +164,7 @@ export class PhysicsLayer {
         this.scene,
         UNIT_RAGDOLL_CAPACITY,
         this.unitModelId,
+        gate,
         // The mage rig has no walk clip: it idles, runs and casts.
         'run',
       );
@@ -175,6 +177,8 @@ export class PhysicsLayer {
       this.shards.dispose();
       this.ragdolls.dispose();
       this.units?.dispose();
+      gate.dispose();
+      this.gate = null;
       this.shards = null;
       this.ragdolls = null;
       this.units = null;
@@ -249,7 +253,7 @@ export class PhysicsLayer {
             // suppression does not apply: a frozen stream body still has to
             // fall, because its baked death was skipped either way.
             if (usesRagdoll(event.enemyId)) {
-              const away = this.awayFromSquad(event.x, event.z, state);
+              const away = awayFromSquad(event.x, event.z, state);
               this.bursts?.streamFall(event.x, event.z, away.dx, away.dz);
             }
           } else if (event.kind === 'charger') {
@@ -259,7 +263,7 @@ export class PhysicsLayer {
             // own baked death plays in the renderer instead
             // (`src/render/chargers.ts`).
           } else if (!this.wasShattered(event.enemyId)) {
-            const away = this.awayFromSquad(event.x, event.z, state);
+            const away = awayFromSquad(event.x, event.z, state);
             this.bursts?.kill(event.x, event.z, away.dx, away.dz, this.quality);
           }
           break;
@@ -281,7 +285,7 @@ export class PhysicsLayer {
           this.bursts?.shieldBreak(event.x, event.z, this.quality);
           break;
         case 'gatePassed': {
-          const at = this.gatePosition(event.gateId, state);
+          const at = gatePosition(event.gateId, state);
           this.bursts?.glass(at.x, at.z, event.kind, this.quality);
           break;
         }
@@ -314,7 +318,12 @@ export class PhysicsLayer {
     // title screen and every frame of a run with no debris in the air, which is
     // most of them: 8 ragdoll slots, 64 shard slots and three buffer commits.
     const live = (this.ragdolls?.count ?? 0) + (this.units?.count ?? 0);
-    if (live === 0 && (this.shards?.count ?? 0) === 0) {
+    const idle = live === 0 && (this.shards?.count ?? 0) === 0;
+    // Nothing to simulate, so Havok is not stepped at all: every parked body
+    // is frozen under the world, and a move still waiting for a step (the
+    // last park) is taken by whichever step comes next (`./prestep.ts`).
+    if (this.plugin !== null) this.scene.physicsEnabled = !idle;
+    if (idle) {
       this.stats.ragdolls = 0;
       this.stats.shards = 0;
       this.stats.bodies = 0;
@@ -363,6 +372,8 @@ export class PhysicsLayer {
     this.ragdolls?.dispose();
     this.units?.dispose();
     this.shards?.dispose();
+    this.gate?.dispose();
+    this.gate = null;
     this.ground = null;
     this.ragdolls = null;
     this.units = null;
@@ -380,32 +391,5 @@ export class PhysicsLayer {
       if (this.shattered[i] === enemyId) return true;
     }
     return false;
-  }
-
-  /**
-   * Which way a corpse is thrown: the unit direction from the squad to
-   * `(x, z)`. A body killed on contact sits on top of the squad and has no
-   * direction at all, so that case falls back to "further down the road".
-   */
-  private awayFromSquad(x: number, z: number, state: RunState): { dx: number; dz: number } {
-    scratchDirection.set(x - state.squad.x, 0, z - state.squad.z);
-    const length = scratchDirection.length();
-    if (length < 0.01) return DOWN_ROAD;
-    scratchAway.dx = scratchDirection.x / length;
-    scratchAway.dz = scratchDirection.z / length;
-    return scratchAway;
-  }
-
-  /** Where a gate's panel stands, or the squad if that gate is already gone. */
-  private gatePosition(gateId: number, state: RunState): { x: number; z: number } {
-    for (const gate of state.gates) {
-      if (gate.id !== gateId) continue;
-      scratchGate.x = laneCenter(gate.lane);
-      scratchGate.z = gate.z;
-      return scratchGate;
-    }
-    scratchGate.x = state.squad.x;
-    scratchGate.z = state.squad.z;
-    return scratchGate;
   }
 }

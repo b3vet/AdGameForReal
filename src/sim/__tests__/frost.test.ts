@@ -49,6 +49,12 @@ function hashOf(text: string): string {
  * The flag is the only field that changed: `genDials` reads it and nothing
  * else does, so level 7's curses, blocks and third lanes are the ordinary
  * ones and every other level's recipe is the byte it was.
+ *
+ * And **level 19**, re-recorded after the owner's second playtest (document
+ * 28): its boss bites at 0.38 rather than 0.45. One gate per row cost one of
+ * its human seeds a doubled gate, and the long fight that seed then won took
+ * the level's mean boss fight past its band; the lighter bite is the only
+ * field that changed, and the road itself is the one it was.
  */
 const BIOME_1_CONFIGS: readonly string[] = [
   'e52737ba',
@@ -70,7 +76,8 @@ const BIOME_1_CONFIGS: readonly string[] = [
   '71830889',
   'e5367ed4',
   'edb02359',
-  'f3f54983',
+  // L19, re-recorded for document 28: `boss.bite` 0.45 to 0.38 (see above).
+  '05d3857f',
   'ebf3f0ea',
 ];
 
@@ -206,8 +213,9 @@ describe('Frostfell', () => {
     // reaches for a clock or an unseeded random.
     //
     // Ninety seconds of sim, not fifteen. The boss's charge is the piece of
-    // this with state of its own — a timer, a phase, a kill budget and a
-    // fractional carry, none of it inside `RunState` (`../bossCharge.ts`) —
+    // this with state of its own — a timer, a phase, a wind-up clock, the
+    // stand it walks home to and what is left of its cap, none of it inside
+    // `RunState` (`../bossCharge.ts`) —
     // and fifteen seconds is 75 m of a 360 m road, which is a window with no
     // arena in it at all (Milestone 7 review). The charge counter below is
     // what keeps it that way: a run that stops reaching the boss fails here

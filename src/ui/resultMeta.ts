@@ -1,7 +1,7 @@
 /**
  * The result sheet's Milestone 8 rows: what the run paid on top of the road,
- * what it finished, how it compares with the player's best walk of this level,
- * and what the purse is now within reach of.
+ * what it finished, and how it compares with the player's best walk of this
+ * level.
  *
  * Split out of `./result.ts` for the file-size rule (CLAUDE.md), on the seam
  * the sheet has: `result.ts` owns the verdict and the two count-ups — the
@@ -16,7 +16,6 @@
 import { academy, fill } from '@/data/academy-types';
 
 import { icon } from './icons';
-import { nextUnlock } from './nextUnlock';
 import type { ResultView } from './result';
 import { element, text } from './widgets';
 
@@ -31,28 +30,25 @@ export interface ResultMetaElements {
   bonuses: HTMLElement;
   /** This level's best walk, and the star it earned. */
   best: HTMLElement;
-  /** The next thing the Academy sells, against the purse. */
-  next: HTMLElement;
-  nextHeading: HTMLElement;
-  nextName: HTMLElement;
-  nextPrice: HTMLElement;
-  nextShort: HTMLElement;
 }
 
+/*
+ * Milestone 8 also put the next thing the Academy sells on the sheet, priced
+ * against the purse. The owner's second device round took it off (docs/28):
+ * it was the one row about a *different* screen, on a sheet that had to stop
+ * scrolling, and the coin chip in the corner already says what the purse holds.
+ */
 export class ResultMeta {
   private readonly elements: ResultMetaElements;
 
   constructor(elements: ResultMetaElements) {
     this.elements = elements;
-    // The markup carries a placeholder; the words are the data's.
-    elements.nextHeading.textContent = academy.meta.result.nextHeading;
   }
 
   show(view: ResultView): void {
     this.paintMetres(view);
     this.paintBonuses(view);
     this.paintBest(view);
-    this.paintNext(view);
   }
 
   /** Metres and the record, for an endless run; hidden on a campaign one. */
@@ -119,19 +115,5 @@ export class ResultMeta {
       this.elements.best.append(text('span', 'best__new', copy.newBestLabel));
     }
     this.elements.best.dataset['improved'] = view.bestImproved ? 'true' : 'false';
-  }
-
-  /** The nearest thing the Academy still sells, measured against the purse. */
-  private paintNext(view: ResultView): void {
-    const next = nextUnlock(view.player);
-    this.elements.next.hidden = next === null;
-    if (next === null) return;
-    this.elements.nextName.textContent = next.name;
-    this.elements.nextPrice.textContent = String(next.price);
-    this.elements.nextShort.textContent =
-      next.missing === 0
-        ? academy.buttons.buy
-        : fill(academy.meta.result.nextShort, { coins: String(next.missing) });
-    this.elements.next.dataset['afford'] = next.missing === 0 ? 'true' : 'false';
   }
 }

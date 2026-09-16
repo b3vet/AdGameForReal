@@ -99,6 +99,7 @@ export function drawFrame(
   // After the rig, because the sky rides on the camera: a dome that follows a
   // frame late shears against the fog on a fast lateral drag.
   const camera = rig.camera;
+  views.road.followArena(state.arenaZ, state.squad.z);
   views.road.update(camera.position.x, camera.position.z, dt);
   views.sky.update(camera.position.x, camera.position.z, dt);
 

@@ -7,6 +7,10 @@
  * side becomes a group of its own, led down the middle of its lane, firing at
  * what is in front of it, taking the gates it walks through on its own account,
  * and scurrying back to the tail of the column when the stretch releases.
+ *
+ * "On its own account" is narrower since the second playtest (document 28):
+ * a row pays one gate for the whole run, so a straggler takes a gate only from
+ * a row nobody has taken one from yet (`./rowClaims.test.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -135,27 +139,6 @@ describe('fighting alone', () => {
       }
     }
     expect(killed).toBeGreaterThan(10);
-  });
-
-  it('takes the gate in its own lane while the column takes the gate in theirs', () => {
-    const run = runOf(
-      straddle([
-        row(40, [null, { kind: 'add', value: 20 }, { kind: 'add', value: 30 }]),
-      ]),
-    );
-    cutInTwo(run);
-    const column = countIn(run, 0);
-    const stragglers = countIn(run, 1);
-
-    const events = play(run, 5, LINE);
-    const passed = events.filter((e) => e.type === 'gatePassed');
-    // Two gates on one row, one row, two groups: each takes the one in front
-    // of it (D44). Before Milestone 6 exactly one gate per row could ever be
-    // taken, by whichever lane the single crowd was in.
-    expect(passed).toHaveLength(2);
-    expect(countIn(run, 0)).toBeGreaterThan(column);
-    expect(countIn(run, 1)).toBeGreaterThan(stragglers);
-    expect(run.state.squad.count).toBe(countIn(run, 0) + countIn(run, 1));
   });
 
   it('pays a curse out of its own tail', () => {

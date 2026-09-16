@@ -1,10 +1,12 @@
 /**
  * A crowd of animated characters as thin instances of one mesh.
  *
- * Every unit is four floats of transform plus four floats of animation state,
- * written into two `Float32Array`s and uploaded once per frame. There is one
- * draw call however many units there are, no per-unit skeleton, and no
- * allocation in `setInstance` — it is a hot loop that runs 500 times a frame.
+ * Every unit is sixteen floats of transform plus four floats of animation
+ * state, written into two `Float32Array`s. There is one draw call however many
+ * units there are, no per-unit skeleton, and no allocation in `setInstance` —
+ * it is a hot loop that runs 500 times a frame. What reaches the GPU is the
+ * part of those buffers the camera can see, packed and uploaded as the scene
+ * renders (`./crowdCull.ts`).
  *
  * The one thing a VAT cannot do is blend *between clips*. A row of the texture
  * is one pose of one clip, so switching a unit from `run` to `cast` is a cut,
@@ -18,15 +20,16 @@
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
-// Side-effect import: this is what puts `thinInstance*` on `Mesh.prototype`.
-import '@babylonjs/core/Meshes/thinInstanceMesh';
 
 import type { CharacterAsset } from './asset';
 import type { Crowd } from './crowd';
+import type { CrowdBuffers } from './crowdCull';
+import { CrowdDraw, FLOATS_PER_SETTING } from './crowdDraw';
+import type { CrowdDrawStats } from './crowdDraw';
+import { pick } from './lod';
 import type { VatRangeMeta } from './manifest';
 
 const FLOATS_PER_MATRIX = 16;
-const FLOATS_PER_SETTING = 4;
 
 /** Reused across every `setInstance` call so the hot loop allocates nothing. */
 const scratchMatrix = Matrix.Identity();
@@ -37,16 +40,21 @@ const scratchTranslation = Vector3.Zero();
 export class VatCrowd implements Crowd {
   readonly mesh: Mesh;
 
+  /**
+   * What the caller wrote, slot by slot: storage, with holes in it and slots
+   * written once and left alone. The GPU never reads these directly; `draw`
+   * packs what it can see of them each time the camera renders.
+   */
+  private readonly source: CrowdBuffers;
   private readonly matrices: Float32Array;
   private readonly settings: Float32Array;
+  private readonly draw: CrowdDraw;
   private readonly ranges: ReadonlyMap<string, VatRangeMeta>;
   private readonly fps: number;
   private readonly baseScale: number;
   private readonly manager;
 
   private count = 0;
-  /** Highest instance index written since the last `commit`, for the upload. */
-  private dirty = false;
   /**
    * The colour buffer the tints are written into, allocated on the first
    * cosmetic change and re-used for every later one: a wardrobe change is a
@@ -54,6 +62,8 @@ export class VatCrowd implements Crowd {
    * time the player tries a hat on.
    */
   private tinted: Float32Array | null = null;
+  /** The same for the small-on-screen copy, in its own vertex order. */
+  private tintedLod: Float32Array | null = null;
   /** What is worn right now, so an unchanged selection writes nothing. */
   private wornKey = '';
 
@@ -69,18 +79,8 @@ export class VatCrowd implements Crowd {
 
     this.matrices = new Float32Array(capacity * FLOATS_PER_MATRIX);
     this.settings = new Float32Array(capacity * FLOATS_PER_SETTING);
-
-    this.mesh.thinInstanceSetBuffer('matrix', this.matrices, FLOATS_PER_MATRIX, false);
-    this.mesh.thinInstanceSetBuffer(
-      'bakedVertexAnimationSettingsInstanced',
-      this.settings,
-      FLOATS_PER_SETTING,
-      false,
-    );
-    this.mesh.thinInstanceCount = 0;
-    // Hidden until something commits instances into it: an empty thin-instance
-    // mesh draws one full-size copy of itself at the origin (see `commit`).
-    this.mesh.setEnabled(false);
+    this.source = { matrices: this.matrices, settings: this.settings, count: 0 };
+    this.draw = new CrowdDraw(this.source, this.mesh, asset.lod?.mesh ?? null, capacity);
   }
 
   /**
@@ -121,6 +121,14 @@ export class VatCrowd implements Crowd {
       }
     }
     this.mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
+
+    // The copy's vertices are a subset of these, in their own order.
+    const lod = this.asset.lod;
+    if (lod === null) return;
+    const lodColors = this.tintedLod ?? new Float32Array(lod.order.length * 4);
+    this.tintedLod = lodColors;
+    pick(colors, lod.order, 4, lodColors);
+    lod.mesh.updateVerticesData(VertexBuffer.ColorKind, lodColors, false, false);
   }
 
   /** Animation ids this crowd's baked texture carries, in bake order. */
@@ -175,32 +183,24 @@ export class VatCrowd implements Crowd {
     this.settings[at + 1] = range.to;
     this.settings[at + 2] = timeOffset * this.fps;
     this.settings[at + 3] = this.fps * speed;
-    this.dirty = true;
   }
 
   /** How many instances `commit` will draw. Extra slots keep their old data. */
   setCount(count: number): void {
     this.count = Math.max(0, Math.min(this.capacity, Math.floor(count)));
-    this.dirty = true;
   }
 
   /**
-   * Uploads both buffers. Cheap enough to call every frame, once.
-   *
-   * The mesh is disabled when the crowd is empty, and that is not an
-   * optimisation: Babylon's `hasThinInstances` is `instancesCount > 0`, so a
-   * mesh whose count has dropped to zero falls back to the *non-instanced*
-   * path and draws one full-size character at the world origin. A squad that
-   * has just been wiped, or a crowd that has been built but not yet placed,
-   * would otherwise put a three-metre mage in the middle of the road.
+   * Closes a frame's writes. Cheap enough to call every frame, once; what is
+   * drawn is decided when the camera renders (`./crowdDraw.ts`).
    */
   commit(): void {
-    this.mesh.thinInstanceCount = this.count;
-    this.mesh.setEnabled(this.count > 0);
-    if (!this.dirty || this.count === 0) return;
-    this.mesh.thinInstanceBufferUpdated('matrix');
-    this.mesh.thinInstanceBufferUpdated('bakedVertexAnimationSettingsInstanced');
-    this.dirty = false;
+    this.draw.commit(this.count);
+  }
+
+  /** What the last render drew of this crowd: whole, small and left out. */
+  get drawStats(): Readonly<CrowdDrawStats> {
+    return this.draw.stats;
   }
 
   /** Advances the shared clock every baked range is sampled against. */
@@ -222,6 +222,7 @@ export class VatCrowd implements Crowd {
   }
 
   dispose(): void {
+    this.draw.dispose();
     this.asset.dispose();
   }
 }

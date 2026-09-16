@@ -220,6 +220,40 @@ describe('one gate per row', () => {
     expect(run.state.gates.every((g) => g.passed)).toBe(true);
   });
 
+  it('darkens the rest of the row on the step its gate is taken', () => {
+    // Document 28: the first gate taken claims the row for the whole run. The
+    // siblings go dark on that very step, not when the retire sweep reaches
+    // them, so nothing can take them in between and no shot lands on them.
+    const def = level({
+      startCount: 10,
+      rows: [
+        row(20, [
+          { kind: 'add', value: 5 },
+          { kind: 'add', value: 6 },
+          { kind: 'fireRate', value: 0.05 },
+        ]),
+      ],
+    });
+    const run = runOf(def);
+    let claimedAt = -1;
+    let hitsAfter = 0;
+    for (let step = 0; step < 60 * 6; step++) {
+      run.setTargetX(0);
+      for (const event of run.tick(1 / 60)) {
+        if (event.type === 'gatePassed') {
+          expect(event.gateId).toBe(1);
+          expect(claimedAt).toBe(-1);
+          claimedAt = step;
+          expect(run.state.gates.map((g) => g.passed)).toEqual([true, true, true]);
+        } else if (event.type === 'gateHit' && claimedAt >= 0) {
+          hitsAfter++;
+        }
+      }
+    }
+    expect(claimedAt).toBeGreaterThan(0);
+    expect(hitsAfter).toBe(0);
+  });
+
   it('reports a loss when the gate empties the squad', () => {
     const def = level({ startCount: 5, rows: [row(2, [null, { kind: 'sub', value: 1000 }, null])] });
     const run = runOf(def);

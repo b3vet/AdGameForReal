@@ -77,6 +77,13 @@ import type { BiomeId } from '@/data/biome-types';
  */
 const FIELD_WIDTH = 240;
 
+/**
+ * Metres the column walks past a finished arena before its markers move on to
+ * the next one (document 28): far enough that the pillars beside the fight are
+ * behind the lens, rather than vanishing in the slow-mo of the kill.
+ */
+const ARENA_LEAVE_BEHIND = 25;
+
 export class RoadView {
   private readonly surface: Mesh;
   private readonly field: Mesh;
@@ -340,6 +347,24 @@ export class RoadView {
     const pulse = 1 + Math.sin(this.phase * Math.PI * 2) * RUNE_PULSE_DEPTH;
     LANE_LINE_COLOR.scaleToRef(RUNE_EMISSIVE * pulse, this.runeMaterial.emissiveColor);
     this.motes.update(cameraX, cameraZ, dt);
+  }
+
+  /**
+   * Walks the arena band and its markers to the line the squad stops at next.
+   * A campaign level's line never moves; the endless road has one every few
+   * hundred metres (document 28), and the line jumps ahead the moment a boss
+   * falls, so the markers wait until the column has left the last fight.
+   */
+  followArena(arenaZ: number, squadZ: number): void {
+    const extent = this.extent;
+    if (extent === null || extent.arenaZ === arenaZ) return;
+    if (arenaZ > extent.arenaZ && squadZ < extent.arenaZ + ARENA_LEAVE_BEHIND) return;
+    extent.arenaZ = arenaZ;
+    this.arenaBand.unfreezeWorldMatrix();
+    this.arenaBand.position.z = arenaZ;
+    this.arenaBand.computeWorldMatrix(true);
+    this.arenaBand.freezeWorldMatrix();
+    this.arena.place(arenaZ);
   }
 
   /** Motes drawn last frame, for the debug panel. */

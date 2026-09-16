@@ -34,6 +34,7 @@ import {
   buyStaff,
   buyUpgrade,
   clonePlayer,
+  endlessOpen,
   rememberSeen,
   roomIds,
   roomUnlockLevel,
@@ -50,6 +51,7 @@ import {
   mergePlayer,
   setPlayer,
 } from './save';
+import type { SaveData } from './save';
 import type { RunSession } from './session';
 
 /** Which Academy screen is up. `home` is the one with the cards. */
@@ -184,8 +186,7 @@ export class AcademyController {
    */
   showHome(selectedLevel: number): void {
     this.screen = 'home';
-    const save = loadSave();
-    this.state = save.player;
+    const save = this.reload();
 
     const reveal: RoomId[] = [];
     for (const room of roomIds) {
@@ -196,6 +197,13 @@ export class AcademyController {
     if (reveal.length > 0) this.deps.audio.playRoomReveal();
 
     this.deps.overlay.showAcademy(this.view(selectedLevel, reveal));
+  }
+
+  /** The player, re-read: a won run writes its unlock to storage itself. */
+  reload(): SaveData {
+    const save = loadSave();
+    this.state = save.player;
+    return save;
   }
 
   /** The level picker, behind the home's Play card. */
@@ -347,6 +355,7 @@ export class AcademyController {
       streak: this.streakView(),
       missions: this.missionsView(),
       endlessBest: Math.max(0, Math.floor(this.state.endless.bestMetres)),
+      endlessOpen: endlessOpen(this.state),
       stars: starredLevels(this.state),
     };
   }

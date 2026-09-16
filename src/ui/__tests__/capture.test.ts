@@ -19,6 +19,15 @@ function stats(): DebugStats {
     simMs: 1,
     renderMs: 8,
     physicsMs: 0.5,
+    viewsMs: 2,
+    drawMs: 6,
+    frameMs: 10,
+    rafCallbacks: 0,
+    activeMeshes: 40,
+    triangles: 600_000,
+    crowdWhole: 40,
+    crowdSmall: 100,
+    crowdCulled: 60,
     drawCalls: 30,
     drawCallsPeak: 30,
     streamBodies: 0,
@@ -114,6 +123,35 @@ describe('CaptureRecorder', () => {
     expect(summary?.frames).toBe(1);
     expect(summary?.run).toBeNull();
     expect(summary?.text).toContain('no run');
+  });
+
+  it('reads the display rate off the callbacks, not the drawn frames', () => {
+    // A 120 Hz display drawn at 60: two callbacks for every frame.
+    const recorder = new CaptureRecorder();
+    recorder.start(1000, 2);
+    let summary = null;
+    let callbacks = 500;
+    for (let frame = 1; frame <= 130 && summary === null; frame++) {
+      callbacks += 2;
+      const now = 1000 + (frame * 1000) / 60;
+      summary = recorder.add(now, 1 / 60, null, { ...stats(), rafCallbacks: callbacks });
+    }
+    expect(summary?.rafHz).toBeCloseTo(120, 0);
+    expect(summary?.fpsAverage).toBeCloseTo(60, 0);
+    expect(summary?.text).toContain('raf 120Hz');
+  });
+
+  it('quotes each phase as a mean and the crowd as medians', () => {
+    const summary = record(Array<number>(100).fill(16));
+
+    expect(summary?.views.mean).toBeCloseTo(2, 5);
+    expect(summary?.draw.mean).toBeCloseTo(6, 5);
+    expect(summary?.js.p95).toBeCloseTo(10, 5);
+    expect(summary?.triangles.median).toBe(600_000);
+    expect(summary?.crowd).toEqual({ whole: 40, small: 100, culled: 60 });
+    expect(summary?.text).toContain('tris 600k');
+    // A frame loop that never reported its callbacks has no display rate.
+    expect(summary?.rafHz).toBe(0);
   });
 
   it('clamps the window to what the buffers hold', () => {

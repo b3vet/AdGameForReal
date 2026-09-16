@@ -116,6 +116,15 @@ export class EventBuffer {
     this.list.push(e);
   }
 
+  /** The Rime Fiend's charge landed on the column, once per charge. */
+  chargeHit(enemyId: number, x: number, z: number): void {
+    const e = this.pools.chargeHits.take();
+    e.enemyId = enemyId;
+    e.x = x;
+    e.z = z;
+    this.list.push(e);
+  }
+
   enemyShattered(enemyId: number, x: number, z: number, streamId?: number): void {
     const e = this.pools.shatters.take();
     e.enemyId = enemyId;

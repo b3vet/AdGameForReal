@@ -184,23 +184,29 @@ function runHash(levelIndex: number, seed: number, player?: PlayerState): string
  * a run whose arc changed. Everything that does not pick a staff up off the
  * road, which is the whole of levels 1 to 3 and thirteen of these fifteen, is
  * byte-identical.
+ *
+ * And all fifteen after the owner's third playtest (document 29), which gave
+ * the Rime Fiend's charge a wind-up and made its dead the people standing
+ * under its body rather than a share of the crowd. Every one of these runs
+ * reaches the arena, so every one of them moved; levels 1 to 3 stand the demon
+ * and replay byte for byte.
  */
 const FROST_GOLDEN: Readonly<Record<string, string>> = {
-  '21:1': '46c70cce',
-  '21:2': 'f609c7fb',
-  '21:3': '7d99c729',
-  '21:4': '436aae17',
-  '21:5': '7791b9b6',
-  '22:1': '64f51834',
-  '22:2': '32d7cd90',
-  '22:3': 'f2030dca',
-  '22:4': '5405b50b',
-  '22:5': '112147ca',
-  '23:1': '85b4e090',
-  '23:2': 'bafc362e',
-  '23:3': 'cd09ed97',
-  '23:4': '23da271c',
-  '23:5': 'e8584c24',
+  '21:1': '1f921cb9',
+  '21:2': '174ff399',
+  '21:3': 'e7fdeb26',
+  '21:4': 'd25e5e44',
+  '21:5': 'cce2909f',
+  '22:1': 'cf3d25e1',
+  '22:2': 'a33e1569',
+  '22:3': '0d654edf',
+  '22:4': '967badde',
+  '22:5': '5d755bb8',
+  '23:1': 'fafe14e0',
+  '23:2': '7f95134b',
+  '23:3': '7605331c',
+  '23:4': '4677ea31',
+  '23:5': '5b89ee98',
 };
 
 describe('no-upgrade regression', () => {

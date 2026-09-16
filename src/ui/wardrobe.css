@@ -88,7 +88,7 @@
   width: 4.6rem;
   padding: 0.2rem 0.15rem;
   border: none;
-  border-radius: 0.45rem;
+  border-radius: var(--corner);
   background: var(--sunk);
   cursor: pointer;
   touch-action: manipulation;
@@ -104,7 +104,7 @@
 .tint__swatch {
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 999px;
+  border-radius: var(--round);
   box-shadow: inset 0 0 0 0.12rem color-mix(in srgb, var(--c-ink-base) 35%, transparent);
   background: var(--tint-role, var(--paper-shade));
 }

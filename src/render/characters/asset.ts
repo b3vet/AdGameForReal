@@ -30,6 +30,7 @@ import {
   vatAsset,
 } from './manifest';
 import type { ModelAsset, VatMeta } from './manifest';
+import { buildLodGeometry, createLodMesh } from './lod';
 import { mergeCharacter } from './merge';
 import type { PartRange } from './merge';
 import { prepareVatSampling } from './vatSampling';
@@ -50,6 +51,12 @@ export interface CharacterAsset {
   readonly baseColors: Float32Array | null;
   /** Where each named source mesh landed in that buffer. */
   readonly parts: ReadonlyMap<string, PartRange>;
+  /**
+   * The same character at about a third of the triangles, for units small on
+   * screen (`./lod.ts`), with the full-mesh vertex each of its vertices came
+   * from. Null when simplifying would not save enough to be worth a draw call.
+   */
+  readonly lod: { readonly mesh: Mesh; readonly order: Uint32Array } | null;
   /** Kept alive because the shader only takes the VAT path when a mesh has one. */
   readonly skeleton: Skeleton;
   readonly manager: BakedVertexAnimationManager;
@@ -100,6 +107,10 @@ export async function loadCharacterAssets(
   const loaded = await ImportMeshAsync(resolveAssetUrl(model.id), scene);
   // The loader starts the first clip on its own; nothing here is played back.
   for (const group of loaded.animationGroups) group.dispose();
+  // Nothing loaded here is drawn as it is, and the variants below yield to the
+  // event loop between them: a frame in between must not find a raw
+  // character standing at the origin.
+  for (const source of loaded.meshes) source.setEnabled(false);
 
   const skeleton = loaded.skeletons[0];
   if (skeleton === undefined) throw new Error(`${model.url} has no skeleton`);
@@ -110,7 +121,8 @@ export async function loadCharacterAssets(
   let live = variants.length;
   let material: Material | null = null;
 
-  const assets = variants.map((requested) => {
+  const assets: CharacterAsset[] = [];
+  for (const requested of variants) {
     const variant = requested ?? variantNames[0] ?? '';
     const extra = model.variants?.[variant];
     if (variant !== '' && extra === undefined) {
@@ -130,6 +142,8 @@ export async function loadCharacterAssets(
 
     const merged = mergeCharacter(sources, skeleton, model);
     const mesh = new Mesh(`${model.id}:${variant}`, scene);
+    // Off until a crowd commits instances into it (`VatCrowd.commit`).
+    mesh.setEnabled(false);
     merged.data.applyToMesh(mesh, false);
     // The colour buffer alone is updatable, so a cosmetic can dye the hat and
     // the cape after the merge (D53, `VatCrowd.setPartTints`). Babylon silently
@@ -146,7 +160,7 @@ export async function loadCharacterAssets(
     // disposed with the first variant that goes away.
     const bones = skeleton.clone(`${model.id}:${variant}:rig`);
     mesh.skeleton = bones;
-    mesh.numBoneInfluencers = 4;
+    mesh.numBoneInfluencers = BONE_INFLUENCERS;
     mesh.isPickable = false;
     // Thin-instance bounds are not tracked as the buffer changes, so let the
     // mesh skip frustum culling rather than have the crowd vanish at the edge.
@@ -157,16 +171,36 @@ export async function loadCharacterAssets(
     manager.texture = texture;
     mesh.bakedVertexAnimationManager = manager;
 
+    // The small-on-screen copy, one variant per task: simplifying is tens of
+    // milliseconds a character, and three staffs in one go would be a stall
+    // the title screen shows.
+    await nextTask();
+    const lodGeometry = buildLodGeometry(merged.data);
+    const lod =
+      lodGeometry === null
+        ? null
+        : {
+            mesh: createLodMesh(scene, `${model.id}:${variant}:lod`, lodGeometry, {
+              material,
+              skeleton: bones,
+              manager,
+              numBoneInfluencers: BONE_INFLUENCERS,
+            }),
+            order: lodGeometry.order,
+          };
+
     const asset: CharacterAsset = {
       mesh,
       baseColors: merged.colors,
       parts: merged.parts,
+      lod,
       skeleton: bones,
       manager,
       vat,
       scale: model.scale ?? 1,
       dispose(): void {
         // `false`: the texture is shared, so it outlives any one variant.
+        lod?.mesh.dispose();
         manager.dispose(false);
         mesh.dispose();
         bones.dispose();
@@ -176,8 +210,8 @@ export async function loadCharacterAssets(
         texture.dispose();
       },
     };
-    return asset;
-  });
+    assets.push(asset);
+  }
 
   // Everything the loader made: the merged copies own the geometry now, and
   // every variant carries its own clone of the rig.
@@ -186,6 +220,14 @@ export async function loadCharacterAssets(
   skeleton.dispose();
 
   return assets;
+}
+
+/** Bone influences a merged vertex carries (KayKit's glTF export). */
+const BONE_INFLUENCERS = 4;
+
+/** Waits for the next macrotask, so the work after it is a task of its own. */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /** The one material every merged mesh shares; the first source that has one. */

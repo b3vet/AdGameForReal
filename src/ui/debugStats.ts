@@ -41,6 +41,33 @@ export interface DebugStats {
   renderMs: number;
   /** `PhysicsLayer.onEvents` plus `update`. */
   physicsMs: number;
+  /** `renderMs` without `scene.render`: the views writing the frame's buffers. */
+  viewsMs: number;
+  /**
+   * `scene.render` alone: Babylon's walk of the scene and the GL calls, and
+   * the Havok step, which Babylon runs inside it (`physicsMs` is only the
+   * layer's own bookkeeping).
+   */
+  drawMs: number;
+  /** The whole frame callback, sim to HUD, before the panel's own work. */
+  frameMs: number;
+  /**
+   * `requestAnimationFrame` callbacks since boot, drawn or skipped: a capture
+   * divides its share by its length to get the display's own rate, which on a
+   * ProMotion phone is the question of whether the pacer is skipping
+   * (`src/core/framePacer.ts`).
+   */
+  rafCallbacks: number;
+  /** Meshes Babylon drew last frame, and their triangles. */
+  activeMeshes: number;
+  triangles: number;
+  /**
+   * Crowd units drawn from the full mesh, from the low-polygon copy, and left
+   * out by the cull, last frame (`src/render/characters/crowdDraw.ts`).
+   */
+  crowdWhole: number;
+  crowdSmall: number;
+  crowdCulled: number;
   /** From the renderer's instrumentation; 0 when it has none yet. */
   drawCalls: number;
   /** Worst draw-call count since the run started; the smoke's budget is on this. */

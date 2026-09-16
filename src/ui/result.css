@@ -1,6 +1,8 @@
 /*
- * The result sheet: the verdict ribbon, the framed stats, the first-clear badge
- * and the purse line.
+ * The result sheet's pieces: the verdict ribbon, the framed stats and the
+ * first-clear badge. How they are spread down the screen, and the three ways
+ * out, are `./resultLayout.css`; the purse the sheet fills is the coin chip
+ * over it (`./coinChip.css`), not a line of its own (docs/28).
  *
  * Split out of `./screens.css` in Milestone 5 Phase D when that file grew past
  * the size rule, and imported by `./result.ts` the way `./hud.css` is imported
@@ -21,7 +23,7 @@
   --ribbon-c: var(--gold-deep);
   position: relative;
   padding: 0.3rem 2.4rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   background: linear-gradient(180deg, var(--ribbon-a), var(--ribbon-b) 55%, var(--ribbon-c));
   clip-path: polygon(
     0 0,
@@ -81,19 +83,49 @@
   }
 }
 
+/*
+ * The numbers, sized to fit the sheet rather than scroll it (docs/28).
+ *
+ * A grid rather than a column: the coins are the headline and take a whole
+ * line, and so do the metres on an endless run, while survivors and peak share
+ * one — the column of four equal rows it replaced was the tallest thing on a
+ * sheet that scrolled on a 390x844 phone.
+ *
+ * The rows grow with the screen's height rather than only its width, which is
+ * what uses a tall phone's room instead of leaving it as a gap: the padding and
+ * the figures are height clamps, compact on a 667-px screen and a size up on a
+ * 956-px one.
+ */
 .stats {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  --stat-pad: clamp(0.1rem, 1.2vh - 0.4rem, 0.6rem);
+  --stat-size: clamp(1.25rem, 3.2vh, 2rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.4rem;
   margin: 0;
   width: min(100%, 22rem);
+}
+
+/*
+ * `dvh` where the browser has it: on the hosted playtest link a `vh` counts the
+ * strip under the URL bar. Behind `@supports` rather than written twice, because
+ * a custom property takes whatever it is given and the second copy would win on
+ * a browser that cannot read it (the trap `./tokens.css` describes).
+ */
+@supports (height: 1dvh) {
+  .stats {
+    --stat-pad: clamp(0.1rem, 1.2dvh - 0.4rem, 0.6rem);
+    --stat-size: clamp(1.25rem, 3.2dvh, 2rem);
+  }
 }
 
 .stats__row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.35rem 0.55rem;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: var(--stat-pad) 0.55rem;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--paper) 94%, transparent),
@@ -101,10 +133,16 @@
   );
 }
 
+.stats__row--coins,
+.stats__row--wide {
+  grid-column: 1 / -1;
+}
+
 .stats__key {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
   font-family: var(--font-body);
   font-size: 0.92rem;
   font-weight: 700;
@@ -120,13 +158,41 @@
 .stats__value {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: var(--stat-size);
   font-weight: 700;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 
+/*
+ * Half a 375-px column is about 170 px of tile, and "Survivors" beside a
+ * three-figure count has to fit in it on one line.
+ */
+.stats__row--half {
+  padding-inline: 0.4rem;
+}
+
+.stats__row--half .stats__key {
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.stats__row--half .stats__icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.stats__row--half .stats__value {
+  font-size: calc(var(--stat-size) * 0.88);
+}
+
 /* --- Result: coins and the first-clear badge (Milestone 4, D33) ----------- */
+
+/* The headline figure, a step up from the rest. */
+.stats__row--coins .stats__value {
+  font-size: calc(var(--stat-size) * 1.12);
+}
 
 .stats__row--coins {
   background: linear-gradient(
@@ -147,9 +213,9 @@
 }
 
 .result__badge {
-  margin: 0.5rem 0 0;
-  padding: 0.25rem 0.9rem;
-  border-radius: 999px;
+  margin: 0.3rem 0 0;
+  padding: 0.2rem 0.9rem;
+  border-radius: var(--corner);
   background: linear-gradient(180deg, var(--gold-light), var(--gold));
   box-shadow: 0 0.15rem 0 var(--c-gold-deep);
   color: var(--ink);
@@ -177,25 +243,11 @@
   }
 }
 
-.result__total {
-  margin: 0.6rem 0 0;
-  font-family: var(--font-body);
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--ink-soft);
-}
-
-.result__total span {
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
 /*
- * Landscape: the result sheet is a column of three stat rows and three buttons,
- * and a phone on its side has 320 px for all of it. The stats go side by side
- * as three tiles — label over number — and every piece of type drops a step.
- * Measured at 568x320, where the column put the buttons below the fold.
+ * Landscape: the result sheet is a grid of stat rows and a row of buttons, and
+ * a phone on its side has 320 px for all of it. The stats go side by side as
+ * one row of tiles — label over number — and every piece of type drops a step.
+ * Measured at 568x320, where a column put the buttons below the fold.
  */
 @media (orientation: landscape) {
   .ribbon {
@@ -218,35 +270,41 @@
   }
 
   .stats {
-    flex-direction: row;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
     gap: 0.4rem;
     width: min(100%, 30rem);
   }
 
-  .stats__row {
-    flex: 1 1 0;
+  .stats__row,
+  .stats__row--half {
     flex-direction: column;
     align-items: center;
     gap: 0.05rem;
     padding: 0.15rem 0.3rem;
   }
 
-  .stats__key {
+  .stats__row--coins,
+  .stats__row--wide {
+    grid-column: auto;
+  }
+
+  .stats__key,
+  .stats__row--half .stats__key {
     font-size: 0.7rem;
   }
 
-  .stats__icon {
+  .stats__icon,
+  .stats__row--half .stats__icon {
     width: 0.95rem;
     height: 0.95rem;
   }
 
-  .stats__value {
+  .stats__value,
+  .stats__row--half .stats__value,
+  .stats__row--coins .stats__value {
     font-size: 1.2rem;
-  }
-
-  .result__total {
-    margin-top: 0.35rem;
-    font-size: 0.75rem;
   }
 }
 
@@ -254,105 +312,5 @@
   .result__badge--pop,
   .ribbon--in {
     animation-duration: 1ms;
-  }
-}
-
-/*
- * The sheet scrolls when it has more to say than the screen has room for.
- *
- * Measured on this milestone's fullest sheet at 390x844 (Phase E): a streak
- * line, a mission tick, the level's best walk and the next unlock together push
- * the fourth button — Academy, the way to the shop the run has just paid into —
- * about thirty pixels past the bottom edge. `html` and `body` are
- * `overflow: hidden` (`./styles.css`), so that button is not merely off screen,
- * it is unreachable, which is the same class of bug the landscape rules below
- * were written for.
- *
- * The middle is what gives: the verdict at the top and the way out at the
- * bottom are the two things that must never move, and a sheet that fits is
- * unchanged — a flex item only scrolls once there is nowhere left to grow.
- * `touch-action` is named because the page itself is `touch-action: none` (the
- * canvas handles every gesture), so a scroll container inside it has to ask for
- * the one axis it wants.
- */
-.screen--result .screen__middle {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-  pointer-events: auto;
-}
-
-/*
- * ...and nothing inside it gives instead.
- *
- * A flex column shrinks whichever child *can* shrink before it overflows, and
- * the one child here that can is the bonus list — it has an `overflow` of its
- * own (`./resultMeta.css`), so its automatic minimum is zero. Without this the
- * sheet fitted by squeezing the streak and the mission tick to a sliver: the
- * run's own story, crushed so that a hint about the next purchase could keep
- * its full height. Every row keeps its size now and the column scrolls, so what
- * goes past the bottom edge is the last thing on the sheet rather than the
- * middle of it.
- */
-.screen--result .screen__middle > * {
-  flex-shrink: 0;
-}
-
-/*
- * Four buttons instead of two (Milestone 8): Ascend, "Same road again", Again
- * and Academy. A column of four is taller than the foot of a 844-px phone once
- * the bonus lines are above it, so the three ghost buttons share a row and only
- * the gold one — the thing the player came here to press — keeps a line of its
- * own.
- */
-.screen--result .screen__actions {
-  flex-flow: row wrap;
-  justify-content: center;
-  gap: 0.4rem;
-}
-
-.screen--result .screen__actions > .button {
-  flex: 1 1 8rem;
-}
-
-.screen--result .screen__actions > .button:not(.button--ghost) {
-  flex-basis: 100%;
-}
-
-/*
- * Landscape: the four buttons share one row (Milestone 8 review).
- *
- * The rule above gives the gold button a line of its own and the three ghosts
- * a line to share, which is right on a 390x844 phone and is three stacked rows
- * on a 568x320 one — about 190 px of a 320 px screen. Measured there: the
- * middle of the sheet was squeezed to *nothing*, so the run's own numbers were
- * not on it at all, and Academy still hung 28 px past the bottom edge, where
- * `overflow: hidden` makes it unreachable. It is the bug the portrait scroll
- * above was written for, in the orientation that has the least height and the
- * most width.
- *
- * So in landscape the row is wider than the phone-shaped column and each
- * button asks for less of it: four across, one row, and the hundred and thirty
- * pixels that buys go back to the numbers.
- */
-@media (orientation: landscape) {
-  .screen--result .screen__actions {
-    width: min(100%, 34rem);
-  }
-
-  /*
-   * And a smaller plate on each. The button face is `clamp(1.05rem, 4.6vw,
-   * 1.25rem)`, which on a 568 px-wide screen is the 1.25rem ceiling — a 20 px
-   * display face whose own minimum width is 146 px, so only three of the four
-   * ever fitted across however small their flex basis was. A 320 px screen
-   * cannot afford that on four buttons, and what it buys back is the whole of
-   * the sheet's middle.
-   */
-  .screen--result .screen__actions > .button,
-  .screen--result .screen__actions > .button:not(.button--ghost) {
-    flex-basis: 6rem;
-    padding: 0.35rem 0.5rem 0.25rem;
-    font-size: clamp(0.85rem, 2.2vw, 1rem);
   }
 }

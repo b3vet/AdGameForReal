@@ -17,6 +17,7 @@ import type { OverlayCallbacks } from '@/ui';
 
 import type { AcademyController } from './academy';
 import type { RunPause } from './pause';
+import { endlessOpen } from './player';
 import type { RoomId } from './player';
 
 /** The app, as a tap sees it. */
@@ -32,23 +33,19 @@ export interface AppCommands {
   /** Play: start the road the picker is pointed at. */
   startRun(): void;
   /**
-   * Again on the result sheet: the road just walked, re-rolled. It has to know
-   * the *mode* rather than the level, because the endless road has none (D52).
+   * Retry on the result sheet: the road just walked, on the seed it was walked
+   * on. It has to know the *mode* rather than the level, because the endless
+   * road has none (D52).
    */
   retryRun(): void;
-  /**
-   * "Same road again" on the result sheet (Milestone 8): the road just walked,
-   * on the seed it was walked on — an endless one included (D52).
-   */
-  replayRun(): void;
   /** The picker's Endless card: a walk of the road with no end (D52). */
   startEndless(seed?: number | null): void;
-  /** Ascend: the level after this one. */
+  /** Continue: the level after this one. */
   nextLevel(): void;
   selectLevel(level: number): void;
   /** A card on the home screen; `play` opens the picker. */
   openRoom(room: RoomId): void;
-  /** Back, from the picker or a room, and "Academy" on the result sheet. */
+  /** Back, from the picker or a room, and Home on the result sheet. */
   showHome(): void;
   toggleMute(): void;
   toggleDebug(): void;
@@ -74,7 +71,7 @@ export function overlayCallbacks(app: AppCommands): OverlayCallbacks {
     onCloseRoom: () => {
       app.showHome();
     },
-    onLevels: () => {
+    onResultHome: () => {
       app.showHome();
     },
     onTap: () => {
@@ -112,10 +109,11 @@ export function overlayCallbacks(app: AppCommands): OverlayCallbacks {
       app.academy.selectCosmetic(slot, id);
     },
     onEndless: () => {
+      // The card is disabled until the player reaches its level (docs/28), so
+      // this is belt and braces for a tap on a stale frame, as `openRoom` has.
+      // Only the tap is gated: the debug handle and `?endless=1` call the app.
+      if (!endlessOpen(app.academy.player)) return;
       app.startEndless();
-    },
-    onReplay: () => {
-      app.replayRun();
     },
     onPause: () => {
       app.pause.pause();

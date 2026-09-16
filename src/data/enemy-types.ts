@@ -86,6 +86,11 @@ export interface BossBalance extends EnemyBalance {
 /**
  * The Rime Fiend's charge: it picks the lane the column is standing in, runs
  * down it through the crowd, and walks back to where it stood (D49).
+ *
+ * What it costs is decided by where the body goes, not by a share of the crowd
+ * (document 29): whoever is standing inside its footprint while it runs in is
+ * under it and dies, up to the cap, and a column that has left the lane before
+ * it arrives loses nobody.
  */
 export interface RimeBalance {
   charge: {
@@ -96,10 +101,27 @@ export interface RimeBalance {
     /** Metres past the column's front it runs before turning round. */
     depth: number;
     /**
-     * Share of the crowd it kills on the way through, spread along its path so
-     * the dead are the ones it actually ran over.
+     * Seconds between committing to a lane and setting off down it. The
+     * commitment is the tell (the roar, the kick, the slide into the lane), and
+     * this is the time a thumb has to answer it: without it a charge from
+     * contact distance lands a tenth of a second after it is announced.
      */
-    share: number;
+    windup: number;
+    /**
+     * Half the width of the road the body kills on, either side of its centre.
+     * Inside half a lane, so a column standing in the next lane is a column it
+     * runs past.
+     */
+    hitHalfWidth: number;
+    /** How far in front of and behind its centre the body kills, in metres. */
+    hitReach: number;
+    /**
+     * The most one charge may kill: this share of the crowd it set off
+     * against, and never less than `killFloor` soldiers. Fewer die when fewer
+     * are standing in its way.
+     */
+    killShare: number;
+    killFloor: number;
     /** How fast it walks back to the spot it charged from. */
     returnSpeed: number;
     /** How fast it slides into the lane it has picked, in m/s. */

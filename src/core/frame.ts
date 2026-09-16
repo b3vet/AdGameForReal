@@ -9,6 +9,10 @@
  *             step. The sim and the renderer run on this, which is what makes
  *             hit-stop and slow-mo affect the game rather than an animation.
  *
+ * Both are measured between *drawn* frames. A display faster than sixty a
+ * second hands the loop callbacks it does not draw on (`./framePacer.ts`), and
+ * the time of a skipped one belongs to the frame after it.
+ *
  * Split out of `App` (Phase C) so the state machine reads as a state machine:
  * everything here is about one frame, and everything there is about which
  * screen is up. The loop asks the app for what it needs through `FrameHost`
@@ -22,6 +26,7 @@ import type { RunState, SimEvent } from '@/sim';
 import type { Overlay } from '@/ui';
 import type { DebugStats } from '@/ui';
 
+import { FramePacer } from './framePacer';
 import { FrameStatsCollector } from './frameStats';
 import type { Juice } from './juice';
 import { PhysicsEventQueue } from './physicsEvents';
@@ -96,6 +101,8 @@ export class FrameDriver {
 
   private readonly host: FrameHost;
   private readonly physicsEvents = new PhysicsEventQueue();
+  /** Which display refreshes are drawn: at most sixty a second (`./framePacer.ts`). */
+  private readonly pacer = new FramePacer();
 
   private rafId: number | null = null;
 
@@ -137,22 +144,6 @@ export class FrameDriver {
   private runningWhenSuspended = false;
 
   /**
-   * Worst draw-call count since the last `resetPeak`. Tracked on every frame
-   * rather than only under `?debug`, because it is what the smoke test reads to
-   * hold the frame budget (plan, "Performance"): one counter read per frame.
-   */
-  private peak = 0;
-
-  /**
-   * Worst charger count since the last `resetPeak`, tracked exactly like the
-   * draw calls beside it and for one reader: the Frostfell smoke run asserts a
-   * charger was actually drawn (D49). A single-frame sample cannot say that — a
-   * charger is on the road for two seconds of a ninety-second run — and a peak
-   * can, for one getter read per frame.
-   */
-  private peakChargers = 0;
-
-  /**
    * Whether the title screen's frame still needs drawing. The preview session
    * never ticks, so once the camera has eased into place the scene is identical
    * frame to frame and `scene.render` is pure heat; anything that can change it
@@ -178,6 +169,7 @@ export class FrameDriver {
     // reports a delta of nothing, which is what makes a pause drop the time
     // spent away instead of handing it to the sim in one lump (see `pause`).
     this.lastFrameTime = null;
+    this.pacer.reset();
     this.rafId = requestAnimationFrame(this.frame);
   }
 
@@ -244,21 +236,23 @@ export class FrameDriver {
 
   /** Worst draw-call count since `resetPeak`; 0 before the first frame. */
   get peakDrawCalls(): number {
-    return this.peak;
+    return this.collector.peakDrawCalls;
   }
 
   /** Most chargers drawn in one frame since `resetPeak` (D49). */
   get peakChargerBodies(): number {
-    return this.peakChargers;
+    return this.collector.peakChargerBodies;
   }
 
   resetPeak(): void {
-    this.peak = 0;
-    this.peakChargers = 0;
+    this.collector.resetPeaks();
   }
 
   private readonly frame = (time: number): void => {
     this.rafId = requestAnimationFrame(this.frame);
+    // A fast display's in-between refresh: the time belongs to the next frame.
+    if (!this.pacer.due(time)) return;
+    const frameStart = now();
     const host = this.host;
 
     // Two real deltas: the clamped one drives the game, the raw one drives the
@@ -288,12 +282,10 @@ export class FrameDriver {
       // rather than hang in the air behind the menu.
       host.physics()?.update(frameDt);
       // No sim, and usually no render either (the title's frame is drawn once
-      // and then held), so the three cost readouts describe nothing. Zeroed
-      // rather than left holding the last run's numbers, which a capture taken
-      // on the title screen would otherwise report as if they were live.
-      this.stats.simMs = 0;
-      this.stats.renderMs = 0;
-      this.stats.physicsMs = 0;
+      // and then held), so the cost readouts describe nothing. Zeroed rather
+      // than left holding the last run's numbers, which a capture taken on the
+      // title screen would otherwise report as if they were live.
+      this.collector.idle(this.pacer.callbacks);
       this.updateDebug(null, NO_EVENTS, frameDt);
       host.onFrameEnd(frameDt, realDt);
       return;
@@ -307,18 +299,15 @@ export class FrameDriver {
     this.stepPhysics(session.state, frameDt);
     const physicsEnd = now();
 
-    this.stats.simMs = renderStart - simStart;
-    this.stats.renderMs = physicsStart - renderStart;
-    this.stats.physicsMs = physicsEnd - physicsStart;
+    this.collector.costs(simStart, renderStart, physicsStart, physicsEnd, host.renderer.drawMs);
 
-    const draws = host.renderer.drawCalls;
-    if (draws > this.peak) this.peak = draws;
-    const chargers = host.renderer.chargerBodies;
-    if (chargers > this.peakChargers) this.peakChargers = chargers;
+    this.collector.trackPeaks(host.renderer);
 
     host.juice.apply();
     this.stats.timeScale = host.juice.scale;
     host.overlay.updateHud(session.state, events);
+    // Before the panel's own work, which is not the game's.
+    this.collector.frameDone(now() - frameStart, this.pacer.callbacks);
     this.updateDebug(session.state, events, frameDt);
 
     host.onFrameEnd(frameDt, realDt);
@@ -394,6 +383,6 @@ export class FrameDriver {
     events: readonly SimEvent[],
     dt: number,
   ): void {
-    this.collector.publish(this.host, state, events, dt, this.peak);
+    this.collector.publish(this.host, state, events, dt);
   }
 }

@@ -7,9 +7,9 @@
  * because every line here is wiring: which screen the menu goes on, what holds
  * the loop, what Restart and Home call, and the two keys.
  *
- * Restart is "same road again" (`RunStage.replay`) rather than "again": the
- * player asked for the run they were on, from the top, and on a replayed or an
- * endless road that is the seed it was walked on, not a fresh one.
+ * Restart is the result sheet's Retry (`RunStage.replay`): the player asked for
+ * the run they were on, from the top, and on a replayed or an endless road that
+ * is the seed it was walked on, not a fresh one.
  */
 
 import type { Overlay } from '@/ui';

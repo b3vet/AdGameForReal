@@ -2,9 +2,18 @@
  * The confetti canvas. It is the last child of `#overlay-root` before the debug
  * panel, so it paints over the result screen's panel rather than under it, and
  * it inherits the overlay's `pointer-events: none`.
+ *
+ * Placed against the overlay's box rather than laid out in its grid. As a grid
+ * item it was sized by its own backing store — a canvas is 2:1 until something
+ * sets its size, so on an 844-px-wide phone on its side it was 422 px tall —
+ * and the one grid row every screen shares grew to match: the result sheet
+ * under it became taller than the screen and its buttons sank into the home
+ * indicator (docs/28, measured at 844x390).
  */
 
 #confetti {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;

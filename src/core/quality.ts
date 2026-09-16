@@ -1,10 +1,11 @@
 /**
  * The degrade ladder, and the frame-time monitor that walks it.
  *
- * One ladder for the whole app: pixel ratio 3 → 2 → 1.5 → 1, then the ragdolls
- * 8 → 4 → 0. It lives here rather than in `src/physics` because the first
- * four steps are the renderer's and only the app can see all of them; the
- * physics layer keeps `setQuality` and no opinion about when it is called.
+ * One ladder for the whole app (`quality.json`, `ladder`): the crowd's
+ * low-polygon copy for every unit, then pixel ratio 3 → 2.5 → 2 → 1.5 → 1,
+ * then the ragdolls 8 → 4 → 0. It lives here rather than in `src/render` or
+ * `src/physics` because only the app can see all of them; the two layers keep
+ * their setters and no opinion about when they are called.
  *
  * Milestone 3 dropped the glow rung entirely (plan, performance step 4): the
  * pass is gone from the renderer, the bolts and impacts carry their own
@@ -32,23 +33,46 @@
  * mid-run is worse to play than one that settles: every rung is a decision the
  * player only notices once.
  *
+ * ## What changed after the second device playtest (docs/28, note 5)
+ *
+ * The owner's phone ran "better but still below 60 on average", and the p95
+ * rule lets exactly that through: a device that misses one refresh in
+ * twenty-five sits at 57 or 58 fps with an ordinary p95 frame. So a window is
+ * also over budget when more than `lateShare` of its frames are *late* —
+ * longer than the budget but shorter than `lateCeilingMs`, which is one or two
+ * refreshes missed, the signature of a device that is short of time. A hitch
+ * of a fifth of a second is not late: it is a stall a lower rung cannot cure,
+ * and the old rule about bursts of those still holds.
+ *
+ * And the first step is no longer resolution. On an Apple GPU the crowd's
+ * triangles were the frame, not its pixels (`src/render/characters/lod.ts`), so
+ * rung 1 draws every unit from the low-polygon copy at full resolution —
+ * the step least likely to be seen — and the resolution steps that follow go
+ * by 2.5 before 2, because 2 is where the owner once called the game "very low
+ * resolution" (D38).
+ *
  * `?quality=n` pins a rung, for testing a phone's worst case on a desktop; a
  * pinned ladder never steps on its own.
  */
 
+import { qualityTuning } from '@/data';
 import type { PhysicsQuality } from '@/physics';
 
 /**
- * What a rung asks of the two layers. `physics` is the quality the physics
- * layer is set to, which is what decides how many ragdolls a kill spawns.
+ * What a rung asks of the layers. `physics` is the quality the physics layer is
+ * set to, which is what decides how many ragdolls a kill spawns; `crowdDetail`
+ * is how many crowd units the renderer draws whole
+ * (`Renderer.setCrowdDetail`).
  */
 export interface QualityRung {
   readonly pixelRatio: number;
+  readonly crowdDetail: number;
   readonly physics: PhysicsQuality;
 }
 
 /**
- * The ladder itself, best first. Index into this is the "rung" everywhere.
+ * The ladder itself, best first (`quality.json`). Index into this is the
+ * "rung" everywhere.
  *
  * Rung 0 is the screen's own pixel ratio, up to 3 (D38). Milestone 3 capped it
  * at 2 on the theory that the extra pixels buy nothing; the product owner's
@@ -60,46 +84,44 @@ export interface QualityRung {
  *
  * That is the whole guard, and it is deliberate: there is no device list and no
  * "3× only above N cores" rule, because both would be wrong on a phone nobody
- * on this team owns. A device that cannot hold native renders two windows —
- * six seconds — at 3 and then steps to 2, which is where Milestone 3 started.
- * Every step is one stop of resolution, never two: dropping straight from 3 to
- * 1.5 is what made the Milestone 2 build look soft, and the p95 rule steps
+ * on this team owns. Every step is one stop, never two: dropping straight from
+ * 3 to 1.5 is what made the Milestone 2 build look soft, and the rule steps
  * again in another six seconds if one stop was not enough.
  *
  * The tail is the ragdolls: physics 2 spawns eight per kill, 1 spawns four and
  * 0 none at all (`RAGDOLL_LIVE_CAP` in `src/physics`), so the last two rungs
  * buy frames by drawing fewer bodies once there is no resolution left to give.
  */
-export const QUALITY_RUNGS: readonly QualityRung[] = [
-  { pixelRatio: 3, physics: 2 },
-  { pixelRatio: 2, physics: 2 },
-  { pixelRatio: 1.5, physics: 2 },
-  { pixelRatio: 1, physics: 2 },
-  { pixelRatio: 1, physics: 1 },
-  { pixelRatio: 1, physics: 0 },
-];
+export const QUALITY_RUNGS: readonly QualityRung[] = qualityTuning.ladder.rungs.map((rung) => ({
+  pixelRatio: Math.max(1, rung.pixelRatio),
+  crowdDetail: Math.max(0, rung.crowdDetail),
+  physics: physicsQuality(rung.physics),
+}));
 
 export const MAX_QUALITY_RUNG = QUALITY_RUNGS.length - 1;
 
+const LADDER = qualityTuning.ladder;
 /**
  * Frame-time budget, in seconds: the p95 a window has to beat.
  *
- * 20 ms is 50 fps, the floor the milestone's re-measurement target names for
- * level 8. A 60 fps device that misses a vsync here and there sits at 16.7 ms
- * at p95 and is left alone; one that is genuinely drawing 40 fps is at 25 and
- * is not.
+ * 20 ms is 50 fps. A 60 fps device that misses a vsync here and there sits at
+ * 16.7 ms at p95 and is left alone by this half of the rule; one that is
+ * genuinely drawing 40 fps is at 25 and is not.
  */
-const FRAME_BUDGET = 0.02;
+const FRAME_BUDGET = LADDER.frameBudgetMs / 1000;
+/** Upper end of a late frame; see the file note. */
+const LATE_CEILING = LADDER.lateCeilingMs / 1000;
+const LATE_SHARE = LADDER.lateShare;
 /** Seconds of frames each verdict is taken over. */
-const WINDOW_SECONDS = 3;
+const WINDOW_SECONDS = LADDER.windowSeconds;
 /** Consecutive over-budget windows before the ladder steps. */
-const WINDOWS_TO_STEP = 2;
+const WINDOWS_TO_STEP = LADDER.windowsToStep;
 /**
  * Seconds after a level start that are not measured at all: the generator, the
  * pools being handed out, the first crowd upload and whatever the browser was
  * doing while the level screen was up.
  */
-const SETTLE_SECONDS = 2;
+const SETTLE_SECONDS = LADDER.settleSeconds;
 /**
  * Frames one window can hold. Three seconds at 170 fps, so a ProMotion phone
  * never overflows it; a longer window simply stops sampling, which biases
@@ -108,6 +130,11 @@ const SETTLE_SECONDS = 2;
 const WINDOW_SAMPLES = 512;
 /** Where in the sorted window the verdict is read. */
 const PERCENTILE = 0.95;
+
+function physicsQuality(value: number): PhysicsQuality {
+  if (value >= 2) return 2;
+  return value >= 1 ? 1 : 0;
+}
 
 export interface QualityLadderOptions {
   /** Pin a rung and stop the monitor. `?quality=`; null means automatic. */
@@ -144,8 +171,10 @@ export class QualityLadder {
   private elapsed = 0;
   /** Seconds since the level started; nothing is judged below `SETTLE_SECONDS`. */
   private sinceLevel = 0;
-  /** Consecutive windows whose p95 was over budget. */
+  /** Consecutive windows that were over budget. */
   private overWindows = 0;
+  /** Late frames in the window being filled; see the file note. */
+  private late = 0;
 
   /** The last completed window's p95, in seconds. 0 before the first one. */
   private lastP95 = 0;
@@ -174,7 +203,7 @@ export class QualityLadder {
   get current(): QualityRung {
     // The index is clamped on every write, so this is never undefined; the
     // fallback is here because `noUncheckedIndexedAccess` cannot know that.
-    return QUALITY_RUNGS[this.index] ?? { pixelRatio: 1, physics: 0 };
+    return QUALITY_RUNGS[this.index] ?? { pixelRatio: 1, crowdDetail: 0, physics: 0 };
   }
 
   /** True while the rung came from `?quality=` rather than from the clock. */
@@ -197,7 +226,7 @@ export class QualityLadder {
    *
    * The ratio rides on the reason because it is what a rung *means* and the
    * debug panel's rung line is where the two belong together (`src/ui/debug.ts`
-   * prints `rung 1 p95 2x  p95 24.1ms`). It is the effective ratio, not the
+   * prints `rung 2 p95 2.5x  p95 24.1ms`). It is the effective ratio, not the
    * rung's — a rung of 3 on a 2× screen renders at 2 — which is the number a
    * capture from the product owner's phone has to be read against.
    */
@@ -242,15 +271,18 @@ export class QualityLadder {
     if (this.sinceLevel < SETTLE_SECONDS) return false;
 
     if (this.count < WINDOW_SAMPLES) this.samples[this.count++] = dt;
+    if (dt > FRAME_BUDGET && dt < LATE_CEILING) this.late++;
     this.elapsed += dt;
     if (this.elapsed < WINDOW_SECONDS) return false;
 
     const p95 = this.percentile();
+    const lateShare = this.count > 0 ? this.late / this.count : 0;
     this.lastP95 = p95;
     this.windowCount++;
     this.resetWindow();
 
-    if (p95 <= FRAME_BUDGET) {
+    const slow = p95 > FRAME_BUDGET;
+    if (!slow && lateShare <= LATE_SHARE) {
       this.overWindows = 0;
       return false;
     }
@@ -259,7 +291,7 @@ export class QualityLadder {
 
     this.overWindows = 0;
     this.index++;
-    this.lastReason = 'p95';
+    this.lastReason = slow ? 'p95' : 'late';
     this.applyCurrent();
     return true;
   }
@@ -284,6 +316,7 @@ export class QualityLadder {
 
   private resetWindow(): void {
     this.count = 0;
+    this.late = 0;
     this.elapsed = 0;
   }
 }

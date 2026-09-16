@@ -30,8 +30,9 @@ import { MENU_SETTLE_MS, bootHeroPage, shotTaker, takeHeroShots } from './smoke-
 
 /**
  * The seed the endless road is walked on. Any seed reaches the first boundary
- * — the span is 216 m and a greedy walk on this kit runs to about 2 km — so
- * this is only here to make the two runs the same road twice.
+ * — the span is 324 m, just past the first arena at 306 m, and a greedy walk on
+ * this kit beats the first four bosses (document 28) — so this is only here to
+ * make the two runs the same road twice.
  */
 const ENDLESS_SEED = 3;
 
@@ -62,7 +63,7 @@ const ENDLESS_SAVE = {
  * first on purpose.
  *
  * The endless road deals staff gates of its own (`endless.json`), and the first
- * one on this seed stands at about 140 m: a run that walked to the 216 m
+ * one on this seed stood at about 140 m: a run that walked to the first
  * boundary before looking for a meteor was carrying *frost* by the time it got
  * there, so ember's tier 4 could never fire again. The meteor falls seven
  * seconds in, thirty-odd metres up the road, which is before any gate.

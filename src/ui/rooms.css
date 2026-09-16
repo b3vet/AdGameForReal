@@ -36,7 +36,7 @@
 .room__subtitle {
   margin: 0.4rem 0 0;
   padding: 0.15rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--corner);
   background: var(--chip-strong);
   font-family: var(--font-body);
   font-size: 0.76rem;
@@ -67,36 +67,16 @@
    */
   min-width: 0;
   max-width: 100%;
+  /*
+   * No scroll bar, not even a thin one (docs/28, note 10; the rule itself is in
+   * `./kit.css`). Milestone 7 Phase E had put a classic bar here, so a standing
+   * Bestiary said its list went on; the owner wants the glass clean, and a
+   * list that goes on now says so the way a phone's own lists do, with a card
+   * cut by the frame's foot.
+   */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
-  /*
-   * A scrollbar that is always there, rather than the overlay one iOS and
-   * Chrome fade in only while a finger is moving.
-   *
-   * The Bestiary is what asked for it (Milestone 7 Phase E): six cards at
-   * 390x844 overflow the panel by about 50 px, and with an overlay scrollbar a
-   * standing screen gives the player nothing at all to say the list continues —
-   * the sixth card is simply cut. The cards below are tightened enough that six
-   * fit, so this is the backstop for the seventh, which Milestone 8's monsters
-   * will bring. Styling `::-webkit-scrollbar` at all is what turns WebKit's
-   * overlay bar into a classic one, which is the whole trick.
-   */
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--c-stone-deep) 70%, transparent) transparent;
-}
-
-.room__panel::-webkit-scrollbar {
-  width: 0.35rem;
-}
-
-.room__panel::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--c-stone-deep) 70%, transparent);
-}
-
-.room__panel::-webkit-scrollbar-track {
-  background: color-mix(in srgb, var(--c-ink-base) 12%, transparent);
 }
 
 .rows,
@@ -346,7 +326,7 @@
 .beast__rung {
   flex: 1 1 0;
   padding: 0.05rem 0;
-  border-radius: 0.3rem;
+  border-radius: var(--corner);
   background: var(--sunk);
   font-family: var(--font-display);
   font-size: 0.64rem;

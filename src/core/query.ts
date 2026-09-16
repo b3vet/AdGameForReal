@@ -5,13 +5,14 @@
  * parameter here is a debugging or scripting affordance — the game itself never
  * writes a URL.
  *
- *   ?level=3        start on a level, ignoring the save's unlock state
+ *   ?level=3        point the picker at a level for the page's life, ignoring
+ *                   the save's unlock state
  *   ?bot=greedy     hand steering to a scripted policy (greedy|human|random|worst)
  *   ?seed=7         override the level's generator seed
  *   ?debug          show the debug panel
  *   ?turbo=8        run the sim this many times faster than the wall clock
  *   ?physics=0|1|2  physics quality: 0 skips Havok entirely
- *   ?quality=3      pin a rung of the degrade ladder (0 best, 5 worst)
+ *   ?quality=3      pin a rung of the degrade ladder (0 best, 7 worst)
  *   ?screenshot=1   keep the drawing buffer readable, for the smoke's frames
  *   ?scene=stress   the performance scene; ?scene=render-test the render one
  *   ?biome=frost    pin every level to one biome, whatever the level says
@@ -29,7 +30,15 @@ import { loadSave } from './save';
 export type SceneKind = 'game' | 'render-test' | 'stress';
 
 export interface QueryOptions {
-  level: number;
+  /**
+   * The level the URL names (or `?perf` settled on), or null to let the save
+   * decide. Read-only after boot: the level a run is on is `RunStage`'s, and
+   * the level the picker is pointed at is `MenuStage`'s, which opens on this
+   * pin when there is one and on the newest unlocked level when there is not
+   * (docs/29). It used to be all three at once, which is how the picker came
+   * to open on a level the player had already cleared.
+   */
+  level: number | null;
   bot: BotKind | null;
   seed: number | null;
   debug: boolean;
@@ -43,15 +52,18 @@ export interface QueryOptions {
    * the automatic ladder. Pinning is how a phone's worst case is looked at on
    * a desktop; a pinned ladder never steps on its own.
    *
-   * The ladder is six rungs, 0 to 5, and `clampRung` is what says so. Milestone
-   * 5 (D38) put the native pixel ratio on top of it and moved the ragdolls to
-   * the bottom, so the table is now
+   * The ladder is eight rungs, 0 to 7 (`quality.json`), and `clampRung` is what
+   * says so. Milestone 5 (D38) put the native pixel ratio on top of it and
+   * moved the ragdolls to the bottom; the second device playtest put the
+   * crowd's low-polygon copy first and a 2.5 stop in (docs/28, note 5):
    *
-   *   0  ratio 3, physics 2      3  ratio 1,   physics 2
-   *   1  ratio 2, physics 2      4  ratio 1,   physics 1
-   *   2  ratio 1.5, physics 2    5  ratio 1,   physics 0
+   *   0  ratio 3, crowd tuned        4  ratio 1.5, crowd lean
+   *   1  ratio 3, crowd lean         5  ratio 1,   crowd lean
+   *   2  ratio 2.5, crowd lean       6  ratio 1,   physics 1
+   *   3  ratio 2, crowd lean         7  ratio 1,   physics 0
    *
-   * where the ratio is a *ceiling*: rung 0 on a 2x screen renders at 2.
+   * where the ratio is a *ceiling*: rung 0 on a 2x screen renders at 2, and a
+   * lean crowd draws every unit from the low-polygon copy.
    */
   qualityRung: number | null;
   /** Sound starts muted. Read from the save, not from the URL. */
@@ -66,9 +78,9 @@ export interface QueryOptions {
   biome: BiomeId | null;
   /**
    * The scripted performance run (Milestone 9, section D): level `PERF_LEVEL`
-   * under the greedy bot, the debug panel up, a thirty-second capture once the
-   * warm-up is done, and the device report shown and copied at the end
-   * (`./perf.ts`).
+   * under the greedy bot, the debug panel up, a 45-second capture from 35
+   * seconds into the run (the road's thick and the boss), and the device
+   * report shown and copied at the end (`./perf.ts`).
    *
    * It is one flag rather than four because it is one *thing the owner does*:
    * open the link on the phone, put it down, pick it up and paste. Every part
@@ -126,9 +138,9 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
   // `?perf` picks the level itself — `PERF_LEVEL`, or the highest the save has
   // reached when that is lower — unless the URL named one, which wins.
   const perfLevel = Math.min(PERF_LEVEL, save.unlockedLevel);
-  const level = Number.isFinite(levelParam)
-    ? clampLevel(levelParam, levelCount)
-    : clampLevel(perf ? perfLevel : save.unlockedLevel, levelCount);
+  let level: number | null = null;
+  if (Number.isFinite(levelParam)) level = clampLevel(levelParam, levelCount);
+  else if (perf) level = clampLevel(perfLevel, levelCount);
 
   const botParam = params.get('bot');
   const namedBot: BotKind | null =

@@ -4,7 +4,7 @@
  * No library and no per-frame allocation — the pool is built once in the
  * constructor and `burst` only rewrites the numbers in it. The canvas is
  * `pointer-events: none` like the rest of the overlay, so a player who taps
- * "Ascend" through a cloud of paper still hits the button.
+ * Continue through a cloud of paper still hits the button.
  *
  * It runs its own `requestAnimationFrame` loop and stops as soon as the last
  * particle dies, because the result screen is otherwise a still image and the

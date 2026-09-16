@@ -179,11 +179,13 @@ export const RUNS = [
     shots: [],
     endShot: 'result-coins.png',
     // A campaign win's sheet: the bonus lines the meta layer paid, the level's
-    // best walk, and the next thing the Academy sells against the purse — and
-    // no metres row, which belongs to the endless road alone.
+    // best walk and Continue — and no metres row, which belongs to the endless
+    // road alone. The next-unlock row and the second replay button are gone
+    // (docs/28), so they are asserted absent rather than hidden.
     sheet: {
-      visible: ['#result-bonuses', '#result-best', '#result-next', '#next-button'],
+      visible: ['#result-bonuses', '#result-best', '#next-button', '#retry-button'],
       hidden: ['#result-metres-row'],
+      absent: ['#result-next', '#replay-button', '#result-total'],
     },
   },
   {
@@ -249,20 +251,33 @@ export const RUNS = [
      * and the run asserts it crossed two of them with the draw budget and the
      * shader count unmoved, which is what the second set of ground meshes and
      * materials was measured at in Phase C. The HUD counts metres instead of a
-     * level. The sheet reads metres, a new record and no Ascend. And Again on
-     * that sheet walks the endless road again rather than whatever level the
-     * picker was pointed at.
+     * level. The sheet reads metres, a new record and no Continue. And Retry
+     * on that sheet walks the endless road again rather than whatever level
+     * the picker was pointed at.
      *
-     * Bare, with no save at all: a greedy walk on nothing bought reaches about
-     * 1900 to 2400 m of the 2898 m road (measured on the sim over five seeds),
-     * which is nine to eleven spans — so the two crossings this run is stopped
-     * after (`endAfter`) are not close to the margin, and the record it sets is
-     * the first one.
+     * Bare, with no save at all. Since the road stands a boss at the end of
+     * every span (document 28) a greedy walk on nothing bought fights on the
+     * way: on this seed it beats the demon at 306 m and the Rime Fiend at
+     * 630 m, and dies to the fourth boss at 1278 m (measured on the sim), so
+     * the two crossings this run is stopped after (`endAfter`), at 324 and
+     * 648 m, are not close to the margin, and the record it sets is the first
+     * one. Each crossing comes just after an arena, so the boundary frame is
+     * also the road carrying on past a fight.
      */
     label: 'endless greedy',
     query: `?endless=1&bot=greedy&seed=3&turbo=${TURBO}&screenshot=1`,
     autoStart: true,
     endless: true,
+    /**
+     * Four over the campaign's 52 (document 28). The mid-road boss is a
+     * campaign level's whole arena standing on a road that is still dealing
+     * rows, and its fight throws the full ragdoll cap: 54 was measured here
+     * with the round 2 performance work in, where the same run without that
+     * work peaked at 53. The phone's cost in this scene was triangles rather
+     * than calls, and those came down by more than half (document 26), so the
+     * calls are allowed the boss rather than the boss being made cheaper.
+     */
+    drawCallLimit: 56,
     shots: [{ at: 'boundary', value: 1, name: 'endless-boundary.png' }],
     endShot: 'end-endless.png',
     // The crossing is the frame this run exists for, so it is the one the
@@ -272,7 +287,7 @@ export const RUNS = [
       visible: ['#result-metres-row'],
       hidden: ['#next-button', '#result-best'],
     },
-    againStaysEndless: true,
+    retryStaysEndless: true,
     /**
      * Stopped two spans in, rather than walked to the wipe.
      *

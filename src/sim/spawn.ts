@@ -9,15 +9,50 @@ import { laneCenter } from './lanes';
 import type { LevelDef } from './level';
 import { shieldFor } from './shields';
 import type { EnemyState, GateState, Lane } from './types';
-import type { Balance } from '@/data/types';
+import type { Balance, BossKind } from '@/data/types';
 
 export interface World {
   gates: GateState[];
   enemies: EnemyState[];
-  /** Null on the endless road, which has no arena and no boss to stand in it (D52). */
+  /** The boss the road meets first: the level's own, or the endless road's first stop. */
   boss: EnemyState | null;
+  /**
+   * Every boss the road holds, in the order it meets them: one on a campaign
+   * level, one per arena on the endless road (document 28). Built here with
+   * the rest of the world so a run never allocates one mid-road.
+   */
+  bosses: EnemyState[];
   /** Where stream bodies carry on numbering from, so every id stays unique. */
   nextId: number;
+}
+
+/** A boss waiting `level.bossOffset` past the line the squad stops at. */
+function bossAt(
+  id: number,
+  arenaZ: number,
+  hp: number,
+  units: number,
+  kind: BossKind,
+  balance: Balance,
+): EnemyState {
+  return {
+    id,
+    kind: 'boss',
+    x: 0,
+    z: arenaZ + balance.level.bossOffset,
+    hp,
+    maxHp: hp,
+    units,
+    speed: balance.enemies.boss.speed,
+    active: false,
+    alive: true,
+    slowUntil: 0,
+    diedAt: 0,
+    enraged: false,
+    // Which boss stands here (D49). Written always rather than only for the
+    // Rime Fiend, so render never has to guess what an absent field means.
+    variant: kind,
+  };
 }
 
 export function buildWorld(level: LevelDef, balance: Balance): World {
@@ -76,26 +111,23 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
     }
   }
 
-  if (level.endless === true) return { gates, enemies, boss: null, nextId };
+  // The endless road stands its bosses along the way rather than at its end
+  // (document 28), and the ids after them are the stream bodies'.
+  if (level.endless === true) {
+    const bosses: EnemyState[] = [];
+    for (const arena of level.arenas ?? []) {
+      bosses.push(bossAt(nextId++, arena.z, arena.hp, arena.units, arena.kind, balance));
+    }
+    return { gates, enemies, boss: bosses[0] ?? null, bosses, nextId };
+  }
 
-  const boss: EnemyState = {
-    id: nextId,
-    kind: 'boss',
-    x: 0,
-    z: level.arenaZ + balance.level.bossOffset,
-    hp: level.boss.hp,
-    maxHp: level.boss.hp,
-    units: level.boss.units,
-    speed: balance.enemies.boss.speed,
-    active: false,
-    alive: true,
-    slowUntil: 0,
-    diedAt: 0,
-    enraged: false,
-    // Which boss stands here (D49). Written always rather than only for the
-    // Rime Fiend, so render never has to guess what an absent field means.
-    variant: level.boss.kind ?? 'demon',
-  };
-
-  return { gates, enemies, boss, nextId: nextId + 1 };
+  const boss = bossAt(
+    nextId,
+    level.arenaZ,
+    level.boss.hp,
+    level.boss.units,
+    level.boss.kind ?? 'demon',
+    balance,
+  );
+  return { gates, enemies, boss, bosses: [boss], nextId: nextId + 1 };
 }

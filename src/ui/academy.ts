@@ -1,11 +1,12 @@
 /**
  * The Academy home and the level picker behind its Play card (decision D33).
  *
- * The home is the game's front door: the coin purse, the wordmark, and five
- * cards over the dressed road. A card the player has not earned yet shows the
- * level that opens it instead of its blurb, and the first time it *does* open
- * it plays a one-shot reveal — once ever, because `App` writes the reveal to
- * the save as soon as it has been asked for.
+ * The home is the game's front door: the wordmark and five cards over the
+ * dressed road, under the coin chip every menu screen shares (`./coinChip.ts`).
+ * A card the player has not earned yet shows the level that opens it instead
+ * of its blurb, and the first time it *does* open it plays a one-shot reveal —
+ * once ever, because `App` writes the reveal to the save as soon as it has
+ * been asked for.
  *
  * Copy, card order and unlock levels are `src/data/academy.json`; nothing in
  * here says a word of English or knows a price. The rooms themselves are
@@ -51,13 +52,14 @@ export interface AcademyView {
   missions: readonly MissionView[];
   /** Metres of the best endless walk, for the picker's card (D52). */
   endlessBest: number;
+  /** Whether the picker's Endless card is open yet (docs/28). */
+  endlessOpen: boolean;
   /** Campaign levels whose best walk earned the picker's star (D53's sibling). */
   stars: readonly number[];
 }
 
 export interface AcademyElements extends PickerElements, BoardElements {
   cards: HTMLElement;
-  coinValue: HTMLElement;
 }
 
 /** Everything the home and the picker hand back to the app. */
@@ -89,8 +91,6 @@ export class Academy {
   /** The streak plaque and the missions board (`./board.ts`). */
   private readonly board: MetaBoard;
 
-  private shownCoins = -1;
-
   constructor(elements: AcademyElements, callbacks: AcademyCallbacks, bind: BindButton) {
     this.elements = elements;
     this.callbacks = callbacks;
@@ -104,9 +104,8 @@ export class Academy {
     this.buildCards();
   }
 
-  /** Paints the home: coins, the streak, the board, and which cards are open. */
+  /** Paints the home: the streak, the board, and which cards are open. */
   showHome(view: AcademyView): void {
-    this.setCoins(view.coins);
     this.paintStaffBadge(view);
     this.board.showStreak(view.streak);
     this.board.showMissions(view.missions);
@@ -136,20 +135,6 @@ export class Academy {
   /** Paints the picker, which is `./picker.ts`'s from the chips down. */
   showLevels(view: AcademyView): void {
     this.picker.show(view);
-  }
-
-  /**
-   * The purse. It bumps whenever the number actually moves — a reward on the
-   * way back from a run, a purchase in a room — but never on the first paint of
-   * the session, where there is no change to announce.
-   */
-  setCoins(coins: number): void {
-    const value = Math.max(0, Math.round(coins));
-    if (value === this.shownCoins) return;
-    const first = this.shownCoins < 0;
-    this.shownCoins = value;
-    this.elements.coinValue.textContent = String(value);
-    if (!first) replay(this.elements.coinValue, 'coins__value--bump');
   }
 
   /**

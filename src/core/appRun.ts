@@ -35,7 +35,7 @@ import { RunSession } from './session';
 
 /** What a run touches that is not the state machine. */
 export interface RunStageDeps {
-  /** Shared with `App`: `level` is the road the picker is pointed at. */
+  /** The URL's: the seed and the bot every run is built with. */
   options: QueryOptions;
   academy: AcademyController;
   menus: MenuStage;
@@ -56,13 +56,20 @@ export class RunStage {
 
   /** The run on the road, or null on the title and the result sheets. */
   private session: RunSession | null = null;
+  /**
+   * The campaign level of the run on the road, or of the last one walked:
+   * what Retry replays and Continue follows. The run's own rather than the
+   * picker's, because the picker opens on the newest level whatever was
+   * walked (docs/29), and an endless run leaves it where it was (D52).
+   */
+  private walked = 1;
   /** The seed the next run is pinned to, or null for the road's own. */
   private nextSeed: number | null = null;
   /** The seed of the last road walked, for `replay`. */
   private lastSeed: number | null = null;
   /** Whether the *next* run walks the endless road (D52); cleared by `start`. */
   private nextEndless = false;
-  /** Whether the last road walked was the endless one, for `replay` and `retry`. */
+  /** Whether the last road walked was the endless one, for `replay`. */
   private lastEndless = false;
   /** What the last finished run paid, meta layer included (`./academy.ts`). */
   private lastPayout: RunPayout | null = null;
@@ -81,6 +88,11 @@ export class RunStage {
     return this.lastPayout;
   }
 
+  /** The campaign level on the road, or last walked; see `walked`. */
+  get level(): number {
+    return this.walked;
+  }
+
   /** The Academy is up again, so there is no run. */
   clear(): void {
     this.session = null;
@@ -90,14 +102,13 @@ export class RunStage {
    * Jumps straight into a level, ignoring the save's unlock state.
    *
    * `seed` walks the *same road* again rather than the level's own: every
-   * campaign level has a fixed seed in `levels.json`, but an endless run (D52)
-   * and anything that re-rolls a road do not, so the result sheet's "same road
-   * again" hands back the seed the finished run reported (`RunSession.seed`).
-   * It applies to the one run that follows and is then forgotten, so the next
-   * Play is an ordinary one.
+   * campaign level has a fixed seed in `levels.json`, but a road started on a
+   * seed of its own does not, so Retry on the result sheet hands back the seed
+   * the finished run reported (`RunSession.seed`). It applies to the one run
+   * that follows and is then forgotten, so the next Play is an ordinary one.
    */
   startLevel(level: number, seed: number | null = null): void {
-    this.deps.options.level = clampLevel(level, levelCount);
+    this.walked = clampLevel(level, levelCount);
     this.nextSeed = seed;
     this.nextEndless = false;
     this.start();
@@ -106,9 +117,8 @@ export class RunStage {
   /**
    * A walk of the endless road (D52), on `seed` or on the road's own.
    *
-   * A mode beside the campaign rather than a level at the end of it: the level
-   * the picker is pointed at is left exactly where it was, so Back from the
-   * result sheet finds the Academy the player left.
+   * A mode beside the campaign rather than a level at the end of it: the
+   * campaign level last walked is left exactly where it was.
    */
   startEndless(seed: number | null = null): void {
     this.nextSeed = seed;
@@ -139,32 +149,36 @@ export class RunStage {
     });
   }
 
-  /** "Same road again": the road just walked, on the seed it was walked on. */
+  /**
+   * The road just walked, from the top, on the seed it was walked on: the
+   * result sheet's Retry and the pause menu's Restart.
+   *
+   * It has to know the *mode* rather than only the level, because the endless
+   * road has no level number: without it, a retry from an endless sheet walked
+   * whatever campaign level the picker happened to be pointed at.
+   *
+   * This used to be one of two buttons, beside an "Again" that re-rolled the
+   * road instead (Milestone 8). They never differed in play (docs/28): a
+   * campaign level's seed is fixed in `levels.json`, and the picker's Endless
+   * card walks the one seed in `endless.json`, so a re-roll landed on the seed
+   * this pins anyway. Only a road started through the debug handle on a seed of
+   * its own told them apart, and for that road this is the honest retry.
+   */
   replay(): void {
     if (this.lastEndless) {
       this.startEndless(this.lastSeed);
       return;
     }
-    this.startLevel(this.deps.options.level, this.lastSeed);
+    this.startLevel(this.walked, this.lastSeed);
   }
 
-  /**
-   * "Again": the road just walked, re-rolled rather than repeated.
-   *
-   * It has to know the *mode* rather than only the level, because the endless
-   * road has no level number: without this, Again on an endless sheet walked
-   * whatever campaign level the picker happened to be pointed at.
-   */
-  retry(): void {
-    if (this.lastEndless) {
-      this.startEndless();
-      return;
-    }
-    this.start();
+  /** Continue on the result sheet: the level after the one just walked. */
+  next(): void {
+    this.startLevel(this.walked + 1);
   }
 
-  /** Play: the road the pins name, from the top. */
-  start(): void {
+  /** The road the pins name, from the top. */
+  private start(): void {
     const deps = this.deps;
     // The backdrop is over; see `MenuStage.end` for what that costs it.
     deps.menus.end();
@@ -179,14 +193,14 @@ export class RunStage {
     // upgrades and the run starts with the staff they chose (D35).
     const endless = this.nextEndless;
     const session = new RunSession(
-      deps.options.level,
+      this.walked,
       deps.options,
       deps.academy.player,
       this.nextSeed,
       endless,
     );
     // Both pins are for one run: the next Play walks whatever road the picker
-    // is pointed at, on that level's own seed.
+    // names, on that level's own seed.
     this.nextSeed = null;
     this.nextEndless = false;
     this.lastSeed = session.seed;
@@ -202,7 +216,7 @@ export class RunStage {
     deps.physics()?.loadLevel(session.level);
     deps.driver.resetPeak();
     deps.onPhase('playing');
-    deps.overlay.showPlaying(deps.options.level, weaponOf(session.state.squad), endless);
+    deps.overlay.showPlaying(this.walked, weaponOf(session.state.squad), endless);
 
     deps.driver.start();
   }
@@ -215,7 +229,7 @@ export class RunStage {
   advanceEnding(realDt: number): void {
     const session = this.session;
     if (session === null) return;
-    if (session.advanceEnding(realDt, this.deps.options.level)) this.finish(session);
+    if (session.advanceEnding(realDt, this.walked)) this.finish(session);
   }
 
   /**
@@ -228,7 +242,7 @@ export class RunStage {
     deps.onPhase('result');
     deps.juice.endDefeatCrawl();
 
-    const level = deps.options.level;
+    const level = this.walked;
     const payout = deps.academy.payRun(session, level);
     this.lastPayout = payout;
 
@@ -239,6 +253,6 @@ export class RunStage {
     // no-op in every browser.
     onRunAwards(payout.completed.length, payout.awards.length);
 
-    deps.overlay.showResult(resultView(session, level, payout, levelCount, deps.academy.player));
+    deps.overlay.showResult(resultView(session, level, payout, levelCount));
   }
 }

@@ -142,6 +142,10 @@ export function advanceEnemies(
       // the column is close enough, and the step it wakes on is the step it
       // commits to a lane.
       if (enemy.z - squad.z > activationRange(enemy.kind, balance)) continue;
+      // Nothing past the line the squad stops at wakes before that stop is
+      // over: on the endless road a block beyond an arena waits for its boss to
+      // fall (document 28). A campaign level stands nothing past its arena.
+      if (enemy.z > state.arenaZ) continue;
       enemy.active = true;
       events.enemyActivated(enemy.id);
       if (enemy.kind === 'charger') startCharge(enemy, state, balance, events);

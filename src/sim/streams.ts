@@ -110,7 +110,9 @@ export class Streams {
     for (const runtime of this.runtimes) {
       const stream = runtime.state;
       if (stream.done || stream.spawned >= stream.count) continue;
-      if (trigger < stream.z) continue;
+      // The same hold `contact.ts` puts on blocks: a river past the line the
+      // squad stops at waits for that stop to be over (document 28).
+      if (trigger < stream.z || stream.z > state.arenaZ) continue;
 
       const def = runtime.def;
       runtime.owed += (def.count / Math.max(0.1, def.durationSeconds)) * dt;

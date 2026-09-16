@@ -105,7 +105,10 @@ export class RunTracker {
           this.bossAt = state.time;
           break;
         case 'bossKilled':
-          this.kills[this.bossKind] += 1;
+          // The state still holds the boss that fell on the step it falls
+          // (`src/sim/arenas.ts`), and on the endless road it is either of the
+          // two (document 28), so the body is asked before the road is.
+          this.kills[state.boss?.variant ?? this.bossKind] += 1;
           if (this.bossSeconds === null && this.bossAt !== null) {
             this.bossSeconds = Math.max(0, state.time - this.bossAt);
           }

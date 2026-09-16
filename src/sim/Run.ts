@@ -19,12 +19,14 @@
  * read exactly what they always did.
  */
 
+import { Arenas } from './arenas';
 import { BossController } from './boss';
 import { advanceEnemies } from './contact';
 import type { Burn } from './burn';
 import { Crossings } from './crossings';
 import type { GateSink } from './crossings';
 import { CrowdSim } from './crowd';
+import type { Swath } from './crowdState';
 import type { Evolutions } from './evolutions';
 import { EventBuffer } from './events';
 import type { Familiar } from './familiar';
@@ -78,6 +80,8 @@ export class Run {
   private readonly burn: Burn | null;
   private readonly streams: Streams;
   private readonly boss = new BossController();
+  /** The endless road's boss stops (document 28); null on a campaign level. */
+  private readonly arenas: Arenas | null;
   private readonly crowd: CrowdSim;
   private readonly crossings: Crossings;
   /** The two evolutions that run on a clock of their own (D54). */
@@ -168,6 +172,7 @@ export class Run {
     };
 
     const world = buildWorld(level, balance);
+    this.arenas = level.arenas === undefined ? null : new Arenas(level, world.bosses, balance);
     this.crowd = new CrowdSim(balance, this.walls);
     this.crossings = new Crossings(level, balance, this.crowd.groups.length, this.sink);
     squad.count = this.crowd.spawn(0, level.startCount);
@@ -185,7 +190,9 @@ export class Run {
       boss: world.boss,
       peakCount: squad.count,
       survivors: squad.count,
-      arenaZ: level.arenaZ,
+      // On the endless road, the first boss's line rather than the road's end:
+      // `arenaZ` is always the next place the squad stops (`./arenas.ts`).
+      arenaZ: this.arenas?.firstLine ?? level.arenaZ,
       familiar: null,
       walls: this.walls,
       crowd: this.crowd.crowd,
@@ -211,7 +218,10 @@ export class Run {
       this.streams,
       this.mods,
       () => {
-        this.finish('won');
+        // A campaign boss is the end of the level; an endless one opens the
+        // road to the next (document 28).
+        if (this.arenas === null) this.finish('won');
+        else this.arenas.opened(this.runState);
       },
       this.crowd,
     );
@@ -315,8 +325,9 @@ export class Run {
     squad.targetX = Math.min(Math.max(squad.targetX, -limit), limit);
     steerLeader(squad, this.balance, dt);
 
-    // The squad stops at the arena to fight the boss. On the endless road there
-    // is no boss and the same line is the finish (D52).
+    // The squad stops at the arena to fight the boss: the level's one, or on
+    // the endless road whichever boss is next (document 28).
+    this.arenas?.release(state);
     if (squad.z < state.arenaZ) {
       squad.z = Math.min(state.arenaZ, squad.z + this.level.runSpeed * dt);
     }
@@ -369,9 +380,11 @@ export class Run {
     if (squad.count > state.peakCount) state.peakCount = squad.count;
     state.survivors = squad.count;
     if (squad.count <= 0) this.finish('lost');
-    // An endless run ends on the wipe above or on the end of the road (D52).
-    // Checked last, so the step that reaches the line still resolves in full.
-    else if (state.endless !== undefined && squad.z >= state.arenaZ) this.finish('won');
+    // An endless run ends on the wipe above or on the end of the road (D52),
+    // which is the level's own line rather than the state's: that one is the
+    // next boss until the last of them is down. Checked last, so the step that
+    // reaches the end still resolves in full.
+    else if (state.endless !== undefined && squad.z >= this.level.arenaZ) this.finish('won');
   }
 
   /**
@@ -410,6 +423,14 @@ export class Run {
 
   private updateBoss(dt: number): void {
     const state = this.runState;
+    // The endless road's next boss, once the column is past the last one: filed
+    // for the sweeps like anything else that joins the road, and fought with a
+    // fresh set of clocks.
+    const next = this.arenas?.advance(state) ?? null;
+    if (next !== null) {
+      this.targets.insert(next, this.balance);
+      this.boss.reset();
+    }
     const boss = state.boss;
     if (boss === null || !boss.alive) return;
 
@@ -419,17 +440,21 @@ export class Run {
       state.arenaZ,
       this.balance,
       dt,
-      this.level.boss.bite ?? 1,
+      this.arenas?.bite ?? this.level.boss.bite ?? 1,
       state.time,
+      state.crowd,
     );
     if (step.activated) this.events.bossActivated(boss.id);
     if (step.enraged) this.events.bossEnraged(boss.id);
-    // The Rime Fiend's lane charge (D49). Its kills are taken nearest the boss
-    // itself, wherever it is on its run, so the dead are the people it went
-    // through rather than a share of the column.
+    // The Rime Fiend's lane charge (D49). Its dead are the people standing
+    // under the body this step and nobody else (document 29). The landing is
+    // told before the loss, so a charge that wipes the column still ends its
+    // tick on `runEnded`.
     if (step.charged) this.events.charge(boss.id, boss.kind, step.chargeLane);
     if (step.chargeKills > 0) {
-      this.loseUnits(step.chargeKills, 'contact', boss.x, boss.z, -1);
+      const swath = step.chargeSwath;
+      if (step.chargeLanded) this.events.chargeHit(boss.id, swath.x, swath.zLo);
+      this.loseUnits(step.chargeKills, 'charge', boss.x, boss.z, -1, swath);
       if (state.status !== 'running') return;
     }
     // Whoever is standing nearest the boss, whichever group they are in: its
@@ -444,17 +469,21 @@ export class Run {
     }
   }
 
-  /** Takes the units standing nearest `(x, z)`, in `group` or in any of them. */
+  /**
+   * Takes the units standing nearest `(x, z)`, in `group` or in any of them,
+   * and only from inside `within` when it is given.
+   */
   private loseUnits(
     amount: number,
     reason: UnitLossReason,
     x: number,
     z: number,
     group: number,
+    within?: Readonly<Swath>,
   ): void {
     const squad = this.runState.squad;
     const before = squad.count;
-    const killed = this.crowd.killNearest(group, amount, x, z);
+    const killed = this.crowd.killNearest(group, amount, x, z, within);
     if (killed <= 0) return;
     squad.count = this.crowd.total;
     this.events.unitsLost(before - squad.count, reason);

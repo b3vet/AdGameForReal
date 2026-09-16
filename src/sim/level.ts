@@ -51,6 +51,21 @@ export type { LevelGenConfig, RowDef, RowEnemyDef, StreamDef, WallDef };
  */
 export type BossId = BossKind;
 
+/**
+ * One boss stop on the endless road (document 28): the line the squad halts
+ * at, and the boss that waits `level.bossOffset` past it: the four numbers a
+ * campaign level's `boss` carries, one set per stop, and the beat after it.
+ */
+export interface ArenaDef {
+  z: number;
+  hp: number;
+  units: number;
+  bite: number;
+  kind: BossKind;
+  /** Seconds the column stands over the fallen boss before the road opens. */
+  hold: number;
+}
+
 export interface LevelDef {
   index: number;
   seed: number;
@@ -81,11 +96,17 @@ export interface LevelDef {
    */
   biome?: BiomeId;
   /**
-   * The endless road (D52): no level number, no boss, and it ends at `arenaZ`
-   * rather than standing anything in it. Absent on every campaign level, and
-   * its presence is what `buildWorld` and `Run` switch on.
+   * The endless road (D52): no level number, and it ends at `arenaZ` rather
+   * than standing a boss in it — its bosses stand along the way (`arenas`).
+   * Absent on every campaign level, and its presence is what `Run` switches on.
    */
   endless?: boolean;
+  /**
+   * The endless road's boss stops, in order along the road (document 28).
+   * Absent on a campaign level, whose one boss is `boss` at `arenaZ`; on the
+   * endless road `arenaZ` is where the road itself ends.
+   */
+  arenas?: ArenaDef[];
   /** Metres of road each biome holds before the next one, on a road that alternates. */
   biomeSpan?: number;
   /** The biomes the road cycles through, in order. One-biome roads omit it. */

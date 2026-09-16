@@ -24,6 +24,8 @@ export { tintColors } from './tint';
 export { StaticCrowd } from './crowd';
 export type { Crowd } from './crowd';
 export { VatCrowd } from './VatCrowd';
+export { crowdFrameTotals, setCrowdDetailScale } from './crowdDraw';
+export type { CrowdDrawStats } from './crowdDraw';
 export {
   assetBytes,
   assetEntry,

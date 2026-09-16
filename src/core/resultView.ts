@@ -15,23 +15,15 @@ import { academy, fill } from '@/data/academy-types';
 
 import type { RunPayout } from './academy';
 import { earnsStar } from './meta';
-import type { PlayerState } from './player';
 import type { RunSession } from './session';
 import type { ResultBonus, ResultView } from '@/ui';
 
-/**
- * The sheet for a finished run.
- *
- * `player` is the purse *after* the run, which is what the next-unlock row is
- * measured against: the sheet's question is "what can I buy now", and the
- * answer moved when this run paid out.
- */
+/** The sheet for a finished run. */
 export function resultView(
   session: RunSession,
   level: number,
   payout: RunPayout,
   levelCount: number,
-  player: PlayerState,
 ): ResultView {
   const best = payout.best;
   return {
@@ -46,7 +38,7 @@ export function resultView(
     earnedCoins: payout.coins + payout.bonusCoins,
     totalCoins: payout.totalCoins,
     firstClear: payout.firstClear,
-    // The endless road has no next level to ascend to (D52).
+    // The endless road has no next level to continue to (D52).
     canAdvance: !payout.endless && level < levelCount,
     endless: payout.endless,
     metres: payout.metres,
@@ -57,7 +49,6 @@ export function resultView(
     best,
     bestImproved: payout.bestImproved,
     star: earnsStar(best),
-    player,
   };
 }
 

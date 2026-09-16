@@ -34,6 +34,7 @@ export class Juice {
 
   private blockKills = 0;
   private stomps = 0;
+  private chargeHits = 0;
   private bossKilled = false;
   private runLost = false;
 
@@ -64,6 +65,7 @@ export class Juice {
   beginFrame(): void {
     this.blockKills = 0;
     this.stomps = 0;
+    this.chargeHits = 0;
     this.bossKilled = false;
     this.runLost = false;
   }
@@ -77,6 +79,13 @@ export class Juice {
           break;
         case 'bossStomp':
           this.stomps++;
+          break;
+        case 'chargeHit':
+          // The Rime Fiend landing on the column (document 29): a stomp's
+          // weight, so a stomp's kick, and the hitch a block kill gets, because
+          // it is the one boss move that is a collision.
+          this.stomps++;
+          this.chargeHits++;
           break;
         case 'bossKilled':
           this.bossKilled = true;
@@ -97,7 +106,7 @@ export class Juice {
 
     if (!this.timeEffects) return;
     // The throttle inside `hitStop` is what keeps a wiped row to one hitch.
-    if (this.blockKills > 0) this.timeScale.hitStop();
+    if (this.blockKills > 0 || this.chargeHits > 0) this.timeScale.hitStop();
     if (this.bossKilled) this.timeScale.slowMo(BOSS_KILL_SCALE, BOSS_KILL_SECONDS);
     if (this.runLost) this.timeScale.setHold(DEFEAT_SCALE);
   }

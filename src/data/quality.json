@@ -1,0 +1,31 @@
+{
+  "frame": {
+    "maxFps": 60,
+    "paceSlackMs": 4
+  },
+  "crowd": {
+    "lodRatio": 0.35,
+    "lodMaxError": 0.02,
+    "lodWholeBudget": 40,
+    "lodRadiusPixels": 60,
+    "lodMinSmall": 32
+  },
+  "ladder": {
+    "rungs": [
+      { "pixelRatio": 3, "crowdDetail": 1, "physics": 2 },
+      { "pixelRatio": 3, "crowdDetail": 0, "physics": 2 },
+      { "pixelRatio": 2.5, "crowdDetail": 0, "physics": 2 },
+      { "pixelRatio": 2, "crowdDetail": 0, "physics": 2 },
+      { "pixelRatio": 1.5, "crowdDetail": 0, "physics": 2 },
+      { "pixelRatio": 1, "crowdDetail": 0, "physics": 2 },
+      { "pixelRatio": 1, "crowdDetail": 0, "physics": 1 },
+      { "pixelRatio": 1, "crowdDetail": 0, "physics": 0 }
+    ],
+    "frameBudgetMs": 20,
+    "lateCeilingMs": 45,
+    "lateShare": 0.03,
+    "windowSeconds": 3,
+    "windowsToStep": 2,
+    "settleSeconds": 2
+  }
+}

@@ -10,8 +10,11 @@
  *
  *   1. start the level (`PERF_LEVEL`, or the highest the save has reached —
  *      `./query.ts` picks it, the bot comes from there too),
- *   2. wait for the shader warm-up to finish and for the ladder's settle
- *      window to pass, so the capture measures play rather than level start,
+ *   2. wait for the shader warm-up to finish, and then for the run to reach
+ *      `LEAD_IN_SECONDS` of its own clock, so the capture measures the fight
+ *      rather than the level start: on level 20 that is the dense road with
+ *      a crowd in the hundreds and the first seconds of the demon
+ *      (docs/28, note 5 — "the busiest fights" is where the target is set),
  *   3. record `MAX_CAPTURE_SECONDS` through the debug panel's own recorder —
  *      the same code path the "Capture" button drives, so the numbers mean the
  *      same thing (`src/ui/capture.ts`),
@@ -31,14 +34,16 @@ import { MAX_CAPTURE_SECONDS } from '@/ui';
 const POLL_MS = 100;
 
 /**
- * Seconds between the level starting and the capture, once the warm-up is done.
+ * Seconds of the run's own clock before the capture starts.
  *
- * The ladder ignores its first two seconds for exactly this reason (generation,
- * pool hand-out, the first crowd upload — `SETTLE_SECONDS` in `./quality.ts`),
- * and a capture that started inside them would report the level screen. Three
- * gives the ladder a whole window of its own before the recording starts.
+ * Milestone 9 waited three — past the ladder's settle window, so the capture
+ * did not report the level screen — and so measured a squad of seventy on an
+ * open road. Thirty-five puts a 45-second window over the part of level 20
+ * the owner's "below 60" is about: the thick of the road and the boss.
  */
-const SETTLE_SECONDS = 3;
+const LEAD_IN_SECONDS = 35;
+/** Wall-clock ceiling on the lead-in, for a phone that plays in slow motion. */
+const LEAD_IN_TIMEOUT_MS = 120_000;
 
 /** Ceilings, so a stall still produces a report rather than nothing. */
 const WARM_UP_TIMEOUT_MS = 30_000;
@@ -51,6 +56,8 @@ export interface PerfHost {
   startLevel: (level: number) => void;
   /** True while the renderer is still compiling materials (`Renderer.warmUp`). */
   warming: () => boolean;
+  /** Seconds of sim time the run has played, or null when none is on the road. */
+  runTime: () => number | null;
   startCapture: (seconds: number) => void;
   captureActive: () => boolean;
   /** Renders the report in the panel and copies it; true when the copy took. */
@@ -63,6 +70,7 @@ export interface PerfHost {
 export interface PerfApp {
   readonly renderer: Renderer;
   readonly overlay: Overlay;
+  readonly session: { readonly state: { readonly time: number } } | null;
   startLevel: (level: number) => void;
 }
 
@@ -78,6 +86,7 @@ export function perfHost(app: PerfApp, level: number, disposed: () => boolean): 
       app.startLevel(next);
     },
     warming: () => app.renderer.shaderStats.warming,
+    runTime: () => app.session?.state.time ?? null,
     startCapture: (seconds) => {
       app.overlay.startCapture(seconds);
     },
@@ -96,13 +105,20 @@ export async function runPerfCapture(host: PerfHost): Promise<void> {
     if (host.disposed()) return;
     host.startLevel(host.level);
     await waitUntil(() => !host.warming(), WARM_UP_TIMEOUT_MS, host.disposed);
-    await sleep(SETTLE_SECONDS * 1000);
+    await waitUntil(() => host.runTime() !== null, WARM_UP_TIMEOUT_MS, host.disposed);
+    // A run that ends before the lead-in (a wipe) is captured on whatever
+    // comes next rather than not at all.
+    await waitUntil(
+      () => (host.runTime() ?? LEAD_IN_SECONDS) >= LEAD_IN_SECONDS,
+      LEAD_IN_TIMEOUT_MS,
+      host.disposed,
+    );
     if (host.disposed()) return;
 
     host.startCapture(MAX_CAPTURE_SECONDS);
     // The recorder closes its own window on the frame it fills; this waits for
     // that rather than for a clock of its own, so a slow phone's capture is the
-    // thirty seconds it actually recorded.
+    // window it actually recorded.
     await waitUntil(() => !host.captureActive(), CAPTURE_TIMEOUT_MS, host.disposed);
     if (host.disposed()) return;
 

@@ -12,7 +12,8 @@
  *
  * The pause menu (`./pause.ts`, docs/27) is not a sixth: it is laid over the
  * HUD rather than swapped in for it, and every real screen switch takes it
- * down.
+ * down. Nor is the coin chip (`./coinChip.ts`, docs/28): it stands outside the
+ * screens, and every switch says whether it is up.
  *
  * Element ids are a contract with `scripts/smoke-run.mjs`, which clicks
  * `#academy-play` and then `#play-button` — do not rename either without
@@ -28,14 +29,13 @@
 // (see `./fonts`).
 import './fonts';
 
-import { academy } from '@/data/academy-types';
-
 import type { PlayerState, RoomId } from '@/core/player';
 import type { CosmeticSlot } from '@/data';
 import type { RunState, SimEvent, WeaponId } from '@/sim';
 
 import { Academy } from './academy';
 import type { AcademyView } from './academy';
+import { CoinChip } from './coinChip';
 import { Confetti } from './confetti';
 import { DebugPanel } from './debug';
 import type { DebugStats, ReportSource } from './debug';
@@ -50,7 +50,9 @@ import { watchTripleTap } from './taps';
 
 export interface OverlayCallbacks {
   onPlay: () => void;
+  /** Retry on the result sheet: the road just walked, on its own seed. */
   onRetry: () => void;
+  /** Continue on the result sheet: the next level. */
   onNext: () => void;
   /** A level picker chip was tapped. The app decides whether to accept it. */
   onSelectLevel: (level: number) => void;
@@ -58,8 +60,8 @@ export interface OverlayCallbacks {
   onOpenRoom: (room: RoomId) => void;
   /** Back, from the picker or from a room. */
   onCloseRoom: () => void;
-  /** "Academy" on the result screen: back to the home and its cards. */
-  onLevels: () => void;
+  /** Home on the result screen: back to the Academy and its cards. */
+  onResultHome: () => void;
   /** Any button at all, for the tap sound. Fires before the button's own call. */
   onTap: () => void;
   /** The mute control was used. The app owns the flag and calls `setMuted`. */
@@ -82,8 +84,6 @@ export interface OverlayCallbacks {
   onSelectCosmetic: (slot: CosmeticSlot, id: string) => void;
   /** The picker's Endless card: a walk of the road with no end (D52). */
   onEndless: () => void;
-  /** "Same road again" on the result sheet: the seed just walked (D52). */
-  onReplay: () => void;
   /**
    * The pause button, and the menu's three (docs/27). The app decides whether
    * a run can pause and what Restart and Home throw away (`src/core/pause.ts`).
@@ -103,7 +103,10 @@ export class Overlay {
   private readonly hudRoot: HTMLElement;
   private readonly result: HTMLElement;
   private readonly muteButtons: HTMLButtonElement[];
+  /** The home's streak plaque, which stands beside the chip in its bar. */
+  private readonly streak: HTMLElement;
 
+  private readonly coinChip: CoinChip;
   private readonly academy: Academy;
   private readonly rooms: Rooms;
   private readonly resultPanel: ResultPanel;
@@ -131,19 +134,26 @@ export class Overlay {
       this.onTap(button, action);
     };
 
+    this.coinChip = new CoinChip({
+      bar: requireElement(root, '#purse-bar'),
+      value: requireElement(root, '#coin-chip-value'),
+    });
+    this.streak = requireElement(root, '#academy-streak');
+
     this.academy = new Academy(
       {
         cards: requireElement(root, '#academy-cards'),
-        coinValue: requireElement(root, '#academy-coin-value'),
         picker: requireElement(root, '#level-picker'),
         caption: requireElement(root, '#picker-caption'),
         pager: requireElement(root, '#picker-pages'),
-        endless: requireElement(root, '#picker-endless'),
+        playTitle: requireElement(root, '#play-title'),
+        playLevel: requireElement(root, '#play-level'),
+        endless: requireElement<HTMLButtonElement>(root, '#picker-endless'),
+        endlessIcon: requireElement(root, '#endless-icon'),
         endlessTitle: requireElement(root, '#endless-title'),
         endlessBlurb: requireElement(root, '#endless-blurb'),
         endlessBest: requireElement(root, '#endless-best'),
-        endlessButton: requireElement<HTMLButtonElement>(root, '#endless-button'),
-        streak: requireElement(root, '#academy-streak'),
+        streak: this.streak,
         streakDays: requireElement(root, '#streak-days'),
         streakHint: requireElement(root, '#streak-hint'),
         missions: requireElement(root, '#academy-missions'),
@@ -161,7 +171,6 @@ export class Overlay {
       {
         title: requireElement(root, '#room-title'),
         subtitle: requireElement(root, '#room-subtitle'),
-        coinValue: requireElement(root, '#room-coin-value'),
         yard: requireElement(root, '#yard-rows'),
         workbench: requireElement(root, '#workbench-cards'),
         sanctum: requireElement(root, '#sanctum-card'),
@@ -178,10 +187,11 @@ export class Overlay {
       bind,
     );
 
-    this.resultPanel = new ResultPanel(resultElements(root), {
-      onCountTick: callbacks.onCountTick,
-      onCoinTick: callbacks.onCoinTick,
-    });
+    this.resultPanel = new ResultPanel(
+      resultElements(root),
+      { onCountTick: callbacks.onCountTick, onCoinTick: callbacks.onCoinTick },
+      this.coinChip,
+    );
 
     this.hud = new Hud(hudElements(root));
     // The menu covers the HUD, and the HUD is the only screen up under it.
@@ -224,11 +234,8 @@ export class Overlay {
 
     this.onTap(requireElement<HTMLButtonElement>(root, '#play-button'), callbacks.onPlay);
     this.onTap(requireElement<HTMLButtonElement>(root, '#retry-button'), callbacks.onRetry);
-    const replayButton = requireElement<HTMLButtonElement>(root, '#replay-button');
-    replayButton.textContent = academy.meta.result.replay;
-    this.onTap(replayButton, callbacks.onReplay);
     this.onTap(requireElement<HTMLButtonElement>(root, '#next-button'), callbacks.onNext);
-    this.onTap(requireElement<HTMLButtonElement>(root, '#levels-button'), callbacks.onLevels);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#home-button'), callbacks.onResultHome);
     this.onTap(requireElement<HTMLButtonElement>(root, '#levels-back'), callbacks.onCloseRoom);
     this.onTap(requireElement<HTMLButtonElement>(root, '#room-back'), callbacks.onCloseRoom);
     for (const button of this.muteButtons) this.onTap(button, callbacks.onToggleMute);
@@ -239,12 +246,15 @@ export class Overlay {
   showAcademy(view: AcademyView): void {
     this.academy.showHome(view);
     this.showOnly(this.academyScreen);
+    // After the switch, so a reward that arrived on the way back bumps in view.
+    this.coinChip.set(view.coins);
   }
 
   /** The level picker behind the Play card. */
   showLevels(view: AcademyView): void {
     this.academy.showLevels(view);
     this.showOnly(this.levelsScreen);
+    this.coinChip.set(view.coins);
   }
 
   /** One of the four rooms, painted from the player's state. */
@@ -256,7 +266,8 @@ export class Overlay {
     // (`Wardrobe.show`).
     this.showOnly(this.roomScreen);
     this.rooms.show(room, player, bump);
-    this.academy.setCoins(player.coins);
+    // A purchase re-shows the room with the new player, which is what bumps.
+    this.coinChip.set(player.coins);
   }
 
   /** `endless` swaps the HUD's level chip for a metres one (D52). */
@@ -368,6 +379,10 @@ export class Overlay {
     this.pauseMenu.close();
     this.resultPanel.stop();
     if (screen !== this.result) this.confetti.stop();
+    // Up on every menu screen and the sheet; not on the HUD, whose corner is
+    // the level chip's, and not over the raw scene (`hideAll`).
+    this.coinChip.setVisible(screen !== null && screen !== this.hudRoot);
+    this.streak.hidden = screen !== this.academyScreen;
     for (const candidate of [
       this.academyScreen,
       this.levelsScreen,

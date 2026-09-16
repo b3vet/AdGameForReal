@@ -14,20 +14,19 @@
  * built, so twenty-four corpses do not all start from the same silhouette.
  */
 
-import type { Skeleton } from '@babylonjs/core/Bones/skeleton';
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
-import type { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
-import { Ragdoll } from '@babylonjs/core/Physics/v2/ragdoll';
 import type { Material } from '@babylonjs/core/Materials/material';
 import type { Scene } from '@babylonjs/core/scene';
 // Side-effect import: registers the glTF 2.0 loader with `ImportMeshAsync`.
 import '@babylonjs/loaders/glTF/2.0';
 
 import { modelAsset, resolveAssetUrl } from '@/render/characters';
-import { RAGDOLL_BONES, RAGDOLL_ROOT_INDEX, bodyMeshes, mergeSkinnedParts, ragdollConfig, untrackBounds } from './rig';
+import type { PrestepGate } from './prestep';
+import { buildSlot, freeze, setQuaternion } from './ragdollSlot';
+import type { Slot } from './ragdollSlot';
+import { RAGDOLL_BONES, bodyMeshes, mergeSkinnedParts } from './rig';
 import {
   PARK_SPACING,
   PARK_Y,
@@ -37,28 +36,12 @@ import {
   RAGDOLL_SINK,
 } from './tuning';
 
-interface Slot {
-  readonly mesh: Mesh;
-  readonly skeleton: Skeleton;
-  readonly ragdoll: Ragdoll;
-  readonly bodies: PhysicsBody[];
-  /** Box positions in the build pose, relative to the root box. */
-  readonly template: Vector3[];
-  live: boolean;
-  /** True once the corpse has stopped simulating and is sinking out of sight. */
-  sinking: boolean;
-  age: number;
-  /** Monotonic spawn ticket, so "recycle the oldest" is one comparison. */
-  spawned: number;
-}
-
 /** Reused every frame and every spawn: this class allocates nothing after `create`. */
 const scratchYaw = Matrix.Identity();
 const scratchVector = new Vector3();
 const scratchVelocity = new Vector3();
 const scratchSpin = new Vector3();
 const scratchQuaternion = new Quaternion();
-const ZERO = Vector3.Zero();
 
 export class RagdollPool {
   private readonly slots: Slot[] = [];
@@ -69,7 +52,11 @@ export class RagdollPool {
   /** One material for all twenty-four corpses; fading uses `mesh.visibility`. */
   private material: Material | null = null;
 
-  private constructor(readonly capacity: number) {
+  private constructor(
+    readonly capacity: number,
+    /** Tells Havok which boxes this pool moved (`./prestep.ts`). */
+    private readonly gate: PrestepGate,
+  ) {
     this.liveCap = capacity;
   }
 
@@ -89,9 +76,10 @@ export class RagdollPool {
     scene: Scene,
     capacity: number,
     modelId: string,
+    gate: PrestepGate,
     poseClip = 'walk',
   ): Promise<RagdollPool> {
-    const pool = new RagdollPool(capacity);
+    const pool = new RagdollPool(capacity, gate);
     const model = modelAsset(modelId);
     if (model.body === undefined) throw new Error(`asset "${modelId}" declares no body meshes`);
 
@@ -121,7 +109,14 @@ export class RagdollPool {
     for (let i = 0; i < capacity; i++) {
       walk.goToFrame(walk.from + ((i + 0.5) / capacity) * (walk.to - walk.from));
       skeleton.prepare(true);
-      pool.slots.push(buildSlot(template, skeleton, scale, i));
+      const slot = buildSlot(template, skeleton, scale, i);
+      // Babylon's ragdoll builds its boxes with the pre-step on; from here the
+      // gate decides, starting with the move to the parking row.
+      for (const body of slot.bodies) {
+        body.disablePreStep = true;
+        gate.sleep(body);
+      }
+      pool.slots.push(slot);
     }
     pool.material = template.material;
 
@@ -188,6 +183,7 @@ export class RagdollPool {
       const node = body.transformNode;
       node.position.set(x + scratchVector.x, RAGDOLL_LIFT + scratchVector.y, z + scratchVector.z);
       setQuaternion(node, scratchQuaternion);
+      this.gate.wake(body);
       body.setMotionType(PhysicsMotionType.DYNAMIC);
       body.setLinearVelocity(scratchVelocity);
       body.setAngularVelocity(scratchSpin);
@@ -224,7 +220,9 @@ export class RagdollPool {
       const drop = (RAGDOLL_SINK * dt) / RAGDOLL_FADE;
       for (let j = 0; j < slot.bodies.length; j++) {
         const body = slot.bodies[j];
-        if (body !== undefined) body.transformNode.position.y -= drop;
+        if (body === undefined) continue;
+        body.transformNode.position.y -= drop;
+        this.gate.moved(body);
       }
     }
   }
@@ -322,6 +320,7 @@ export class RagdollPool {
       const offset = slot.template[i];
       if (body === undefined || offset === undefined) continue;
       body.transformNode.position.set(parkX + offset.x, PARK_Y + offset.y, offset.z);
+      this.gate.sleep(body);
     }
     slot.mesh.setEnabled(false);
     slot.ragdoll.pauseSync = true;
@@ -329,68 +328,4 @@ export class RagdollPool {
     slot.live = false;
     slot.sinking = false;
   }
-}
-
-/** Stops the simulation for a slot without leaving ragdoll mode. */
-function freeze(slot: Slot): void {
-  for (const body of slot.bodies) {
-    body.setLinearVelocity(ZERO);
-    body.setAngularVelocity(ZERO);
-    body.setMotionType(PhysicsMotionType.ANIMATED);
-  }
-}
-
-function setQuaternion(node: { rotationQuaternion: Quaternion | null }, value: Quaternion): void {
-  if (node.rotationQuaternion === null) node.rotationQuaternion = value.clone();
-  else node.rotationQuaternion.copyFrom(value);
-}
-
-function buildSlot(template: Mesh, source: Skeleton, scale: number, index: number): Slot {
-  const skeleton = source.clone(`ragdoll_skeleton_${String(index)}`);
-  const mesh = template.clone(`ragdoll_${String(index)}`);
-  mesh.skeleton = skeleton;
-  mesh.numBoneInfluencers = 4;
-  mesh.scaling.setAll(scale);
-  mesh.position.setAll(0);
-  mesh.rotationQuaternion = Quaternion.Identity();
-  untrackBounds(mesh);
-  mesh.setEnabled(false);
-  // `Ragdoll` reads the root's world matrix while it places the boxes.
-  mesh.computeWorldMatrix(true);
-
-  const ragdoll = new Ragdoll(skeleton, mesh, ragdollConfig());
-  ragdoll.ragdoll();
-
-  const bodies: PhysicsBody[] = [];
-  for (let i = 0; i < RAGDOLL_BONES.length; i++) bodies.push(ragdoll.getAggregate(i).body);
-
-  const root = bodies[RAGDOLL_ROOT_INDEX];
-  if (root === undefined) throw new Error('ragdoll has no root aggregate');
-  const origin = root.transformNode.position;
-  const layout = bodies.map((body) => body.transformNode.position.subtract(origin));
-
-  const slot: Slot = {
-    mesh,
-    skeleton,
-    ragdoll,
-    bodies,
-    template: layout,
-    live: false,
-    sinking: false,
-    age: 0,
-    spawned: 0,
-  };
-  freeze(slot);
-  ragdoll.pauseSync = true;
-  for (let i = 0; i < bodies.length; i++) {
-    const body = bodies[i];
-    const offset = layout[i];
-    if (body === undefined || offset === undefined) continue;
-    body.transformNode.position.set(
-      index * PARK_SPACING + offset.x,
-      PARK_Y + offset.y,
-      offset.z,
-    );
-  }
-  return slot;
 }

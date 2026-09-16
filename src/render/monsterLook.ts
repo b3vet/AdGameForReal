@@ -238,6 +238,13 @@ export const BOSS_WAKE_COLOR = paletteColor('shadow.blob');
 export const SHAKE_CHARGE = { strength: 0.11, seconds: 0.26 } as const;
 
 /**
+ * The kick when the charge lands on the column (document 29): the hit the
+ * `SHAKE_CHARGE` wind-up promised, so it is the stomp's size and a little
+ * longer, because the body keeps going through the crowd after it lands.
+ */
+export const SHAKE_CHARGE_HIT = { strength: 0.15, seconds: 0.36 } as const;
+
+/**
  * Seconds past `EnemyState.charge.until` the Rime Fiend keeps running before it
  * is drawn walking home.
  *

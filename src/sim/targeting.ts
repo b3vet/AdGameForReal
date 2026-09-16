@@ -114,6 +114,9 @@ export class TargetList {
   /** Registers one body the moment it appears. Streams call this on every spawn. */
   insert(enemy: EnemyState, balance: Balance): void {
     if (!enemy.alive) return;
+    // The endless road puts a Rime Fiend on the road mid-run (document 28), so
+    // its charge speed has to reach the seam here rather than only in `build`.
+    if (enemy.variant === 'rime') this.fastest = Math.max(this.fastest, bossClosing(balance));
     this.add(
       enemy.x,
       shootableHalf(enemy, balance),
@@ -282,10 +285,13 @@ function fastestClosing(state: RunState, balance: Balance): number {
   let fastest = Math.max(enemies.grunt.speed, enemies.brute.speed, balance.streams.speed);
   for (const enemy of state.enemies) if (enemy.speed > fastest) fastest = enemy.speed;
   const boss = state.boss;
-  if (boss !== null && boss.variant === 'rime') {
-    fastest = Math.max(fastest, enemies.boss.rime.charge.speed);
-  }
+  if (boss !== null && boss.variant === 'rime') fastest = Math.max(fastest, bossClosing(balance));
   return fastest;
+}
+
+/** How fast the Rime Fiend closes on the squad while it charges (D49). */
+function bossClosing(balance: Balance): number {
+  return balance.enemies.boss.rime.charge.speed;
 }
 
 /**

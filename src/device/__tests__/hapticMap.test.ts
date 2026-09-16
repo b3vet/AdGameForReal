@@ -98,10 +98,17 @@ describe('haptics on a device', () => {
     expect(impacts).toEqual(['MEDIUM', 'MEDIUM']);
   });
 
-  it('taps heavy on a meteor and on the boss winding up to charge', () => {
-    unthrottled({ type: 'meteor', x: 0, z: 30, radius: 3 });
+  it('taps medium on the Rime Fiend committing to a charge, and heavy when it lands', () => {
+    // Document 29: the commitment is the warning a thumb answers, and the
+    // landing is the hit.
     unthrottled({ type: 'charge', enemyId: 9, kind: 'boss', lane: 1 });
-    expect(impacts).toEqual(['HEAVY', 'HEAVY']);
+    unthrottled({ type: 'chargeHit', enemyId: 9, x: -2, z: 40 });
+    expect(impacts).toEqual(['MEDIUM', 'HEAVY']);
+  });
+
+  it('taps heavy on a meteor', () => {
+    unthrottled({ type: 'meteor', x: 0, z: 30, radius: 3 });
+    expect(impacts).toEqual(['HEAVY']);
   });
 
   it('keeps Milestone 4s three: the stomp, the boss dying and the win', () => {
@@ -131,6 +138,8 @@ describe('haptics on a device', () => {
     unthrottled({ type: 'freezePulse', x: 0, z: 14, radius: 4 });
     unthrottled({ type: 'glacier', lane: 1, z: 18, until: 9 });
     unthrottled({ type: 'unitsLost', amount: 3, reason: 'contact' });
+    // The charge's dead are the landing's to announce, once, not each step's.
+    unthrottled({ type: 'unitsLost', amount: 6, reason: 'charge' });
     expect(impacts).toEqual([]);
     expect(notifications).toEqual([]);
   });

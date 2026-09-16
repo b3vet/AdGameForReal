@@ -62,6 +62,13 @@ export type SimEvent =
    */
   | { type: 'charge'; enemyId: number; kind: EnemyKind; lane: Lane }
   /**
+   * The Rime Fiend's charge landed on the column (document 29): once per
+   * charge, on the step its body first kills somebody, at the front of the
+   * body. The dead themselves are the `unitsLost` with reason `charge` that
+   * follows it in the same step.
+   */
+  | { type: 'chargeHit'; enemyId: number; x: number; z: number }
+  /**
    * A body was set alight by an evolved ember staff. Emitted when the burn
    * *starts*, not on every tick: a tick is four a second on every burning body
    * and a river is hundreds of them, so the ticks are ordinary `enemyHit`s and

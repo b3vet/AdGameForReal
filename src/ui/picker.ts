@@ -1,11 +1,19 @@
 /**
- * The level picker behind the Academy's Play card, and the Endless card beside
- * it (D52).
+ * The level picker behind the Academy's Play card: the chips, Play under
+ * them, and the Endless card under that (D52).
  *
  * Split out of `./academy.ts` in Milestone 8 for the file-size rule (CLAUDE.md),
- * on the seam that file already had: the Academy is the *door* — the purse, the
- * cards, the board — and this is the corridor, which now has two ends. A chip
- * is a campaign level; the card at the top is the road with no level number.
+ * on the seam that file already had: the Academy is the *door* — the cards and
+ * the board — and this is the corridor, which has two ends. A chip is a
+ * campaign level; the Endless card is the road with no level number.
+ *
+ * The order is the owner's second playtest (docs/28): a first-time player
+ * walked straight past the campaign into Endless, which sat above the chips in
+ * a gold frame with a gold button of its own. So Play leads now, the loudest
+ * thing on the screen, directly under the chips and naming the level it will
+ * start; Endless is a quiet card below it, and stays shut until the player has
+ * reached the level `academy.json` names — the same rule, and the same drained
+ * padlocked look, as a home card that is not open yet.
  *
  * Two marks on a chip, and both are read off the save rather than the level:
  * a **badge** on a milestone level (D45: the ones the upgrades are meant to be
@@ -13,13 +21,18 @@
  * crowd it ever held. The badge says "this one is meant to be hard" before the
  * level is walked; the star says "and you walked it well" after.
  *
- * Ids are a contract with `scripts/smoke-run.mjs`, which clicks `#play-button`.
+ * Ids are a contract with `scripts/smoke-run.mjs`, which clicks `#play-button`,
+ * and with `scripts/probe-safe-area.mjs`, which measures `#picker-endless`.
  */
 
+import './picker.css';
+
+import { endlessUnlockLevel } from '@/core/player';
 import { academy, fill } from '@/data/academy-types';
 import { levelConfig } from '@/data';
 
 import type { BindButton } from './academy';
+import { setIcon } from './icons';
 import { element, text } from './widgets';
 
 /** How many level chips a page of the picker holds (plan: two pages of ten). */
@@ -29,12 +42,15 @@ export interface PickerElements {
   picker: HTMLElement;
   caption: HTMLElement;
   pager: HTMLElement;
-  /** The Endless card: its name, its blurb, its record and its button. */
-  endless: HTMLElement;
+  /** Play's name and the level it starts; the button is bound by the overlay. */
+  playTitle: HTMLElement;
+  playLevel: HTMLElement;
+  /** The Endless card, which is its own button, and what it says. */
+  endless: HTMLButtonElement;
+  endlessIcon: HTMLElement;
   endlessTitle: HTMLElement;
   endlessBlurb: HTMLElement;
   endlessBest: HTMLElement;
-  endlessButton: HTMLButtonElement;
 }
 
 /** What the picker needs of the save, filled by `AcademyView`. */
@@ -44,6 +60,8 @@ export interface PickerView {
   selectedLevel: number;
   /** Metres of the best endless walk; 0 for a road never taken. */
   endlessBest: number;
+  /** Whether this player has reached the level that opens Endless (docs/28). */
+  endlessOpen: boolean;
   /** Campaign levels whose best walk earned a star. */
   stars: readonly number[];
 }
@@ -69,6 +87,7 @@ export class Picker {
     this.elements = elements;
     this.callbacks = callbacks;
     this.bind = bind;
+    this.elements.playTitle.textContent = academy.meta.picker.playTitle;
     this.buildEndless();
   }
 
@@ -79,25 +98,42 @@ export class Picker {
     this.view = view;
     this.page = Math.min(this.pageButtons.length - 1, pageOf(view.selectedLevel));
     this.paintChips();
+    this.elements.playLevel.textContent = fill(academy.meta.picker.playHint, {
+      level: String(view.selectedLevel),
+    });
     this.paintEndless(view);
   }
 
   private buildEndless(): void {
-    const copy = academy.meta.endless;
-    this.elements.endlessTitle.textContent = copy.title;
-    this.elements.endlessBlurb.textContent = copy.blurb;
-    this.elements.endlessButton.textContent = copy.title;
-    this.bind(this.elements.endlessButton, () => {
+    this.elements.endlessTitle.textContent = academy.meta.endless.title;
+    this.bind(this.elements.endless, () => {
       this.callbacks.onEndless();
     });
   }
 
+  /**
+   * Open, the card says what the road is and how far the player has walked it.
+   * Shut, it says what opens it, as a home card does: the level in the blurb's
+   * place and a padlock in the glyph's, drained, and dead to a tap.
+   */
   private paintEndless(view: PickerView): void {
     const copy = academy.meta.endless;
-    this.elements.endlessBest.textContent =
-      view.endlessBest > 0
-        ? fill(copy.bestLabel, { metres: String(view.endlessBest) })
-        : copy.noBestLabel;
+    const open = view.endlessOpen;
+    const card = this.elements.endless;
+    card.disabled = !open;
+    card.dataset['locked'] = open ? 'false' : 'true';
+    setIcon(this.elements.endlessIcon, open ? 'endless' : 'lock');
+    this.elements.endlessBlurb.textContent = open
+      ? copy.blurb
+      : fill(academy.home.lockedHint, { level: String(endlessUnlockLevel()) });
+    let best = '';
+    if (open) {
+      best =
+        view.endlessBest > 0
+          ? fill(copy.bestLabel, { metres: String(view.endlessBest) })
+          : copy.noBestLabel;
+    }
+    this.elements.endlessBest.textContent = best;
   }
 
   /**

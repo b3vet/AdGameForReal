@@ -169,8 +169,19 @@ export interface AcademyCopy {
       noBestLabel: string;
       /** `{metres}` — the HUD chip that stands in for the level chip (D52). */
       hudLabel: string;
+      /**
+       * The level that opens the picker's Endless card (docs/28), read like a
+       * room's `unlockLevel`: a new player meets the campaign first. Only the
+       * card is locked; `?endless=1` and the debug handle walk the road at any
+       * level.
+       */
+      unlockLevel: number;
     };
     picker: {
+      /** The Play card under the chips (docs/28). */
+      playTitle: string;
+      /** `{level}` — the line under it: which road Play is about to start. */
+      playHint: string;
       /** `{level}` — what an ordinary chip reads as to a screen reader. */
       levelLabel: string;
       /** `{level}` — the label a milestone chip carries for a screen reader. */
@@ -186,8 +197,6 @@ export interface AcademyCopy {
       /** `{survivors}` of `{peak}` — this level's best walk. */
       bestLabel: string;
       newBestLabel: string;
-      /** The button that walks the same seed again (D52). */
-      replay: string;
       bonusHeading: string;
       /** `{days}` — the streak line under the coins. */
       streakBonus: string;
@@ -195,9 +204,6 @@ export interface AcademyCopy {
       tierBonus: string;
       /** `{name}` — the tint that rung handed over. */
       tintBonus: string;
-      nextHeading: string;
-      /** `{coins}` still to save for the next thing the Academy sells. */
-      nextShort: string;
     };
   };
   /**
@@ -233,7 +239,17 @@ export interface AcademyCopy {
     bind: string;
     empower: string;
   };
-  result: { firstClear: string };
+  /**
+   * The result sheet's badge and its three ways out (docs/28): Continue to the
+   * next level after a clear, Retry the road just walked, and Home — the pause
+   * menu's word for the same place.
+   */
+  result: {
+    firstClear: string;
+    continue: string;
+    retry: string;
+    home: string;
+  };
 }
 
 export const academy: AcademyCopy = academyJson;

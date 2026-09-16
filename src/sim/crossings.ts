@@ -1,14 +1,27 @@
 /**
- * Which group takes which gate (D44).
+ * Which group takes which gate, and the rule that a row pays once (D44, and
+ * the owner's second playtest round, document 28).
  *
  * Through Milestone 5 there was one crowd and one answer: the lane the squad's
- * centre stood in when it crossed the row. A run can now have several groups on
- * the road at once — the column and whoever a fence shut out — so a row is
- * crossed once per group, and a gate belongs to the *first* group whose leader
- * crosses the row in that gate's lane. `add`, `sub` and `mul` then apply to
- * that group alone: its own back is where the newcomers form up and its own
- * tail is what a curse takes. `fireRate` and `weapon` are the squad's, because
- * they are what the wizards are carrying rather than how many of them there are.
+ * centre stood in when it crossed the row. A run can have several groups on
+ * the road at once — the column and whoever a fence shut out — so each group
+ * still crosses each row on its own account, and whatever gate stands in the
+ * lane it crosses in is the one it walks through. `add`, `sub` and `mul` then
+ * apply to that group alone: its own back is where the newcomers form up and
+ * its own tail is what a curse takes. `fireRate` and `weapon` are the squad's,
+ * because they are what the wizards are carrying rather than how many of them
+ * there are.
+ *
+ * What changed after the second playtest is *how many* gates a row can pay.
+ * D44 let each group claim the gate in its own lane, and a fence that starts to
+ * hold on the step the column crosses a row cuts its stragglers off a metre or
+ * two *behind* that row — so they walked through it a moment later in the next
+ * lane and took a second gate from a row the column had already chosen from.
+ * Eighteen rows in four hundred human-bot runs did exactly that, and the owner
+ * saw it: "gates are double collectible". Now the first gate any group takes
+ * claims its row, every other gate in that row goes dark on the same step, and
+ * a group crossing a claimed row takes nothing, stragglers included. A group
+ * that walks through an empty lane has taken no gate and claims nothing.
  *
  * A gate nobody claimed stays shootable until every live group is past its row,
  * and is then retired: it is still standing, and a column behind a fence can
@@ -51,6 +64,9 @@ export class Crossings {
   /** Rows every live group is past; their gates are done with. */
   private swept = 0;
 
+  /** 1 once a row has paid a gate: the rest of it is dark for everybody. */
+  private readonly claimed: Uint8Array;
+
   /** Re-used by the lane test: a gate row must not allocate (CLAUDE.md). */
   private readonly limits: WallLimits = { lo: 0, hi: 0, wall: -1 };
 
@@ -61,6 +77,7 @@ export class Crossings {
     this.nextRow = new Int32Array(groups).fill(UNPLACED);
     this.nextRow[0] = 0;
     this.placedFor = new Int32Array(groups);
+    this.claimed = new Uint8Array(Math.max(1, level.rows.length));
   }
 
   /** Walks every group over whatever rows it crossed this step. */
@@ -98,11 +115,13 @@ export class Crossings {
         if (row === undefined || group.z < row.z) break;
         this.nextRow[g] = index + 1;
 
+        if (this.claimed[index] === 1) continue;
         const lane = this.laneOf(state, crowd, g);
         for (const gate of state.gates) {
           if (gate.rowIndex !== index || gate.passed || gate.lane !== lane) continue;
-          gate.passed = true;
+          this.claim(state, index);
           this.apply(state, gate, g, events);
+          break;
         }
         if (state.status !== 'running') return;
       }
@@ -133,6 +152,19 @@ export class Crossings {
       this.balance,
     );
     return laneOf(clampToWalls(at.leaderX, limits), width);
+  }
+
+  /**
+   * The row has paid: every gate in it is passed from this step, the one being
+   * taken and the ones beside it. No event for the siblings — the `gatePassed`
+   * for the taken gate is what the renderer dims its row on, and a gate it has
+   * not bound yet is never bound once it is passed.
+   */
+  private claim(state: RunState, row: number): void {
+    this.claimed[row] = 1;
+    for (const gate of state.gates) {
+      if (gate.rowIndex === row) gate.passed = true;
+    }
   }
 
   /** First row standing in front of `z`. */

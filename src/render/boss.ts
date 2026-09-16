@@ -4,10 +4,11 @@
  * (D49), and the number over its head.
  *
  * The body itself — two models, their clips, the enrage pulse and the greybox
- * stand-in — is `./bossModels.ts`; this file is the state machine over it. That
- * machine is a priority list — death beats a charge, a charge beats a stomp, a
- * stomp beats a hit reaction, a hit reaction beats walking — because the sim can
- * hand us a stomp and six hits in the same tick.
+ * stand-in — is `./bossModels.ts`, and the rings a stomp or a landed charge
+ * send across the road are `./bossRings.ts`; this file is the state machine
+ * over the body. That machine is a priority list — death beats a charge, a
+ * charge beats a stomp, a stomp beats a hit reaction, a hit reaction beats
+ * walking — because the sim can hand us a stomp and six hits in the same tick.
  *
  * Clip playback runs on the app's time scale rather than the frame's, so
  * hit-stop and the slow-mo on the kill hold the boss too.
@@ -16,10 +17,10 @@
 import type { Scene } from '@babylonjs/core/scene';
 
 import { BossRig, FACING, FACING_HOME } from './bossModels';
+import { ShockRings } from './bossRings';
 import { FrostSpray } from './frostSpray';
 import type { GroundDecals } from './groundDecals';
 import { labelPixels, type NumberLabels } from './labels';
-import { RingPool } from './rings';
 import {
   BOSS_CHARGE_OVERRUN,
   BOSS_DRAW_RANGE,
@@ -40,23 +41,8 @@ import {
   BOSS_WAKE_SIZE,
   BOSS_WAKE_SPREAD,
   LABEL_RANGE,
-  POOL,
-  STOMP_ALPHA,
-  STOMP_COLOR,
-  STOMP_DURATION,
-  STOMP_MAX_RADIUS,
-  STOMP_THICKNESS,
 } from './theme';
 import type { BossKind, EnemyState } from '@/sim';
-
-/** Rings start as a tight shockwave under the boss and sweep outward. */
-const RING_START_RADIUS = 0.8;
-
-interface Ring {
-  x: number;
-  z: number;
-  age: number;
-}
 
 export class BossView {
   private readonly scene: Scene;
@@ -64,8 +50,7 @@ export class BossView {
   /** This view's label id in the shared atlas; see `src/render/labels.ts`. */
   private readonly label: number;
   private readonly rig: BossRig;
-  private readonly rings: RingPool;
-  private readonly ringState: Ring[] = [];
+  private readonly rings: ShockRings;
   /** The frost the Fiend tears off the road while it charges (D49). */
   private readonly wake = new FrostSpray(
     BOSS_WAKE_SIZE,
@@ -85,8 +70,13 @@ export class BossView {
    */
   private oneShotSpeed = 1;
   private hitCooldown = 0;
+  /** True while a charge owns the body: past its wind-up and not yet home. */
+  private running = false;
   /** Seconds since `bossKilled`, or -1 while alive. */
   private dying = -1;
+  /** The boss last drawn alive and the one dying: a new live id is the endless road's next fight (docs/28). */
+  private drawnId = -1;
+  private deadId = -1;
   private shownHp = Number.NaN;
   private shownText = '';
   /** Where the body was last drawn, for the sink and for the death burst. */
@@ -103,17 +93,7 @@ export class BossView {
     this.decals = decals;
     this.label = labels.claim();
     this.rig = new BossRig(scene);
-
-    // Thin: the ring is a tell, not the event. A fat bright ring swallows the
-    // boss it is meant to sell — which is exactly what the Phase B2 frames
-    // showed, and the additive blend does the rest.
-    this.rings = new RingPool(scene, 'stomp', STOMP_COLOR, POOL.stompRings, {
-      thickness: STOMP_THICKNESS,
-      alpha: STOMP_ALPHA,
-      additive: true,
-      y: 0.12,
-    });
-    for (let i = 0; i < POOL.stompRings; i++) this.ringState.push({ x: 0, z: 0, age: -1 });
+    this.rings = new ShockRings(scene);
   }
 
   async load(): Promise<void> {
@@ -141,15 +121,20 @@ export class BossView {
 
   reset(): void {
     this.dying = -1;
+    this.drawnId = -1;
+    this.deadId = -1;
     this.oneShot = 0;
     this.oneShotSpeed = 1;
     this.hitCooldown = 0;
+    this.running = false;
     this.current = '';
     this.shownHp = Number.NaN;
     this.shownText = '';
     this.wake.clear();
-    for (const ring of this.ringState) ring.age = -1;
     this.rings.reset();
+    // Off the body before the phase is zeroed: a boss that died enraged would
+    // otherwise come back red on the next road that stands it.
+    this.rig.paintEnrage(false, 0);
     this.rig.stopEverything();
   }
 
@@ -164,23 +149,26 @@ export class BossView {
   }
 
   onStomp(x: number, z: number): void {
-    // A free ring, or the one that has swept out furthest: the pool is small on
-    // purpose (see `POOL.stompRings`), and the newest wave is the one that
-    // matters.
-    let chosen = this.ringState[0];
-    for (const ring of this.ringState) {
-      if (ring.age < 0) {
-        chosen = ring;
-        break;
-      }
-      if (chosen !== undefined && chosen.age >= 0 && ring.age > chosen.age) chosen = ring;
-    }
-    if (chosen !== undefined) {
-      chosen.x = x;
-      chosen.z = z;
-      chosen.age = 0;
-    }
+    this.rings.start(x, z);
     this.playOneShot('attack');
+  }
+
+  /**
+   * The Rime Fiend has committed to a lane and is winding up (document 29): the
+   * taunt's slow raised arm, for as long as the wind-up lasts. The run takes
+   * the body back from it the moment it sets off (`trackCharge`).
+   */
+  onChargeTell(): void {
+    if (this.dying >= 0) return;
+    this.playOneShot('attack', BOSS_TAUNT_SPEED);
+  }
+
+  /**
+   * The charge landed on the column: the stomp's shockwave where the body met
+   * it, and no clip, because the run owns the body until it turns for home.
+   */
+  onChargeHit(x: number, z: number): void {
+    this.rings.start(x, z);
   }
 
   /**
@@ -188,9 +176,12 @@ export class BossView {
    * `BOSS_HIT_THROTTLE` is shorter in Milestone 3 than in Milestone 2 — the
    * product owner asked for more animation, and a boss that stands still
    * through a barrage is the most visible place there was none.
+   *
+   * Not while it runs: the run's clip is re-asserted every frame, so a flinch
+   * there lasted one frame and started the run's cycle over from its first.
    */
   onHit(): void {
-    if (this.dying >= 0 || this.hitCooldown > 0 || this.oneShot > 0) return;
+    if (this.dying >= 0 || this.hitCooldown > 0 || this.oneShot > 0 || this.running) return;
     this.hitCooldown = BOSS_HIT_THROTTLE;
     this.playOneShot('hit');
   }
@@ -198,6 +189,7 @@ export class BossView {
   onKilled(): void {
     if (this.dying >= 0) return;
     this.dying = 0;
+    this.deadId = this.drawnId;
     this.oneShot = 0;
     this.play('death', false);
   }
@@ -238,19 +230,26 @@ export class BossView {
     timeScale: number,
     time: number,
   ): void {
-    this.updateRings(dt);
+    this.rings.update(dt);
     this.hitCooldown = Math.max(0, this.hitCooldown - dt);
 
     if (this.dying >= 0) {
       this.oneShot = 0;
-      this.advanceDeath(dt, timeScale);
-      return;
+      // The death plays out in full, and only then does a different live boss
+      // on the state — the endless road's next one — get the body.
+      const next = boss !== null && boss.alive && boss.id !== this.deadId;
+      if (!next || this.dying < BOSS_SINK_DELAY + BOSS_SINK_DURATION) {
+        this.advanceDeath(dt, timeScale);
+        return;
+      }
+      this.revive();
     }
 
     if (boss === null || !boss.alive) {
       this.rig.show(false);
       return;
     }
+    this.drawnId = boss.id;
 
     // The state is the authority on which boss this is: a level load sets it
     // through `setVariant`, and a hand-made `EnemyState` carries no variant at
@@ -302,13 +301,12 @@ export class BossView {
   dispose(): void {
     this.rig.dispose();
     this.rings.dispose();
-    this.ringState.length = 0;
   }
 
   /**
    * The charge (D49): which way the body faces, the frost it tears up, and the
    * clip it owes — the run on the way in, the walk on the way home, and `''`
-   * when there is no charge to draw at all.
+   * when there is no run to draw, which includes the wind-up before one.
    *
    * It does not touch the demon: `EnemyState.charge` is only ever written by
    * the Rime Fiend's own move and by a charger, neither of which is boss 1, so
@@ -317,11 +315,18 @@ export class BossView {
    */
   private trackCharge(boss: EnemyState, time: number, dt: number): string {
     const charge = boss.charge;
-    if (charge === undefined) {
+    // Standing, or winding up where it stands (document 29): facing the column,
+    // with whatever clip the tell started (`onChargeTell`) still on the body.
+    this.running = charge !== undefined && time >= (charge.from ?? -Infinity);
+    if (charge === undefined || !this.running) {
       this.rig.face(FACING, dt);
       return '';
     }
     const runningIn = time <= charge.until + BOSS_CHARGE_OVERRUN;
+    // The run takes the body from the wind-up: a one-shot still counting down
+    // would keep the lunge at the taunt's half speed.
+    this.oneShot = 0;
+    this.oneShotSpeed = 1;
     // Facing the way it is going: at the squad on the way in, up the road on
     // the walk back to its stand.
     this.rig.face(runningIn ? FACING : FACING_HOME, dt);
@@ -330,6 +335,19 @@ export class BossView {
     this.wake.emit(boss.x, boss.z + (runningIn ? BOSS_WAKE_BEHIND : -BOSS_WAKE_BEHIND), 0, time);
     if (!runningIn) return 'walk';
     return this.rig.has('charge') ? 'charge' : 'walk';
+  }
+
+  /** Back to a live boss once one has sunk; the red comes off the body that died first. */
+  private revive(): void {
+    this.rig.paintEnrage(false, 0);
+    this.dying = -1;
+    this.oneShot = 0;
+    this.oneShotSpeed = 1;
+    this.hitCooldown = 0;
+    this.running = false;
+    this.current = '';
+    this.shownHp = Number.NaN;
+    this.shownText = '';
   }
 
   /** The body plays its death, holds, then sinks through the road. */
@@ -376,20 +394,4 @@ export class BossView {
     this.oneShotSpeed = speed;
     this.oneShot = seconds / Math.max(0.05, speed);
   }
-
-  private updateRings(dt: number): void {
-    this.rings.begin();
-    for (const ring of this.ringState) {
-      if (ring.age < 0) continue;
-      ring.age += dt;
-      if (ring.age >= STOMP_DURATION) {
-        ring.age = -1;
-        continue;
-      }
-      const p = ring.age / STOMP_DURATION;
-      this.rings.add(ring.x, ring.z, RING_START_RADIUS + (STOMP_MAX_RADIUS - RING_START_RADIUS) * p);
-    }
-    this.rings.end();
-  }
-
 }

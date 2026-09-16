@@ -15,7 +15,7 @@ export {
   BOSS_Z_OFFSET,
   FIRE_RATE_GATE_WORTH,
 } from './level';
-export type { BossId, LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
+export type { ArenaDef, BossId, LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
 /**
  * The endless road (D52): the same `LevelDef` a campaign level is, built from
  * `endless.json`'s dials instead of a level recipe. `dialAt` is exported for

@@ -77,9 +77,6 @@ describe('?perf', () => {
   it('runs the highest level reached when that is lower than 20', () => {
     savedAt(6);
     expect(parseQuery('?perf', levelCount).level).toBe(6);
-    // Without `?perf` the same save boots the picker at the same level, which
-    // is what says the flag only ever *caps* it.
-    expect(parseQuery('', levelCount).level).toBe(6);
   });
 
   it('never picks a level the campaign does not have', () => {
@@ -94,5 +91,21 @@ describe('?perf', () => {
     expect(options.level).toBe(8);
     expect(options.bot).toBe('human');
     expect(options.perf).toBe(true);
+  });
+});
+
+describe('?level', () => {
+  it('names nothing when the URL does not, so the picker reads the save (docs/29)', () => {
+    savedAt(6);
+    expect(parseQuery('', levelCount).level).toBeNull();
+    expect(parseQuery('?bot=greedy&seed=3', levelCount).level).toBeNull();
+    expect(parseQuery('?level=abc', levelCount).level).toBeNull();
+  });
+
+  it('pins a level the URL names, inside the campaign, whatever the save says', () => {
+    savedAt(2);
+    expect(parseQuery('?level=23', levelCount).level).toBe(23);
+    expect(parseQuery('?level=0', levelCount).level).toBe(1);
+    expect(parseQuery(`?level=${String(levelCount + 9)}`, levelCount).level).toBe(levelCount);
   });
 });

@@ -10,13 +10,13 @@
  * once a staff is upgraded — `overcharge`, `freezePulse` and `glacier` are
  * deliberately absent for exactly that reason (D54).
  *
- * What is left is nine things that happen once, or once in a while:
+ * What is left is ten things that happen once, or once in a while:
  *
  *   light    a gate row passed — the one thing the player *chose* this second
  *   medium   a shielded brute's shield going (D49), a charger setting off,
- *            the boss's stomp landing
- *   heavy    a meteor crater (D54), the Rime Fiend starting a charge (D49),
- *            the boss dying
+ *            the boss's stomp landing, the Rime Fiend committing to a charge
+ *   heavy    a meteor crater (D54), the Rime Fiend's charge landing on the
+ *            column (document 29), the boss dying
  *   success  the level won, and the meta layer paying out at the sheet — a
  *            mission finished or a bestiary tier crossed (D51, D53)
  *   warning  the wipe
@@ -79,7 +79,15 @@ function ignore(result: Promise<void>): void {
 }
 
 /** The taps, from lightest to heaviest. Throttled as a group. */
-type Impact = 'gate' | 'shield' | 'charger' | 'stomp' | 'meteor' | 'bossCharge' | 'bossDown';
+type Impact =
+  | 'gate'
+  | 'shield'
+  | 'charger'
+  | 'stomp'
+  | 'bossTell'
+  | 'meteor'
+  | 'bossCharge'
+  | 'bossDown';
 
 /** The three end-of-run verdicts. Not throttled; see `MIN_IMPACT_GAP_MS`. */
 type Notice = 'won' | 'reward' | 'wipe';
@@ -103,6 +111,7 @@ function impact(kind: Impact): void {
     case 'shield':
     case 'charger':
     case 'stomp':
+    case 'bossTell':
       // Something breaking, or a heavy thing landing a few metres away.
       ignore(Haptics.impact({ style: ImpactStyle.Medium }));
       break;
@@ -149,10 +158,15 @@ export function feedSimEvents(events: readonly SimEvent[]): void {
         break;
 
       case 'charge':
-        // One event, two creatures (D49): the Rime Fiend winding up to cross
-        // the arena is the biggest thing that happens in a boss fight, and a
-        // charger in the crowd is a shove.
-        impact(event.kind === 'boss' ? 'bossCharge' : 'charger');
+        // One event, two creatures (D49): a charger setting off, or the Rime
+        // Fiend committing to a lane. The Fiend's is the warning, not the hit
+        // (document 29) — the hit is `chargeHit` below — so it is a stomp's
+        // weight, and the heavy one is kept for the moment it lands.
+        impact(event.kind === 'boss' ? 'bossTell' : 'charger');
+        break;
+
+      case 'chargeHit':
+        impact('bossCharge');
         break;
 
       case 'meteor':

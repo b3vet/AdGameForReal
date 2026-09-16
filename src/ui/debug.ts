@@ -21,18 +21,15 @@
 
 import type { RunState, SimEvent } from '@/sim';
 
-import {
-  CAPTURE_SECONDS,
-  CaptureRecorder,
-  SPIKE_MS,
-  SPIKE_WINDOW_SECONDS,
-  SpikeWindow,
-} from './capture';
+import { CAPTURE_SECONDS, CaptureRecorder } from './capture';
 import type { CaptureSummary } from './capture';
 import { browserSurface, copyText } from './clipboard';
 import type { CopySurface } from './clipboard';
 import { describeEvent } from './debugEvents';
-import type { DebugCanvas, DebugStats } from './debugStats';
+import type { DebugStats } from './debugStats';
+import { composeReadout } from './debugText';
+import type { LogEntry, PanelAverages } from './debugText';
+import { SpikeWindow } from './spikeWindow';
 import './debug.css';
 
 /** How many event lines the panel keeps. */
@@ -62,11 +59,6 @@ const NO_REPORT = 'arcane-rush report\n\n  -  no source (the app has not booted)
 
 /** Wall clock for the capture window. Presentation only; the sim has its own. */
 const now = (): number => (typeof performance === 'undefined' ? 0 : performance.now());
-
-interface LogEntry {
-  text: string;
-  repeats: number;
-}
 
 /**
  * How the panel asks for the device report. The app supplies it
@@ -106,13 +98,18 @@ export class DebugPanel {
   private readonly surface: CopySurface;
 
   private enabled = false;
-  private fps = 0;
-  private simMs = 0;
-  private renderMs = 0;
-  private physicsMs = 0;
+  /** The smoothed numbers the readout prints (`./debugText.ts`). */
+  private readonly averages: PanelAverages = {
+    fps: 0,
+    simMs: 0,
+    viewsMs: 0,
+    drawMs: 0,
+    physicsMs: 0,
+    frameMs: 0,
+    spikes: 0,
+  };
   private sinceRefresh = REFRESH_INTERVAL;
   private shownLabel = '';
-  private spikeCount = 0;
 
   private source: ReportSource | null = null;
   private lastSummary: CaptureSummary | null = null;
@@ -258,11 +255,14 @@ export class DebugPanel {
     // a phone's hot spot shows up as a rising average, not as one bad frame.
     // The capture is the opposite — it keeps every raw sample.
     if (dt > 0) {
-      this.spikeCount = this.spikes.add(now());
-      this.fps += (1 / dt - this.fps) * AVERAGE_WEIGHT;
-      this.simMs += (stats.simMs - this.simMs) * AVERAGE_WEIGHT;
-      this.renderMs += (stats.renderMs - this.renderMs) * AVERAGE_WEIGHT;
-      this.physicsMs += (stats.physicsMs - this.physicsMs) * AVERAGE_WEIGHT;
+      const a = this.averages;
+      a.spikes = this.spikes.add(now());
+      a.fps += (1 / dt - a.fps) * AVERAGE_WEIGHT;
+      a.simMs += (stats.simMs - a.simMs) * AVERAGE_WEIGHT;
+      a.viewsMs += (stats.viewsMs - a.viewsMs) * AVERAGE_WEIGHT;
+      a.drawMs += (stats.drawMs - a.drawMs) * AVERAGE_WEIGHT;
+      a.physicsMs += (stats.physicsMs - a.physicsMs) * AVERAGE_WEIGHT;
+      a.frameMs += (stats.frameMs - a.frameMs) * AVERAGE_WEIGHT;
     }
 
     for (const event of events) this.push(describeEvent(event));
@@ -278,7 +278,9 @@ export class DebugPanel {
 
     // Composing the readout into a hidden element is a dozen strings a second
     // nobody can see; the report is what is on screen.
-    if (!this.reportShown) this.elements.text.textContent = this.compose(state, phase, stats);
+    if (!this.reportShown) {
+      this.elements.text.textContent = composeReadout(state, phase, stats, this.averages, this.log);
+    }
     if (this.capture.active) {
       this.setLabel(`Recording ${String(this.capture.secondsLeft(now()))}s`);
     }
@@ -332,80 +334,6 @@ export class DebugPanel {
     this.elements.copyButton.textContent = COPY_LABEL;
   }
 
-  /**
-   * The block the product owner reads off a phone in one glance
-   * (docs/06-milestone-2-plan.md, definition of done 9): frame rate, where the
-   * frame went, what it cost to draw, how much of the horde and how many world
-   * numbers are on screen, which rung of the degrade ladder is in force at what
-   * resolution, what physics is alive, and whether sound is on.
-   *
-   * `bodies` and `lbl` are the two ceilings Milestone 3 added that a level can
-   * quietly run into — `POOL.grunts` and the glyph budget — so they are printed
-   * next to the draw calls rather than left to be inferred from a missing
-   * skeleton or a missing number. `DROP` only appears when the atlas actually
-   * refused a glyph, which is the one case that is a bug rather than a reading.
-   */
-  private compose(state: Readonly<RunState> | null, phase: string, stats: DebugStats): string {
-    const lines = [
-      `fps ${this.fps.toFixed(0).padStart(3)}  phase ${phase}  x${stats.timeScale.toFixed(2)}`,
-      `sim ${this.simMs.toFixed(2)}ms  render ${this.renderMs.toFixed(2)}ms` +
-        `  phys ${this.physicsMs.toFixed(2)}ms`,
-      `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
-        `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
-      canvasLine(stats.canvas),
-      `bodies ${String(stats.streamBodies)}  chg ${String(stats.chargers)}` +
-        `  lbl ${String(stats.labels)}` +
-        `/${String(stats.labelGlyphs)}g` +
-        (stats.labelsDropped > 0 ? ` DROP ${String(stats.labelsDropped)}` : ''),
-      `wall ${String(stats.walls)}  wisp ${stats.wisp ? 'on' : 'off'}` +
-        `  spark ${String(stats.sparks)}  burn ${String(stats.burning)}`,
-      `rung ${String(stats.qualityRung)} ${stats.qualityReason}` +
-        `  p95 ${stats.qualityP95.toFixed(1)}ms` +
-        `  >${String(SPIKE_MS)}ms ${String(this.spikeCount)}/${String(SPIKE_WINDOW_SECONDS)}s`,
-      `rag ${String(stats.ragdolls)}  shard ${String(stats.shards)}` +
-        `  bodies ${String(stats.physicsBodies)}  physq ${String(stats.physicsQuality)}`,
-      // The heap rides with the audio line rather than with the ladder's: the
-      // ladder line is already the longest the panel composes, and the two
-      // together ran off the right edge of a 390 px phone, which is exactly the
-      // clipping `debug.css` warns about. Chrome only, so on the phone this
-      // line is the short one it has always been.
-      `audio ${stats.audio} ${String(stats.audioClips)} clips` +
-        (stats.heapMb > 0
-          ? `  heap ${stats.heapMb.toFixed(0)}MB gc ${String(stats.heapDrops)}`
-          : ''),
-    ];
-
-    if (state === null) {
-      lines.push('no run');
-    } else {
-      const projectiles = countAlive(state.projectiles);
-      const enemies = countAlive(state.enemies);
-      lines.push(
-        `lvl ${String(state.levelIndex)} seed ${String(state.seed)} ${state.status}`,
-        `t ${state.time.toFixed(1)}s  z ${state.squad.z.toFixed(1)}`,
-        `count ${String(state.squad.count)}  peak ${String(state.peakCount)}`,
-        `proj ${String(projectiles)}  enemies ${String(enemies)}`,
-      );
-      const boss = state.boss;
-      if (boss !== null) {
-        lines.push(
-          `boss ${boss.hp.toFixed(0)}/${boss.maxHp.toFixed(0)} ${boss.active ? 'active' : 'idle'}` +
-            (boss.enraged === true ? ' ENRAGED' : ''),
-        );
-      }
-    }
-
-    lines.push('- events -');
-    if (this.log.length === 0) lines.push('(none)');
-    else {
-      for (const entry of this.log) {
-        lines.push(entry.repeats > 1 ? `${entry.text} x${String(entry.repeats)}` : entry.text);
-      }
-    }
-
-    return lines.join('\n');
-  }
-
   /** Repeats collapse into a counter so one noisy event cannot flush the log. */
   private push(text: string): void {
     const last = this.log[this.log.length - 1];
@@ -416,25 +344,4 @@ export class DebugPanel {
     this.log.push({ text, repeats: 1 });
     if (this.log.length > LOG_LIMIT) this.log.shift();
   }
-}
-
-/**
- * `css 440x956 bk 1320x2868 buf 1320x2868`: the box, the backing store and the
- * drawing buffer (`./debugStats.ts`). `SKEW` only when they are not one shape,
- * like `DROP` above — the one case that is a fault rather than a reading.
- * Forty-odd characters, inside the panel's width at 10 px.
- */
-function canvasLine(canvas: Readonly<DebugCanvas>): string {
-  return (
-    `css ${String(canvas.cssWidth)}x${String(canvas.cssHeight)}` +
-    ` bk ${String(canvas.backingWidth)}x${String(canvas.backingHeight)}` +
-    ` buf ${String(canvas.bufferWidth)}x${String(canvas.bufferHeight)}` +
-    (canvas.inShape ? '' : ' SKEW')
-  );
-}
-
-function countAlive(items: readonly { alive: boolean }[]): number {
-  let alive = 0;
-  for (const item of items) if (item.alive) alive++;
-  return alive;
 }

@@ -24,8 +24,8 @@ import {
 } from '../report';
 import type { ReportInput } from '../report';
 
-function spread(median: number, p95: number): Spread {
-  return { min: median / 2, median, p95, max: p95 * 2 };
+function spread(median: number, p95: number, mean = median): Spread {
+  return { mean, min: median / 2, median, p95, max: p95 * 2 };
 }
 
 function capture(): CaptureSummary {
@@ -33,16 +33,25 @@ function capture(): CaptureSummary {
     seconds: 30,
     frames: 1783,
     frameMs: spread(16.6, 24.4),
+    fpsAverage: 59.43,
     fpsMedian: 60.2,
     fpsP95: 41,
+    rafHz: 120.2,
     over20: 12,
     drawPeak: 38,
     rungPeak: 1,
     pixelRatio: 3,
+    pixelRatioMin: 2,
     devicePixelRatio: 3,
     sim: spread(1.1, 2.4),
-    render: spread(8.2, 14.1),
+    render: spread(8.2, 14.1, 8.4),
     physics: spread(0.9, 2),
+    views: spread(1.5, 3),
+    draw: spread(6.7, 11.1),
+    js: spread(10.2, 18.3, 10.9),
+    draws: spread(24, 31),
+    triangles: spread(612_345, 1_400_000, 700_000),
+    crowd: { whole: 40, small: 181, culled: 97 },
     run: { level: 20, squadMin: 40, squadMax: 212 },
     text: 'the panel-sized block',
   };
@@ -122,13 +131,21 @@ describe('buildReport', () => {
     expect(report).toContain('pixels     3 of 3');
     expect(report).toContain('physics    2');
 
-    // Capture: the frame rate twice, the hitch count, the draw peak, the split.
+    // Capture: the frame rate three ways, the display's own rate, the hitch
+    // count, where the frame went, and what the GPU was handed.
     expect(report).toContain('window     30.0s, 1783 frames');
-    expect(report).toContain('fps        med 60 p95 41');
+    expect(report).toContain('fps        avg 59.4 med 60 p95 41');
+    expect(report).toContain('display    120 Hz, 59.4 drawn a second');
     expect(report).toContain('frame p95  24.4 ms (med 16.6)');
     expect(report).toContain('>20ms      12');
-    expect(report).toContain('draws      peak 38, rung peak 1');
-    expect(report).toContain('render     med 8.20 p95 14.10 ms');
+    expect(report).toContain('js         mean 10.90 med 10.20 p95 18.30 ms');
+    expect(report).toContain('views      mean 1.50 med 1.50 p95 3.00 ms');
+    expect(report).toContain('draw       mean 6.70 med 6.70 p95 11.10 ms');
+    expect(report).toContain('render     mean 8.40 med 8.20 p95 14.10 ms');
+    expect(report).toContain('draws      med 24, peak 38, rung peak 1');
+    expect(report).toContain('triangles  med 612k, max 2.8M');
+    expect(report).toContain('crowd      whole 40, lod 181, culled 97 (med)');
+    expect(report).toContain('ratio      3, min 2 of 3');
 
     // Run: which road, how it ended, and what walked it.
     expect(report).toContain('road       level 20');

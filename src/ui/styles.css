@@ -214,11 +214,7 @@ body {
     linear-gradient(180deg, transparent 40%, color-mix(in srgb, var(--c-stone-deep) 26%, transparent));
 }
 
-/* Ribbon at the top, buttons at the foot, numbers centred between them. */
-.screen--result .screen__middle {
-  margin-top: auto;
-  margin-bottom: auto;
-}
+/* How the sheet's column is spread is `./result.css`, beside the rest of it. */
 
 .screen--hud {
   background: none;
@@ -310,9 +306,15 @@ body {
   background-clip: text;
 }
 
-/* On the result sheet the heading is ink on paper. */
+/*
+ * On the result sheet the heading is ink on paper, and a size up on a phone
+ * tall enough to spare the room for it (docs/28): the smaller of the width's
+ * and the height's answers, so a short screen keeps the old size.
+ */
 .screen__title--result {
   font-size: clamp(1.6rem, 7.5vw, 2.3rem);
+  font-size: clamp(1.6rem, min(8.6vw, 4.1vh), 2.5rem);
+  font-size: clamp(1.6rem, min(8.6vw, 4.1dvh), 2.5rem);
   color: var(--ink);
 }
 

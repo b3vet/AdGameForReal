@@ -174,7 +174,7 @@
   position: relative;
   margin-top: 0.2rem;
   height: 0.62rem;
-  border-radius: 999px;
+  border-radius: var(--corner);
   background: var(--sunk);
   box-shadow: inset 0 0.1rem 0.2rem color-mix(in srgb, var(--c-ink-base) 60%, transparent);
 }
@@ -182,7 +182,7 @@
 .boss__fill {
   height: 100%;
   width: 100%;
-  border-radius: 999px;
+  border-radius: var(--corner);
   background: linear-gradient(90deg, var(--gold), var(--danger));
   transform: scaleX(var(--boss-fill));
   transform-origin: 0 50%;
@@ -198,7 +198,7 @@
   height: 0.78rem;
   margin: -0.39rem 0 0 -0.39rem;
   transform: rotate(45deg);
-  border-radius: 0.14rem;
+  border-radius: var(--corner);
   background: linear-gradient(135deg, var(--gold-light), var(--gold) 55%, var(--gold-deep));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--c-ink-base) 55%, transparent),
@@ -225,7 +225,7 @@
   top: 50%;
   transform: translateY(-50%);
   padding: 0.15rem 0.45rem;
-  border-radius: 0.5rem;
+  border-radius: var(--corner);
   background: var(--chip-strong);
   box-shadow: inset 0 0 0 1px currentcolor;
   font-family: var(--font-display);

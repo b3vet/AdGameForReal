@@ -14,6 +14,7 @@
  */
 
 import type { BiomeId } from './biome-types';
+import type { BossKind } from './enemy-types';
 import type { ValueRange } from './level-types';
 
 /** A dial that starts somewhere, grows per row and stops at a ceiling. */
@@ -38,6 +39,38 @@ export interface EndlessMix {
   chargerRows: number;
   shieldRows: number;
   wallRows: number;
+}
+
+/**
+ * The road's bosses (document 28): an arena every `everyRows` rows from
+ * `firstRow`, the two bosses taking turns, each one bigger than the last.
+ *
+ * Counted in rows rather than metres for the reason everything else here is:
+ * a row is the unit the generator lays down, and an arena has to sit on the
+ * grid a gate row stands on, clear of the rows either side of it.
+ */
+export interface EndlessBosses {
+  /** Row index of the first arena line. */
+  firstRow: number;
+  /** Rows from one arena line to the next, the arena and its breathers included. */
+  everyRows: number;
+  /**
+   * Empty rows after each arena. Nothing on them can wake while the fight is
+   * on, so the only thing in the arena is the boss the player came for.
+   */
+  breatherRows: number;
+  /** Which boss stands in each arena, in turn. */
+  kinds: readonly BossKind[];
+  /** Hit points, per boss met: `start * growth^n`, held under `cap`. */
+  hp: EndlessDial;
+  /** The boss's share of the stomp and the grind (D31), per boss met. */
+  bite: EndlessDial;
+  /**
+   * Seconds the column stands over a fallen boss before the road opens: the
+   * death and the body sinking into the road (`src/render/boss.ts` takes 3.2),
+   * so the column does not walk through a boss that is still falling.
+   */
+  holdSeconds: number;
 }
 
 export interface EndlessConfig {
@@ -84,6 +117,14 @@ export interface EndlessConfig {
     density: EndlessDial;
   };
   mix: EndlessMix;
+  /**
+   * The mix the road has turned into by `mixRampRows`, and holds from there:
+   * fewer plain rivers, more hordes, brutes, chargers and shielded brutes.
+   * Each stretch between two arenas is dealt from the shares at its middle.
+   */
+  mixLate: EndlessMix;
+  mixRampRows: number;
+  bosses: EndlessBosses;
   /** The biomes the road walks through, in order, flipping every `rowsPerBiome`. */
   biomes: readonly BiomeId[];
   gateValues: {

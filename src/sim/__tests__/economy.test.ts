@@ -215,8 +215,8 @@ describe('the campaign', () => {
   it('holds the cadence when the player walks the endless road once a level', () => {
     // D52 from the campaign's side: the endless road pays, so it has to be
     // shown not to move the curve the prices were tuned against. One walk per
-    // campaign level, paid at the distance the retuned road's median run
-    // reaches on the level-20 kit (Milestone 8 log: 1903 m of 2898).
+    // campaign level, paid at the distance the road's median run reaches on
+    // the level-20 kit (`ENDLESS_MEDIAN_METRES` below).
     // One campaign a seed, both bands read off the same five: the walk is paid
     // into the same purse, so playing them twice would be ten campaigns for one
     // number and this file already plays ten.
@@ -235,11 +235,12 @@ describe('the campaign', () => {
 
 /**
  * The median endless walk on the kit the campaign holds at level 20, measured
- * over ten seeds by the Milestone 8 balance pass. Written down rather than
- * played, because playing one endless road is six minutes of sim and this test
- * would play two hundred of them.
+ * over ten seeds (`./endlessBosses.test.ts`). Written down rather than played,
+ * because playing one endless road is minutes of sim and this test would play
+ * two hundred of them. 1951 m through Milestone 8; 1169 m since the road
+ * stands its bosses (document 28), which pays a walk less than it did.
  */
-const ENDLESS_MEDIAN_METRES = 1951;
+const ENDLESS_MEDIAN_METRES = 1169;
 
 /** One endless run a campaign level, paid by `runRewards` as the app pays it. */
 function endlessWalk(): (facts: unknown, level: number) => number {

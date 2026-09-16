@@ -32,6 +32,8 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { FLOATS_PER_MATRIX, commitInstances, createMatrixBuffer } from '@/render/instanceBuffer';
 
+import type { PrestepGate } from './prestep';
+
 import {
   PARK_SPACING,
   PARK_Y,
@@ -80,14 +82,22 @@ export class ShardPool {
   private ticket = 0;
   private liveCount = 0;
 
-  constructor(scene: Scene, readonly capacity: number) {
+  constructor(
+    scene: Scene,
+    readonly capacity: number,
+    /** Tells Havok which shards this pool moved (`./prestep.ts`). */
+    private readonly gate: PrestepGate,
+  ) {
     for (let size = 0; size < SHARD_SIZES.length; size++) {
       this.shapes.push(buildShape(scene, size, capacity));
     }
     for (let i = 0; i < capacity; i++) {
       // Round robin, so every shape has a third of the pool and a burst of one
       // kind never has to steal from another.
-      this.slots.push(buildSlot(scene, i, i % SHARD_SIZES.length));
+      const slot = buildSlot(scene, i, i % SHARD_SIZES.length);
+      // Built where it parks, so there is nothing to push: parked from the start.
+      slot.body.disableSync = true;
+      this.slots.push(slot);
     }
   }
 
@@ -130,6 +140,7 @@ export class ShardPool {
 
     scratchVelocity.set(dx, up, dz);
     scratchSpin.set(spin * 2, spin, -spin * 1.5);
+    this.gate.wake(slot.body);
     slot.body.setMotionType(PhysicsMotionType.DYNAMIC);
     slot.body.setLinearVelocity(scratchVelocity);
     slot.body.setAngularVelocity(scratchSpin);
@@ -273,6 +284,7 @@ export class ShardPool {
   private park(slot: Slot): void {
     freeze(slot);
     slot.node.position.set(slot.parkX, PARK_Y, 0);
+    this.gate.sleep(slot.body);
     if (slot.live) this.liveCount--;
     slot.live = false;
     slot.frozen = false;
@@ -332,8 +344,10 @@ function buildSlot(scene: Scene, index: number, size: number): Slot {
     },
     scene,
   );
-  // Teleporting is how a shard is recycled, so the body has to read its node.
-  aggregate.body.disablePreStep = false;
+  // Teleporting is how a shard is recycled, and a teleport reaches Havok
+  // through the pre-step; the pool turns it on for the step after one
+  // (`./prestep.ts`), and it stays off otherwise.
+  aggregate.body.disablePreStep = true;
 
   const slot: Slot = {
     node,

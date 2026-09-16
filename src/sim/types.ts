@@ -121,9 +121,11 @@ export interface EnemyState {
    * Set while a charger or the Rime Fiend is running a lane down (D49).
    * `lane` is the lane it has committed to and `until` is the sim time it
    * expects to have finished the run in — render's clock for the animation,
-   * not a rule the sim enforces.
+   * not a rule the sim enforces. `from` is the sim time the run itself starts:
+   * the Rime Fiend commits to its lane and winds up before it goes (document
+   * 29), and a charger, which sets off at once, leaves it out.
    */
-  charge?: { until: number; lane: Lane };
+  charge?: { until: number; lane: Lane; from?: number };
 }
 
 /**
@@ -278,8 +280,12 @@ export interface IceWall {
 
 export type RunStatus = 'running' | 'won' | 'lost';
 
-/** `leak` is new in Milestone 3: one stream enemy walked into the squad. */
-export type UnitLossReason = 'contact' | 'gate' | 'stomp' | 'leak';
+/**
+ * `leak` is new in Milestone 3: one stream enemy walked into the squad.
+ * `charge` is the Rime Fiend running over them (document 29), apart from its
+ * grind so the balance bands can count it and the feedback can tell it apart.
+ */
+export type UnitLossReason = 'contact' | 'gate' | 'stomp' | 'leak' | 'charge';
 
 export interface RunState {
   levelIndex: number;

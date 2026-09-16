@@ -10,6 +10,7 @@
  */
 
 import { sleep } from './smoke-browser.mjs';
+import { RESULT_SETTLE_MS, checkSheet } from './smoke-sheet.mjs';
 
 /**
  * How long to wait for a run to reach a terminal status. A greedy level-10 run
@@ -18,13 +19,6 @@ import { sleep } from './smoke-browser.mjs';
  * this leaves room for a slow machine without blowing the smoke's budget.
  */
 const RUN_END_TIMEOUT_MS = Number(process.env.SMOKE_RUN_TIMEOUT_MS ?? 180_000);
-
-/**
- * How long to wait for the result screen after the run reaches a terminal
- * status. The app holds it back ~0.8 s of *frame* time, which is several times
- * that in wall-clock time on a SwiftShader machine.
- */
-const RESULT_SETTLE_MS = 20_000;
 
 /**
  * The beat after the coin roll has landed, so the frame taken next is of a
@@ -190,8 +184,14 @@ export async function checkRun(page, run, failures, say, before, startedAt) {
   }
 
   say(`[smoke] ${run.label}: ${status} after ${seconds}s of wall clock, phase ${phase}`);
+  // A run may carry its own ceiling (`drawCallLimit`), with its reason beside it
+  // in `./smoke-runs.mjs`; the environment override still wins over both.
+  const drawLimit =
+    process.env.SMOKE_DRAW_CALLS === undefined
+      ? (run.drawCallLimit ?? DRAW_CALL_LIMIT)
+      : DRAW_CALL_LIMIT;
   say(
-    `[smoke]   draw calls: peak ${draws.peak} (limit ${DRAW_CALL_LIMIT}), ` +
+    `[smoke]   draw calls: peak ${draws.peak} (limit ${drawLimit}), ` +
       `ladder rung ${quality.rung}, physics quality ${quality.physics}, ` +
       `squad ragdolls ${quality.units ? 'on' : 'off'}`,
   );
@@ -223,118 +223,10 @@ export async function checkRun(page, run, failures, say, before, startedAt) {
   if (status === 'won' && purse <= 0) {
     failures.push(`${run.label}: a cleared level paid no coins`);
   }
-  if (draws.peak > DRAW_CALL_LIMIT) {
-    failures.push(
-      `${run.label}: peak ${draws.peak} draw calls is over the ${DRAW_CALL_LIMIT} budget`,
-    );
+  if (draws.peak > drawLimit) {
+    failures.push(`${run.label}: peak ${draws.peak} draw calls is over the ${drawLimit} budget`);
   }
   if (run.endless === true) await checkEndless(page, run, failures, say);
-}
-
-/**
- * What the result sheet owes the payout that made it (D51 to D53).
- *
- * The identity is the whole point: the count-up rolls *everything the run
- * paid* — the road plus the streak, the missions and the bestiary rungs — and
- * the purse under it ends where the save ended. Milestone 8's wave one shipped
- * a sheet that rolled the road's coins alone while the purse climbed by the
- * total, so the two numbers on one screen disagreed by the bonus.
- *
- * Waited for rather than slept through: the roll is driven by
- * `requestAnimationFrame` on the wall clock, and on this rasteriser a frame of
- * a five-hundred-mage scene behind the sheet is most of a second.
- */
-async function checkSheet(page, run, failures, say) {
-  const rolled = await page
-    .waitForFunction(
-      () => {
-        const payout = globalThis.__arcane?.meta().payout;
-        if (payout === null || payout === undefined) return false;
-        const want = Math.max(0, Math.round(payout.coins + payout.bonusCoins));
-        const shown = globalThis.document.querySelector('#result-coins')?.textContent ?? '';
-        return Number(shown) === want;
-      },
-      null,
-      { timeout: RESULT_SETTLE_MS },
-    )
-    .then(() => true)
-    .catch(() => false);
-
-  const sheet = await page.evaluate((wanted) => {
-    const text = (id) => globalThis.document.querySelector(id)?.textContent ?? '';
-    const shown = (id) => {
-      const element = globalThis.document.querySelector(id);
-      return element !== null && !element.hidden;
-    };
-    return {
-      payout: globalThis.__arcane?.meta().payout ?? null,
-      coins: Number(text('#result-coins')),
-      total: Number(text('#result-total')),
-      metres: Number(text('#result-metres')),
-      bestMetres: text('#result-best-metres'),
-      best: text('#result-best'),
-      purse: globalThis.__arcane?.player().coins ?? -1,
-      // The bottom of the last button, against the bottom of the screen.
-      wayOut:
-        (globalThis.document.querySelector('#levels-button')?.getBoundingClientRect().bottom ??
-          0) - globalThis.innerHeight,
-      visible: (wanted.visible ?? []).map((id) => [id, shown(id)]),
-      hidden: (wanted.hidden ?? []).map((id) => [id, shown(id)]),
-    };
-  }, run.sheet ?? {});
-
-  const payout = sheet.payout;
-  if (payout === null) {
-    failures.push(`${run.label}: the run finished but paid no payout`);
-    return;
-  }
-  const earned = Math.max(0, Math.round(payout.coins + payout.bonusCoins));
-  say(
-    `[smoke]   paid: ${payout.coins} from the road + ${payout.bonusCoins} bonus = ` +
-      `${earned}, purse ${payout.totalCoins}`,
-  );
-  if (!rolled) {
-    failures.push(
-      `${run.label}: the sheet rolled to ${sheet.coins} coins, not the ${earned} the run paid`,
-    );
-  }
-  if (sheet.total !== Math.round(payout.totalCoins)) {
-    failures.push(
-      `${run.label}: the sheet's purse reads ${sheet.total}, the payout says ${payout.totalCoins}`,
-    );
-  }
-  if (sheet.purse !== payout.totalCoins) {
-    failures.push(
-      `${run.label}: the save's purse is ${sheet.purse}, the payout says ${payout.totalCoins}`,
-    );
-  }
-  // `html` and `body` are `overflow: hidden` (`src/ui/styles.css`), so a button
-  // past the bottom edge is not off screen, it is unreachable — and Academy is
-  // the way to spend what the run has just paid. A full sheet overflowed by
-  // about thirty pixels before Phase E gave the middle of it a scroll.
-  if (sheet.wayOut > 1) {
-    failures.push(
-      `${run.label}: the Academy button is ${sheet.wayOut.toFixed(0)}px below the screen`,
-    );
-  }
-  for (const [id, on] of sheet.visible) {
-    if (!on) failures.push(`${run.label}: ${id} is not on the result sheet`);
-  }
-  for (const [id, on] of sheet.hidden) {
-    if (on) failures.push(`${run.label}: ${id} is on the result sheet and should not be`);
-  }
-
-  if (run.endless !== true) return;
-  // The endless sheet (D52): metres instead of a level, and a record to beat.
-  if (sheet.metres !== Math.floor(payout.metres)) {
-    failures.push(
-      `${run.label}: the sheet reads ${sheet.metres} m, the run walked ${payout.metres}`,
-    );
-  }
-  if (!payout.endlessBest || sheet.bestMetres === '') {
-    failures.push(`${run.label}: the first endless walk did not read as a new best`);
-  }
-  say(`[smoke]   endless sheet: ${sheet.metres} m, "${sheet.bestMetres}"`);
 }
 
 /**
@@ -393,27 +285,4 @@ export async function checkNoSideScroll(page, run, name, failures, say) {
   // one pixel wider than the client on a device pixel ratio of 1.
   if (over > 1) failures.push(`${run.label}: ${name} scrolls ${over}px sideways`);
   else say(`[smoke]   ${name}: no side scroll`);
-}
-
-/**
- * Again on an endless sheet walks the endless road again (D52).
- *
- * The button is mode-aware because the endless road has no level number: the
- * bug it guards against is Again walking whatever campaign level the picker
- * happened to be pointed at.
- */
-export async function checkAgainStaysEndless(page, run, failures, say) {
-  await page.click('#retry-button');
-  const again = await page
-    .waitForFunction(
-      () =>
-        globalThis.__arcane?.app.status() === 'playing' &&
-        globalThis.__arcane.state()?.endless !== undefined,
-      null,
-      { timeout: RESULT_SETTLE_MS },
-    )
-    .then(() => true)
-    .catch(() => false);
-  if (again) say('[smoke]   Again from the endless sheet walked the endless road again');
-  else failures.push(`${run.label}: Again from the endless sheet did not start an endless run`);
 }

@@ -20,7 +20,7 @@ import type { EvolutionView } from './evolutions';
 import type { GateView } from './gates';
 import type { ProjectileView } from './projectiles';
 import type { SquadView } from './squad';
-import { SHAKE_BOSS_KILL, SHAKE_CHARGE, SHAKE_STOMP } from './theme';
+import { SHAKE_BOSS_KILL, SHAKE_CHARGE, SHAKE_CHARGE_HIT, SHAKE_STOMP } from './theme';
 import type { WallView } from './walls';
 import type { WispView } from './wisp';
 import { startWeapon } from '@/sim';
@@ -110,7 +110,11 @@ export class RendererEvents {
 
   /** What `update` knows before the events are read: the boss and the staff. */
   observe(bossId: number | undefined, weaponId: WeaponId): void {
-    this.bossId = bossId ?? this.bossId;
+    const next = bossId ?? this.bossId;
+    // A new boss on the state is a new death to burst: the endless road meets
+    // one every few hundred metres (document 28).
+    if (next !== this.bossId) this.bossBurstDone = false;
+    this.bossId = next;
     this.lastWeapon = weaponId;
   }
 
@@ -209,7 +213,17 @@ export class RendererEvents {
           // landing on the crowd rather than as something setting off.
           if (event.kind === 'boss') {
             this.views.shake(SHAKE_CHARGE.strength, SHAKE_CHARGE.seconds);
+            this.views.boss?.onChargeTell();
           }
+          break;
+        case 'chargeHit':
+          // The Rime Fiend's body reached the column (document 29). Its dead
+          // fall through the crowd view like any others; this is the landing
+          // itself — the stomp's ring and a burst of ice where the body met
+          // the front, and a kick the size of a stomp.
+          this.views.boss?.onChargeHit(event.x, event.z);
+          effects?.onShieldBreak(event.x, event.z);
+          this.views.shake(SHAKE_CHARGE_HIT.strength, SHAKE_CHARGE_HIT.seconds);
           break;
         case 'meteor':
           // Ember tier 4 (D54): the head, the flash, the crater and a kick

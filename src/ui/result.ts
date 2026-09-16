@@ -3,23 +3,31 @@
  *
  * Milestone 4 puts coins on it (D33), which is the screen's new headline: the
  * run's whole point on the meta layer is the purse it fills, so the coins roll
- * up first — with their own bright tick — and only then does the total settle
- * underneath them. A first clear says so with a badge, because the bonus it
- * carries is four times the ordinary one and that should be visible.
+ * up — with their own bright tick — and the purse climbs with them. The purse
+ * is the coin chip in the corner now (`./coinChip.ts`, docs/28) rather than a
+ * line of the sheet's own, so the number the player watches fill here is the
+ * one they will spend from on the next screen. A first clear says so with a
+ * badge, because the bonus it carries is four times the ordinary one and that
+ * should be visible.
+ *
+ * Three ways out (docs/28): Continue after a clear, Retry, and Home. Retry is
+ * one button on an endless sheet as well — the "same road" and "again" pair it
+ * replaced never walked different roads (`RunStage.replay`).
  *
  * Split out of `./overlay.ts` when the Academy arrived: the overlay is about
  * which screen is up, and this is one screen's numbers.
  */
 
 import { academy, fill } from '@/data/academy-types';
-import type { PlayerState } from '@/core/player';
 
+import type { CoinChip } from './coinChip';
 import { requireElement } from './dom';
 import { ResultMeta } from './resultMeta';
 import type { ResultMetaElements } from './resultMeta';
 import { replay } from './widgets';
 
 import './result.css';
+import './resultLayout.css';
 
 /** One coin line under the count-up: where it came from and what it paid. */
 export interface ResultBonus {
@@ -41,7 +49,7 @@ export interface ResultView {
    * is what the count-up rolls, because it is exactly what the purse gained.
    */
   earnedCoins: number;
-  /** The purse afterwards. */
+  /** The purse afterwards, which the coin chip climbs to. */
   totalCoins: number;
   /** True when this run was the first clear of the level. */
   firstClear: boolean;
@@ -61,8 +69,6 @@ export interface ResultView {
   bestImproved: boolean;
   /** Whether that best walk earns the picker's star. */
   star: boolean;
-  /** The purse's owner, for the next-unlock row (`./nextUnlock.ts`). */
-  player: PlayerState;
 }
 
 export interface ResultElements extends ResultMetaElements {
@@ -74,9 +80,10 @@ export interface ResultElements extends ResultMetaElements {
   survivors: HTMLElement;
   peak: HTMLElement;
   coins: HTMLElement;
-  total: HTMLElement;
+  /** Continue, Retry and Home; the ids are a contract with the smoke. */
   advance: HTMLButtonElement;
-  levels: HTMLButtonElement;
+  retry: HTMLButtonElement;
+  home: HTMLButtonElement;
 }
 
 /** The sheet's elements in `index.html`, by the ids the markup gives them. */
@@ -89,19 +96,14 @@ export function resultElements(root: ParentNode): ResultElements {
     survivors: requireElement(root, '#result-survivors'),
     peak: requireElement(root, '#result-peak'),
     coins: requireElement(root, '#result-coins'),
-    total: requireElement(root, '#result-total'),
     advance: requireElement<HTMLButtonElement>(root, '#next-button'),
-    levels: requireElement<HTMLButtonElement>(root, '#levels-button'),
+    retry: requireElement<HTMLButtonElement>(root, '#retry-button'),
+    home: requireElement<HTMLButtonElement>(root, '#home-button'),
     metresRow: requireElement(root, '#result-metres-row'),
     metres: requireElement(root, '#result-metres'),
     bestMetres: requireElement(root, '#result-best-metres'),
     bonuses: requireElement(root, '#result-bonuses'),
     best: requireElement(root, '#result-best'),
-    next: requireElement(root, '#result-next'),
-    nextHeading: requireElement(root, '#result-next-heading'),
-    nextName: requireElement(root, '#result-next-name'),
-    nextPrice: requireElement(root, '#result-next-price'),
-    nextShort: requireElement(root, '#result-next-short'),
   };
 }
 
@@ -129,24 +131,35 @@ const COINS_UP_SECONDS = 0.6;
 const COUNT_TICK_MS = 55;
 const COIN_TICK_MS = 45;
 
+/** What the sheet asks of the coin chip: a frame of the roll, and the landing. */
+export type ResultPurse = Pick<CoinChip, 'roll' | 'bump'>;
+
 export class ResultPanel {
   private readonly elements: ResultElements;
   private readonly callbacks: ResultCallbacks;
+  private readonly purse: ResultPurse;
   /** The lists under the numbers (`./resultMeta.ts`). */
   private readonly meta: ResultMeta;
 
   private raf: number | null = null;
 
-  constructor(elements: ResultElements, callbacks: ResultCallbacks) {
+  constructor(elements: ResultElements, callbacks: ResultCallbacks, purse: ResultPurse) {
     this.elements = elements;
     this.callbacks = callbacks;
+    this.purse = purse;
     this.meta = new ResultMeta(elements);
+    // The markup carries placeholders; the words are the data's. Plain words
+    // rather than the epic register: "Ascend" read as a mechanic the player
+    // had not met yet rather than as the next level (docs/28).
+    elements.advance.textContent = academy.result.continue;
+    elements.retry.textContent = academy.result.retry;
+    elements.home.textContent = academy.result.home;
   }
 
   /**
-   * Copy is in the epic register (docs/06-milestone-2-plan.md) and cut to the
-   * shortest phrase that still says it: a win is a slaughter, a loss is being
-   * overwhelmed, and the next level is an ascent.
+   * The verdict is in the epic register (docs/06-milestone-2-plan.md) and cut
+   * to the shortest phrase that still says it: a win is a slaughter and a loss
+   * is being overwhelmed.
    */
   show(view: ResultView): void {
     const survivors = Math.max(0, Math.round(view.survivors));
@@ -177,21 +190,21 @@ export class ResultPanel {
     // Always offered, unlike Milestone 3's "Levels": the Academy is where the
     // coins this run just paid are spent, so a won run must not be able to
     // funnel the player straight into the next level with no way to the shop.
-    this.elements.levels.hidden = false;
+    this.elements.home.hidden = false;
 
     this.stop();
     // A count-up is motion, and a player who has asked for less of it gets the
-    // numbers rather than the roll — the ticks that go with it too.
+    // numbers rather than the roll — the ticks and the bump that go with it too.
     if (reducedMotion()) {
       this.elements.survivors.textContent = String(survivors);
       this.elements.peak.textContent = String(peak);
       this.elements.coins.textContent = String(coins);
-      this.elements.total.textContent = String(total);
+      this.purse.roll(total);
       return;
     }
 
     // The purse starts where the run found it and climbs with the coins.
-    this.elements.total.textContent = String(Math.max(0, total - coins));
+    this.purse.roll(total - coins);
     // A lost run is still not a moment for a fanfare of numbers — the survivors
     // and the peak are simply there — but it *pays* now (D46, 30 percent of the
     // road walked), and the purse filling is the one thing on this screen a
@@ -265,7 +278,7 @@ export class ResultPanel {
         this.elements.coins.textContent = String(nextCoins);
         // The purse follows the coins up, so the two numbers agree the whole
         // way rather than only at the end.
-        this.elements.total.textContent = String(total - coins + nextCoins);
+        this.purse.roll(total - coins + nextCoins);
         if (time - lastCoinTick >= COIN_TICK_MS) {
           lastCoinTick = time;
           this.callbacks.onCoinTick();
@@ -274,6 +287,9 @@ export class ResultPanel {
 
       if (t >= 1 && coinT >= 1) {
         this.raf = null;
+        // One bump when the coins land, the beat a roll of silent frames owes
+        // the purse; a run that paid nothing has nothing to announce.
+        if (coins > 0) this.purse.bump();
         return;
       }
       this.raf = requestAnimationFrame(step);

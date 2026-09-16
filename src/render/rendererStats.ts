@@ -18,8 +18,13 @@
 
 import type { Engine } from '@babylonjs/core/Engines/engine';
 import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import type { Scene } from '@babylonjs/core/scene';
 
+import { crowdFrameTotals } from './characters';
+import type { CrowdDrawStats } from './characters';
 import type { SceneViews } from './views';
+
+export type { CrowdDrawStats };
 
 export interface LabelReadout {
   labels: number;
@@ -54,6 +59,25 @@ export interface FeatureReadout {
 /** Draw calls in the last rendered frame; the budget is 40 at 500 units. */
 export function drawCallsOf(instrumentation: SceneInstrumentation | null): number {
   return instrumentation?.drawCallsCounter.current ?? 0;
+}
+
+/**
+ * Meshes Babylon selected for the last frame, and the triangles they drew:
+ * what the GPU was handed. The triangles are the device report's best single
+ * number for the crowd's cost (docs/28, note 5): on an Apple GPU the frame
+ * time follows them closely.
+ */
+export function activeMeshesOf(scene: Scene | null): number {
+  return scene?.getActiveMeshes().length ?? 0;
+}
+
+export function trianglesOf(scene: Scene | null): number {
+  return scene === null ? 0 : Math.round(scene.getActiveIndices() / 3);
+}
+
+/** Crowd units drawn whole, drawn from the low-polygon copy, and culled. */
+export function crowdStatsOf(scene: Scene | null): Readonly<CrowdDrawStats> {
+  return crowdFrameTotals(scene?.getRenderId() ?? -1);
 }
 
 /**

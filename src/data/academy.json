@@ -312,9 +312,12 @@
       "blurb": "One road, no end.",
       "bestLabel": "Best {metres} m",
       "noBestLabel": "Never walked",
-      "hudLabel": "{metres} m"
+      "hudLabel": "{metres} m",
+      "unlockLevel": 3
     },
     "picker": {
+      "playTitle": "Play",
+      "playHint": "Level {level}",
       "levelLabel": "Level {level}",
       "milestoneLabel": "Milestone level {level}",
       "starLabel": "Level {level}, walked well"
@@ -324,13 +327,10 @@
       "bestMetresLabel": "Best {metres} m",
       "bestLabel": "Best {survivors} of {peak}",
       "newBestLabel": "New best",
-      "replay": "Same road again",
       "bonusHeading": "Bonuses",
       "streakBonus": "Day {days} streak",
       "tierBonus": "{kind}, tier {tier}",
-      "tintBonus": "{name} unlocked",
-      "nextHeading": "Next unlock",
-      "nextShort": "{coins} to go"
+      "tintBonus": "{name} unlocked"
     }
   },
   "hud": {
@@ -356,6 +356,9 @@
     "empower": "Empower"
   },
   "result": {
-    "firstClear": "First clear"
+    "firstClear": "First clear",
+    "continue": "Continue",
+    "retry": "Retry",
+    "home": "Home"
   }
 }

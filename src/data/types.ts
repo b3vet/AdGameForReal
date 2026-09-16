@@ -740,4 +740,4 @@ export type {
   MissionsState,
   StreakState,
 } from './meta-types';
-export type { EndlessConfig, EndlessDial, EndlessMix } from './endless-types';
+export type { EndlessBosses, EndlessConfig, EndlessDial, EndlessMix } from './endless-types';

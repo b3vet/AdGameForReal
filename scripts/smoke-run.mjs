@@ -15,12 +15,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { SCREENSHOT_TIMEOUT_MS, assertNotBlank, sleep } from './smoke-browser.mjs';
-import {
-  checkAgainStaysEndless,
-  checkNoSideScroll,
-  checkRun,
-  checkWarmUp,
-} from './smoke-run-checks.mjs';
+import { checkNoSideScroll, checkRun, checkWarmUp } from './smoke-run-checks.mjs';
 import {
   BOSS_SHOT_HP_SHARE,
   PACE,
@@ -30,6 +25,7 @@ import {
   takeShots,
 } from './smoke-run-plan.mjs';
 import { checkPauseMenu } from './smoke-pause.mjs';
+import { checkCoinChipPlace, checkRetryStaysEndless, readCoinChip } from './smoke-sheet.mjs';
 import { checkVisibilityPause } from './smoke-visibility.mjs';
 
 /**
@@ -150,6 +146,9 @@ async function playRun(page, url, run, failures, outDir, say) {
   // its own before anything is clicked.
   await sleep(300);
   if (run.titleShot !== undefined) written.push(await shot(run.titleShot));
+  // The one purse every menu screen shares (docs/28): the rooms below are
+  // measured against where the home has it.
+  const homeChip = run.menuShots === undefined ? null : await readCoinChip(page);
 
   // Rooms: open one, photograph it, come back. The home is up again after each.
   //
@@ -170,6 +169,7 @@ async function playRun(page, url, run, failures, outDir, say) {
     // A room whose ladders or prices are wider than the phone is a room the
     // player has to scroll sideways to read (plan, definition of done 5).
     if (menu.noScroll === true) await checkNoSideScroll(page, run, menu.name, failures, say);
+    await checkCoinChipPlace(page, run, menu.name, homeChip, failures, say);
     await page.click(menu.back ?? '#room-back');
     await sleep(300);
   }
@@ -240,9 +240,9 @@ async function playRun(page, url, run, failures, outDir, say) {
 
   written.push(await shot(run.endShot));
 
-  // Again on an endless sheet walks the endless road again rather than whatever
+  // Retry on an endless sheet walks the endless road again rather than whatever
   // level the picker was pointed at (D52). Last, because it starts a new run.
-  if (run.againStaysEndless === true) await checkAgainStaysEndless(page, run, failures, say);
+  if (run.retryStaysEndless === true) await checkRetryStaysEndless(page, run, failures, say);
 
   if (run.assertNotBlank !== undefined) {
     // Only if the frame was actually taken: a shot that was missed has already

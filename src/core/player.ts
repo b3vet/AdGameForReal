@@ -19,6 +19,7 @@
  */
 
 import { levelConfig } from '@/data';
+import { academy } from '@/data/academy-types';
 import {
   Run,
   addCoins,
@@ -94,6 +95,25 @@ export const roomIds: readonly RoomId[] = [
  */
 export function roomUnlockLevel(room: RoomId): number {
   return simRoomUnlockLevel(room);
+}
+
+/**
+ * The level that opens the picker's Endless card (docs/28): a first-time
+ * player went to the road with no end before the campaign, so it waits, like
+ * the Bestiary and the Wardrobe, until the player has walked a little of it.
+ *
+ * Here rather than in the sim because nothing about a run depends on it. It
+ * locks the card and the card's tap and nothing else: `?endless=1` and the
+ * debug handle's `startEndless` go round it, which is what the smoke and the
+ * probes rely on.
+ */
+export function endlessUnlockLevel(): number {
+  return academy.meta.endless.unlockLevel;
+}
+
+/** Whether this player may start Endless from the picker. */
+export function endlessOpen(player: Readonly<PlayerState>): boolean {
+  return player.unlockedLevel >= endlessUnlockLevel();
 }
 
 /** A player who has just installed the game: ember in hand, nothing bought. */

@@ -233,6 +233,8 @@ async function armFrostPlan(page, shots, pace) {
         // The Fiend, and only while it is still running *in*: past `until` it is
         // walking home, which is the same charge to the sim and a different
         // picture — the column bows under the run in, not under the walk back.
+        // And past `from`: before it the Fiend is winding up where it stands
+        // (docs/29).
         const boss = state.boss;
         return (
           boss !== null &&
@@ -240,6 +242,7 @@ async function armFrostPlan(page, shots, pace) {
           boss.alive &&
           boss.charge !== undefined &&
           boss.z - state.squad.z <= clock.bossGap &&
+          state.time >= (boss.charge.from ?? -Infinity) &&
           state.time <= boss.charge.until
         );
       };

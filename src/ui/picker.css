@@ -1,0 +1,177 @@
+/*
+ * The level picker's foot (docs/28): Play under the chips, the Endless card
+ * under Play, and Back. The chips themselves are `./screens.css` and the page
+ * tabs over them are `./academy.css`.
+ *
+ * Imported by `./picker.ts`, the way `./hud.css` is imported by `./hud.ts`, so
+ * it loads after the Academy's sheets and a rule here wins a tie with the
+ * home's `.card` rules both controls are built on.
+ */
+
+.picker__actions {
+  gap: 0.6rem;
+}
+
+/* --- Play ----------------------------------------------------------------- */
+
+/*
+ * The home's Play card, grown (`.card--play`: the ornate frame and the gold
+ * plate): a bigger glyph and title, and the level it starts written under its
+ * name in the display face, so the number the player just chose is what the
+ * eye reads on the way to pressing it. It is the tallest and the brightest
+ * thing on the screen on purpose. Endless and Back are paper and stone, and a
+ * new player went to Endless first while it was the gold one.
+ */
+.picker__play {
+  gap: 0.7rem;
+  min-height: 4.8rem;
+  padding: 0.45rem 0.8rem;
+}
+
+.picker__play .card__icon {
+  width: 2.3rem;
+  height: 2.3rem;
+}
+
+.picker__play .card__title {
+  font-size: clamp(1.6rem, 7.4vw, 2rem);
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.picker__play .card__hint {
+  font-family: var(--font-display);
+  font-size: clamp(0.8rem, 3.6vw, 0.92rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A slow breath of gold light round the frame, which makes the card the one
+ * thing on the panel that moves. The light is a layer of its own and only its
+ * opacity animates, so a frame of it is a composite rather than a paint; the
+ * layer's inset is the frame's width, so it rings the ornament and sits
+ * outside the box, where it cannot move anything.
+ */
+.picker__play::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  box-shadow: 0 0 0.8rem 0.15rem color-mix(in srgb, var(--gold-light) 85%, transparent);
+  opacity: 0.2;
+  animation: play-breathe 1.6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes play-breathe {
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Endless (D52) -------------------------------------------------------- */
+
+/*
+ * A mode beside the campaign, and now plainly the second thing on the screen:
+ * the stone rim the level chips wear instead of a gold one, their parchment, a
+ * smaller title, and no button of its own. The whole card is the button, as
+ * the home's cards are. Shut (docs/28), it is drained and padlocked by the
+ * home's own rule, `.card[data-locked]` in `./academy.css`.
+ */
+.endless {
+  gap: 0.55rem;
+  min-height: 3.2rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.endless .card__title {
+  font-size: 0.98rem;
+  letter-spacing: 0.06em;
+}
+
+.endless__best {
+  margin-left: auto;
+  padding-left: 0.4rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+/* Shut, the card says what opens it and nothing about a record. */
+.endless__best:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker__play::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/*
+ * Landscape: the three controls share one row, as every other screen's
+ * buttons do (`./styles.css`), and each drops to the height of a button. The
+ * home's landscape rule stacks a card's glyph over its title, which a row of
+ * three has no height for, so both cards keep theirs beside it.
+ */
+@media (orientation: landscape) {
+  .picker__actions > * {
+    flex: 1 1 0;
+  }
+
+  /* Still the widest of the three, as it is the tallest upright. */
+  .picker__actions > .picker__play {
+    flex-grow: 1.4;
+  }
+
+  .picker__play,
+  .endless {
+    flex-direction: row;
+    min-height: 2.6rem;
+    gap: 0.4rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .picker__play .card__icon {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+
+  .picker__play .card__title {
+    font-size: 1.2rem;
+  }
+
+  .picker__play .card__hint {
+    font-size: 0.66rem;
+  }
+
+  .endless .card__title {
+    font-size: 0.84rem;
+  }
+
+  .endless__best {
+    display: none;
+  }
+
+  .screen--levels .screen__middle {
+    gap: 0.5rem;
+  }
+}
+
+/*
+ * The shortest screen the game runs on, 568x320: with the tabs over the chips
+ * the middle measured 106 px against 78 px of room, and it scrolled the chips
+ * themselves half out of sight. The caption is the one line a player does not
+ * need there; the tabs and the numbered chips say what the list is.
+ */
+@media (orientation: landscape) and (max-height: 340px) {
+  .screen--levels .picker__caption {
+    display: none;
+  }
+}

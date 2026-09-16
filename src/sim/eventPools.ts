@@ -62,6 +62,7 @@ export function createEventPools() {
       kind: 'charger',
       lane: 0,
     })),
+    chargeHits: new Pool<EventOf<'chargeHit'>>(() => ({ type: 'chargeHit', enemyId: 0, x: 0, z: 0 })),
     shatters: new Pool<EventOf<'enemyShattered'>>(() => ({
       type: 'enemyShattered',
       enemyId: 0,

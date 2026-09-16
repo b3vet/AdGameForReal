@@ -7,11 +7,20 @@ import audioJson from './audio.json';
 import balanceJson from './balance.json';
 import endlessJson from './endless.json';
 import levelsJson from './levels.json';
+import qualityJson from './quality.json';
 import type { AudioMix } from './audio-types';
+import type { QualityTuning } from './quality-types';
 import type { Balance, EndlessConfig, LevelGenConfig } from './types';
 
 export type { Balance, EndlessConfig, LevelGenConfig, ValueRange, EnemyBalance, BossBalance } from './types';
 export type { AudioMix } from './audio-types';
+export type {
+  CrowdDetail,
+  FramePacing,
+  LadderRung,
+  LadderTuning,
+  QualityTuning,
+} from './quality-types';
 
 export const balance: Balance = balanceJson;
 
@@ -23,6 +32,13 @@ export const endless: EndlessConfig = endlessJson as EndlessConfig;
 
 /** Mix and throttles for `src/audio`; see `audio-types.ts`. */
 export const audioMix: AudioMix = audioJson;
+
+/**
+ * What the app spends on a device: the frame cap (`src/core/framePacer.ts`),
+ * the crowd's low-polygon copy (`src/render/characters/lod.ts`) and the degrade
+ * ladder (`src/core/quality.ts`); see `quality-types.ts`.
+ */
+export const qualityTuning: QualityTuning = qualityJson;
 
 /**
  * The cast is the one place a JSON import's widened strings are narrowed:

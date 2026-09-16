@@ -297,13 +297,15 @@ export async function armShotPlan(page, shots, bossShare, staffRange, pace) {
         if (step.at === 'bossCharge') {
           // Still running *in*: past `until` the Fiend is walking home, which is
           // the same charge to the sim and a different picture — the column bows
-          // under the run in, not under the walk back (D49).
+          // under the run in, not under the walk back (D49). And past `from`:
+          // before it the Fiend is winding up where it stands (docs/29).
           const boss = state.boss;
           return (
             boss !== null &&
             boss.alive &&
             boss.charge !== undefined &&
             boss.z - state.squad.z <= clock.bossGap &&
+            state.time >= (boss.charge.from ?? -Infinity) &&
             state.time <= boss.charge.until
           );
         }

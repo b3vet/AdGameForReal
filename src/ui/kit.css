@@ -1,6 +1,6 @@
 /*
  * The UI kit (decision D39): the nine-slice frames, the heading flourish, the
- * shared button and the icon host.
+ * shared button, the icon host, and the rule that hides every scroll bar.
  *
  * The pieces are Kenney's Fantasy UI Borders and UI Pack, recoloured from the
  * palette by `scripts/fetch-ui.mjs` and named in `./tokens.css`. They are SVG,
@@ -75,9 +75,19 @@
  * The button body is a nine-slice from Kenney's UI Pack, recoloured to the
  * palette's gold: a rounded plate with a lit top edge, a dark rim, and a depth
  * edge along the bottom. The depth is in the image rather than in a
- * `box-shadow`, which is what lets the press *compress* it — the bottom border
- * shrinks by the depth and the button moves down by the same amount, so it
- * behaves like a key rather than sliding about on the page.
+ * `box-shadow`, which is what lets the press *compress* it: the plate moves
+ * down by the depth and the depth edge folds away under it, so it behaves like
+ * a key rather than sliding about on the page.
+ *
+ * The press may not change the button's box (docs/28, note 2). It used to
+ * shrink the bottom border by the depth, which made the button 5 px shorter
+ * for as long as a finger was on it, and every screen whose column is centred
+ * or pinned to the foot moved with it. So the depth edge is painted *outside*
+ * the box, by `border-image-outset`, and the margin under the button holds its
+ * place in the layout: the box is the same size pressed or not, and the press
+ * is a transform plus two paint-only properties. The margin is the depth
+ * exactly, so every row and column keeps the rhythm it had when the depth was
+ * a border.
  *
  * `fill` on the slice is what paints the face; without it the middle of the
  * source is dropped and the button is a ring.
@@ -87,12 +97,15 @@
   appearance: none;
   display: block;
   width: 100%;
+  margin: 0 0 var(--depth);
   padding: 0.5rem 0.9rem 0.35rem;
   border-style: solid;
   border-color: transparent;
-  border-width: 9px 11px calc(9px + var(--depth)) 11px;
+  border-width: 9px 11px;
   border-image-source: var(--button-gold);
   border-image-slice: 9 11 14 11 fill;
+  border-image-width: 9px 11px calc(9px + var(--depth));
+  border-image-outset: 0 0 var(--depth);
   border-image-repeat: stretch;
   background: none;
   font-family: var(--font-display);
@@ -106,14 +119,18 @@
   user-select: none;
   /* The only interactive things in the overlay. */
   pointer-events: auto;
+  /* The three move together, so the plate's foot stays where it was while its
+     top comes down: the outset shrinks by exactly what the transform adds. */
   transition:
     transform 90ms var(--ease),
-    border-bottom-width 90ms var(--ease);
+    border-image-outset 90ms var(--ease),
+    border-image-width 90ms var(--ease);
 }
 
 .button:active {
   transform: translateY(var(--depth));
-  border-bottom-width: 9px;
+  border-image-width: 9px 11px;
+  border-image-outset: 0;
 }
 
 .button--ghost {
@@ -135,7 +152,8 @@
 
 .button:disabled:active {
   transform: none;
-  border-bottom-width: calc(9px + var(--depth));
+  border-image-width: 9px 11px calc(9px + var(--depth));
+  border-image-outset: 0 0 var(--depth);
 }
 
 /* --- Icons ---------------------------------------------------------------- */
@@ -156,4 +174,28 @@
   width: 100%;
   height: 100%;
   fill: currentColor;
+}
+
+/* --- Scroll containers ---------------------------------------------------- */
+
+/*
+ * No scroll bar anywhere (docs/28, note 10): the home's board, the picker, the
+ * rooms, the Wardrobe's strips and the result sheet all still scroll by touch
+ * and by wheel, and none of them draws a bar while it does.
+ *
+ * Every element rather than a list of the scrollers, so the next list that
+ * learns to scroll is covered without anyone remembering this rule; neither
+ * declaration does anything to an element that does not scroll. Both are
+ * needed: `scrollbar-width` is the standard one (Chromium 121, Safari 18.2),
+ * and the WebKit pseudo-element is what an older WKWebView listens to. The
+ * debug panel has no scroller of its own, so it needs no exception.
+ */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }

@@ -72,6 +72,7 @@ function fakeHost(session: RunSession): FrameHost {
       drainFallenUnits: (): void => undefined,
       drawCalls: 0,
       chargerBodies: 0,
+      drawMs: 0,
     } as unknown as Renderer,
     overlay: { updateHud: (): void => undefined, debugEnabled: false } as unknown as Overlay,
     audio: { onEvents: (): void => undefined } as unknown as GameAudio,
@@ -270,5 +271,28 @@ describe('FrameDriver across a pause', () => {
     // every tick from here on.
     step(2000);
     expect(ticks).toHaveLength(2);
+  });
+});
+
+describe('FrameDriver on a fast display', () => {
+  /**
+   * A ProMotion phone may hand the page 120 callbacks a second. The loop draws
+   * sixty of them (`../framePacer.ts`), and the frames it draws carry the whole
+   * sixtieth of a second: a skipped refresh is time the next frame spends, not
+   * time the game loses.
+   */
+  it('draws every other refresh of a 120 Hz display, with a full step each', () => {
+    const driver = new FrameDriver(fakeHost(fakeSession()));
+    driver.start();
+    for (let i = 0; i <= 12; i++) step(1000 + (i * 1000) / 120);
+    expect(ticks).toHaveLength(7);
+    for (const dt of ticks.slice(1)) expect(dt).toBeCloseTo(1 / 60, 3);
+  });
+
+  it('draws every refresh of a 60 Hz display', () => {
+    const driver = new FrameDriver(fakeHost(fakeSession()));
+    driver.start();
+    for (let i = 0; i <= 60; i++) step(1000 + (i * 1000) / 60);
+    expect(ticks).toHaveLength(61);
   });
 });

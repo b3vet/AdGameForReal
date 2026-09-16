@@ -25,6 +25,7 @@
 
 import { CrowdScene } from './crowdForces';
 import { createCrowdState, nearestLive } from './crowdState';
+import type { Swath } from './crowdState';
 import { formationOffsets, openRoadWidth, unitSpacing } from './formation';
 import { updateStragglers } from './stragglers';
 import {
@@ -213,12 +214,13 @@ export class CrowdSim {
    * or flank, rather than an anonymous subtraction from the count.
    *
    * `group` is -1 for "anyone", which is what the boss uses — its foot does not
-   * care which group it lands on.
+   * care which group it lands on. `within` limits it to the people standing in
+   * one box: the Rime Fiend's charge kills only who is under it.
    */
-  killNearest(group: number, amount: number, x: number, z: number): number {
+  killNearest(group: number, amount: number, x: number, z: number, within?: Readonly<Swath>): number {
     let killed = 0;
     for (let k = 0; k < amount; k++) {
-      const nearest = nearestLive(this.crowd, group, x, z);
+      const nearest = nearestLive(this.crowd, group, x, z, within);
       if (nearest < 0) break;
       this.kill(nearest);
       killed++;

@@ -115,18 +115,57 @@ describe('QualityLadder', () => {
     expect(h.ladder.rung).toBe(0);
     expect(h.ladder.p95Ms).toBeGreaterThan(20);
 
-    // The second one is.
+    // The second one is. The first step keeps the resolution: it is the
+    // crowd's low-polygon copy (docs/28, note 5).
     expect(h.window(FRAME_SLOW)).toBe(1);
     expect(h.ladder.rung).toBe(1);
-    expect(h.ladder.reason).toBe('p95 2x');
+    expect(h.ladder.reason).toBe('p95 3x');
+    expect(QUALITY_RUNGS[1]?.crowdDetail).toBe(0);
   });
 
   it('never drops two stops of resolution at once', () => {
     const h = harness();
     settle(h);
-    h.window(FRAME_SLOW);
-    h.window(FRAME_SLOW);
-    expect(QUALITY_RUNGS[h.ladder.rung]?.pixelRatio).toBe(2);
+    const ratios: number[] = [];
+    for (let i = 0; i < 2 * MAX_QUALITY_RUNG; i++) {
+      h.window(FRAME_SLOW);
+      ratios.push(QUALITY_RUNGS[h.ladder.rung]?.pixelRatio ?? 0);
+    }
+    for (let i = 1; i < ratios.length; i++) {
+      const drop = (ratios[i - 1] ?? 0) - (ratios[i] ?? 0);
+      expect(drop).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('steps on a steady share of late frames that the p95 lets through', () => {
+    const h = harness();
+    settle(h);
+    // One frame in twenty misses a refresh: 57 fps, and a p95 that is the
+    // ordinary frame.
+    const lateOne = (i: number): number => (i % 20 === 19 ? 1 / 30 : FRAME_60);
+    expect(h.patternWindow(lateOne)).toBe(0);
+    expect(h.ladder.p95Ms).toBeLessThan(20);
+    expect(h.patternWindow(lateOne)).toBe(1);
+    expect(h.ladder.reason).toBe('late 3x');
+  });
+
+  it('leaves a device alone that misses a refresh now and then', () => {
+    const h = harness();
+    settle(h);
+    // One in fifty: under the share, however long it goes on.
+    const rare = (i: number): number => (i % 50 === 49 ? 1 / 30 : FRAME_60);
+    for (let window = 0; window < 4; window++) expect(h.patternWindow(rare)).toBe(0);
+    expect(h.ladder.rung).toBe(0);
+  });
+
+  it('does not count a stall as a late frame', () => {
+    const h = harness();
+    settle(h);
+    // Four percent of frames are 60 ms stalls: past the late ceiling, so they
+    // are hitches a lower rung would not cure, and the p95 is still ordinary.
+    const stalls = (i: number): number => (i % 25 === 24 ? 0.06 : FRAME_60);
+    for (let window = 0; window < 4; window++) expect(h.patternWindow(stalls)).toBe(0);
+    expect(h.ladder.rung).toBe(0);
   });
 
   it('forgets a bad window once the device catches up', () => {
@@ -184,18 +223,20 @@ describe('QualityLadder', () => {
     const h = harness(3);
     expect(h.ladder.rung).toBe(3);
     expect(h.ladder.isPinned).toBe(true);
-    expect(h.ladder.reason).toBe('pinned 1x');
+    expect(h.ladder.reason).toBe('pinned 2x');
     expect(h.feed(FRAME_SLOW, 1000)).toBe(0);
     expect(h.ladder.rung).toBe(3);
     h.ladder.beginLevel();
     expect(h.ladder.rung).toBe(3);
   });
 
-  it('is four pixel-ratio rungs and then the ragdolls (D38)', () => {
-    // The table itself, because it is the milestone's promise: native first,
-    // one stop of resolution at a time, and only then fewer bodies.
-    expect(QUALITY_RUNGS.map((rung) => rung.pixelRatio)).toEqual([3, 2, 1.5, 1, 1, 1]);
-    expect(QUALITY_RUNGS.map((rung) => rung.physics)).toEqual([2, 2, 2, 2, 1, 0]);
+  it('is the crowd, then resolution, then the ragdolls (D38, docs/28)', () => {
+    // The table itself, because it is the promise: native first with the
+    // whole crowd, the least visible step next, one stop of resolution at a
+    // time, and only then fewer bodies.
+    expect(QUALITY_RUNGS.map((rung) => rung.pixelRatio)).toEqual([3, 3, 2.5, 2, 1.5, 1, 1, 1]);
+    expect(QUALITY_RUNGS.map((rung) => rung.crowdDetail)).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+    expect(QUALITY_RUNGS.map((rung) => rung.physics)).toEqual([2, 2, 2, 2, 2, 2, 1, 0]);
   });
 
   it('reports the effective ratio, which the screen can cap', () => {

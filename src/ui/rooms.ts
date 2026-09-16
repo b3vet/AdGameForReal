@@ -7,12 +7,13 @@
  * and this file keeps the shell and the three rooms that are still a list of
  * priced rows.
  *
- * All of them share one screen — heading, coin chip, Back — and only the body
- * swaps, so a room is a list that is built on its first visit and re-painted
- * from a `PlayerState` on every later one. Nothing here owns state: `App`
- * makes the purchase, writes the save and calls `show` again with the new
- * player, which is what keeps the price, the coins and the button's enabled
- * state from ever disagreeing.
+ * All of them share one screen — heading and Back, under the coin chip every
+ * menu screen shares (`./coinChip.ts`) — and only the body swaps, so a room is
+ * a list that is built on its first visit and re-painted from a `PlayerState`
+ * on every later one. Nothing here owns state: `App` makes the purchase,
+ * writes the save and calls `show` again with the new player, which is what
+ * keeps the price, the coins and the button's enabled state from ever
+ * disagreeing.
  *
  * Prices and effects come from `@/core/player` (the plan's `progression.json`
  * once the sim track lands it) and every word comes from
@@ -47,7 +48,6 @@ import { amount, element, priceButton, replay, setPrice, text } from './widgets'
 export interface RoomElements {
   title: HTMLElement;
   subtitle: HTMLElement;
-  coinValue: HTMLElement;
   yard: HTMLElement;
   workbench: HTMLElement;
   sanctum: HTMLElement;
@@ -110,8 +110,6 @@ export class Rooms {
   private readonly wardrobe: Wardrobe;
   private familiarRow: FamiliarRow | null = null;
 
-  private shownCoins = -1;
-
   constructor(elements: RoomElements, callbacks: RoomCallbacks, bind: BindButton) {
     this.elements = elements;
     this.callbacks = callbacks;
@@ -164,15 +162,6 @@ export class Rooms {
         // `play` is a door to the picker, not a room with a body.
         break;
     }
-
-    this.setCoins(player.coins);
-  }
-
-  setCoins(coins: number): void {
-    const value = Math.max(0, Math.round(coins));
-    if (value === this.shownCoins) return;
-    this.shownCoins = value;
-    this.elements.coinValue.textContent = String(value);
   }
 
   // --- Training Yard -------------------------------------------------------
