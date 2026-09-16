@@ -37,7 +37,7 @@ import { ShadowLayer, addPropShadows } from './shadows';
 import { SkyDome } from './sky';
 import { SpriteLayer } from './sprites';
 import { SquadView } from './squad';
-import { POOL, SPRAY_DECAL_POOL, SPRAY_Y } from './theme';
+import { BEAT_DECAL_POOL, POOL, SPRAY_DECAL_POOL, SPRAY_Y } from './theme';
 import { WallView } from './walls';
 import { WispView } from './wisp';
 import { biomeAt } from '@/sim';
@@ -64,8 +64,9 @@ export class SceneViews {
   readonly sprites: SpriteLayer;
   /**
    * Every mark on the road, in one batch; see `./groundDecals.ts`. The
-   * charger's dust and the Rime Fiend's wake are the only things that draw
-   * into it, and it draws nothing at all on a frame neither of them is running.
+   * charger's dust, the Rime Fiend's wake, the evolutions' marks, a waking
+   * block's dust and the portal rings draw into it, and it draws nothing at
+   * all on a frame none of them is running.
    */
   readonly decals: GroundDecals;
   readonly projectiles: ProjectileView;
@@ -118,9 +119,14 @@ export class SceneViews {
     this.props = new PropsView(scene);
     this.squad = new SquadView(scene);
     this.sprites = new SpriteLayer(scene, POOL.sprites);
-    // The monsters' own marks plus the evolutions' craters and rings: one
-    // batch, one draw call, and a pool that cannot starve either of them.
-    this.decals = new GroundDecals(scene, SPRAY_DECAL_POOL + EVOLUTION_DECAL_POOL, SPRAY_Y);
+    // The monsters' own marks, the evolutions' craters and rings, and the
+    // level-design plan's wake kicks and portals: one batch, one draw call,
+    // and a pool that cannot starve any of them.
+    this.decals = new GroundDecals(
+      scene,
+      SPRAY_DECAL_POOL + EVOLUTION_DECAL_POOL + BEAT_DECAL_POOL,
+      SPRAY_Y,
+    );
     this.projectiles = new ProjectileView(this.sprites);
     this.effects = new EffectsView(scene, this.sprites);
     this.gates = new GateView(scene, this.labels);

@@ -67,6 +67,12 @@ export class Firing {
   /** Per staff: whether the arc keeps its full damage at every hop (D54). */
   private readonly fullChains: Record<WeaponId, boolean>;
 
+  /**
+   * Gates grow, flip and creep with a share of the squad as well as at the
+   * flat rate (`LevelDef.squadRates`, document 31). Off on a dealt road.
+   */
+  private readonly squadRates: boolean;
+
   constructor(
     balance: Balance,
     events: EventBuffer,
@@ -80,6 +86,7 @@ export class Firing {
     held: HeldEvolutions,
     mods: PlayerMods = NO_MODS,
     burn: Burn | null = null,
+    squadRates = false,
   ) {
     this.balance = balance;
     this.events = events;
@@ -92,6 +99,7 @@ export class Firing {
     this.burn = burn;
     this.extraChains = held.extraChains;
     this.fullChains = held.fullChains;
+    this.squadRates = squadRates;
 
     const max = Math.max(1, Math.floor(balance.projectiles.max));
     this.spawnZ = new Float64Array(max);
@@ -123,9 +131,10 @@ export class Firing {
     if (state.levelIndex < this.balance.gates.creep.fromLevel) return;
     const from = state.squad.z;
     const to = from + this.balance.projectiles.range;
+    const squad = this.squadRates ? state.squad.count : 0;
     for (const gate of state.gates) {
       if (gate.passed || gate.kind !== 'sub' || gate.z < from || gate.z > to) continue;
-      applyCurseCreep(gate, dt, this.balance);
+      applyCurseCreep(gate, dt, this.balance, squad);
     }
   }
 
@@ -277,7 +286,13 @@ export class Firing {
 
     const gate = target.gate;
     if (gate !== null) {
-      applyGateGrowth(gate, hits, this.shotRate, this.balance);
+      applyGateGrowth(
+        gate,
+        hits,
+        this.shotRate,
+        this.balance,
+        this.squadRates ? squad.count : 0,
+      );
       this.events.projectileHit(weaponId, x, gate.z);
       this.events.gateHit(gate.id, gate.kind, gate.value);
       return;

@@ -126,6 +126,26 @@ export interface EnemyState {
    * 29), and a charger, which sets off at once, leaves it out.
    */
   charge?: { until: number; lane: Lane; from?: number };
+  /**
+   * Squad-to-enemy distance at which this one starts walking (document 31,
+   * 3.2): a beat sets it per enemy, because where a block starts running is
+   * what turns a guard into an ambush. Absent means the kind's own range
+   * (`activationRange`), which is every dealt block.
+   */
+  wake?: number;
+  /**
+   * Hit points per printed unit, when the beat that stood it says so
+   * (`enemies.beat`). Absent means the kind's own (`enemyBalance`).
+   */
+  hpPerUnit?: number;
+  /** A charger's bite, as a share of the column, when its beat says so. */
+  killShare?: number;
+  /**
+   * Ceiling on the half-width, in metres. A beat holds an ambush to its own
+   * lane so the panel in front of it screens all of it (document 31, 3.3); a
+   * fat block would otherwise reach into the next lane, where nothing does.
+   */
+  maxHalf?: number;
 }
 
 /**
@@ -135,6 +155,11 @@ export interface EnemyState {
  * `balance.streams.spawnAhead` metres in front of the squad so the stream keeps
  * coming however fast the squad runs, and walk toward the squad at `speed` with
  * up to `jitter` metres of lateral scatter around the lane centre.
+ *
+ * A scripted road pours its rivers from a portal instead (document 31, 3.2):
+ * with `anchorZ` set, every body is released at that point on the road, the
+ * pour starts once the squad is `openAt` metres short of it and stops once it
+ * is `enemies.portal.stopGap` short, whatever is still unpoured.
  */
 export interface StreamDef {
   lane: Lane;
@@ -144,6 +169,10 @@ export interface StreamDef {
   hpPerEnemy: number;
   speed: number;
   jitter: number;
+  /** Road `z` of the portal, absolute (not relative to the row). */
+  anchorZ?: number;
+  /** Squad-to-portal distance at which the pour starts. Required with `anchorZ`. */
+  openAt?: number;
 }
 
 /** The live half of a `StreamDef`. Render reads `headZ` to float the count. */
@@ -166,6 +195,14 @@ export interface StreamState {
   headZ: number;
   started: boolean;
   done: boolean;
+  /**
+   * Where a portal stands, on a stream poured from one (`StreamDef.anchorZ`);
+   * absent on a river that keeps pace with the squad. Render stands its marker
+   * here. `z` is the same point on such a stream.
+   */
+  anchorZ?: number;
+  /** A portal that stopped pouring before it had sent its whole `count`. */
+  cut?: boolean;
 }
 
 export interface ProjectileState {

@@ -7,8 +7,15 @@ import type { LevelDef, RowDef, RowEnemyDef } from '../level';
 import { emptyPlayer } from '../player';
 import { Run } from '../Run';
 import type { GateDef, SimEvent, WallDef, WeaponId } from '../types';
-import { balance } from '@/data';
-import type { Balance, FamiliarTier, PlayerState, StaffTier, UpgradeId } from '@/data/types';
+import { balance, levelConfig, requireDealt } from '@/data';
+import type {
+  Balance,
+  DealtLevelConfig,
+  FamiliarTier,
+  PlayerState,
+  StaffTier,
+  UpgradeId,
+} from '@/data/types';
 
 /** A private copy of the tuning data, so a test can bend physics safely. */
 export function testBalance(): Balance {
@@ -26,6 +33,22 @@ export function row(
 /** A staff gate in the middle lane, close enough to be taken immediately. */
 export function staffRow(z: number, weaponId: WeaponId): RowDef {
   return row(z, [null, { kind: 'weapon', value: 0, cap: 0, weaponId }, null]);
+}
+
+/**
+ * Level `index` as the dealer would build it: its recipe in `levels.json`
+ * with the script left off (document 31, D70).
+ *
+ * The campaign plays its scripts now, and the dealt generator lives on for the
+ * render fixtures, the stress scene and the endless road. Its own rules — the
+ * row mix, the curve, the curse ceilings, the fences' payable halves — are
+ * checked against the forty recipes they were written for, which is what
+ * the tests that read this are about; the scripted rules are
+ * `levelDesign.test.ts`'s.
+ */
+export function dealtLevel(index: number): DealtLevelConfig {
+  const { script: _script, curses: _curses, curveTrim: _trim, ...recipe } = levelConfig(index);
+  return requireDealt(recipe);
 }
 
 export function level(overrides: Partial<LevelDef> = {}): LevelDef {

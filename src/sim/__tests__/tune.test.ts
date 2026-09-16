@@ -8,7 +8,7 @@ import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { playLevel } from './harness';
-import { playerHolding } from './fixtures';
+import { dealtLevel, playerHolding } from './fixtures';
 import { runCampaign } from '../campaign';
 import { squadCurve } from '../curve';
 import { generateLevel } from '../level';
@@ -26,7 +26,9 @@ describe.skipIf(!ON)('tuning readout', () => {
       'L  rows gate  peak  target  surv  boss  leak%  lost  streams  press  count  hp  win',
     );
     for (let level = 1; level <= levelCount; level++) {
-      const config = levelConfig(level);
+      // The stream columns read the dealt recipe's curve; the design readout of
+      // document 31 replaces them for scripted levels.
+      const config = dealtLevel(level);
       let peak = 0;
       let survivors = 0;
       let boss = 0;

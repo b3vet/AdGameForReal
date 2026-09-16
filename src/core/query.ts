@@ -18,9 +18,14 @@
  *   ?biome=frost    pin every level to one biome, whatever the level says
  *   ?endless=1      boot straight onto the endless road instead of a level
  *   ?perf           the scripted performance run; see `PERF_LEVEL` below
+ *   ?beat=ambush:3  one designed beat on a short road with no boss, played on
+ *                   a loop (document 31); `&count=100` is the squad it is
+ *                   sized for and starts with, `&prize=x2` the script's prize
+ *                   override, and `?seed`, `?bot` and `?biome` apply as above
  */
 
 import type { BiomeId } from '@/data/biome-types';
+import type { PrizeOverride } from '@/data/types';
 import type { PhysicsQuality } from '@/physics';
 import type { BotKind } from '@/sim';
 
@@ -28,6 +33,19 @@ import { clampRung } from './quality';
 import { loadSave } from './save';
 
 export type SceneKind = 'game' | 'render-test' | 'stress';
+
+/**
+ * `?beat=<id>:<tier>`: which designed beat to play alone (document 31, 4.1).
+ * Parsed for shape only; whether the library has that beat and that tier is
+ * `beatRoad`'s question (`./devScenes.ts`), which warns rather than fails.
+ */
+export interface BeatPin {
+  id: string;
+  tier: number;
+  /** The squad the beat is sized for, and the squad the run starts with. */
+  count: number;
+  prize: PrizeOverride | null;
+}
 
 export interface QueryOptions {
   /**
@@ -90,6 +108,13 @@ export interface QueryOptions {
    */
   perf: boolean;
   /**
+   * One beat on its own road, or null (`?beat=`; see `BeatPin`). A probe
+   * affordance like `?endless=`: the run it starts is never paid, and it plays
+   * again from the top when it ends, so a beat can be felt as often as it
+   * takes.
+   */
+  beat: BeatPin | null;
+  /**
    * Boot straight onto the endless road (D52) rather than the Academy.
    *
    * A probe affordance like `?biome=`: Endless is a card on the picker, and a
@@ -122,6 +147,12 @@ export const MAX_TURBO = 60;
  * 20 the player has never seen is not the run they are about to play.
  */
 export const PERF_LEVEL = 20;
+
+/**
+ * The squad a `?beat=` road is sized for when the URL names none: the middle
+ * of the three sizes the beat lab holds every beat to (document 31, 4.4).
+ */
+export const BEAT_COUNT = 100;
 
 export function clampLevel(level: number, levelCount: number): number {
   if (!Number.isFinite(level)) return 1;
@@ -172,6 +203,31 @@ export function parseQuery(search: string, levelCount: number): QueryOptions {
     biome: parseBiome(params.get('biome')),
     endless: parseFlag(params.get('endless')),
     perf,
+    beat: parseBeat(params.get('beat'), params.get('count'), params.get('prize')),
+  };
+}
+
+/**
+ * `ambush:3`, `ambush` (tier 1) or `ambush:3` with `count` and `prize` beside
+ * it. A value with no id is no pin at all; a count that is not a positive
+ * number is the default one.
+ */
+export function parseBeat(
+  raw: string | null,
+  countRaw: string | null = null,
+  prizeRaw: string | null = null,
+): BeatPin | null {
+  if (raw === null) return null;
+  const [idPart = '', tierPart = ''] = raw.split(':');
+  const id = idPart.trim();
+  if (id === '') return null;
+  const tier = Number.parseInt(tierPart, 10);
+  const count = Number.parseInt(countRaw ?? '', 10);
+  return {
+    id,
+    tier: Number.isFinite(tier) && tier > 0 ? tier : 1,
+    count: Number.isFinite(count) && count > 0 ? count : BEAT_COUNT,
+    prize: prizeRaw === 'x2' || prizeRaw === 'x3' || prizeRaw === 'big' ? prizeRaw : null,
   };
 }
 

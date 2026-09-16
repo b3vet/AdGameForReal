@@ -13,7 +13,9 @@
  * every pool size, `./wallLook.ts` and `./spellLook.ts` what Milestone 3 and 4
  * added to the road, and Milestone 4 Phase C took the camera (`./cameraLook.ts`)
  * and the crowds (`./crowdLook.ts`) out for the same reason — this file had
- * grown past the file-size rule again.
+ * grown past the file-size rule again. The draw and label ranges followed in
+ * the level-design plan's first phase (`./rangeLook.ts`, document 31), when
+ * every one of them moved at once.
  */
 
 import { balance } from '@/data';
@@ -61,6 +63,8 @@ export * from './monsterLook';
 export * from './crowdLook';
 export * from './wallLook';
 export * from './spellLook';
+export * from './rangeLook';
+export * from './beatLook';
 
 export const LANE_WIDTH = balance.road.laneWidth;
 export const ROAD_HALF_WIDTH = balance.road.halfWidth;
@@ -171,64 +175,6 @@ export const SHADOW = {
   /** The charger is one body, wider across the feet than a skeleton (D49). */
   charger: 0.3,
 } as const;
-
-/** Labels cost a 2D canvas redraw, so only near things get one. */
-export const LABEL_RANGE = 45;
-/**
- * Past two rows the numbers are noise, not choice — and with the rows this
- * close together the third and fourth rows print their digits on top of the
- * second one's. Derived from the sim's spacing so moving the rows again cannot
- * silently turn the far half of the road back into a stack of numbers.
- */
-export const GATE_LABEL_RANGE = balance.level.rowSpacing * 2.5;
-/**
- * Side lanes are two metres from the middle one, which is barely thirty screen
- * pixels once a row is thirty metres out — three numbers printed across that
- * touch each other. Past this distance only the middle lane keeps its label, so
- * the row the player is actually deciding about is the only one showing three.
- */
-export const SIDE_GATE_LABEL_RANGE = Math.min(balance.level.rowSpacing * 2.3, 30);
-/** How far behind the squad a label stays alive before it is hidden. */
-export const LABEL_BEHIND = 4;
-
-/**
- * How far ahead a gate panel is drawn at all. Everything past this is inside
- * the fog and reads as a smudge, and a level carries up to sixty panels — one
- * draw call each, which is most of the frame budget (plan, "Performance").
- *
- * Just outside `GATE_LABEL_RANGE`, so a panel fades up shortly before its
- * number does and never the other way round. Three full rows (the Phase B2
- * value) put up to nine unlabelled slabs in the fog and three draw calls on
- * the frame's peak for panels the player cannot read.
- */
-export const GATE_DRAW_RANGE = balance.level.rowSpacing * 2.7;
-/** Same rule for enemy blocks: their skeletons are instanced, but not free. */
-export const ENEMY_DRAW_RANGE = 52;
-
-/**
- * How much road has to separate a block's HP number from a gate row's numbers
- * before both stay readable — as a share of the camera's distance to the gate,
- * not as metres.
- *
- * A share, because the same stretch of road is fewer pixels the further out it
- * is: five metres hold two labels 55 px apart at the nearest row and 16 px apart
- * three rows out, so M1's fixed 3 m window either hides everything up close or
- * nothing far away. Behind is the wider of the two: a block beyond a gate prints
- * *up* into that gate's panel, while a block in front prints below it, where the
- * HP label's low anchor on the block's face already buys separation.
- *
- * Measured off the camera rig below at 390x844: 0.28 is where the two numbers
- * stop touching and 0.31 to 0.44 (small squad to large) is where the block's
- * number clears the panel band entirely.
- */
-export const BLOCK_LABEL_CLEARANCE_BEHIND = 0.35;
-export const BLOCK_LABEL_CLEARANCE_FRONT = 0.15;
-/**
- * Lateral reach of the same rule. Lanes are two metres apart, which is 55 px
- * even three rows out — wider than either number — so only a gate in the block's
- * own lane can print on the same patch of screen.
- */
-export const BLOCK_LABEL_LANE_CLEARANCE = 1.2;
 
 export const STREAM_LABEL_SIZE = 30;
 export const STREAM_LABEL_MIN = 13;

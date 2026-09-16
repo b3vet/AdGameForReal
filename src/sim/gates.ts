@@ -82,9 +82,31 @@ function capOf(gate: GateState, balance: Balance): number {
  * `projectiles.range`, which at the run speed is under seven seconds, so the
  * most one can put on is `perSecond` times that.
  */
-export function applyCurseCreep(gate: GateState, dt: number, balance: Balance): void {
+export function applyCurseCreep(
+  gate: GateState,
+  dt: number,
+  balance: Balance,
+  // The squad the share term is read against; zero on a road without
+  // `squadRates`, which leaves the flat rate exactly as it was tuned.
+  squad = 0,
+): void {
   if (gate.kind !== 'sub') return;
-  gate.value += balance.gates.creep.perSecond * dt;
+  const creep = balance.gates.creep;
+  gate.value += (creep.perSecond + creep.share * squad) * dt;
+}
+
+/**
+ * The per-second rates a gate grows and shrinks at for a squad of `squad`
+ * (document 31, 3.4): the flat D19 rate plus a share of the squad, so a curse
+ * of thirty can be shot green by the column that stands in it and pumping a
+ * plus is visible at three hundred. `squad` is zero on a dealt road.
+ */
+export function growthRates(balance: Balance, squad: number): { add: number; sub: number } {
+  const rates = balance.gates.growthPerSecond;
+  return {
+    add: rates.add + rates.shares.add * squad,
+    sub: rates.sub + rates.shares.sub * squad,
+  };
 }
 
 /**
@@ -106,6 +128,10 @@ export function applyGateGrowth(
   hits: number,
   shotRate: number,
   balance: Balance,
+  // See `growthRates`: zero keeps the flat D19 rates of a dealt road. Read as
+  // two numbers rather than through `growthRates`, which allocates, because
+  // this is on the shot path.
+  squad = 0,
 ): void {
   if (hits <= 0 || !isShootable(gate.kind)) return;
 
@@ -113,23 +139,25 @@ export function applyGateGrowth(
   if (shotRate <= 0) return;
 
   const rates = balance.gates.growthPerSecond;
+  const addRate = rates.add + rates.shares.add * squad;
+  const subRate = rates.sub + rates.shares.sub * squad;
   const share = hits / shotRate;
   const cap = capOf(gate, balance);
 
   if (gate.kind === 'sub') {
-    const drop = rates.sub * share;
+    const drop = subRate * share;
     if (drop < gate.value) {
       gate.value -= drop;
       return;
     }
     // The flip: the penalty is spent, the gate is now a bonus that keeps growing.
-    const spare = rates.sub > 0 ? ((drop - gate.value) * rates.add) / rates.sub : 0;
+    const spare = subRate > 0 ? ((drop - gate.value) * addRate) / subRate : 0;
     gate.kind = 'add';
     gate.value = Math.min(cap, spare);
     return;
   }
 
-  const step = gate.kind === 'add' ? rates.add * share : rates.fireRate * share;
+  const step = gate.kind === 'add' ? addRate * share : rates.fireRate * share;
   // `Math.max(value, ...)` and not just `Math.min(cap, ...)`: a gate that
   // already offers more than the cap is a gate the level author wanted that
   // big, and shooting a bonus must never make it smaller.

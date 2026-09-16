@@ -28,6 +28,8 @@ import {
   GRUNT_SCALE,
   POOL,
   SHADOW,
+  WAKE_SQUASH_STAGGER,
+  wakeSquash,
 } from './theme';
 import type { EnemyKind } from '@/sim';
 
@@ -164,6 +166,10 @@ function slotOf(kind: EnemyKind): 0 | 1 | 2 {
  * block's footprint from a hash, so a shadow written off `slot.x` would be one
  * disc under eighteen bodies. `shadowAlpha` is the block's distance fade, which
  * the caller has already worked out for the whole cluster (`ShadowLayer.fade`).
+ *
+ * `woke` is the seconds since the block set off, or -1: the wake cue's squash
+ * (`wakeSquash`, document 31, 4.1), played by each skeleton a little later the
+ * further back in the block it stands, so the crouch ripples through the mob.
  */
 export function writeCluster(
   crowd: Crowd,
@@ -173,6 +179,7 @@ export function writeCluster(
   dying: number,
   shadows: ShadowLayer | null,
   shadowAlpha: number,
+  woke = -1,
 ): number {
   const brute = slot.kind === 'brute' || slot.kind === 'shieldBrute';
   const scale = brute ? BRUTE_SCALE : GRUNT_SCALE;
@@ -201,7 +208,21 @@ export function writeCluster(
       // One block in three runs at the squad rather than walking, which is the
       // second baked range Milestone 3 added earning its rows.
       const gait = slot.enemyId % 3 === 0 ? 'walk2' : 'walk';
-      crowd.setInstance(base + i, x, 0, z, FACING + (phase - 0.5) * 0.4, scale, gait, phase);
+      // The skeleton nearest the camera goes first: `along` is its place in the
+      // block, and the camera looks up the road at the block's front.
+      const squash = woke < 0 ? 0 : wakeSquash(woke - along * WAKE_SQUASH_STAGGER);
+      crowd.setInstance(
+        base + i,
+        x,
+        0,
+        z,
+        FACING + (phase - 0.5) * 0.4,
+        scale * (1 + squash),
+        gait,
+        phase,
+        1,
+        scale * (1 - squash),
+      );
     } else {
       // Not activated yet: hold one frame of the walk so the block reads as a
       // waiting mob rather than marching on the spot.

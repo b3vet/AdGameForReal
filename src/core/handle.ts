@@ -98,6 +98,12 @@ export interface ArcaneDebugHandle {
    */
   startEndless: (seed?: number) => void;
   /**
+   * Starts one designed beat on its own road (`?beat=`, document 31): `beat`
+   * as the URL writes it (`ambush:3`), `count` the squad it is sized for. The
+   * hero set's beat page walks four of them on one boot this way.
+   */
+  startBeat: (beat: string, count?: number) => void;
+  /**
    * Ends the run on the road as a loss, wherever it has got to.
    *
    * The picture-taking path, like `steer` below: the smoke's endless walk

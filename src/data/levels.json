@@ -2,6 +2,41 @@
   {
     "index": 1,
     "seed": 1137,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 1
+      }
+    ],
+    "curses": 0,
     "rows": 16,
     "gateRows": 8,
     "mixedRows": 2,
@@ -39,6 +74,42 @@
   {
     "index": 2,
     "seed": 1274,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 1
+      }
+    ],
+    "curses": 2,
     "rows": 16,
     "gateRows": 9,
     "mixedRows": 3,
@@ -76,6 +147,42 @@
   {
     "index": 3,
     "seed": 1411,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 1
+      }
+    ],
+    "curses": 2,
     "rows": 17,
     "gateRows": 9,
     "mixedRows": 3,
@@ -113,6 +220,42 @@
   {
     "index": 4,
     "seed": 1548,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 1
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "prep",
+        "tier": 1
+      }
+    ],
+    "curses": 2,
     "rows": 17,
     "gateRows": 10,
     "mixedRows": 3,
@@ -150,6 +293,46 @@
   {
     "index": 5,
     "seed": 1685,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 2,
     "rows": 17,
     "gateRows": 10,
     "mixedRows": 4,
@@ -187,6 +370,46 @@
   {
     "index": 6,
     "seed": 1822,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "fence",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 18,
     "gateRows": 11,
     "mixedRows": 4,
@@ -224,6 +447,46 @@
   {
     "index": 7,
     "seed": 1959,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "flip",
+        "tier": 2
+      },
+      {
+        "beat": "fork",
+        "tier": 2
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "guard",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 18,
     "gateRows": 11,
     "mixedRows": 4,
@@ -261,6 +524,46 @@
   {
     "index": 8,
     "seed": 2096,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 18,
     "gateRows": 11,
     "mixedRows": 4,
@@ -298,6 +601,46 @@
   {
     "index": 9,
     "seed": 2233,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "fence",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 2
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 12,
     "mixedRows": 5,
@@ -336,6 +679,47 @@
     "index": 10,
     "milestone": true,
     "seed": 2370,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 12,
     "mixedRows": 5,
@@ -373,6 +757,42 @@
   {
     "index": 11,
     "seed": 2507,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "fork",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 2,
     "rows": 19,
     "gateRows": 13,
     "mixedRows": 6,
@@ -410,6 +830,47 @@
   {
     "index": 12,
     "seed": 2644,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 13,
     "mixedRows": 6,
@@ -447,6 +908,47 @@
   {
     "index": 13,
     "seed": 2781,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 13,
     "mixedRows": 6,
@@ -484,6 +986,47 @@
   {
     "index": 14,
     "seed": 2918,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 13,
     "mixedRows": 6,
@@ -522,6 +1065,47 @@
     "index": 15,
     "milestone": true,
     "seed": 3055,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 13,
     "mixedRows": 7,
@@ -559,6 +1143,42 @@
   {
     "index": 16,
     "seed": 3192,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -596,6 +1216,47 @@
   {
     "index": 17,
     "seed": 3329,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -633,6 +1294,47 @@
   {
     "index": 18,
     "seed": 3466,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -670,6 +1372,47 @@
   {
     "index": 19,
     "seed": 3603,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "guard",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -708,6 +1451,47 @@
     "index": 20,
     "milestone": true,
     "seed": 3740,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 5,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -746,6 +1530,46 @@
     "index": 21,
     "biome": "frost",
     "seed": 3877,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "guard",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 1
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 2,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -787,6 +1611,46 @@
     "index": 22,
     "biome": "frost",
     "seed": 4014,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -828,6 +1692,47 @@
     "index": 23,
     "biome": "frost",
     "seed": 4151,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "fence",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "fork",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -869,6 +1774,47 @@
     "index": 24,
     "biome": "frost",
     "seed": 4288,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -911,6 +1857,47 @@
     "milestone": true,
     "biome": "frost",
     "seed": 4425,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -952,6 +1939,42 @@
     "index": 26,
     "biome": "frost",
     "seed": 4562,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "prep",
+        "tier": 2
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -993,6 +2016,47 @@
     "index": 27,
     "biome": "frost",
     "seed": 4699,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -1034,6 +2098,47 @@
     "index": 28,
     "biome": "frost",
     "seed": 4836,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -1075,6 +2180,47 @@
     "index": 29,
     "biome": "frost",
     "seed": 4973,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -1117,6 +2263,47 @@
     "milestone": true,
     "biome": "frost",
     "seed": 5110,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 5,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -1158,6 +2345,42 @@
     "index": 31,
     "biome": "frost",
     "seed": 5247,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 3,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -1199,6 +2422,47 @@
     "index": 32,
     "biome": "frost",
     "seed": 5384,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 6,
@@ -1240,6 +2504,47 @@
     "index": 33,
     "biome": "frost",
     "seed": 5521,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -1281,6 +2586,47 @@
     "index": 34,
     "biome": "frost",
     "seed": 5658,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 6,
@@ -1323,6 +2669,47 @@
     "milestone": true,
     "biome": "frost",
     "seed": 5795,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 5,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 6,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 9,
@@ -1364,6 +2751,42 @@
     "index": 36,
     "biome": "frost",
     "seed": 5932,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 3
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 3
+      }
+    ],
+    "curses": 4,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -1405,6 +2828,47 @@
     "index": 37,
     "biome": "frost",
     "seed": 6069,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
+        "beat": "toll",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 5,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -1446,6 +2910,47 @@
     "index": 38,
     "biome": "frost",
     "seed": 6206,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 4
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 6,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -1487,6 +2992,47 @@
     "index": 39,
     "biome": "frost",
     "seed": 6343,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "toll",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "fence",
+        "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 4
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 4
+      }
+    ],
+    "curses": 6,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 9,
@@ -1529,6 +3075,47 @@
     "milestone": true,
     "biome": "frost",
     "seed": 6480,
+    "script": [
+      {
+        "beat": "open",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 4,
+        "prize": "x2"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 5
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 5
+      },
+      {
+        "beat": "toll",
+        "tier": 5
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 5,
+        "prize": "x3"
+      },
+      {
+        "beat": "prep",
+        "tier": 5
+      }
+    ],
+    "curses": 6,
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,

@@ -85,6 +85,9 @@ export function publishHandle(app: App, sources: HandleSources): ArcaneDebugHand
     startEndless: (seed?: number) => {
       app.startEndless(seed ?? null);
     },
+    startBeat: (beat: string, count?: number) => {
+      app.startBeat(beat, count ?? null);
+    },
     steer: (x: number) => {
       // Only while a run is actually on the road. Taking the wheel drops the
       // session's bot for good, so on the title screen, in the Academy or on

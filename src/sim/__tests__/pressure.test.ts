@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { dealtLevel } from './fixtures';
 import { squadCurve } from '../curve';
 import { generateLevel } from '../level';
 import { dpsPerUnit, expectedStreamDps, sizeStream, streamPressure, streamWindow } from '../pressure';
 import type { StreamShape } from '../pressure';
-import { balance, levelConfig, levelCount } from '@/data';
+import { balance, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
@@ -46,7 +47,7 @@ describe('stream pressure', () => {
 
   it('builds a stream that lands on the pressure it was asked for', () => {
     for (let level = 1; level <= levelCount; level++) {
-      const config = levelConfig(level);
+      const config = dealtLevel(level);
       for (const shape of ['single', 'horde'] as StreamShape[]) {
         for (const duration of [7, 10, 13]) {
           for (const rowIndex of [1, 5, config.rows - 1]) {
@@ -66,7 +67,7 @@ describe('stream pressure', () => {
     let seen = 0;
     for (let level = 1; level <= levelCount; level++) {
       const band = bandOf(level);
-      const config = levelConfig(level);
+      const config = dealtLevel(level);
       for (const seed of SEEDS) {
         const generated = generateLevel(level, config, seed);
         generated.rows.forEach((row, rowIndex) => {
@@ -92,7 +93,7 @@ describe('stream pressure', () => {
     // the same share of the squad at eight units and at four hundred.
     // Level 4, whose whole curve fits under the body cap: at the cap the count
     // stops following the squad and the HP per body rises to make up for it.
-    const config = levelConfig(4);
+    const config = dealtLevel(4);
     const small = sizeStream(config, 5, 0, 'single', 10);
     const large = sizeStream(config, config.rows - 1, 0, 'single', 10);
     expect(large.count).toBeGreaterThan(small.count * 4);
@@ -104,12 +105,12 @@ describe('stream pressure', () => {
     // worth the name, and no lane ever carries more bodies than the live cap.
     const tiny = sizeStream(config, 0, 0, 'single', 10);
     expect(tiny.count).toBe(balance.streams.count.min);
-    expect(sizeStream(levelConfig(levelCount), levelConfig(levelCount).rows - 1, 0, 'single', 13).count)
+    expect(sizeStream(dealtLevel(levelCount), dealtLevel(levelCount).rows - 1, 0, 'single', 13).count)
       .toBe(balance.streams.count.max);
   });
 
   it('holds a stream to the duration and speed the tuning allows', () => {
-    const config = levelConfig(4);
+    const config = dealtLevel(4);
     expect(sizeStream(config, 3, 0, 'single', 1).durationSeconds).toBe(
       balance.streams.duration.min,
     );

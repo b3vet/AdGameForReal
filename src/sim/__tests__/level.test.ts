@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { dealtLevel } from './fixtures';
 import { genDials } from '../gateGen';
 import { generateLevel, laneCenter, laneOf, rowOffersGrowth, squadCurve, BOSS_Z_OFFSET } from '../level';
 import type { LevelDef, RowDef } from '../level';
 import type { GateDef, StreamDef } from '../types';
-import { balance, levelConfig, levelCount } from '@/data';
+import { balance, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
@@ -23,7 +24,7 @@ function streamsOf(level: LevelDef): StreamDef[] {
 function everyLevel(fn: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
     for (const seed of SEEDS) {
-      fn(generateLevel(index, levelConfig(index), seed), index, seed);
+      fn(generateLevel(index, dealtLevel(index), seed), index, seed);
     }
   }
 }
@@ -42,20 +43,20 @@ function laneOfKind(row: RowDef, kind: string): number | null {
 describe('generateLevel', () => {
   it('is deterministic: the same seed replays the same level', () => {
     for (let index = 1; index <= levelCount; index++) {
-      const a = generateLevel(index, levelConfig(index), 7);
-      const b = generateLevel(index, levelConfig(index), 7);
+      const a = generateLevel(index, dealtLevel(index), 7);
+      const b = generateLevel(index, dealtLevel(index), 7);
       expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     }
   });
 
   it('produces different levels for different seeds', () => {
-    const a = generateLevel(5, levelConfig(5), 1);
-    const b = generateLevel(5, levelConfig(5), 2);
+    const a = generateLevel(5, dealtLevel(5), 1);
+    const b = generateLevel(5, dealtLevel(5), 2);
     expect(JSON.stringify(b)).not.toBe(JSON.stringify(a));
   });
 
   it("falls back to the config's own seed", () => {
-    const config = levelConfig(3);
+    const config = dealtLevel(3);
     expect(JSON.stringify(generateLevel(3, config))).toBe(
       JSON.stringify(generateLevel(3, config, config.seed)),
     );
@@ -63,7 +64,7 @@ describe('generateLevel', () => {
 
   it('stands every gate row on the 18 m grid and nudges only threat rows off it', () => {
     everyLevel((level) => {
-      expect(level.rows).toHaveLength(levelConfig(level.index).rows);
+      expect(level.rows).toHaveLength(dealtLevel(level.index).rows);
       level.rows.forEach((row, i) => {
         const grid = balance.level.rowSpacing * (i + 1);
         if (row.gates.some((g) => g !== null)) {
@@ -82,14 +83,14 @@ describe('generateLevel', () => {
     // "the Milestone 3 curve stretched"): the late levels buy their difficulty
     // from pressure, hordes and walls, and pay for it with more gate rows.
     everyLevel((level, index) => {
-      expect(gateRowsOf(level)).toHaveLength(levelConfig(index).gateRows);
+      expect(gateRowsOf(level)).toHaveLength(dealtLevel(index).gateRows);
     });
-    expect(levelConfig(1).gateRows).toBe(8);
-    expect(levelConfig(10).gateRows).toBe(12);
-    expect(levelConfig(levelCount).gateRows).toBe(14);
+    expect(dealtLevel(1).gateRows).toBe(8);
+    expect(dealtLevel(10).gateRows).toBe(12);
+    expect(dealtLevel(levelCount).gateRows).toBe(14);
     let previous = 0;
     for (let index = 1; index <= levelCount; index++) {
-      const rows = levelConfig(index).gateRows;
+      const rows = dealtLevel(index).gateRows;
       expect(rows).toBeGreaterThanOrEqual(previous);
       previous = rows;
     }
@@ -135,7 +136,7 @@ describe('generateLevel', () => {
           singles++;
         }
       }
-      const wanted = levelConfig(index).hordeRows;
+      const wanted = dealtLevel(index).hordeRows;
       expect(level.rows.filter((r) => (r.streams ?? []).length === 2)).toHaveLength(wanted);
     });
     expect(hordes).toBeGreaterThan(0);
@@ -144,8 +145,8 @@ describe('generateLevel', () => {
 
   it('keeps level 1 to single light streams and never one before the first gate row', () => {
     for (const seed of SEEDS) {
-      const first = generateLevel(1, levelConfig(1), seed);
-      expect(levelConfig(1).hordeRows).toBe(0);
+      const first = generateLevel(1, dealtLevel(1), seed);
+      expect(dealtLevel(1).hordeRows).toBe(0);
       for (const row of first.rows) expect((row.streams ?? []).length).toBeLessThanOrEqual(1);
       const firstGateRow = first.rows.findIndex((r) => r.gates.some((g) => g !== null));
       expect(firstGateRow).toBe(0);
@@ -164,7 +165,7 @@ describe('generateLevel', () => {
       const last = level.rows[level.rows.length - 1];
       // From the grid, not from the last row: a nudged final threat row must
       // not move the arena, because the level's length is a time budget.
-      const rows = levelConfig(index).rows;
+      const rows = dealtLevel(index).rows;
       expect(level.arenaZ).toBeCloseTo(balance.level.rowSpacing * (rows + 1), 9);
       expect(level.arenaZ).toBeGreaterThan(last?.z ?? 0);
       expect(BOSS_Z_OFFSET).toBe(balance.level.bossOffset);
@@ -212,11 +213,11 @@ describe('generateLevel', () => {
 
   it('keeps level 1 free of penalties and introduces them from level 2', () => {
     for (const seed of SEEDS) {
-      const first = generateLevel(1, levelConfig(1), seed);
+      const first = generateLevel(1, dealtLevel(1), seed);
       expect(gatesOf(first).some((g) => g.kind === 'sub')).toBe(false);
     }
     const laterHasSub = SEEDS.some((seed) =>
-      gatesOf(generateLevel(2, levelConfig(2), seed)).some((g) => g.kind === 'sub'),
+      gatesOf(generateLevel(2, dealtLevel(2), seed)).some((g) => g.kind === 'sub'),
     );
     expect(laterHasSub).toBe(true);
   });
@@ -258,11 +259,11 @@ describe('generateLevel', () => {
 
   it('spaces rows the plan\'s eighteen metres apart and runs 16 rows to 19', () => {
     expect(balance.level.rowSpacing).toBe(18);
-    expect(levelConfig(1).rows).toBe(16);
-    expect(levelConfig(levelCount).rows).toBe(19);
+    expect(dealtLevel(1).rows).toBe(16);
+    expect(dealtLevel(levelCount).rows).toBe(19);
     let previous = 0;
     for (let index = 1; index <= levelCount; index++) {
-      const rows = levelConfig(index).rows;
+      const rows = dealtLevel(index).rows;
       expect(rows).toBeGreaterThanOrEqual(previous);
       previous = rows;
     }
@@ -278,7 +279,7 @@ describe('generateLevel', () => {
 
   it('sends a stream nobody has to fight twice, sized to the squad at its row', () => {
     everyLevel((level, index) => {
-      const config = levelConfig(index);
+      const config = dealtLevel(index);
       for (const def of streamsOf(level)) {
         expect(def.count).toBeGreaterThanOrEqual(balance.streams.count.min);
         expect(def.count).toBeLessThanOrEqual(balance.streams.count.max);
@@ -302,10 +303,10 @@ describe('generateLevel', () => {
     // curses splits the ceiling between them (`rowGates`), so the row still
     // costs what one curse costs.
     everyLevel((level, index, seed) => {
-      const dials = genDials(levelConfig(index));
+      const dials = genDials(dealtLevel(index));
       level.rows.forEach((row, i) => {
         const curses = row.gates.filter((gate) => gate?.kind === 'sub').length;
-        const whole = Math.max(2, Math.floor(squadCurve(levelConfig(index), i) * dials.curseShare));
+        const whole = Math.max(2, Math.floor(squadCurve(dealtLevel(index), i) * dials.curseShare));
         const ceiling = curses > 1 ? Math.max(2, Math.floor(whole / curses)) : whole;
         for (const gate of row.gates) {
           if (gate?.kind !== 'sub') continue;
@@ -322,21 +323,21 @@ describe('generateLevel', () => {
     // (D45) carries a heavier range than its neighbours, which is one of the
     // three things `levels.json` uses to make it one — level 10's read 20 to 75
     // where level 9's read 13 to 54 and level 11's 16 to 64.
-    expect(levelConfig(1).gateValues.sub).toEqual({ min: 2, max: 6 });
-    expect(levelConfig(10).gateValues.sub).toEqual({ min: 20, max: 75 });
-    expect(levelConfig(20).gateValues.sub).toEqual({ min: 25, max: 100 });
+    expect(dealtLevel(1).gateValues.sub).toEqual({ min: 2, max: 6 });
+    expect(dealtLevel(10).gateValues.sub).toEqual({ min: 20, max: 75 });
+    expect(dealtLevel(20).gateValues.sub).toEqual({ min: 25, max: 100 });
     // Frostfell carries on from there, against a squad the cap holds at 500
     // and a curse ceiling of `curseShare` of it (D49).
-    expect(levelConfig(levelCount).gateValues.sub).toEqual({ min: 48, max: 192 });
+    expect(dealtLevel(levelCount).gateValues.sub).toEqual({ min: 48, max: 192 });
     for (const level of [5, 10]) {
-      const here = levelConfig(level).gateValues.sub;
-      const before = levelConfig(level - 1).gateValues.sub;
+      const here = dealtLevel(level).gateValues.sub;
+      const before = dealtLevel(level - 1).gateValues.sub;
       expect(`L${String(level)} curses over L${String(level - 1)}`).toBe(
         here.max > before.max ? `L${String(level)} curses over L${String(level - 1)}` : 'softer',
       );
     }
     everyLevel((level, index) => {
-      const range = levelConfig(index).gateValues.sub;
+      const range = dealtLevel(index).gateValues.sub;
       for (const gate of gatesOf(level)) {
         if (gate.kind !== 'sub') continue;
         expect(gate.value).toBeLessThanOrEqual(range.max);
@@ -372,7 +373,7 @@ describe('generateLevel', () => {
   it('deals the same row mix to every seed, so a level is the level it was designed as', () => {
     for (let index = 1; index <= levelCount; index++) {
       const shapes = SEEDS.map((seed) => {
-        const level = generateLevel(index, levelConfig(index), seed);
+        const level = generateLevel(index, dealtLevel(index), seed);
         const gates = gateRowsOf(level).length;
         const hordes = level.rows.filter((r) => (r.streams ?? []).length === 2).length;
         const streams = level.rows.filter((r) => (r.streams ?? []).length > 0).length;
@@ -390,7 +391,7 @@ describe('generateLevel', () => {
     // sits on `squad.maxCount`.
     let previous = 0;
     for (let index = 1; index <= levelCount; index++) {
-      const config = levelConfig(index);
+      const config = dealtLevel(index);
       const cap = balance.squad.maxCount;
       expect(config.peakTarget).toBeLessThanOrEqual(cap);
       const where = `L${String(index)} peak ${String(config.peakTarget)}`;
@@ -401,8 +402,8 @@ describe('generateLevel', () => {
       previous = config.peakTarget;
     }
     // The cap is reached, and only at the end of biome 1.
-    expect(levelConfig(20).peakTarget).toBe(balance.squad.maxCount);
-    expect(levelConfig(19).peakTarget).toBeLessThan(balance.squad.maxCount);
+    expect(dealtLevel(20).peakTarget).toBe(balance.squad.maxCount);
+    expect(dealtLevel(19).peakTarget).toBeLessThan(balance.squad.maxCount);
   });
 
   it('hides a block behind a gate on mixed rows', () => {
@@ -423,8 +424,8 @@ describe('generateLevel', () => {
   });
 
   it('scales gate and block sizes with the expected squad at that row', () => {
-    const level = generateLevel(10, levelConfig(10), 3);
-    const config = levelConfig(10);
+    const level = generateLevel(10, dealtLevel(10), 3);
+    const config = dealtLevel(10);
     expect(squadCurve(config, 0)).toBeCloseTo(config.startCount, 9);
     expect(squadCurve(config, config.rows - 1)).toBeCloseTo(config.peakTarget, 6);
 

@@ -80,6 +80,10 @@ export class RunSession {
    * the campaign, not a level at the end of it: nothing about it is keyed by
    * `levelIndex`, and the one thing that still is — the seed — is the same seed
    * the campaign's replay uses.
+   *
+   * `road` is a road built elsewhere and walked as it is: the `?beat=` dev
+   * route's one-beat road (`./devScenes.ts`), which is endless-style and so
+   * carries no level number either.
    */
   constructor(
     levelIndex: number,
@@ -87,10 +91,13 @@ export class RunSession {
     player: PlayerState,
     seed: number | null = null,
     endless = false,
+    road: LevelDef | null = null,
   ) {
-    this.level = endless
-      ? generateEndless(seed ?? options.seed ?? endlessConfig.seed, player)
-      : buildLevel(levelIndex, seed ?? options.seed, player);
+    this.level =
+      road ??
+      (endless
+        ? generateEndless(seed ?? options.seed ?? endlessConfig.seed, player)
+        : buildLevel(levelIndex, seed ?? options.seed, player));
     this.run = buildRun(this.level, balance, player);
     // The same tuning object the run was built on: a bot steers by the crowd's
     // own width and the clamp it leaves, and both come out of the balance.

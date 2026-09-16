@@ -11,8 +11,31 @@
 import { balance, levels } from '@/data';
 import { progression } from '@/sim';
 
+import { ENEMY_DRAW_RANGE, LABEL_BEHIND } from './rangeLook';
+
+/**
+ * The most beats any scripted level is written in (document 31, 3.8). A
+ * scripted level's rows, rivers, chargers and fences all come out of its
+ * script rather than out of the per-kind counts a dealt level carries, so the
+ * pools below take the larger of the two answers: the dealt counts as they
+ * stand, and what a script of this many beats can hold at the most.
+ */
+const MAX_SCRIPT_BEATS = levels.reduce(
+  (most, level) => Math.max(most, level.script?.length ?? 0),
+  0,
+);
+/** Rows one beat is (3.3): two, and three for the Phase 2 gauntlet. */
+const BEAT_ROWS_MAX = 3;
+/** Chargers one beat can stand: one a lane (the charger fork). */
+const BEAT_CHARGERS_MAX = 3;
+/** Fence stretches one beat can stand: both boundaries (the gauntlet). */
+const BEAT_FENCES_MAX = 2;
+
 /** The longest level in `levels.json`; every per-row pool is sized off it. */
-const MAX_ROWS = levels.reduce((most, level) => Math.max(most, Math.ceil(level.rows)), 1);
+const MAX_ROWS = Math.max(
+  levels.reduce((most, level) => Math.max(most, Math.ceil(level.rows ?? 0)), 1),
+  MAX_SCRIPT_BEATS * BEAT_ROWS_MAX,
+);
 
 /** Three lanes per row, plus slack for the ones still playing their exit. */
 const PER_ROW_POOL = MAX_ROWS * 3 + 6;
@@ -25,6 +48,11 @@ const MAX_CHARGER_ROWS = levels.reduce(
   (most, level) => Math.max(most, Math.ceil(level.chargerRows ?? 0)),
   0,
 );
+/** Chargers a level can stand, dealt or scripted. */
+const MAX_CHARGERS = Math.max(
+  MAX_CHARGER_ROWS * Math.ceil(balance.gen.chargerLanes.max),
+  MAX_SCRIPT_BEATS * BEAT_CHARGERS_MAX,
+);
 /**
  * Skeletons drawn for one block, however many units it is worth.
  *
@@ -35,15 +63,13 @@ const MAX_CHARGER_ROWS = levels.reduce(
 export const ENEMY_MAX_INSTANCES = 18;
 
 /**
- * Streams a level can register: one per mixed row and two per horde row (D29),
- * plus slack. They are all registered at level load, so this is the number of
- * `StreamState`s `RunState.streams` can hold, not the number live at once.
+ * Rows of blocks the enemy view can have in its draw range at once: the range
+ * ahead plus the stretch behind the squad a body is still drawn over, at the
+ * sim's row spacing.
  */
-const MAX_STREAMS =
-  levels.reduce(
-    (most, level) => Math.max(most, Math.ceil(level.mixedRows) + Math.ceil(level.hordeRows) * 2),
-    1,
-  ) + 4;
+const BLOCK_ROWS_IN_RANGE = Math.ceil(
+  (ENEMY_DRAW_RANGE + LABEL_BEHIND * 2) / balance.level.rowSpacing,
+);
 
 /**
  * Metres between one fence post and the next (D32).
@@ -63,7 +89,11 @@ export const WALL_POST_SPACING = 2;
  * most `walls.length.max` long and carries a post every `WALL_POST_SPACING`
  * metres plus the one that closes it.
  */
-const MAX_WALLS = levels.reduce((most, level) => Math.max(most, Math.ceil(level.wallRows)), 0) * 2 + 2;
+const MAX_WALLS =
+  Math.max(
+    levels.reduce((most, level) => Math.max(most, Math.ceil(level.wallRows ?? 0)), 0) * 2,
+    MAX_SCRIPT_BEATS * BEAT_FENCES_MAX,
+  ) + 2;
 const POSTS_PER_WALL = Math.ceil(balance.walls.length.max / WALL_POST_SPACING) + 1;
 
 /**
@@ -87,11 +117,12 @@ export const POOL = {
   /**
    * Minion instances: every live stream body on the road plus the skeletons of
    * the grunt blocks in draw range. `enemies.maxLive` is the sim's own ceiling
-   * on bodies (300), and at 18 m rows about four block rows are inside
-   * `ENEMY_DRAW_RANGE` at `ENEMY_MAX_INSTANCES` each. One draw call covers all
-   * of them, so the only cost of the headroom is the instance buffer.
+   * on bodies (300), and at 18 m rows `BLOCK_ROWS_IN_RANGE` block rows (five,
+   * since the range reached 74 m) are inside `ENEMY_DRAW_RANGE` at
+   * `ENEMY_MAX_INSTANCES` each. One draw call covers all of them, so the only
+   * cost of the headroom is the instance buffer.
    */
-  grunts: balance.enemies.maxLive + 4 * ENEMY_MAX_INSTANCES,
+  grunts: balance.enemies.maxLive + BLOCK_ROWS_IN_RANGE * ENEMY_MAX_INSTANCES,
   /**
    * Warrior instances, *per variant*: the plain brute and the shielded one are
    * two meshes out of one parse and one baked texture (D49, `loadCrowds`), and
@@ -102,18 +133,23 @@ export const POOL = {
   brutes: 120,
   /**
    * Chargers alive at once (D49): every row the longest level deals, each of
-   * them up to `gen.chargerLanes.max` bodies, plus the ones still playing a
-   * death. One instance each — a charger is a runner, not a block.
+   * them up to `gen.chargerLanes.max` bodies — or every beat of the longest
+   * script a charger fork — plus the ones still playing a death. One instance
+   * each — a charger is a runner, not a block.
    */
-  chargers: MAX_CHARGER_ROWS * Math.ceil(balance.gen.chargerLanes.max) + 4,
+  chargers: MAX_CHARGERS + 4,
   /** Frost rings under slowed blocks. */
   slowRings: 16,
   /**
-   * Floating stream counts. `levels.json` says how many streams a level can
-   * carry — one per mixed row, two per horde row — so this cannot silently run
-   * short when a level gains a horde.
+   * Floating stream counts on screen at once. Each is handed out a frame at a
+   * time to the rivers in range (`./streamBodies.ts`), so this is what the draw
+   * range can hold rather than what a level registers: two lanes of river on
+   * each of the rows in `ENEMY_DRAW_RANGE`, with two to spare. One label per
+   * registered river was what this used to be, sized off the longest level's
+   * rivers (19) — and the endless road registers twice that many (38), so
+   * every river past its 1,390 m mark walked with no count over it.
    */
-  streams: MAX_STREAMS,
+  streams: BLOCK_ROWS_IN_RANGE * 2 + 2,
   /**
    * Simultaneous impact bursts, per the plan's cap. `EffectsView` keeps one
    * ring of twice this, because muzzle flashes and the puff a leaked body

@@ -180,3 +180,51 @@ export interface ShieldBalance {
   damageMul: number;
 }
 
+/**
+ * A portal (document 31, 3.2): a fixed point on the road a river pours from.
+ * Where it stands, when it opens and how long it pours are the beat's; these
+ * are the rules every portal shares.
+ */
+export interface PortalBalance {
+  /** The pour stops once the squad is this close to the portal, in metres. */
+  stopGap: number;
+  /**
+   * A body with less fire window than this between the moment it can be shot
+   * and the moment it reaches the column is counted as the river's toll: what
+   * a squad standing in the lane is expected to pay (`portalWindow`'s
+   * `tollShare` in `src/sim/pressure.ts`).
+   */
+  tollSeconds: number;
+  /** Fewest bodies a portal pours, however small the squad it is sized for. */
+  minBodies: number;
+  /**
+   * Most bodies one beat's rivers pour between them. A beat that asks for more
+   * pours this many, each tougher, so the pressure is kept and the peak of live
+   * bodies stays inside the plan's 180 (4.7).
+   */
+  maxBodiesPerBeat: number;
+  /**
+   * Most bodies the rivers of a whole road may have on it at once, counted as
+   * if nothing were shot: two beats' portals can pour into the same stretch,
+   * and a river the column dodges walks the whole road. Held under the plan's
+   * 180 with room left for the blocks.
+   */
+  maxLiveBodies: number;
+}
+
+/**
+ * What a block a beat stands is worth where it differs from a dealt one
+ * (document 31, 3.4). A per-body number rather than a change to the kind's own
+ * block, so the endless road and the dealt fixtures keep the numbers they were
+ * tuned on while the scripted roads are tuned in the beat lab.
+ */
+export interface BeatEnemyBalance {
+  /**
+   * Hit points per printed unit of a brute or shielded brute. Lower than a
+   * dealt brute's, so a block that takes three seconds to clear prints what it
+   * would take on contact.
+   */
+  bruteHpPerUnit: number;
+  /** Share of the column a scripted charger takes on contact, above its floor. */
+  chargerKillShare: number;
+}

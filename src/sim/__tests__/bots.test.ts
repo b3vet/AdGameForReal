@@ -173,8 +173,11 @@ describe('bots', () => {
     // way the number moves is beside the point: the bot must read its own.
     expect(halfWidth(8, width, tuned)).not.toBeCloseTo(halfWidth(8, width), 6);
 
-    // Both want the `mul` in the right lane, each through its own clamp.
-    const squad = state(ROW, [], 8);
+    // Both want the `mul` in the right lane, each through its own clamp. A
+    // x3 rather than `ROW`'s x2: on eight units a +5 the column can pump for
+    // four seconds is worth a x2 to a bot that prices the panel's growth
+    // (document 31, 4.4), and this test is about the clamp, not that call.
+    const squad = state([gate(-1, 'sub', 3), gate(0, 'add', 5), gate(1, 'mul', 3)], [], 8);
     const onShipped = createBot('greedy', 1)(squad);
     const onTuned = createBot('greedy', 1, tuned)(squad);
     expect(lane(onShipped)).toBe(1);

@@ -24,12 +24,13 @@ import { weaponOf } from '@/sim';
 import type { Overlay } from '@/ui';
 
 import type { AcademyController, RunPayout } from './academy';
+import { beatRoad } from './devScenes';
 import type { FrameDriver } from './frame';
 import type { Juice } from './juice';
 import type { MenuStage } from './menus';
 import type { QualityLadder } from './quality';
 import { clampLevel } from './query';
-import type { QueryOptions } from './query';
+import type { BeatPin, QueryOptions } from './query';
 import { resultView } from './resultView';
 import { RunSession } from './session';
 
@@ -71,6 +72,13 @@ export class RunStage {
   private nextEndless = false;
   /** Whether the last road walked was the endless one, for `replay`. */
   private lastEndless = false;
+  /**
+   * The beat the next run, and the last, walk alone (`?beat=`, document 31,
+   * `./devScenes.ts`), or null. A beat run is a probe: it is never paid, and it
+   * plays again from the top when it ends rather than showing a result sheet.
+   */
+  private nextBeat: BeatPin | null = null;
+  private lastBeat: BeatPin | null = null;
   /** What the last finished run paid, meta layer included (`./academy.ts`). */
   private lastPayout: RunPayout | null = null;
 
@@ -111,6 +119,7 @@ export class RunStage {
     this.walked = clampLevel(level, levelCount);
     this.nextSeed = seed;
     this.nextEndless = false;
+    this.nextBeat = null;
     this.start();
   }
 
@@ -123,6 +132,32 @@ export class RunStage {
   startEndless(seed: number | null = null): void {
     this.nextSeed = seed;
     this.nextEndless = true;
+    this.nextBeat = null;
+    this.start();
+  }
+
+  /**
+   * `?beat=`: the one-beat road the URL names, once the physics layer has
+   * landed, for the same reason `autoStartEndless` waits. A pin the beat
+   * library cannot build has already said why in the console (`beatRoad`), and
+   * leaves the Academy up.
+   */
+  autoStartBeat(physics: Promise<void>, disposed: () => boolean): void {
+    void physics.then(() => {
+      if (disposed()) return;
+      this.startBeat();
+    });
+  }
+
+  /**
+   * One beat on its own road, from the top, on the seed the URL names: the
+   * URL's own pin unless a probe names another (`ArcaneDebugHandle.startBeat`).
+   */
+  startBeat(pin: BeatPin | null = this.deps.options.beat): void {
+    if (pin === null) return;
+    this.nextSeed = this.deps.options.seed;
+    this.nextEndless = false;
+    this.nextBeat = pin;
     this.start();
   }
 
@@ -165,6 +200,10 @@ export class RunStage {
    * its own told them apart, and for that road this is the honest retry.
    */
   replay(): void {
+    if (this.lastBeat !== null) {
+      this.startBeat(this.lastBeat);
+      return;
+    }
     if (this.lastEndless) {
       this.startEndless(this.lastSeed);
       return;
@@ -180,6 +219,21 @@ export class RunStage {
   /** The road the pins name, from the top. */
   private start(): void {
     const deps = this.deps;
+    const endless = this.nextEndless;
+    const seed = this.nextSeed;
+    // The player is read once, here: the level is generated with their
+    // upgrades and the run starts with the staff they chose (D35).
+    const pin = this.nextBeat;
+    const road = pin === null ? null : beatRoad(pin, seed, deps.options.biome, deps.academy.player);
+    // Every pin is for one run: the next Play walks whatever road the picker
+    // names, on that level's own seed.
+    this.nextSeed = null;
+    this.nextEndless = false;
+    this.nextBeat = null;
+    // A `?beat=` the library cannot build leaves the Academy as it was; the
+    // console already says why (`beatRoad`).
+    if (pin !== null && road === null) return;
+
     // The backdrop is over; see `MenuStage.end` for what that costs it.
     deps.menus.end();
     // Cheap when the boot pass already did the work, which is the normal case;
@@ -189,22 +243,17 @@ export class RunStage {
     // A level is a fresh measurement: the ladder starts again at rung 0 and
     // ignores the first seconds of load noise (`src/core/quality.ts`).
     deps.ladder.beginLevel();
-    // The player is read once, here: the level is generated with their
-    // upgrades and the run starts with the staff they chose (D35).
-    const endless = this.nextEndless;
     const session = new RunSession(
       this.walked,
       deps.options,
       deps.academy.player,
-      this.nextSeed,
+      seed,
       endless,
+      road,
     );
-    // Both pins are for one run: the next Play walks whatever road the picker
-    // names, on that level's own seed.
-    this.nextSeed = null;
-    this.nextEndless = false;
     this.lastSeed = session.seed;
     this.lastEndless = endless;
+    this.lastBeat = road === null ? null : pin;
     this.session = session;
     deps.juice.reset();
     deps.audio.beginRun();
@@ -216,7 +265,8 @@ export class RunStage {
     deps.physics()?.loadLevel(session.level);
     deps.driver.resetPeak();
     deps.onPhase('playing');
-    deps.overlay.showPlaying(this.walked, weaponOf(session.state.squad), endless);
+    // A beat's road is endless-style, so its HUD counts metres, not a level.
+    deps.overlay.showPlaying(this.walked, weaponOf(session.state.squad), session.isEndless);
 
     deps.driver.start();
   }
@@ -238,6 +288,11 @@ export class RunStage {
    * `AcademyController.payRun`.
    */
   private finish(session: RunSession): void {
+    // A beat is a probe, not a run: nothing to pay, and it plays again.
+    if (this.lastBeat !== null) {
+      this.startBeat(this.lastBeat);
+      return;
+    }
     const deps = this.deps;
     deps.onPhase('result');
     deps.juice.endDefeatCrawl();

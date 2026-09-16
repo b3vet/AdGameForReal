@@ -26,7 +26,7 @@ import type { ArenaDef } from './level';
 import type { RowDef } from './rows';
 import type { WallDef } from './walls';
 import { balance, endless } from '@/data';
-import type { EndlessDial, EndlessMix, LevelGenConfig } from '@/data/types';
+import type { EndlessDial, EndlessMix, DealtLevelConfig } from '@/data/types';
 
 /**
  * Row kind of an arena and its breathers. Outside the dealer's own range on
@@ -77,7 +77,7 @@ function mixAt(row: number): EndlessMix {
 }
 
 /** `base` with the counts the dealer reads set for `rows` rows centred on `middle`. */
-function stretchConfig(base: LevelGenConfig, rows: number, middle: number): LevelGenConfig {
+function stretchConfig(base: DealtLevelConfig, rows: number, middle: number): DealtLevelConfig {
   const mix = mixAt(middle);
   return {
     ...base,
@@ -94,7 +94,7 @@ function stretchConfig(base: LevelGenConfig, rows: number, middle: number): Leve
 /** Every row's kind, stretch by stretch, with the arenas laid in between. */
 export function dealRoad(
   rng: () => number,
-  base: LevelGenConfig,
+  base: DealtLevelConfig,
   rowCount: number,
   arenas: readonly number[],
 ): number[] {

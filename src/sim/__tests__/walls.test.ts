@@ -18,8 +18,8 @@ import { Run } from '../Run';
 import { clampLimit } from '../formation';
 import { clampToWalls, generateWalls, wallHolds, wallLimits, wallX } from '../walls';
 import type { WallDef, WallLimits } from '../walls';
-import { level, play, row, runOf, testBalance, wall } from './fixtures';
-import { balance, levelConfig, levelCount } from '@/data';
+import { dealtLevel, level, play, row, runOf, testBalance, wall } from './fixtures';
+import { balance, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 const TUNING = balance.walls;
@@ -201,7 +201,7 @@ describe('the wall clamp', () => {
 describe('the wall generator', () => {
   function everyLevel(fn: (def: LevelDef, index: number, seed: number) => void): void {
     for (let index = 1; index <= levelCount; index++) {
-      for (const seed of SEEDS) fn(generateLevel(index, levelConfig(index), seed), index, seed);
+      for (const seed of SEEDS) fn(generateLevel(index, dealtLevel(index), seed), index, seed);
     }
   }
 
@@ -220,8 +220,8 @@ describe('the wall generator', () => {
       seen += walls.length;
       // A horde stretch adds its mirror image, so the budget can be beaten by
       // one; nothing else may.
-      expect(walls.length).toBeLessThanOrEqual(levelConfig(index).wallRows + 1);
-      if (index >= TUNING.fromLevel && levelConfig(index).wallRows > 0) {
+      expect(walls.length).toBeLessThanOrEqual(dealtLevel(index).wallRows + 1);
+      if (index >= TUNING.fromLevel && dealtLevel(index).wallRows > 0) {
         expect(walls.length).toBeGreaterThan(0);
       }
     });
@@ -338,7 +338,7 @@ describe('the wall generator', () => {
   });
 
   it('is a function of the seed, like everything else the generator does', () => {
-    const rows = generateLevel(12, levelConfig(12), 4).rows;
+    const rows = generateLevel(12, dealtLevel(12), 4).rows;
     const once = generateWalls(rows, 12, 4, 400, 5);
     const twice = generateWalls(rows, 12, 4, 400, 5);
     expect(JSON.stringify(twice)).toBe(JSON.stringify(once));
@@ -412,7 +412,7 @@ describe('bots and walls', () => {
   });
 
   it('never asks for a lane the fence has taken away', () => {
-    const def = generateLevel(16, levelConfig(16), 2);
+    const def = generateLevel(16, dealtLevel(16), 2);
     const run = new Run(def, testBalance());
     const bot = createBot('greedy', 11);
     const walls = def.walls ?? [];

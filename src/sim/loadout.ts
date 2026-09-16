@@ -48,6 +48,8 @@ export function buildLoadout(
   mods: PlayerMods,
   onBossKilled: () => void,
   crowd: CrowdSim,
+  // `LevelDef.squadRates`: whether the road's gates grow with the squad.
+  squadRates = false,
 ): Loadout {
   const held = heldEvolutions(mods);
 
@@ -76,7 +78,19 @@ export function buildLoadout(
       ? { tuning: balance.evolutions.ember.wildfire, targets, balance }
       : null;
   const burn = def === null ? null : new Burn(def, events, hit, wildfire);
-  fire = new Firing(balance, events, targets, streams, crowd, onBossKilled, effects, held, mods, burn);
+  fire = new Firing(
+    balance,
+    events,
+    targets,
+    streams,
+    crowd,
+    onBossKilled,
+    effects,
+    held,
+    mods,
+    burn,
+    squadRates,
+  );
 
   const evolutions = new Evolutions(
     held,

@@ -15,7 +15,16 @@ export {
   BOSS_Z_OFFSET,
   FIRE_RATE_GATE_WORTH,
 } from './level';
-export type { ArenaDef, BossId, LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
+export type { ArenaDef, BeatMark, BossId, LevelDef, RowDef, RowEnemyDef, LevelGenConfig } from './level';
+/**
+ * The level-design grammar (document 31, D70). `buildBeatLevel` is one beat on
+ * a short boss-less road, for the beat lab and the `?beat=` dev route;
+ * `markAhead` reads a composed level's beat marks for render's hints.
+ */
+export { buildBeatLevel } from './beats/beatLevel';
+export type { BeatLevelOptions } from './beats/beatLevel';
+export { composeLevel } from './beats/compose';
+export { markAhead } from './beats/marks';
 /**
  * The endless road (D52): the same `LevelDef` a campaign level is, built from
  * `endless.json`'s dials instead of a level recipe. `dialAt` is exported for
@@ -100,6 +109,8 @@ export {
   enemyBalance,
   enemyFootprint,
   enemyHalfWidth,
+  hpPerUnitOf,
+  wakeRange,
 } from './enemies';
 /** The two Frostfell kinds and boss 2's charge (D49), for the views that draw
  *  them: what a charger's lane pick is, what a shield is worth, what a charge
@@ -120,17 +131,25 @@ export {
 } from './types';
 export { effectiveSpeed, overlapShare } from './contact';
 export { stompKills } from './boss';
-export { applyGateGrowth, clampCount, countAfterGate, gateCap, isShootable } from './gates';
+export {
+  applyGateGrowth,
+  clampCount,
+  countAfterGate,
+  gateCap,
+  growthRates,
+  isShootable,
+} from './gates';
 export { blockGap, expectedDps, startWeapon, weaponDef, weaponIds, weaponOf } from './weapons';
 export {
   dpsPerUnit,
   expectedStreamDps,
   laneShareOf,
+  portalWindow,
   sizeStream,
   streamPressure,
   streamWindow,
 } from './pressure';
-export type { StreamShape } from './pressure';
+export type { PortalGeometry, PortalWindow, StreamShape } from './pressure';
 export { createBot } from './bots';
 export type { BotKind } from './bots';
 export { mulberry32, randomInt, randomRange, weightedIndex } from './rng';

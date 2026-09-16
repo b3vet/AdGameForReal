@@ -14,31 +14,31 @@
  */
 
 import { balance } from '@/data';
-import type { LevelGenConfig, ValueRange } from '@/data/types';
+import type { DealtLevelConfig, ValueRange } from '@/data/types';
 
 /** How big the squad is expected to be at row `i`. */
-export function squadCurve(config: LevelGenConfig, rowIndex: number): number {
+export function squadCurve(config: DealtLevelConfig, rowIndex: number): number {
   const start = curveStart(config);
   const top = curveTop(config);
   return Math.min(top, start * Math.pow(curveGrowth(config), rowIndex));
 }
 
-export function curveStart(config: LevelGenConfig): number {
+export function curveStart(config: DealtLevelConfig): number {
   return Math.max(1, config.startCount);
 }
 
-export function curveTop(config: LevelGenConfig): number {
+export function curveTop(config: DealtLevelConfig): number {
   return Math.min(balance.squad.maxCount, Math.max(curveStart(config), config.peakTarget));
 }
 
 /** Factor the curve grows by from one row to the next. */
-export function curveGrowth(config: LevelGenConfig): number {
+export function curveGrowth(config: DealtLevelConfig): number {
   const span = Math.max(1, Math.floor(config.rows) - 1);
   return Math.pow(curveTop(config) / curveStart(config), 1 / span);
 }
 
 /** Share of this level's rows that carry at least one gate. */
-export function gateRowShare(config: LevelGenConfig): number {
+export function gateRowShare(config: DealtLevelConfig): number {
   const rows = Math.max(1, Math.floor(config.rows));
   return Math.min(1, Math.max(0.2, config.gateRows / rows));
 }
@@ -54,7 +54,7 @@ export function gateRowShare(config: LevelGenConfig): number {
  * taken off the top. One set of dials then serves a level that grows 5 into 105
  * and one that grows 12 into 400 with half its rows full of enemies.
  */
-export function addValueAt(config: LevelGenConfig, estimate: number): number {
+export function addValueAt(config: DealtLevelConfig, estimate: number): number {
   return addValueFor(
     estimate,
     curveGrowth(config),

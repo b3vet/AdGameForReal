@@ -12,7 +12,7 @@
 
 import { shuffle } from './gateGen';
 import { balance } from '@/data';
-import type { LevelGenConfig } from '@/data/types';
+import type { DealtLevelConfig } from '@/data/types';
 
 type Rng = () => number;
 
@@ -42,7 +42,7 @@ export const SHIELD_ROW = 6;
  * threat rows in a row past `gen.maxEnemyRun`, so a level never walks the
  * player through a dead zone they cannot grow out of.
  */
-export function dealRowKinds(rng: Rng, config: LevelGenConfig, rowCount: number): number[] {
+export function dealRowKinds(rng: Rng, config: DealtLevelConfig, rowCount: number): number[] {
   const gateRows = Math.min(rowCount, Math.max(1, Math.round(config.gateRows)));
   const mixed = Math.min(gateRows - 1, Math.max(0, Math.round(config.mixedRows)));
   const threats = rowCount - gateRows;

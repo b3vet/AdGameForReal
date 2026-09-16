@@ -1,14 +1,21 @@
 /**
  * Shared plumbing for the balance tests: play a whole level with a bot and
  * report what happened. Not a test file itself.
+ *
+ * `playDef` is the same loop for a level built by hand or by the beat lab
+ * (`./beatLab.ts`), with a hook that sees every step's events, which is how
+ * the design readout (`./designReadout.test.ts`) instruments a run without a
+ * second copy of the loop.
  */
 
 import { createBot } from '../bots';
 import type { BotKind } from '../bots';
 import { generateLevel } from '../level';
+import type { LevelDef } from '../level';
 import { Run } from '../Run';
+import type { SimEvent, UnitLossReason } from '../types';
 import { balance, levelConfig, levelCount } from '@/data';
-import type { PlayerState } from '@/data/types';
+import type { Balance, PlayerState } from '@/data/types';
 
 /** One sim step; the bots are asked for a target every step, as the app does. */
 const DT = 1 / 60;
@@ -30,6 +37,15 @@ export interface StragglerTally {
   wiped: number;
   /** Groups still fighting on their own when the column reached the arena. */
   atArena: number;
+}
+
+/** Units lost, by the reason the sim gave (`UnitLossReason`). */
+export type LossTally = Record<UnitLossReason, number>;
+
+export const LOSS_REASONS: readonly UnitLossReason[] = ['contact', 'gate', 'stomp', 'leak', 'charge'];
+
+export function emptyTally(): LossTally {
+  return { contact: 0, gate: 0, stomp: 0, leak: 0, charge: 0 };
 }
 
 export interface PlayResult {
@@ -60,6 +76,33 @@ export interface PlayResult {
    * since document 29, which the feedback needed as much as this count did.
    */
   chargeKills: number;
+  /**
+   * Every unit lost before the boss woke, by reason: blocks and chargers
+   * (`contact`), river bodies (`leak`), curses (`gate`). The road half of
+   * document 31's "where the squad is lost".
+   */
+  road: LossTally;
+  /** The same from the moment the boss woke: its stomps, grind and charge. */
+  boss: LossTally;
+  /** Most enemies alive at once, boss excluded (document 31, 4.7). */
+  peakLive: number;
+}
+
+/** What `playDef` hands its hook each step, besides the run itself. */
+export type StepHook = (run: Run, events: readonly SimEvent[], step: number) => void;
+
+export interface PlayOptions {
+  player?: PlayerState | undefined;
+  /** The tuning the run and the bot are built on. */
+  balance?: Balance;
+  /** The bot's own seed; `playLevel` derives it from the road's. */
+  botSeed?: number;
+  /** Called after every step with that step's events (copy what you keep). */
+  onStep?: StepHook;
+  /** Stop once the squad is past this `z` (the beat lab's short road). */
+  untilZ?: number;
+  /** A cap on simulated seconds, below the stalemate one. */
+  maxSeconds?: number;
 }
 
 /**
@@ -75,15 +118,49 @@ export function playLevel(
   player?: PlayerState,
 ): PlayResult {
   const level = generateLevel(levelIndex, levelConfig(levelIndex), seed, player);
-  const run = new Run(level, balance, player);
-  const bot = createBot(kind, seed * 7919 + levelIndex);
+  return playDef(level, kind, { player, botSeed: seed * 7919 + levelIndex });
+}
+
+/**
+ * Writes onto a run's state the facts about its rivers and its road that a bot
+ * prices from and the sim does not yet put there (`../botStreams.ts`): each
+ * river's hit points per body, pour length and opening distance, and whether
+ * the road grows its panels by the squad (`LevelDef.squadRates`). A player sees
+ * a portal and its count before it opens; without these a bot cannot price the
+ * river until its first body is on the road. Streams are registered in row
+ * order, def by def (`Run`'s constructor), so the i-th def is the i-th state.
+ *
+ * Test-side only, and to be deleted once `Streams.add` and `Run` write them.
+ */
+export function exposeRoad(run: Run, level: LevelDef): void {
+  const defs = level.rows.flatMap((row) => row.streams ?? []);
+  run.state.streams.forEach((stream, i) => {
+    const def = defs[i];
+    if (def === undefined) return;
+    const facts: { hpPerEnemy: number; durationSeconds: number; openAt?: number } = {
+      hpPerEnemy: def.hpPerEnemy,
+      durationSeconds: def.durationSeconds,
+    };
+    if (def.openAt !== undefined) facts.openAt = def.openAt;
+    Object.assign(stream, facts);
+  });
+  if (level.squadRates === true) Object.assign(run.state, { squadRates: true });
+}
+
+/** Plays a built level with one bot. See `PlayOptions`. */
+export function playDef(level: LevelDef, kind: BotKind, options: PlayOptions = {}): PlayResult {
+  const tuning = options.balance ?? balance;
+  const run = new Run(level, tuning, options.player);
+  exposeRoad(run, level);
+  const bot = createBot(kind, options.botSeed ?? level.seed, tuning);
 
   let steps = 0;
   let bossStart = -1;
   let countAtBoss = 0;
-  let stompKills = 0;
-  let chargeKills = 0;
-  const maxSteps = Math.round(MAX_SECONDS / DT);
+  let peakLive = 0;
+  const road = emptyTally();
+  const boss = emptyTally();
+  const maxSteps = Math.round(Math.min(MAX_SECONDS, options.maxSeconds ?? MAX_SECONDS) / DT);
   const stragglers: StragglerTally = {
     groups: 0,
     units: 0,
@@ -101,16 +178,23 @@ export function playLevel(
     run.setTargetX(bot(run.state));
     const events = run.tick(DT);
     steps++;
+    // Booked before the boss edge below: a stomp on the step the boss wakes is
+    // not possible (it wakes before it stomps), and a curse on that step is
+    // still the road's.
+    const tally = bossStart < 0 ? road : boss;
     for (const event of events) {
-      if (event.type !== 'unitsLost') continue;
-      if (event.reason === 'stomp') stompKills += event.amount;
-      else if (event.reason === 'charge') chargeKills += event.amount;
+      if (event.type === 'unitsLost') tally[event.reason] += event.amount;
     }
     if (bossStart < 0 && run.state.boss?.active === true) {
       bossStart = steps;
       countAtBoss = run.state.squad.count;
     }
+    let live = 0;
+    for (const enemy of run.state.enemies) if (enemy.alive && enemy.kind !== 'boss') live++;
+    if (live > peakLive) peakLive = live;
     noteStragglers(run.state, stragglers, held, reachedArena);
+    options.onStep?.(run, events, steps);
+    if (options.untilZ !== undefined && run.state.squad.z >= options.untilZ) break;
   }
 
   const state = run.state;
@@ -140,8 +224,11 @@ export function playLevel(
     streamsSeen: seen,
     worstLeakShare: worst,
     stragglers,
-    stompKills,
-    chargeKills,
+    stompKills: boss.stomp + road.stomp,
+    chargeKills: boss.charge + road.charge,
+    road,
+    boss,
+    peakLive,
   };
 }
 

@@ -190,8 +190,12 @@ export function fenceTrap(): ReturnType<typeof level> {
   });
 }
 
-/** Levels and seeds with fences on them, small enough to drive twice in a test. */
-export const WALLED_LEVELS = [4, 6, 8, 11, 14];
+/**
+ * Levels and seeds with fences on them, small enough to drive twice in a test.
+ * The scripted campaign (document 31) fences only its commit-fence beats, so
+ * these are the levels whose scripts carry one or two of them.
+ */
+export const WALLED_LEVELS = [4, 5, 6, 7, 8, 9, 10, 12];
 export const WALLED_SEEDS = [1, 2, 3];
 
 /** Every fence entry of a bot over that sweep: how far its column reached past

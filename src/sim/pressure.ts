@@ -23,7 +23,7 @@ import { squadCurve } from './curve';
 import type { StreamDef } from './types';
 import { expectedDps, startWeapon } from './weapons';
 import { balance } from '@/data';
-import type { Balance, LevelGenConfig } from '@/data/types';
+import type { Balance, DealtLevelConfig } from '@/data/types';
 
 /** How the squad's own fire is shared with a stream that stands in one lane. */
 export type StreamShape = 'single' | 'horde';
@@ -114,7 +114,7 @@ function clamp(value: number, min: number, max: number): number {
  * player never sees it because a stream shows its remaining count, not HP.
  */
 export function sizeStream(
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   rowIndex: number,
   lane: StreamDef['lane'],
   shape: StreamShape,
@@ -149,4 +149,91 @@ export function sizeStream(
     speed,
     jitter: streams.jitter,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Portals (document 31, 3.2)                                          */
+/* ------------------------------------------------------------------ */
+
+/** Where a portal stands relative to its beat, and how it pours. */
+export interface PortalGeometry {
+  /** Metres from the beat's gate row; negative is in front of the panels. */
+  at: number;
+  /** Squad-to-portal distance at which the pour starts. */
+  open: number;
+  /** Seconds it is asked to pour. */
+  seconds: number;
+  /** A panel that stops shots stands at the gate row in the portal's lane. */
+  screened: boolean;
+  /** How fast a body walks. */
+  speed: number;
+}
+
+export interface PortalWindow {
+  /**
+   * Seconds in which the lane has a body the column can shoot: the union of
+   * every body's time between being in range, and past any panel screening
+   * it, and reaching the column.
+   */
+  window: number;
+  /** Seconds the pour actually runs before the squad is `portal.stopGap` short of it. */
+  pour: number;
+  /**
+   * Share of the poured bodies that reach the column with less than
+   * `portal.tollSeconds` of fire on them: the part of the river a column that
+   * stands in the lane is expected to pay for (3.3, the toll).
+   */
+  tollShare: number;
+}
+
+/**
+ * Bodies the window is sampled at. A numerical detail rather than a tuning
+ * number: every body's window is a straight-line function of when it was
+ * poured, so two dozen samples put the union within a few hundredths of a
+ * second of the exact one.
+ */
+const PORTAL_SAMPLES = 24;
+
+/**
+ * The fire window a portal's geometry leaves (3.2, rule 4).
+ *
+ * Time runs from the pour opening. The squad closes on the portal at the run
+ * speed and a body closes on the squad at the sum of the two, so a body
+ * poured at `t` reaches the column at `(open + speed * t) / closing` and is in
+ * range from `(open - range + speed * t) / closing`. A panel that stops shots
+ * stands between the two until the body walks through it (`at / speed` after
+ * it was poured) or the squad walks through it first, whichever comes sooner:
+ * a lane's fire goes into the nearest target, and until then that is the
+ * panel.
+ */
+export function portalWindow(geometry: PortalGeometry, balanceData: Balance = balance): PortalWindow {
+  const run = balanceData.squad.runSpeed;
+  const speed = Math.max(0.1, geometry.speed);
+  const closing = run + speed;
+  const range = balanceData.projectiles.range;
+  const portal = balanceData.enemies.portal;
+  const open = geometry.open;
+  const pour = Math.max(0, Math.min(geometry.seconds, (open - portal.stopGap) / Math.max(0.1, run)));
+  if (pour <= 0) return { window: 0, pour: 0, tollShare: 0 };
+
+  const screen = geometry.screened && geometry.at > 0;
+  // When the squad reaches the gate row and the panel stops being in the way.
+  const squadAtPanel = (open - geometry.at) / Math.max(0.1, run);
+
+  let window = 0;
+  let reach = -Infinity;
+  let tolls = 0;
+  for (let k = 0; k < PORTAL_SAMPLES; k++) {
+    const poured = (pour * k) / (PORTAL_SAMPLES - 1);
+    const contact = (open + speed * poured) / closing;
+    let start = Math.max(poured, (open - range + speed * poured) / closing);
+    if (screen) start = Math.max(start, Math.min(poured + geometry.at / speed, squadAtPanel));
+    if (contact - start < portal.tollSeconds) tolls++;
+    if (contact <= start) continue;
+    // Starts and contacts both rise with `poured`, so the union is a sweep.
+    if (start >= reach) window += contact - start;
+    else if (contact > reach) window += contact - reach;
+    reach = Math.max(reach, contact);
+  }
+  return { window, pour, tollShare: tolls / PORTAL_SAMPLES };
 }

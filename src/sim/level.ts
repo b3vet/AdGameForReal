@@ -13,10 +13,12 @@
  * gate rows.
  */
 
+import { composeLevel } from './beats/compose';
+import type { BeatMark } from './beats/marks';
 import { addValueAt, squadCurve } from './curve';
-import { gateCap } from './gates';
-import { emptyLane, genDials, growsTheSquad, shuffle, staffLane, weaponGate } from './gateGen';
+import { genDials, growsTheSquad } from './gateGen';
 import type { RowBudget } from './gateGen';
+import { applyGateBonus, placeWeaponGates } from './levelPasses';
 import { playerMods } from './player';
 import type { PlayerMods } from './player';
 import {
@@ -36,12 +38,14 @@ import { mulberry32 } from './rng';
 import type { GateDef, StreamDef } from './types';
 import { generateWalls } from './walls';
 import type { WallDef } from './walls';
-import { balance } from '@/data';
-import type { BiomeId, BossKind, LevelGenConfig, PlayerState } from '@/data/types';
+import { balance, requireDealt } from '@/data';
+import type { BiomeId, BossKind, DealtLevelConfig, LevelGenConfig, PlayerState } from '@/data/types';
 
 export { FIRE_RATE_GATE_WORTH } from './gates';
 export { addValueAt, squadCurve } from './curve';
 export { laneCenter, laneOf } from './lanes';
+export { applyGateBonus, placeWeaponGates } from './levelPasses';
+export type { BeatMark } from './beats/marks';
 export type { LevelGenConfig, RowDef, RowEnemyDef, StreamDef, WallDef };
 
 /**
@@ -116,16 +120,26 @@ export interface LevelDef {
    * same reason as `bossId`, and `generateLevel` always writes it.
    */
   walls?: WallDef[];
+  /**
+   * Where each beat of a composed level stands (document 31, 3.8), in road
+   * order. Absent on a dealt road. For the tests, the design readout and
+   * render's hints: the sim's rules and the bots never read it.
+   */
+  beats?: BeatMark[];
+  /**
+   * Gate growth, a curse's shoot-down and its creep carry the share-of-squad
+   * term (`gates.growthPerSecond.shares`, `gates.creep.share`) as well as the
+   * flat rate (document 31, 3.4). The composer sets it; a dealt road leaves it
+   * off and plays exactly the rates it was tuned on.
+   */
+  squadRates?: boolean;
 }
 
 export const BOSS_Z_OFFSET = balance.level.bossOffset;
 
-/** Mixed into the seed for the staff-gate stream, so it is not the level's. */
-const WEAPON_STREAM_SALT = 0x57_af_f0_0d;
-
 type Rng = () => number;
 
-function budgetFor(config: LevelGenConfig, rowIndex: number): RowBudget {
+function budgetFor(config: DealtLevelConfig, rowIndex: number): RowBudget {
   const estimate = squadCurve(config, rowIndex);
   return {
     estimate,
@@ -148,95 +162,11 @@ function mulBudget(index: number, gateRows: number): number {
   return Math.round(balance.gen.mulChance * gateRows);
 }
 
-/** How many staff gates this level may carry, and whether they are on at all. */
-function weaponBudget(index: number): number {
-  const gen = balance.gen;
-  if (!gen.weaponGatesEnabled || index < gen.weaponFromLevel) return 0;
-  return index >= gen.weaponGateManyFromLevel ? gen.weaponGatesLate : gen.weaponGatesEarly;
-}
-
-/** One lane of one row a staff gate could take over. */
-interface StaffSlot {
-  row: number;
-  lane: number;
-}
-
-/**
- * Lanes of rows past the first that `pick` says a staff may take, shuffled.
- * Never the first row: the plan's rule, and the player has not seen a staff
- * work yet when they are asked to trade for another one.
- */
-function staffCandidates(
-  rows: readonly RowDef[],
-  rng: Rng,
-  pick: (gates: ReadonlyArray<GateDef | null>) => number,
-): StaffSlot[] {
-  const candidates: StaffSlot[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row === undefined) continue;
-    const lane = pick(row.gates);
-    if (lane >= 0) candidates.push({ row: i, lane });
-  }
-  shuffle(rng, candidates);
-  return candidates;
-}
-
-/** Converts lanes to staff gates until the budget is spent. Returns how many. */
-function convert(
-  rows: RowDef[],
-  candidates: readonly StaffSlot[],
-  rng: Rng,
-  budget: number,
-): number {
-  let placed = 0;
-  for (const candidate of candidates) {
-    if (placed >= budget) break;
-    const row = rows[candidate.row];
-    // One staff per row (plan, "Weapons"): the second tier may offer a row the
-    // first tier has already taken.
-    if (row === undefined || row.gates.some((gate) => gate?.kind === 'weapon')) continue;
-    row.gates[candidate.lane] = weaponGate(rng);
-    placed++;
-  }
-  return placed;
-}
-
-/**
- * Turns up to `weaponBudget` spare lanes into staff gates, on a stream of its
- * own, after the level is laid out — so turning staff gates on moves only the
- * lanes it converts and cannot re-roll the campaign (Phase C, Milestone 2).
- *
- * Two tiers, in order. First a lane the row can give up — a `fireRate` bonus, a
- * second grower, a second curse (`staffLane`). Then, only if the budget is not
- * spent, a lane that is already empty (`emptyLane`), which costs the row
- * nothing at all.
- */
-export function placeWeaponGates(
-  rows: RowDef[],
-  index: number,
-  seed: number,
-  // Named by the endless road, which is one road of 160 rows rather than a
-  // level and would otherwise be offered the one or two staff gates a *level*
-  // carries (`weaponBudget`).
-  wanted?: number,
-): void {
-  const budget = wanted ?? weaponBudget(index);
-  if (budget <= 0) return;
-
-  // A separate stream, salted, so the level's own sequence is untouched.
-  const rng = mulberry32((seed ^ WEAPON_STREAM_SALT) >>> 0);
-
-  const placed = convert(rows, staffCandidates(rows, rng, staffLane), rng, budget);
-  if (placed >= budget) return;
-  convert(rows, staffCandidates(rows, rng, emptyLane), rng, budget - placed);
-}
-
 /** The row builder each dealt kind maps to. Shared with the endless road (D52). */
 export function buildRow(
   kind: number,
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   rowIndex: number,
   z: number,
   budget: RowBudget,
@@ -261,27 +191,6 @@ export function buildRow(
 }
 
 /**
- * The gate-bonus upgrade (D35), applied after the level is laid out.
- *
- * Only `add` gates and only their printed value, so the level itself — its
- * rows, its curses, its streams and every random draw behind them — is the one
- * the campaign was tuned as, whatever the player has bought. A player with the
- * upgrade at zero multiplies by exactly one and this returns without touching a
- * thing, which is what keeps a no-upgrade run byte-identical.
- */
-export function applyGateBonus(rows: readonly RowDef[], bonus: number): void {
-  if (bonus === 1) return;
-  for (const row of rows) {
-    for (let slot = 0; slot < row.gates.length; slot++) {
-      const gate = row.gates[slot];
-      if (gate === null || gate === undefined || gate.kind !== 'add') continue;
-      gate.value = Math.max(1, Math.round(gate.value * bonus));
-      gate.cap = gateCap('add', gate.value, balance);
-    }
-  }
-}
-
-/**
  * Deterministic: the same `index`, `config`, `seed` and `player` always produce
  * the same level. `seed` defaults to the config's own seed so callers can omit
  * it, and `player` is optional because the balance bands are defined for a
@@ -290,6 +199,10 @@ export function applyGateBonus(rows: readonly RowDef[], bonus: number): void {
  * Two of the five upgrades are the level's business rather than the squad's:
  * the units the player starts with and what an `add` gate prints. The other
  * three are multipliers on the squad and belong to `Run`.
+ *
+ * A config with a `script` is composed from beats (document 31, D70); one
+ * without is dealt, as every level was before. The render fixtures, the stress
+ * scene and the endless road are dealt.
  */
 export function generateLevel(
   index: number,
@@ -297,8 +210,19 @@ export function generateLevel(
   seed?: number,
   player?: PlayerState,
 ): LevelDef {
-  const mods: PlayerMods = playerMods(player);
   const resolvedSeed = seed ?? config.seed;
+  if (config.script !== undefined) return composeLevel(index, config, resolvedSeed, player);
+  return dealLevel(index, requireDealt(config), resolvedSeed, player);
+}
+
+/** The dealt road (Milestones 3 to 9): row kinds shuffled under the order rules. */
+function dealLevel(
+  index: number,
+  config: DealtLevelConfig,
+  resolvedSeed: number,
+  player?: PlayerState,
+): LevelDef {
+  const mods: PlayerMods = playerMods(player);
   const rng = mulberry32(resolvedSeed);
   const rowCount = Math.max(1, Math.floor(config.rows));
   const spacing = balance.level.rowSpacing;

@@ -12,7 +12,7 @@ import { randomInt, randomRange } from './rng';
 import type { GateDef, GateKind, Lane, WeaponId } from './types';
 import { startWeapon, weaponIds } from './weapons';
 import { balance } from '@/data';
-import type { LevelGenConfig, ValueRange } from '@/data/types';
+import type { DealtLevelConfig, LevelGenConfig, ValueRange } from '@/data/types';
 
 type Rng = () => number;
 
@@ -104,7 +104,7 @@ function pickWeapon(rng: Rng): WeaponId {
   return options[Math.floor(rng() * options.length)] ?? 'storm';
 }
 
-function makeGate(kind: GateKind, rng: Rng, config: LevelGenConfig, budget: RowBudget): GateDef {
+function makeGate(kind: GateKind, rng: Rng, config: DealtLevelConfig, budget: RowBudget): GateDef {
   const gen = balance.gen;
   switch (kind) {
     case 'mul': {
@@ -144,7 +144,7 @@ function makeGate(kind: GateKind, rng: Rng, config: LevelGenConfig, budget: RowB
  */
 export function rowGateKinds(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   slots: number,
   permits: RowPermits,
 ): GateKind[] {
@@ -279,7 +279,7 @@ function roundValue(kind: GateKind, value: number): number {
 function makeDistinct(
   def: GateDef,
   taken: ReadonlySet<string>,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   budget: RowBudget,
 ): void {
   if (!taken.has(gateKey(def))) return;
@@ -337,7 +337,7 @@ export function emptyGates(): [GateDef | null, GateDef | null, GateDef | null] {
  */
 export function rowGates(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   budget: RowBudget,
   lanes: readonly Lane[],
   kinds: readonly GateKind[],

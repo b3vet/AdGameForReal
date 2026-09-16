@@ -9,10 +9,37 @@ import endlessJson from './endless.json';
 import levelsJson from './levels.json';
 import qualityJson from './quality.json';
 import type { AudioMix } from './audio-types';
+import { readBeatLibrary } from './beat-types';
+import type { BeatLibrary } from './beat-types';
 import type { QualityTuning } from './quality-types';
 import type { Balance, EndlessConfig, LevelGenConfig } from './types';
 
-export type { Balance, EndlessConfig, LevelGenConfig, ValueRange, EnemyBalance, BossBalance } from './types';
+export type {
+  Balance,
+  DealtFields,
+  DealtLevelConfig,
+  EndlessConfig,
+  LevelGenConfig,
+  ValueRange,
+  EnemyBalance,
+  BossBalance,
+} from './types';
+export type {
+  BeatDef,
+  BeatEnemy,
+  BeatFence,
+  BeatLibrary,
+  BeatRiver,
+  BeatsData,
+  BeatTier,
+  BeatValueSize,
+  GateSlot,
+  LaneRole,
+  PrizeOverride,
+  ScriptBeat,
+} from './beat-types';
+export { readBeatLibrary } from './beat-types';
+export { dealtConfig, requireDealt } from './level-types';
 export type { AudioMix } from './audio-types';
 export type {
   CrowdDetail,
@@ -63,6 +90,19 @@ export function levelConfig(index: number): LevelGenConfig {
 }
 
 export const levelCount = levels.length;
+
+/**
+ * The beat library (document 31, 4.2), from `beats.json`.
+ *
+ * Read through an eager glob rather than a static import because the file is
+ * written in parallel with the code that reads it: a glob that matches nothing
+ * is an empty map, so the game still boots — and every dealt level still plays
+ * — before the file exists, and `readBeatLibrary` keeps whatever parts of a
+ * half-written one are usable. A script that needs a part that is not there
+ * fails in the composer, loudly, with the level it was composing.
+ */
+const beatFiles = import.meta.glob<unknown>('./beats.json', { eager: true, import: 'default' });
+export const beats: BeatLibrary = readBeatLibrary(beatFiles['./beats.json']);
 
 /**
  * The Milestone 8 meta layer, re-exported so `@/data` stays the one import site

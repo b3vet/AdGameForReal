@@ -16,7 +16,7 @@
 
 import type { ChargerDeath } from './chargers';
 import { SHIELD_GLYPH } from './glyphAtlas';
-import { gateCrowdsLabel } from './labelClearance';
+import { placeBlockLabel } from './labelClearance';
 import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
 import {
@@ -24,16 +24,19 @@ import {
   DANGER_LABEL_COLOR,
   ENEMY_LABEL_COLOR,
   ENEMY_LABEL_MIN,
+  ENEMY_LABEL_RANGE,
   ENEMY_LABEL_SIZE,
   LABEL_BEHIND,
-  LABEL_RANGE,
   SHIELD_LABEL_COLOR,
   SHIELD_LABEL_MIN,
   SHIELD_LABEL_RISE,
   SHIELD_LABEL_SIZE,
+  WAKE_ALARM_SECONDS,
+  WAKE_CUE_SECONDS,
+  wakePop,
 } from './theme';
 import { balance } from '@/data';
-import { enemyFootprint } from '@/sim';
+import { enemyHalfWidth } from '@/sim';
 import type { EnemyKind, EnemyState, GateState, RunState } from '@/sim';
 
 /** Where a block's HP number is anchored: on the cluster, not floating above it. */
@@ -70,6 +73,14 @@ export interface EnemySlot {
   broken: boolean;
   /** True while the body is running a lane down (`EnemyState.charge`). */
   charging: boolean;
+  /** Whether the body was walking last frame, so the step it wakes is seen. */
+  awake: boolean;
+  /**
+   * Seconds since the block woke (document 31, 3.2), or -1 once the cue has
+   * played out or when it never woke in sight: the squash `./enemyBlocks.ts`
+   * draws is read off this.
+   */
+  woke: number;
 }
 
 export class EnemySlotBook {
@@ -100,6 +111,8 @@ export class EnemySlotBook {
         shownShieldText: '',
         broken: false,
         charging: false,
+        awake: false,
+        woke: -1,
       });
     }
   }
@@ -135,6 +148,10 @@ export class EnemySlotBook {
     // already broken — a body the view lost sight of and picked up again.
     slot.broken = enemy.kind === 'shieldBrute' && (enemy.shield ?? 0) <= 0;
     slot.charging = false;
+    // A body first seen already walking woke somewhere the view was not
+    // looking: it owes no cue.
+    slot.awake = enemy.active;
+    slot.woke = -1;
 
     this.byEnemyId.set(enemy.id, slot);
     return slot;
@@ -152,6 +169,8 @@ export class EnemySlotBook {
     slot.shownShieldText = '';
     slot.broken = false;
     slot.charging = false;
+    slot.awake = false;
+    slot.woke = -1;
   }
 
   releaseAll(): void {
@@ -167,7 +186,10 @@ export class EnemySlotBook {
     slot.x = enemy.x;
     slot.z = enemy.z;
     slot.units = Math.max(1, enemy.units);
-    slot.footprint = enemyFootprint(enemy.kind, slot.units, balance);
+    // The sim's own half-width, cap included: a beat holds an ambush to its
+    // lane (`EnemyState.maxHalf`), and a cluster drawn wider than the body the
+    // sim collides would show skeletons in a lane the block is not in.
+    slot.footprint = enemyHalfWidth(enemy, balance);
     slot.charging = enemy.charge !== undefined;
 
     // Two sources for the same fact, because both can be missing: the sim's
@@ -176,6 +198,30 @@ export class EnemySlotBook {
     const remaining = enemy.slowUntil === undefined ? 0 : enemy.slowUntil - state.time;
     slot.slow = Math.max(slot.slow - dt, remaining);
     return slot.slow;
+  }
+
+  /**
+   * Ages the wake cue and answers true on the one frame a block sets off
+   * (document 31, 3.2: where a block starts running is the beat's dial, so
+   * the moment it starts has to be seen). Read off `EnemyState.active` rather
+   * than an event, so a frame that covered several sim steps under `?turbo`
+   * still sees the edge. A charger is not cued here: it keeps the windup its
+   * own clips already play (`./chargers.ts`).
+   *
+   * `inSight` is whether the body is drawn this frame; one that wakes further
+   * out than that plays nothing, because there is nothing on screen to play it
+   * on.
+   */
+  wake(slot: EnemySlot, enemy: EnemyState, dt: number, inSight: boolean): boolean {
+    if (slot.woke >= 0) {
+      slot.woke += dt;
+      if (slot.woke >= WAKE_CUE_SECONDS) slot.woke = -1;
+    }
+    const woke = enemy.active && !slot.awake;
+    slot.awake = enemy.active;
+    if (!woke || !inSight || enemy.kind === 'charger') return false;
+    slot.woke = 0;
+    return true;
   }
 
   /**
@@ -188,8 +234,9 @@ export class EnemySlotBook {
    * string, one label, one draw call with every other number in the scene.
    *
    * The alarm ink is for a body that is happening *now* — a charger from the
-   * step it sets off, a shielded brute from the step its shield breaks — and
-   * nothing else on the road prints in it.
+   * step it sets off, a shielded brute from the step its shield breaks, a block
+   * for the second after it wakes (`WAKE_ALARM_SECONDS`) — and nothing else on
+   * the road prints in it.
    */
   paint(
     slot: EnemySlot,
@@ -199,19 +246,26 @@ export class EnemySlotBook {
     view: LabelView,
   ): void {
     const ahead = enemy.z - squadZ;
-    const height = enemy.kind === 'charger' ? CHARGER_LABEL_HEIGHT : LABEL_HEIGHT;
-    const readable =
-      ahead < LABEL_RANGE &&
-      ahead > -LABEL_BEHIND &&
-      !gateCrowdsLabel(gates, enemy.x, enemy.z, height, view);
-    if (!readable) return;
+    if (ahead >= ENEMY_LABEL_RANGE || ahead <= -LABEL_BEHIND) return;
+    // The wake cue's pop (`wakePop`); placed at the size it is drawn at, so a
+    // popping number is moved clear of a gate's by its full height.
+    const woke = slot.woke;
+    const pixels = labelPixels(ENEMY_LABEL_SIZE, ENEMY_LABEL_MIN, ahead) * wakePop(woke);
+    const rest = enemy.kind === 'charger' ? CHARGER_LABEL_HEIGHT : LABEL_HEIGHT;
+    // Moved clear of a gate's number rather than hidden by it: the number on a
+    // threat is the price of its lane (`./labelClearance.ts`).
+    const height = placeBlockLabel(gates, enemy.x, enemy.z, rest, pixels, view);
+    if (Number.isNaN(height)) return;
 
     const hp = Math.max(0, Math.round(enemy.hp));
     if (hp !== slot.shownHp) {
       slot.shownHp = hp;
       slot.shownText = String(hp);
     }
-    const alarmed = slot.charging || (slot.kind === 'shieldBrute' && slot.broken);
+    const alarmed =
+      slot.charging ||
+      (slot.kind === 'shieldBrute' && slot.broken) ||
+      (woke >= 0 && woke < WAKE_ALARM_SECONDS);
     this.labels.set(
       slot.label,
       slot.shownText,
@@ -219,7 +273,7 @@ export class EnemySlotBook {
       height,
       enemy.z,
       alarmed ? DANGER_LABEL_COLOR : ENEMY_LABEL_COLOR,
-      labelPixels(ENEMY_LABEL_SIZE, ENEMY_LABEL_MIN, ahead),
+      pixels,
     );
 
     const shield = Math.max(0, Math.round(enemy.shield ?? 0));

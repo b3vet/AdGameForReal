@@ -1,51 +1,58 @@
 /**
- * When a world number gives way to a gate panel.
+ * Where a world number goes when a gate's number is in the way.
  *
  * Three kinds of number float over the road — a block's HP (`./enemies.ts`), a
  * stream's remaining count (`./streamBodies.ts`) and a gate's own value
  * (`./gates.ts`) — and the gate's always wins, because it is the choice the
- * player is about to make. This is the rule that decides when one of the other
- * two is standing on it.
+ * player is about to make. This is the rule for the other two when they are
+ * standing on it.
  *
- * Two tests, and which of them applies depends on what the number is anchored
- * to:
+ * Two rules, and which applies depends on what the number is anchored to:
  *
- *   1. The panel's own screen box, `gateCoversLabel`. Every world number obeys
- *      it: a number inside the rectangle the panel occupies on screen is simply
- *      unreadable. It is what `artifacts/smoke/staff-l10.png` needed in
- *      Milestone 4 Phase C, where the near row's `+6` had a stream's `9` printed
- *      across it — the count rides the head of the river at
- *      `STREAM_LABEL_HEIGHT` rather than on a body, so a head level with a gate
- *      row lands in the middle of the plaque.
- *   2. A share of the camera's distance to the gate, `gateCrowdsLabel`, on top
- *      of the box. The same stretch of road is fewer pixels the further out it
- *      is, so a fixed window in metres either hides everything up close or
- *      nothing far away. This is Milestone 1's rule, re-measured in Milestone 3,
- *      and it is a *block's* margin: a block's HP number and a gate's value are
- *      both about the same patch of road, and the two want daylight between them
- *      rather than merely not touching. A stream's count takes the box alone —
- *      under the share a river whose head is five metres past the row loses its
- *      number for no reason, which is a threat readout gone missing.
+ *   1. A river's count, `gateCoversLabel`: hidden while it is inside the screen
+ *      box of a numbered gate's plaque. The count rides the head of the river
+ *      at `STREAM_LABEL_HEIGHT`, which is exactly the plaque's band, so a head
+ *      level with a row lands in the middle of the plaque for the second or so
+ *      it takes to walk through (Milestone 4 Phase C, `staff-l10.png`).
+ *   2. A block's number, `placeBlockLabel`: *moved* rather than hidden. Up to
+ *      Phase 1 of the level-design plan this was a hide rule with a margin of
+ *      a share of the camera's distance either side of the row, and that
+ *      margin is exactly the one the plan's beats live in (document 31, 3.2):
+ *      a brute standing 5 m behind a plus panel — the ambush — lost its number
+ *      for as long as the panel was ahead of the squad, and a guard 6 m in
+ *      front lost its number for four seconds of the approach. The number on a
+ *      threat is the price of the lane, so it has to stay on screen. A number
+ *      behind a gate is lifted until it clears the plaque's top edge; one in
+ *      front is lowered until it clears the gate's own number; and only a
+ *      number that cannot be moved far enough is hidden.
+ *
+ * Both rules only look at gates that are printing a number (`GATE_LABEL_RANGE`):
+ * the plaque is drawn only where the number is (`./gates.ts`), so an arch
+ * further out has nothing for a number to land on.
  *
  * The projection is the analytic camera, not the rig: `CameraRig` eases toward
  * exactly this pose and trails it by under a metre (`CAMERA.smoothing`), the
  * plaque band is a metre of road deep, and reading the live rig would mean
  * threading it through two views for a fraction of a band. The Academy's
- * backdrop camera stands elsewhere (`PREVIEW_BEHIND`), so the test is a shade
- * off there; nothing is streaming behind a menu.
+ * backdrop camera stands elsewhere (`PREVIEW_BEHIND`), so the rule is a shade
+ * off there; nothing is fighting behind a menu.
  */
 
 import { GATE_PLAQUE_HEIGHT } from './gateLook';
+import { labelPixels } from './labels';
 import {
-  BLOCK_LABEL_CLEARANCE_BEHIND,
-  BLOCK_LABEL_CLEARANCE_FRONT,
+  BLOCK_LABEL_FLOOR,
+  BLOCK_LABEL_GAP,
   BLOCK_LABEL_LANE_CLEARANCE,
   CAMERA,
   GATE_CENTER_Y,
-  GATE_DRAW_RANGE,
+  GATE_LABEL_MIN,
+  GATE_LABEL_RANGE,
+  GATE_LABEL_SIZE,
   LABEL_BEHIND,
   cameraBack,
   cameraLift,
+  gateLabelReach,
 } from './theme';
 import { formationDepth, laneCenter, openRoadWidth } from '@/sim';
 import type { GateState } from '@/sim';
@@ -53,20 +60,28 @@ import type { GateState } from '@/sim';
 /**
  * How tall the thing a number can hide behind actually is.
  *
- * Milestone 4 measured this against the translucent panel that used to carry
- * the value — 2.2 m of it, most of the arch's opening — and Milestone 5 replaced
- * that panel with a rune plaque a third as tall (`./gateLook.ts`). Keeping the
- * old band meant a block's HP number was blanked for the two metres of screen
- * above and below a plaque that was never in front of it: the plaque hangs at
- * `GATE_CENTER_Y` and is 0.8 m tall, and *that* is the box a number can be lost
- * in. The clearance share below still opens a margin around it.
+ * The plaque hangs at `GATE_CENTER_Y` and is 0.8 m tall (`./gateLook.ts`); a
+ * quarter taller than the slab, because a number is hidden by a plaque a little
+ * before it is *inside* one: at the plaque's own height a stream's count came to
+ * rest on the top rail of a `+3` (`artifacts/smoke/t6.png`).
  */
-/** A quarter taller than the slab, because a number is hidden by a plaque a
- *  little before it is *inside* one: at the plaque's own height a stream's
- *  count came to rest on the top rail of a `+3` (`artifacts/smoke/t6.png`).
- *  It hides slightly more block HP behind a gate, which is the cheaper miss. */
 const GATE_LABEL_BAND_MARGIN = 1.25;
 const GATE_LABEL_BAND = GATE_PLAQUE_HEIGHT * GATE_LABEL_BAND_MARGIN;
+
+/**
+ * Screen tangent per design pixel. Labels are sized in pixels of a 390x844
+ * frame (`./labels.ts`), and on any phone-shaped screen the ratio between the
+ * design pixel and the frame's height is that frame's, so one constant serves
+ * every phone: 0.00103 at 390x844 and 0.00103 at 440x956.
+ */
+const DESIGN_HEIGHT = 844;
+const TAN_PER_PIXEL = (2 * Math.tan(CAMERA.fov / 2)) / DESIGN_HEIGHT;
+/**
+ * Half the height of a number's ink, as a share of its size: Cinzel's figures
+ * are about 0.7 em tall, and the atlas strokes a 7 px outline round a 64 px
+ * face (`./glyphAtlas.ts`), a little over a twentieth of an em each side.
+ */
+const INK_HALF = 0.42;
 
 /**
  * Where the camera stands this frame. One per frame, re-used: the sim must not
@@ -103,8 +118,8 @@ export function setLabelView(
   // The same pair the rig derives its pose from, off the same formation depth
   // (`cameraBack`). The rig eases toward this over about half a second while
   // the crowd is growing; the panel band is a metre of road deep and a label
-  // that flickers for one frame of a `mul` gate is not worth threading the live
-  // pose through two views for.
+  // that sits a pixel off for a frame of a `mul` gate is not worth threading
+  // the live pose through two views for.
   const depth = formationDepth(count, width);
   const back = cameraBack(depth);
   const lift = cameraLift(depth);
@@ -116,15 +131,16 @@ export function setLabelView(
 }
 
 /**
- * Vertical screen position of a world point, in units of `tan(fov/2)` — so 0 is
- * the middle of the frame and ±1 its edges. Only the ratio matters here, which
- * is why neither the field of view nor the viewport appears.
+ * Vertical screen position of a world point, as the tangent of its angle above
+ * the view axis: 0 is the middle of the frame and `±tan(fov / 2)` its edges.
+ * Neither the field of view nor the viewport appears, because every caller
+ * compares two of these or converts through `TAN_PER_PIXEL`.
  *
  * Derived from the camera's own axes in the y-z plane: forward is
  * `(-sin, cos)` and up is `(cos, sin)` for a downward pitch, and dividing both
  * by `cos` leaves the tangent this takes.
  */
-function screenY(view: LabelView, y: number, z: number): number {
+export function screenY(view: LabelView, y: number, z: number): number {
   const dy = y - view.eyeY;
   const dz = z - view.eyeZ;
   const depth = dz - view.pitch * dy;
@@ -134,8 +150,17 @@ function screenY(view: LabelView, y: number, z: number): number {
 }
 
 /**
- * True when a label at `(x, z, labelY)` lands inside the screen box of an
- * unpassed gate's panel. Every world number that is not a gate's own obeys it.
+ * The height over the road at `z` that lands on screen at `target`: `screenY`
+ * solved for `y`, which is a straight line in `y` at a fixed `z`.
+ */
+export function heightAtScreen(view: LabelView, target: number, z: number): number {
+  const dz = z - view.eyeZ;
+  return view.eyeY + (dz * (target - view.pitch)) / (1 + target * view.pitch);
+}
+
+/**
+ * True when a label at `(x, z, labelY)` lands inside the screen box of a
+ * numbered gate's plaque. For a river's count; see the note at the top.
  */
 export function gateCoversLabel(
   gates: readonly GateState[],
@@ -144,58 +169,77 @@ export function gateCoversLabel(
   labelY: number,
   view: LabelView,
 ): boolean {
-  return crowded(gates, x, z, labelY, view, false);
-}
-
-/**
- * The same, plus a block's own margin either side of the row. Blocks only:
- * see the note at the top of the file.
- */
-export function gateCrowdsLabel(
-  gates: readonly GateState[],
-  x: number,
-  z: number,
-  labelY: number,
-  view: LabelView,
-): boolean {
-  return crowded(gates, x, z, labelY, view, true);
-}
-
-function crowded(
-  gates: readonly GateState[],
-  x: number,
-  z: number,
-  labelY: number,
-  view: LabelView,
-  margin: boolean,
-): boolean {
   const here = screenY(view, labelY, z);
-
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i];
-    if (gate === undefined || gate.passed) continue;
-    // Lanes are two metres apart, which is 55 px even three rows out — wider
-    // than either number — so only a gate in the label's own lane can print on
-    // the same patch of screen.
-    if (Math.abs(laneCenter(gate.lane) - x) > BLOCK_LABEL_LANE_CLEARANCE) continue;
-
-    if (margin) {
-      // Behind is the wider window: a number beyond a gate prints *up* into that
-      // gate's panel, while one in front prints below it, where a low anchor on
-      // the body's own face already buys separation.
-      const gap = z - gate.z;
-      const share = gap >= 0 ? BLOCK_LABEL_CLEARANCE_BEHIND : BLOCK_LABEL_CLEARANCE_FRONT;
-      if (Math.abs(gap) < (gate.z - view.eyeZ) * share) return true;
-    }
-
-    // An arch outside the draw range is not on screen, so there is nothing for
-    // the number to stand on (`GateView.draw` writes no instance for it).
-    const ahead = gate.z - view.squadZ;
-    if (ahead >= GATE_DRAW_RANGE || ahead <= -LABEL_BEHIND * 2) continue;
+    if (gate === undefined || !printsNumber(gate, x, view)) continue;
     const top = screenY(view, GATE_CENTER_Y + GATE_LABEL_BAND / 2, gate.z);
     const bottom = screenY(view, GATE_CENTER_Y - GATE_LABEL_BAND / 2, gate.z);
     if (here <= top && here >= bottom) return true;
   }
-
   return false;
+}
+
+/**
+ * The height a block's number should be printed at, or `NaN` to hide it this
+ * frame. `labelY` is where it would ride with nothing in the way and `pixels`
+ * the size it is printed at.
+ *
+ * A number *behind* a numbered gate in its lane may only go up — to clear the
+ * plaque's top edge on screen — and one *in front* may only go down, to clear
+ * the gate's number above it. The two bounds are collected over every gate,
+ * so a block between two rows of its own lane is placed against both, and one
+ * that fits neither is hidden.
+ */
+export function placeBlockLabel(
+  gates: readonly GateState[],
+  x: number,
+  z: number,
+  labelY: number,
+  pixels: number,
+  view: LabelView,
+): number {
+  let lowest = Number.NEGATIVE_INFINITY;
+  let highest = Number.POSITIVE_INFINITY;
+  const ink = INK_HALF * pixels;
+
+  for (let i = 0; i < gates.length; i++) {
+    const gate = gates[i];
+    if (gate === undefined || !printsNumber(gate, x, view)) continue;
+
+    if (z >= gate.z) {
+      // Behind the row: the plaque is nearer the camera, so on screen it is
+      // *in front of* the number, and the number goes over its top edge.
+      const top = screenY(view, GATE_CENTER_Y + GATE_LABEL_BAND / 2, gate.z);
+      const clear = top + (ink + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
+      lowest = Math.max(lowest, heightAtScreen(view, clear, z));
+      continue;
+    }
+
+    // In front of the row: the gate's number is further up the screen, and
+    // this one goes far enough under it that the two inks do not touch.
+    const gatePixels = labelPixels(GATE_LABEL_SIZE, GATE_LABEL_MIN, gate.z - view.squadZ);
+    const number = screenY(view, GATE_CENTER_Y, gate.z);
+    const clear = number - (ink + INK_HALF * gatePixels + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
+    highest = Math.min(highest, heightAtScreen(view, clear, z));
+  }
+
+  const y = Math.min(Math.max(labelY, lowest), highest);
+  if (y < lowest || (y < labelY && y < BLOCK_LABEL_FLOOR)) return Number.NaN;
+  return y;
+}
+
+/**
+ * Whether this gate is printing a number a label at lateral `x` could land on:
+ * unpassed, in the label's own lane, and inside the range `./gates.ts` numbers
+ * it from.
+ */
+function printsNumber(gate: GateState, x: number, view: LabelView): boolean {
+  // Distance first: a level lists every gate on its road, and all but the
+  // two or three rows in front of the squad fail here.
+  const ahead = gate.z - view.squadZ;
+  if (ahead >= GATE_LABEL_RANGE || ahead <= -LABEL_BEHIND || gate.passed) return false;
+  const lane = laneCenter(gate.lane);
+  if (Math.abs(lane - x) > BLOCK_LABEL_LANE_CLEARANCE) return false;
+  return ahead < gateLabelReach(lane, gate.kind === 'weapon');
 }

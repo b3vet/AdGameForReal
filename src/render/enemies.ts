@@ -32,6 +32,7 @@
 
 import type { Scene } from '@babylonjs/core/scene';
 
+import { BeatCues } from './beatCues';
 import { ChargerBodies } from './chargers';
 import { BlockCrowds, writeCluster } from './enemyBlocks';
 import { EnemySlotBook } from './enemySlots';
@@ -65,6 +66,8 @@ export class EnemyView {
   /** The chargers, which are bodies rather than blocks (`./chargers.ts`). */
   private readonly chargers = new ChargerBodies();
   private readonly decals: GroundDecals;
+  /** A block's dust as it wakes, and the portals rivers pour from (document 31). */
+  private readonly cues: BeatCues;
 
   private physicsQuality = 0;
   private frame = 0;
@@ -84,6 +87,7 @@ export class EnemyView {
     this.decals = decals;
     this.book = new EnemySlotBook(labels, POOL.enemies);
     this.streams = new StreamBodies(labels);
+    this.cues = new BeatCues(decals);
     this.rings = new RingPool(scene, 'frostRing', SLOW_RING_COLOR, POOL.slowRings, {
       thickness: 0.1,
       alpha: 0.7,
@@ -111,6 +115,7 @@ export class EnemyView {
     this.rings.reset();
     this.streams.reset();
     this.chargers.reset();
+    this.cues.reset();
   }
 
   /**
@@ -171,14 +176,6 @@ export class EnemyView {
   }
 
   /**
-   * Where an enemy is, for the chain effect to draw an arc between two of them.
-   *
-   * Blocks answer from their slot. Stream bodies have no slot, so they are
-   * looked up by a scan of the state the last `update` was given — up to three
-   * hundred comparisons, but only on a `chain` event, of which there are at
-   * most `POOL.chains` in a frame.
-   */
-  /**
    * Every live body within `radius` of `(x, z)`, up to `cap`, as positions.
    *
    * For storm's overcharge (D54), whose event says *how many* bodies the volley
@@ -209,6 +206,14 @@ export class EnemyView {
     }
   }
 
+  /**
+   * Where an enemy is, for the chain effect to draw an arc between two of them.
+   *
+   * Blocks answer from their slot. Stream bodies have no slot, so they are
+   * looked up by a scan of the state the last `update` was given — up to three
+   * hundred comparisons, but only on a `chain` event, of which there are at
+   * most `POOL.chains` in a frame.
+   */
   positionOf(enemyId: number, out: { x: number; z: number }): boolean {
     const slot = this.book.get(enemyId);
     if (slot !== undefined) {
@@ -263,11 +268,16 @@ export class EnemyView {
       this.book.paint(slot, enemy, state.gates, squadZ, view);
 
       const ahead = enemy.z - squadZ;
-      if (ahead > ENEMY_DRAW_RANGE || ahead < -LABEL_BEHIND * 2) continue;
+      const inSight = ahead <= ENEMY_DRAW_RANGE && ahead >= -LABEL_BEHIND * 2;
+      if (this.book.wake(slot, enemy, dt, inSight)) {
+        this.cues.wake(enemy.x, enemy.z, slot.footprint);
+      }
+      if (!inSight) continue;
       this.writeBody(slot, enemy, shadows, ShadowLayer.fade(ahead), state.time);
     }
 
     this.sweep(dt, shadows);
+    this.cues.update(state.streams, squadZ, dt);
 
     // The streams go into the minion crowd after every block, so both are one
     // draw call, and their floating counts into the shared glyph atlas.
@@ -339,6 +349,7 @@ export class EnemyView {
       -1,
       shadows,
       shadowAlpha,
+      slot.woke,
     );
     this.crowds.advance(enemy.kind, written);
   }

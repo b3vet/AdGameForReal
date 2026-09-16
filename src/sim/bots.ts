@@ -1,11 +1,15 @@
 /**
  * Scripted players. Used by the balance tests and by `?bot=` in the app.
  *
- *   greedy — best expected count on the next unpassed row; between rows it
- *            covers the river, steps out of a block already on its way, and is
- *            inside the fence with its whole column before a wall holds it
- *   human  — a decent thumb: reaction delay, a swipe speed limit, the right
- *            lane about seven times in ten, and no lookahead past the next row
+ *   greedy — from `readDistance` it prices every lane of the next row — the
+ *            panel less what the road to it will take (`./botValue.ts`) — and
+ *            stands in the best one, so it shoots the guard it is paying for;
+ *            it steps out of a block already on its way, and is inside the
+ *            fence with its whole column, on the side the same price chose,
+ *            before a wall holds it
+ *   human  — a decent thumb: reaction delay, a swipe speed limit, the same
+ *            price read through noise and a short reach behind panels, and no
+ *            lookahead past the next row
  *   random — a random lane per row
  *   worst  — the worst gate on the next row
  *
@@ -15,8 +19,9 @@
  * human's ring of past observations. All of it is per-instance and seeded, so a
  * bot run is as reproducible as the sim it drives.
  *
- * The lane arithmetic they share lives in `./botLanes.ts`, what a lane is worth
- * in `./botScore.ts`, and where to stand between rows in `./botStand.ts`.
+ * The lane arithmetic they share lives in `./botLanes.ts`, a panel's face value
+ * in `./botScore.ts`, what the road to it costs in `./botPrice.ts`, the priced
+ * choice in `./botPlan.ts`, and where to stand between rows in `./botStand.ts`.
  */
 
 import { bestChargerStand } from './botCharge';
@@ -30,8 +35,12 @@ import {
   pickLane,
   reachable,
 } from './botLanes';
+import { NO_PLAN, planLane, pricedSide } from './botPlan';
+import { WHOLE_BOARD } from './botPrice';
 import { bestDodge, bestStreamStand, stand } from './botStand';
-import { laneCenter } from './lanes';
+import { exactRead } from './botValue';
+import type { LaneRead } from './botValue';
+import { laneCenter, laneOf } from './lanes';
 import { mulberry32 } from './rng';
 import type { Lane, RunState } from './types';
 import { clampToWalls, wallX } from './walls';
@@ -77,7 +86,13 @@ export function createBot(
     };
   }
 
-  const sign = kind === 'greedy' ? 1 : -1;
+  const greedy = kind === 'greedy';
+  const sign = greedy ? 1 : -1;
+  // Greedy reads the board exactly; the worst bot ranks panels by face value,
+  // which is what "the worst gate" means, so it never prices anything.
+  const read = greedy ? exactRead() : null;
+  let planRow = -2;
+  let plan = NO_PLAN;
   // The side chosen for the stretch on each boundary, and the stretch it was
   // chosen for. A bot that re-scores its side every step will happily take a
   // multiplier on the wrong half of the road and then set off across it with a
@@ -98,41 +113,60 @@ export function createBot(
     // `gateCommitDistance` (D32): the stretch is up to twenty metres long, it
     // holds all the way to the row it guards, and there is no crossing it once
     // inside. The choice narrows the range rather than becoming the answer —
-    // the bot still covers the river and still picks a lane, it just does both
-    // on the half it has decided to arrive on.
-    commitToWalls(state, row, sign, range, balance, sideZ, sideTaken);
+    // the bot still picks a lane, it just does so on the half it has decided to
+    // arrive on.
+    commitToWalls(state, row, sign, range, balance, sideZ, sideTaken, read);
 
     const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;
 
-    if (kind === 'greedy' && !committed) {
+    if (greedy && !committed) {
       // A charger that has set off comes first (D49): it arrives in a second
       // and a half and takes a bite of the crowd, and the lane it is running
       // is one the squad has to be out of or shooting into.
       //
-      // Only between rows, like the river and the blocks below, and that is
-      // the measured half of the rule rather than a tidy one: a bot that
-      // broke its gate commitment to dodge gave up a panel a small squad
-      // could not afford — levels 36 to 40 on five seeds went from four
-      // clears to two when it did. The charger's own warning is long enough
-      // that the choice is nearly always made before the commit anyway.
+      // Only between rows, like the blocks below, and that is the measured
+      // half of the rule rather than a tidy one: a bot that broke its gate
+      // commitment to dodge gave up a panel a small squad could not afford —
+      // levels 36 to 40 on five seeds went from four clears to two when it
+      // did. The charger's own warning is long enough that the choice is
+      // nearly always made before the commit anyway.
       if (bestChargerStand(state, range, balance)) return stand.x;
-      // Between rows the squad's job is the river, not the next panel — but
-      // only as far as the wall it is already inside allows.
-      if (bestStreamStand(state, range, balance)) return stand.x;
-      // Nothing streaming, and a block already on its way: step out of it.
-      // Through Phase B this held position and shot instead, because the crowd
-      // was wider than the lanes and there was nowhere a block was not; a
-      // lane-wide column (D42) fits beside one, so the cheapest place it can
-      // still reach is worth more than the half-second of extra fire.
-      if (bestDodge(state, range, balance)) return stand.x;
+      // Before the row is read the old between-rows play stands: cover the
+      // river. Inside `readDistance` the lane plan is the answer, because the
+      // price already counts the river in every lane, and a column standing in
+      // a river it has no reason to be in pays for every body (D29, D42).
+      if (row >= 0 && distance > balance.bots.readDistance) {
+        if (bestStreamStand(state, range, balance)) return stand.x;
+        if (bestDodge(state, range, balance)) return stand.x;
+      }
     }
 
-    // No gates left: hold station and shoot whatever is in front.
-    if (row < 0) return clampToWalls(state.squad.x, range);
-    return clampToWalls(
-      laneCenter(pickLane(state, row, sign, range, balance), balance.road.laneWidth),
-      range,
-    );
+    if (read === null) {
+      // The worst bot: face value, and holding station once the gates are gone.
+      if (row < 0) return clampToWalls(state.squad.x, range);
+      return clampToWalls(laneCenter(pickLane(state, row, sign, range, balance), balance.road.laneWidth), range);
+    }
+    if (row !== planRow) {
+      planRow = row;
+      plan = NO_PLAN;
+    }
+    // Past the last row there is no panel to go for: the lane underfoot is
+    // kept unless another is cheaper, and kept means holding station.
+    const here = laneOf(state.squad.x, balance.road.laneWidth);
+    const lane = planLane(state, row, range, WHOLE_BOARD, read, balance, row < 0 ? here : plan);
+    plan = lane;
+    // A block already on its way: step out of it, within the planned lane. A
+    // lane-wide column (D42) fits beside a block, so the cheapest place it can
+    // still reach is worth more than the half-second of extra fire — but a
+    // step into another lane is the plan's call, which has priced the block and
+    // the panel the step would land in. Through Phase 1 the dodge took the
+    // nearest free spot whatever stood behind it, and walked a column that had
+    // just misread an ambush into the curse beside it.
+    if (!committed && bestDodge(state, range, balance) && laneOf(stand.x, balance.road.laneWidth) === lane) {
+      return stand.x;
+    }
+    if (row < 0 && lane === here) return clampToWalls(state.squad.x, range);
+    return clampToWalls(laneCenter(lane, balance.road.laneWidth), range);
   };
 }
 
@@ -156,6 +190,10 @@ export function createBot(
  * stragglers. This is what keeps greedy the fair-play reference — it never
  * costs itself a soldier at a fence — and the human bot deliberately does not
  * call it, which is where its stragglers come from.
+ *
+ * `read` is greedy's exact read, and then the side is the one whose best lane
+ * prices highest (`pricedSide`); the worst bot passes null and keeps the face
+ * value and river count it always chose on.
  */
 function commitToWalls(
   state: RunState,
@@ -165,6 +203,7 @@ function commitToWalls(
   balance: Balance,
   sideZ: Float64Array,
   sideTaken: Int8Array,
+  read: LaneRead | null,
 ): void {
   const walls = state.walls;
   if (walls === undefined || walls.length === 0) return;
@@ -182,15 +221,11 @@ function commitToWalls(
     const slot = wall.boundary < 0 ? 0 : 1;
     if (sideZ[slot] !== wall.zStart) {
       sideZ[slot] = wall.zStart;
-      sideTaken[slot] = chooseSide(
-        state,
-        row,
-        guardedRow(state, wall, row),
-        sign,
-        range,
-        line,
-        balance,
-      );
+      const guarded = guardedRow(state, wall, row);
+      sideTaken[slot] =
+        read === null
+          ? chooseSide(state, row, guarded, sign, range, line, balance)
+          : pricedSide(state, row, guarded, range, line, WHOLE_BOARD, read, balance);
     }
     narrowToSide(state, range, line, sideTaken[slot] ?? 0, balance);
   }

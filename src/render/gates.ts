@@ -39,6 +39,7 @@ import {
   SHIMMER_WIDTH,
   SHIMMER_Y,
 } from './gateLook';
+import { GateScreens, seeThroughPlaques } from './gateScreens';
 import { GateSlots } from './gateSlots';
 import type { GateSlot } from './gateSlots';
 import { StaffProps } from './gateStaffs';
@@ -52,15 +53,16 @@ import {
   GATE_EXIT_DURATION,
   GATE_LABEL_COLOR,
   GATE_LABEL_MIN,
-  GATE_LABEL_RANGE,
   GATE_LABEL_SIZE,
   GATE_PULSE_DURATION,
   GATE_TINTS,
   GATE_WORD_MIN,
   GATE_WORD_SIZE,
   LABEL_BEHIND,
+  PLAQUE_GLASS_ALPHA,
   POOL,
-  SIDE_GATE_LABEL_RANGE,
+  gateLabelReach,
+  gateLabelScale,
 } from './theme';
 import type { RunState } from '@/sim';
 
@@ -86,6 +88,9 @@ export class GateView {
   private archMatrices: Float32Array;
   private readonly plaques: Mesh;
   private readonly plaqueMatrices: Float32Array;
+  /** Each plaque's opacity, as an instance colour (`./gateScreens.ts`). */
+  private readonly plaqueTints: Float32Array;
+  private readonly screens = new GateScreens();
   private readonly shimmer: TintedQuads;
   /**
    * One dressing mesh per kind, in `ORNAMENT_KINDS` order, with its own
@@ -114,6 +119,7 @@ export class GateView {
 
     this.plaques = createPlaque(scene);
     this.plaqueMatrices = createMatrixBuffer(this.plaques, GATE_DRAW_CAPACITY);
+    this.plaqueTints = seeThroughPlaques(this.plaques, GATE_DRAW_CAPACITY);
 
     this.shimmer = new TintedQuads(
       scene,
@@ -212,6 +218,7 @@ export class GateView {
       }
     }
 
+    this.screens.gather(state);
     this.draw(squadZ, dt);
     this.staffs.place(dt);
   }
@@ -271,7 +278,7 @@ export class GateView {
 
       const ahead = slot.z - squadZ;
       // A level carries up to sixty gates and the ones deep in the fog are a
-      // smudge, so only the rows the player can act on are drawn at all.
+      // smudge, so only the rows the player can read a beat on are drawn at all.
       if (ahead >= GATE_DRAW_RANGE || ahead <= -LABEL_BEHIND * 2) {
         this.labels.hide(slot.label);
         continue;
@@ -284,11 +291,12 @@ export class GateView {
 
       this.writeShimmer(slot);
 
-      // The plaque only where the number is: an arch three rows out carries no
-      // digits, and a dark slab hanging in it with nothing on it reads as a
-      // hole in the frame.
-      const range = slot.x === 0 ? GATE_LABEL_RANGE : SIDE_GATE_LABEL_RANGE;
-      const labelled = slot.exit === 'none' && ahead < range && ahead > -LABEL_BEHIND;
+      // The plaque only where the number is: an arch past the numbers carries
+      // no digits, and a dark slab hanging in it with nothing on it reads as a
+      // hole in the frame. Its light already says what kind of gate it is.
+      const word = slot.kind === 'weapon';
+      const labelled =
+        slot.exit === 'none' && ahead < gateLabelReach(slot.x, word) && ahead > -LABEL_BEHIND;
       if (labelled && plaques < GATE_DRAW_CAPACITY) {
         writeInstance(
           this.plaqueMatrices,
@@ -300,8 +308,19 @@ export class GateView {
           GATE_CENTER_Y,
           slot.z - GATE_PLAQUE_Z,
         );
+        // See-through while something waits behind it (`./gateScreens.ts`).
+        this.plaqueTints[plaques * 4 + 3] = this.screens.covers(slot.x, slot.z)
+          ? PLAQUE_GLASS_ALPHA
+          : 1;
         plaques++;
-        const word = slot.kind === 'weapon';
+        // A side lane's number is a glance until the row is close: smaller, so
+        // three offers fit across a row two and a half rows out (document 31,
+        // 4.1; `GATE_SIDE_GLANCE_SCALE`).
+        const size = labelPixels(
+          word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
+          word ? GATE_WORD_MIN : GATE_LABEL_MIN,
+          ahead,
+        );
         this.labels.set(
           slot.label,
           slot.shownText,
@@ -310,11 +329,7 @@ export class GateView {
           // A hair in front of the plaque's own face, toward the camera.
           slot.z - GATE_PLAQUE_Z - GATE_LABEL_LIFT,
           GATE_LABEL_COLOR,
-          labelPixels(
-            word ? GATE_WORD_SIZE : GATE_LABEL_SIZE,
-            word ? GATE_WORD_MIN : GATE_LABEL_MIN,
-            ahead,
-          ),
+          size * gateLabelScale(slot.x, ahead),
         );
       } else {
         this.labels.hide(slot.label);
@@ -332,6 +347,7 @@ export class GateView {
 
     commitInstances(this.arch, arches);
     commitInstances(this.plaques, plaques);
+    if (plaques > 0) this.plaques.thinInstanceBufferUpdated('color');
     for (let i = 0; i < this.ornaments.length; i++) {
       const ornament = this.ornaments[i];
       if (ornament === null || ornament === undefined) continue;

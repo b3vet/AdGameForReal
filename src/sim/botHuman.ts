@@ -13,9 +13,21 @@
  *               coming up all reach it a quarter of a second late;
  *   swipe       the finger it steers with moves at `swipeSpeed`, so a lane
  *               change is a movement with a duration rather than a jump;
- *   lane        it reads the row right `laneAccuracy` of the time and takes the
- *               second-best lane the rest of the time, decided once per row —
- *               a player commits to a panel, they do not dither in front of it;
+ *   read        it prices every lane as greedy does (`./botValue.ts`), but sees
+ *               what a panel gives and what its road takes each through a
+ *               log-normal factor of spread `readNoise`, drawn once per row —
+ *               a player commits to a panel, they do not dither in front of
+ *               it — so close calls are missed often and obvious ones rarely
+ *               (document 31, 4.4, replacing the flat seven-in-ten of D45);
+ *   behind      a block or a portal standing behind a panel that stops shots
+ *               is not on its screen until it is within `behindReach`, and a
+ *               river that has not started pouring from nowhere is not on it
+ *               at all;
+ *   read time   it reads each row somewhere between `readLate` and
+ *               `readDistance` short of it, drawn with the read, and until then
+ *               plays the road — the cheapest lane underfoot — rather than the
+ *               row. A row read late is a guard shot for less time, an ambush
+ *               seen too late to leave, and a fence met from the wrong side;
  *   lookahead   it values the next row only. The row behind a fence is a row it
  *               has not looked at yet;
  *   walls       it notices a stretch only when the approach zone is within
@@ -25,27 +37,22 @@
  *               units are cut off as stragglers — the bot does not model that,
  *               it simply moves late and pays for it.
  *
- * Everything else — which lane is worth what, where to stand in a river, how to
+ * Everything else — how a lane is priced, where to stand in a river, how to
  * step out of a block — is greedy's, because a decent player does know all of
- * that. The difference the bands are measured against is the hand, not the head.
+ * that. The difference the bands are measured against is the hand and the eye,
+ * not the arithmetic.
  */
 
-import {
-  chooseSide,
-  distanceToRow,
-  narrowToSide,
-  nextGateRow,
-  pickLane,
-  reachable,
-  secondLane,
-} from './botLanes';
+import { distanceToRow, narrowToSide, nextGateRow, reachable } from './botLanes';
 import { bestChargerStand } from './botCharge';
-import { bestDodge, bestStreamStand, stand } from './botStand';
-import { laneCenter } from './lanes';
+import { NO_PLAN, planLane, planRoad, pricedSide } from './botPlan';
+import type { PriceView } from './botPrice';
+import { bestDodge, stand } from './botStand';
+import type { LaneRead } from './botValue';
+import { laneCenter, laneOf } from './lanes';
 import type { Rng } from './rng';
-import type { Lane, RunState } from './types';
+import type { RunState } from './types';
 import { clampToWalls, wallX } from './walls';
-import type { WallLimits } from './walls';
 import type { Balance } from '@/data/types';
 
 /**
@@ -55,8 +62,17 @@ import type { Balance } from '@/data/types';
  */
 const SIM_STEP = 1 / 60;
 
-/** Greedy's sign: the human wants the best gate too, it just misreads which. */
-const BEST = 1;
+/**
+ * Two standard normals from two uniforms (Box–Muller), so the six a row needs
+ * are three pairs. `1 - u` keeps the logarithm off zero, which the generator
+ * can return.
+ */
+function normalPair(rng: Rng, out: Float64Array, at: number): void {
+  const radius = Math.sqrt(-2 * Math.log(1 - rng()));
+  const angle = 2 * Math.PI * rng();
+  out[at] = radius * Math.cos(angle);
+  out[at + 1] = radius * Math.sin(angle);
+}
 
 export function createHumanBot(rng: Rng, balance: Balance): (state: RunState) => number {
   const tuning = balance.bots.human;
@@ -69,17 +85,28 @@ export function createHumanBot(rng: Rng, balance: Balance): (state: RunState) =>
   let primed = false;
   /** Where the thumb is: the bot's own target, which moves at `swipeSpeed`. */
   let finger = 0;
-  /** The row the lane roll was made for, and how it came out. */
-  let rolledRow = -2;
-  let readsRowRight = true;
+  /** The row the read was drawn for, and the lane it has settled on for it. */
+  let readRow = -2;
+  let plan = NO_PLAN;
+  /** How far from the row this row gets read, drawn with the read. */
+  let readAt = tuning.readDistance;
 
-  function laneFor(state: RunState, row: number, range: WallLimits): Lane {
-    if (row !== rolledRow) {
-      rolledRow = row;
-      readsRowRight = rng() < tuning.laneAccuracy;
+  const read: LaneRead = { gain: new Float64Array(3), price: new Float64Array(3) };
+  const normals = new Float64Array(6);
+  const view: PriceView = {
+    behindReach: tuning.behindReach,
+    delay: tuning.reactionSteps * SIM_STEP,
+    shift: tuning.swipeSpeed,
+    seesUnopened: false,
+  };
+
+  /** A fresh read for a new row: what each lane gives and takes, as it looks. */
+  function drawRead(): void {
+    for (let i = 0; i < normals.length; i += 2) normalPair(rng, normals, i);
+    for (let slot = 0; slot < 3; slot++) {
+      read.gain[slot] = Math.exp(tuning.readNoise * (normals[slot * 2] ?? 0));
+      read.price[slot] = Math.exp(tuning.readNoise * (normals[slot * 2 + 1] ?? 0));
     }
-    const best = pickLane(state, row, BEST, range, balance);
-    return readsRowRight ? best : secondLane(state, row, BEST, range, balance, best);
   }
 
   /** What the player sees this step and would like to do about it. */
@@ -87,10 +114,16 @@ export function createHumanBot(rng: Rng, balance: Balance): (state: RunState) =>
     const row = nextGateRow(state);
     const distance = row >= 0 ? distanceToRow(state, row) : Infinity;
     const range = reachable(state, balance);
+    if (row !== readRow) {
+      readRow = row;
+      plan = NO_PLAN;
+      drawRead();
+      readAt = tuning.readLate + rng() * Math.max(0, tuning.readDistance - tuning.readLate);
+    }
 
-    // The fence, once it is close enough to be looking at. `row` for the
-    // guarded row is the no-lookahead rule: the side is chosen on the panels
-    // this side of the stretch, not on the ones it is hiding.
+    // The fence, once it is close enough to be looking at. The row it guards
+    // is valued as the near row: the no-lookahead rule, the side is chosen on
+    // the panels this side of the stretch, not on the ones it is hiding.
     const walls = state.walls;
     if (walls !== undefined) {
       const z = state.squad.z;
@@ -102,22 +135,34 @@ export function createHumanBot(rng: Rng, balance: Balance): (state: RunState) =>
         // Re-decided every step, unlike greedy's one-shot commitment: a player
         // changes their mind halfway across, which is the other half of why
         // this bot leaves units outside the fence.
-        narrowToSide(state, range, line, chooseSide(state, row, row, BEST, range, line, balance), balance);
+        const side = pricedSide(state, row, row, range, line, view, read, balance);
+        narrowToSide(state, range, line, side, balance);
       }
     }
 
-    if (row < 0 || distance > balance.bots.gateCommitDistance) {
-      // A charger that has set off comes before the river and the blocks: a
-      // decent player does get out of the way of the thing running at them
-      // (D49). The hand is still late and still slow, which is where the
-      // difficulty is — this is the observation, and the reaction ring and the
-      // swipe limit below decide whether the crowd arrives in time.
-      if (bestChargerStand(state, range, balance)) return stand.x;
-      if (bestStreamStand(state, range, balance)) return stand.x;
-      if (bestDodge(state, range, balance)) return stand.x;
-      if (row < 0) return clampToWalls(state.squad.x, range);
+    const committed = row >= 0 && distance <= balance.bots.gateCommitDistance;
+    // A charger that has set off comes first: a decent player does get out of
+    // the way of the thing running at them (D49). The hand is still late and
+    // still slow, which is where the difficulty is — this is the observation,
+    // and the reaction ring and the swipe limit below decide whether the crowd
+    // arrives in time.
+    if (!committed && bestChargerStand(state, range, balance)) return stand.x;
+
+    // Until it has read the row it plays the road: the cheapest lane between
+    // here and the panels, the one underfoot unless another is clearly cheaper.
+    const here = laneOf(state.squad.x, balance.road.laneWidth);
+    const reading = row < 0 || distance <= readAt;
+    const lane = reading
+      ? planLane(state, row, range, view, read, balance, row < 0 ? here : plan)
+      : planRoad(state, row, range, view, read, balance, here);
+    if (reading) plan = lane;
+    // Stepping out of a block stays inside the lane it has settled on, as
+    // greedy's does (`./bots.ts`).
+    if (!committed && bestDodge(state, range, balance) && laneOf(stand.x, balance.road.laneWidth) === lane) {
+      return stand.x;
     }
-    return clampToWalls(laneCenter(laneFor(state, row, range), balance.road.laneWidth), range);
+    if ((!reading || row < 0) && lane === here) return clampToWalls(state.squad.x, range);
+    return clampToWalls(laneCenter(lane, balance.road.laneWidth), range);
   }
 
   return function decide(state: RunState): number {

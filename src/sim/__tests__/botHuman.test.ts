@@ -19,13 +19,14 @@ import {
   state,
 } from './botFixtures';
 import { playLevel } from './harness';
+import type { GateState } from '../types';
 import { balance } from '@/data';
 
 describe('the human bot', () => {
   it('acts on the board exactly `reactionSteps` after it changes', () => {
     // The hand alone: no misreads, and a finger fast enough to arrive the step
     // it is told to, so what is left to measure is the delay itself.
-    const tuned = humanBalance({ swipeSpeed: 1000, laneAccuracy: 1 });
+    const tuned = humanBalance({ swipeSpeed: 1000, readNoise: 0 });
     const delay = tuned.bots.human.reactionSteps;
     const bot = createBot('human', 1, tuned);
 
@@ -52,7 +53,7 @@ describe('the human bot', () => {
   it('moves its finger no faster than `swipeSpeed`', () => {
     // A thumb, not a jump (D45): the target itself has a speed, on top of
     // whatever the crowd does to follow it.
-    const tuned = humanBalance({ reactionSteps: 0, laneAccuracy: 1 });
+    const tuned = humanBalance({ reactionSteps: 0, readNoise: 0 });
     const cap = tuned.bots.human.swipeSpeed / 60;
     const bot = createBot('human', 1, tuned);
     const wanted = state(rowGates(balance.bots.gateCommitDistance - 3));
@@ -72,21 +73,48 @@ describe('the human bot', () => {
     expect(steps).toBeGreaterThanOrEqual(Math.floor(laneCenter(1) / cap));
   });
 
-  it('reads the row right about seven times in ten', () => {
-    // Wrong is the *second* best lane, not the worst one: a player who misreads
-    // a row takes the lesser gate, they do not walk into the curse.
+  /** A row `z` ahead with `left` and `right` in the side lanes and a curse between. */
+  function sides(left: GateState, right: GateState, row: number): GateState[] {
+    const close = balance.bots.gateCommitDistance - 3;
+    return [
+      { ...left, lane: -1, z: close, rowIndex: row },
+      { ...gate(0, 'sub', 3, close), rowIndex: row },
+      { ...right, lane: 1, z: close, rowIndex: row },
+    ];
+  }
+
+  /** How often, over `rows` fresh rows, the human takes the lesser of two side panels. */
+  function misreads(left: GateState, right: GateState, rows: number, count = 100): { lesser: number; curse: number } {
     const tuned = humanBalance({ reactionSteps: 0, swipeSpeed: 1000 });
     const bot = createBot('human', 5, tuned);
-    const rows = 400;
-    let best = 0;
+    let lesser = 0;
+    let curse = 0;
     for (let r = 0; r < rows; r++) {
-      const picked = lane(bot(state(rowGates(balance.bots.gateCommitDistance - 3, r))));
-      expect(picked).not.toBe(-1);
-      if (picked === 1) best++;
+      const picked = lane(bot(state(sides(left, right, r), [], count)));
+      if (picked === -1) lesser++;
+      if (picked === 0) curse++;
     }
-    const accuracy = best / rows;
-    expect(accuracy).toBeGreaterThan(tuned.bots.human.laneAccuracy - 0.07);
-    expect(accuracy).toBeLessThan(tuned.bots.human.laneAccuracy + 0.07);
+    return { lesser: lesser / rows, curse: curse / rows };
+  }
+
+  it('misreads a close call often and an obvious one rarely (document 31, 4.4)', () => {
+    // The noisy read that replaced D45's flat seven in ten: +10 beside +11 on a
+    // hundred soldiers is a coin flip weighted a little toward the right one,
+    // +10 beside a x2 is not a question at all, and the curse is never taken.
+    const close = misreads(gate(-1, 'add', 10), gate(1, 'add', 11), 400);
+    expect(close.lesser).toBeGreaterThan(0.25);
+    expect(close.lesser).toBeLessThan(0.5);
+    const obvious = misreads(gate(-1, 'add', 10), gate(1, 'mul', 2), 400);
+    expect(obvious.lesser).toBeLessThan(0.02);
+    expect(close.curse + obvious.curse).toBe(0);
+  });
+
+  it('reads every row right with no noise', () => {
+    const tuned = humanBalance({ reactionSteps: 0, swipeSpeed: 1000, readNoise: 0 });
+    const bot = createBot('human', 5, tuned);
+    for (let r = 0; r < 50; r++) {
+      expect(lane(bot(state(sides(gate(-1, 'add', 10), gate(1, 'add', 11), r), [], 100)))).toBe(1);
+    }
   });
 
   it('rolls its lane once per row, not once per step', () => {
@@ -98,15 +126,16 @@ describe('the human bot', () => {
   });
 
   it('answers the same board the same way from the same seed', () => {
-    // It carries state now — a ring of past observations, a finger, and one
-    // roll per row — so "reproducible" has to be pinned rather than assumed:
-    // the balance bands are measured on this bot, run after run.
+    // It carries state — a ring of past observations, a finger, and one read
+    // per row — so "reproducible" has to be pinned rather than assumed: the
+    // balance bands are measured on this bot, run after run. A close call, so
+    // that two seeds have something to disagree about.
     const first = createBot('human', 9);
     const same = createBot('human', 9);
     const other = createBot('human', 10);
     let diverged = false;
     for (let r = 0; r < 40; r++) {
-      const here = state(rowGates(balance.bots.gateCommitDistance - 3, r));
+      const here = state(sides(gate(-1, 'add', 10), gate(1, 'add', 11), r), [], 100);
       for (let step = 0; step < 12; step++) {
         const answer = first(here);
         expect(same(here)).toBe(answer);
@@ -171,13 +200,18 @@ describe('bots at a fence', () => {
     // still happening when the stretch arrives. Phase A turns the units still
     // on the far side into a straggler group; from here it is simply that the
     // crowd was not all there yet.
+    //
+    // A tenth rather than the quarter the dealt campaign measured: since the
+    // priced read (document 31, 4.4) the human settles its lane when it reads
+    // the row, which on most rows is before the fence, so what is left is the
+    // row it reads late — 4 of 27 entries on the scripted fences at the time.
     const entries = campaignEntries('human');
     expect(entries.length).toBeGreaterThan(10);
     const astride = entries.filter((outside) => outside > 0).length;
     expect(`${String(astride)} of ${String(entries.length)} astride`).not.toBe(
       `0 of ${String(entries.length)} astride`,
     );
-    expect(astride / entries.length).toBeGreaterThan(0.25);
+    expect(astride / entries.length).toBeGreaterThan(0.1);
   }, 60_000);
 
   it('keeps greedy out of every fence in the campaign, not just the fixture', () => {

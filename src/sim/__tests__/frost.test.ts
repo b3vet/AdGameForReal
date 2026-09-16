@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { dealtLevel } from './fixtures';
 import { createBot } from '../bots';
 import { generateLevel } from '../level';
 import { playLevel } from './harness';
@@ -134,7 +135,8 @@ describe('Frostfell', () => {
     let chargerLevels = 0;
     let shieldLevels = 0;
     for (let index = BIOME_1 + 1; index <= levelCount; index++) {
-      const config = levelConfig(index);
+      // The dealt recipe: a scripted level books its kinds in its beats.
+      const config = dealtLevel(index);
       const chargers = config.chargerRows ?? 0;
       const shields = config.shieldRows ?? 0;
       const where = `L${String(index)}`;

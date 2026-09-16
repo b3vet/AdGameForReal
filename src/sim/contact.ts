@@ -22,7 +22,7 @@
  */
 
 import { chargerKills, startCharge, steerCharger } from './chargers';
-import { activationRange, enemyBalance, enemyFootprint } from './enemies';
+import { enemyHalfWidth, hpPerUnitOf, wakeRange } from './enemies';
 import type { EventBuffer } from './events';
 import { halfWidth } from './formation';
 import { laneOf } from './lanes';
@@ -140,8 +140,9 @@ export function advanceEnemies(
     if (!enemy.active) {
       // A charger has a trigger range of its own (D49): it stands still until
       // the column is close enough, and the step it wakes on is the step it
-      // commits to a lane.
-      if (enemy.z - squad.z > activationRange(enemy.kind, balance)) continue;
+      // commits to a lane. A body a beat placed wakes at its own distance
+      // (document 31), which is what makes it a guard or an ambush.
+      if (enemy.z - squad.z > wakeRange(enemy, balance)) continue;
       // Nothing past the line the squad stops at wakes before that stop is
       // over: on the endless road a block beyond an arena waits for its boss to
       // fall (document 28). A campaign level stands nothing past its arena.
@@ -193,7 +194,7 @@ export function advanceEnemies(
         hitSquad(1, 'leak', enemy.x, enemy.z, group.id);
         hit = true;
       } else {
-        const half = enemyFootprint(enemy.kind, enemy.units, balance);
+        const half = enemyHalfWidth(enemy, balance);
         const share = overlapShare(
           enemy.x,
           half,
@@ -207,7 +208,7 @@ export function advanceEnemies(
         // is small on purpose so it can be shot out of the lane (D49).
         const taken =
           enemy.kind === 'charger'
-            ? chargerKills(group.count, balance)
+            ? chargerKills(group.count, balance, enemy.killShare)
             : Math.max(1, Math.ceil(enemy.units * share));
         killEnemy(enemy, state.time);
         events.enemyKilled(enemy.id, enemy.kind, enemy.x, enemy.z);
@@ -232,5 +233,5 @@ export function advanceEnemies(
 /** Units a block is still worth, from its hp. Used when a block is re-sized. */
 export function unitsOf(enemy: EnemyState, balance: Balance): number {
   if (enemy.streamId !== undefined) return 1;
-  return Math.ceil(enemy.hp / enemyBalance(enemy.kind, balance).hpPerUnit);
+  return Math.ceil(enemy.hp / hpPerUnitOf(enemy, balance));
 }

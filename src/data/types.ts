@@ -31,13 +31,22 @@ export type { BiomeId } from './biome-types';
  * Frostfell adds (D49) — split out for the file-size rule and re-exported here
  * so every importer still reads one module.
  */
-import type { BossBalance, ChargerBalance, EnemyBalance, ShieldBalance } from './enemy-types';
+import type {
+  BeatEnemyBalance,
+  BossBalance,
+  ChargerBalance,
+  EnemyBalance,
+  PortalBalance,
+  ShieldBalance,
+} from './enemy-types';
 
 export type {
+  BeatEnemyBalance,
   BossBalance,
   BossKind,
   ChargerBalance,
   EnemyBalance,
+  PortalBalance,
   RimeBalance,
   ShieldBalance,
 } from './enemy-types';
@@ -47,9 +56,37 @@ export type {
  * `levels.json` — split out for the file-size rule and re-exported here so
  * every importer still reads one module.
  */
+/**
+ * The scripted players' tuning is `./bot-types.ts`, owned by the bot track and
+ * split out for the file-size rule; re-exported here like the level recipes.
+ */
+import type { BotBalance } from './bot-types';
+
+export type { BotBalance, BotPriceBalance, HumanBotBalance } from './bot-types';
+
 import type { ValueRange } from './level-types';
 
-export type { LevelGenConfig, ValueRange } from './level-types';
+export type { DealtFields, DealtLevelConfig, LevelGenConfig, ValueRange } from './level-types';
+
+/**
+ * The level-design grammar (document 31, D70): the beats a scripted level is
+ * written in and the file they live in, pinned by the plan and re-exported
+ * here so every importer still reads one module.
+ */
+export type {
+  BeatDef,
+  BeatEnemy,
+  BeatFence,
+  BeatLibrary,
+  BeatRiver,
+  BeatsData,
+  BeatTier,
+  BeatValueSize,
+  GateSlot,
+  LaneRole,
+  PrizeOverride,
+  ScriptBeat,
+} from './beat-types';
 
 /**
  * Ember tier 3: a burning body passes the fire to what it is touching, once.
@@ -333,6 +370,10 @@ export interface Balance {
     /** What a shield is worth on the brute that carries one (D49). */
     shield: ShieldBalance;
     boss: BossBalance;
+    /** Rivers poured from a fixed place on a scripted road (document 31, 3.2). */
+    portal: PortalBalance;
+    /** What a block placed by a beat is worth, where it differs from a dealt one. */
+    beat: BeatEnemyBalance;
   };
   level: {
     rowSpacing: number;
@@ -487,6 +528,13 @@ export interface Balance {
       add: number;
       sub: number;
       fireRate: number;
+      /**
+       * The share-of-squad term beside the flat rate (document 31, 3.4): per
+       * unit of the squad, added to `add` and `sub` on a road that asks for it
+       * (`LevelDef.squadRates`). A flat two a second never flips a curse of
+       * thirty, and a plus pumped at two a second is invisible at three hundred.
+       */
+      shares: { add: number; sub: number };
     };
     /** A gate can be shot up by this share of its printed value... */
     capShare: number;
@@ -509,7 +557,35 @@ export interface Balance {
     creep: {
       perSecond: number;
       fromLevel: number;
+      /** Per unit of the squad, on a road with `squadRates` (document 31, 3.4). */
+      share: number;
     };
+    /**
+     * How a scripted gate's value is printed (document 31, 3.4): to the nearest
+     * five above `fiveAbove` and to the nearest ten above `tenAbove`, so a late
+     * row reads +60 / +150 / x2 rather than +31 / +38 / x2.
+     */
+    print: { fiveAbove: number; tenAbove: number };
+    /**
+     * The ceilings a script is checked against (document 31, 3.5): no
+     * multiplier below `mulFromLevel`, at most `mulEarly` of them up to
+     * `mulEarlyTo`, at most `mulMax` after, and a x3 only from `x3FromLevel`.
+     * The composer fails loudly past them rather than rolling under them.
+     */
+    budget: {
+      mulFromLevel: number;
+      mulEarly: number;
+      mulEarlyTo: number;
+      mulMax: number;
+      x3FromLevel: number;
+    };
+    /**
+     * Bounds on the one factor a script's plus panels are scaled by so the
+     * expected squad at the prep beat lands on the level's target (3.4). A
+     * script that needs more than this is a script to rewrite, not a curve to
+     * stretch: the panels would stop printing the sizes the beats name.
+     */
+    scale: { min: number; max: number };
   };
   /**
    * Level generator tuning. The generator scales every number it writes by a
@@ -613,70 +689,8 @@ export interface Balance {
       blockScale: number;
     };
   };
-  bots: {
-    /** How far ahead a scripted player looks for a block about to reach it. */
-    threatLookahead: number;
-    /** Inside this distance to the next gate row, a bot commits to its lane. */
-    gateCommitDistance: number;
-    /** Rows of enemy layout a bot reads when valuing a staff gate. */
-    weaponLookaheadRows: number;
-    /** How much of the squad a doubling of expected DPS is worth to a bot. */
-    weaponWorth: number;
-    /** What a slow is worth as a share of DPS, since it buys time not damage. */
-    weaponSlowWorth: number;
-    /** How far ahead greedy looks for the stream lane it should stand in. */
-    streamLookahead: number;
-    /** Most bodies a staff valuation reads, so a stream cannot swamp it. */
-    weaponLayoutMax: number;
-    /**
-     * How close to a wall's approach zone a bot commits to the side it wants
-     * (D32). Inside the fence there is no changing sides, so the lane has to be
-     * chosen before it, and far enough out that the crowd can cross the road in
-     * time — six metres of road is a little over a second, and the squad moves
-     * sideways faster than it runs.
-     */
-    wallCommitDistance: number;
-    /**
-     * How far ahead a bot reads a charger that has set off (D49). Past the
-     * charger's own `triggerRange`, so a bot sees one the moment it moves.
-     */
-    chargerLookahead: number;
-    /**
-     * Share of the squad's raw output a bot assumes actually lands on a
-     * charger running at it. Below 1 because the river, the gates and the
-     * blocks in the same lane are eating shots too, and a bot that believed
-     * its whole output was on the charger would stand in the lane and lose the
-     * argument.
-     */
-    chargerAimShare: number;
-    /** The human-like bot the difficulty bands are measured on (D45). */
-    human: {
-      /**
-       * Steps the bot's hand is behind the board. Fifteen at the sim's fixed
-       * 1/60 s step is the 250 ms of the plan: long enough that a gate value
-       * seen at the last moment is acted on after it, short enough that the
-       * player is clearly playing rather than watching.
-       */
-      reactionSteps: number;
-      /**
-       * How fast its finger crosses the road, in metres per second. Below the
-       * speed the head itself can move, so the limit is the thumb rather than
-       * the crowd: a full lane takes about a third of a second to ask for and
-       * a little longer than that to arrive.
-       */
-      swipeSpeed: number;
-      /** How often it reads the row right; the rest of the time it takes the
-       *  second-best lane. Seven in ten is the plan's "decent player". */
-      laneAccuracy: number;
-      /**
-       * How far ahead of a wall's approach zone it notices the fence, in metres
-       * of road. Well inside greedy's `wallCommitDistance`: a player watching
-       * their own crowd starts the crossing late, and the units still outside
-       * the line when the stretch begins to hold are cut off (D44).
-       */
-      wallReach: number;
-    };
-  };
+  /** The scripted players the bands are measured on (D45). See `BotBalance`. */
+  bots: BotBalance;
   /** The six evolution mechanics D54 adds, by staff. See `EvolutionBalance`. */
   evolutions: EvolutionBalance;
   input: {

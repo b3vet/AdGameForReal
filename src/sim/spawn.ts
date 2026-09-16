@@ -86,7 +86,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
 
     for (const def of row.enemies) {
       const config = enemyBalance(def.kind, balance);
-      const hp = def.units * config.hpPerUnit;
+      const hp = def.units * (def.hpPerUnit ?? config.hpPerUnit);
       const enemy: EnemyState = {
         id: nextId++,
         kind: def.kind,
@@ -107,6 +107,12 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
       // bigger brute carries a bigger shield and the label still reads the
       // body alone.
       if (def.kind === 'shieldBrute') enemy.shield = shieldFor(hp, balance);
+      // What a beat set on this one body (document 31), copied only when set so
+      // a dealt block keeps the shape it always had.
+      if (def.wake !== undefined) enemy.wake = def.wake;
+      if (def.hpPerUnit !== undefined) enemy.hpPerUnit = def.hpPerUnit;
+      if (def.killShare !== undefined) enemy.killShare = def.killShare;
+      if (def.maxHalf !== undefined) enemy.maxHalf = def.maxHalf;
       enemies.push(enemy);
     }
   }

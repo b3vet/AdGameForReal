@@ -119,7 +119,18 @@
       }
     },
     "maxLive": 300,
-    "corpseSeconds": 1.1
+    "corpseSeconds": 1.1,
+    "portal": {
+      "stopGap": 6,
+      "tollSeconds": 1.5,
+      "minBodies": 4,
+      "maxBodiesPerBeat": 120,
+      "maxLiveBodies": 170
+    },
+    "beat": {
+      "bruteHpPerUnit": 12,
+      "chargerKillShare": 0.1
+    }
   },
   "level": {
     "rowSpacing": 18,
@@ -154,7 +165,11 @@
     "growthPerSecond": {
       "add": 2,
       "sub": 2,
-      "fireRate": 0.04
+      "fireRate": 0.04,
+      "shares": {
+        "add": 0.012,
+        "sub": 0.018
+      }
     },
     "capShare": 0.6,
     "capFloor": {
@@ -163,7 +178,23 @@
     },
     "creep": {
       "perSecond": 0.6,
-      "fromLevel": 4
+      "fromLevel": 4,
+      "share": 0.002
+    },
+    "print": {
+      "fiveAbove": 20,
+      "tenAbove": 100
+    },
+    "budget": {
+      "mulFromLevel": 2,
+      "mulEarly": 1,
+      "mulEarlyTo": 9,
+      "mulMax": 2,
+      "x3FromLevel": 13
+    },
+    "scale": {
+      "min": 0.5,
+      "max": 3
     }
   },
   "gen": {
@@ -222,11 +253,29 @@
     "wallCommitDistance": 6,
     "chargerLookahead": 26,
     "chargerAimShare": 0.5,
+    "readDistance": 45,
+    "planMargin": 0.02,
+    "price": {
+      "blockAim": 0.9,
+      "riverBase": 0.4,
+      "riverFloor": 0.85,
+      "splashGain": 1.75,
+      "splashPower": 0.81,
+      "riverSteepness": 1.5,
+      "riverChunks": 4,
+      "horizon": 16,
+      "afterRow": 8,
+      "trailing": 1.5,
+      "shiftSpeed": 8
+    },
     "human": {
       "reactionSteps": 15,
       "swipeSpeed": 6,
-      "laneAccuracy": 0.7,
-      "wallReach": 3
+      "wallReach": 3,
+      "readNoise": 0.25,
+      "behindReach": 35,
+      "readLate": 16,
+      "readDistance": 34
     }
   },
   "input": {

@@ -16,7 +16,7 @@ import { sizeStream } from './pressure';
 import { randomInt, randomRange } from './rng';
 import type { EnemyKind, GateDef, Lane, StreamDef } from './types';
 import { balance } from '@/data';
-import type { LevelGenConfig } from '@/data/types';
+import type { DealtLevelConfig } from '@/data/types';
 
 export type { RowPermits };
 
@@ -32,8 +32,19 @@ export interface RowEnemyDef {
    * Meters from the row's own `z`. Mixed rows stand their block short of the
    * gate row (a negative `dz`) so the block's HP label and the gate's number
    * are never on the same spot on screen. Omitted means "on the row".
+   *
+   * A beat's lead-in row stands its guards ahead of the gate row it is about
+   * (document 31, 3.8), so on a scripted road `dz` may be positive.
    */
   dz?: number;
+  /** See `EnemyState.wake`: the beat's own wake distance, else the kind's. */
+  wake?: number;
+  /** See `EnemyState.hpPerUnit`. */
+  hpPerUnit?: number;
+  /** See `EnemyState.killShare`. */
+  killShare?: number;
+  /** See `EnemyState.maxHalf`. */
+  maxHalf?: number;
 }
 
 export interface RowDef {
@@ -74,7 +85,7 @@ function gateWorth(def: GateDef, count: number): number {
  * a whole row. Greedy is nearly unmoved by it: it was taking the best panel
  * either way.
  */
-function gateSlots(rng: Rng, config: LevelGenConfig): number {
+function gateSlots(rng: Rng, config: DealtLevelConfig): number {
   if (config.index < balance.gen.fullGateRowsFromLevel) return 3;
   return rng() < genDials(config).thirdGateChance ? 3 : 2;
 }
@@ -103,7 +114,7 @@ function kindFrac(kind: EnemyKind): number {
 
 function blockUnits(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   estimate: number,
   kind: EnemyKind,
   scale: number,
@@ -115,7 +126,7 @@ function blockUnits(
 }
 
 /** A block standing short of a gate row, so the player meets it on the way in. */
-function guardBlock(rng: Rng, config: LevelGenConfig, budget: RowBudget, lane: Lane): RowEnemyDef {
+function guardBlock(rng: Rng, config: DealtLevelConfig, budget: RowBudget, lane: Lane): RowEnemyDef {
   const kind = rng() < balance.gen.bruteChance ? 'brute' : 'grunt';
   return {
     kind,
@@ -139,7 +150,7 @@ function laneOfKind(row: RowDef, kind: string): Lane | null {
  * row it sits on carries a curse in another lane, or a block in front of the
  * multiplier itself (docs/06-milestone-2-plan.md, "Feel and difficulty").
  */
-function pairMultiplier(row: RowDef, rng: Rng, config: LevelGenConfig, budget: RowBudget): void {
+function pairMultiplier(row: RowDef, rng: Rng, config: DealtLevelConfig, budget: RowBudget): void {
   const lane = laneOfKind(row, 'mul');
   if (lane === null) return;
   if (row.gates.some((g) => g?.kind === 'sub')) return;
@@ -149,7 +160,7 @@ function pairMultiplier(row: RowDef, rng: Rng, config: LevelGenConfig, budget: R
 
 export function gateRow(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   z: number,
   budget: RowBudget,
   permits: RowPermits,
@@ -174,7 +185,7 @@ export function gateRow(
  */
 export function mixedRow(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   z: number,
   budget: RowBudget,
   permits: RowPermits,
@@ -216,7 +227,7 @@ export function mixedRow(
  * lane: a wide squad overlaps every lane at once, so three full-sized blocks on
  * one row is not three times the choice, it is a wipe.
  */
-export function bruteRow(rng: Rng, config: LevelGenConfig, z: number, budget: RowBudget): RowDef {
+export function bruteRow(rng: Rng, config: DealtLevelConfig, z: number, budget: RowBudget): RowDef {
   const lanes = pickLanes(rng, randomInt(rng, 1, 2));
   const share = 1 / lanes.length;
   const enemies: RowEnemyDef[] = [];
@@ -238,7 +249,7 @@ export function bruteRow(rng: Rng, config: LevelGenConfig, z: number, budget: Ro
  */
 export function chargerRow(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   z: number,
   budget: RowBudget,
 ): RowDef {
@@ -266,7 +277,7 @@ export function chargerRow(
  */
 export function shieldRow(
   rng: Rng,
-  config: LevelGenConfig,
+  config: DealtLevelConfig,
   z: number,
   budget: RowBudget,
 ): RowDef {
@@ -286,7 +297,7 @@ function streamDuration(rng: Rng): number {
 }
 
 /** One lane's river. `rowIndex` is what the stream's size is scaled against. */
-export function streamRow(rng: Rng, config: LevelGenConfig, rowIndex: number, z: number): RowDef {
+export function streamRow(rng: Rng, config: DealtLevelConfig, rowIndex: number, z: number): RowDef {
   const lane = LANES[Math.min(2, Math.floor(rng() * 3))] ?? 0;
   const def = sizeStream(config, rowIndex, lane, 'single', streamDuration(rng));
   return { z, gates: emptyGates(), enemies: [], streams: [def] };
@@ -307,7 +318,7 @@ function hordeLanes(rng: Rng): [Lane, Lane] {
  * Two lanes at once. The lanes are `gen.hordeLaneGap` apart, so the squad has
  * to split its fire or give one of them up and eat the leaks.
  */
-export function hordeRow(rng: Rng, config: LevelGenConfig, rowIndex: number, z: number): RowDef {
+export function hordeRow(rng: Rng, config: DealtLevelConfig, rowIndex: number, z: number): RowDef {
   const [first, second] = hordeLanes(rng);
   const duration = streamDuration(rng);
   return {

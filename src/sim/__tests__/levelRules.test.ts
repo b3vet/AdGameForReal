@@ -15,12 +15,13 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { dealtLevel } from './fixtures';
 import { genDials } from '../gateGen';
 import { generateLevel } from '../level';
 import type { LevelDef } from '../level';
 import { wallX } from '../walls';
 import type { GateDef, Lane } from '../types';
-import { balance, levelConfig, levelCount } from '@/data';
+import { balance, levelCount } from '@/data';
 
 const SEEDS = [1, 2, 3, 4, 5];
 
@@ -39,7 +40,7 @@ const MILESTONES = [10, 15, 20, 25, 30, 35, 40];
 
 function everyLevel(body: (level: LevelDef, index: number, seed: number) => void): void {
   for (let index = 1; index <= levelCount; index++) {
-    for (const seed of SEEDS) body(generateLevel(index, levelConfig(index), seed), index, seed);
+    for (const seed of SEEDS) body(generateLevel(index, dealtLevel(index), seed), index, seed);
   }
 }
 
@@ -51,14 +52,14 @@ describe('milestone levels', () => {
   it('marks exactly the seven the plans name, in the data and not in code', () => {
     const flagged: number[] = [];
     for (let index = 1; index <= levelCount; index++) {
-      if (levelConfig(index).milestone === true) flagged.push(index);
+      if (dealtLevel(index).milestone === true) flagged.push(index);
     }
     expect(flagged).toEqual(MILESTONES);
   });
 
   it('gives a milestone level its own dials and every other level the ordinary ones', () => {
     for (let index = 1; index <= levelCount; index++) {
-      const dials = genDials(levelConfig(index));
+      const dials = genDials(dealtLevel(index));
       const where = `L${String(index)}`;
       if (MILESTONES.includes(index)) {
         expect(`${where} ${JSON.stringify(dials)}`).toBe(
@@ -77,7 +78,7 @@ describe('milestone levels', () => {
     // what makes a misread cost something on the levels that are meant to.
     for (const index of MILESTONES) {
       for (const seed of SEEDS) {
-        const level = generateLevel(index, levelConfig(index), seed);
+        const level = generateLevel(index, dealtLevel(index), seed);
         for (const row of level.rows) {
           if (!hasGates(row.gates)) continue;
           const filled = row.gates.filter((gate) => gate !== null).length;

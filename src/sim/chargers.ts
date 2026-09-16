@@ -81,10 +81,10 @@ export function steerCharger(enemy: EnemyState, balance: Balance, dt: number): v
  * Units one charger takes when it reaches the crowd: a floor, or a share of
  * whoever is standing there, whichever is more — the same shape as a stomp
  * (`boss.ts`), so a charger costs a big column something as well as a small
- * one.
+ * one. `share` is the charger's own when a beat set one (`EnemyState.killShare`).
  */
-export function chargerKills(count: number, balance: Balance): number {
+export function chargerKills(count: number, balance: Balance, share?: number): number {
   const config = balance.enemies.charger;
   const floor = Math.max(1, Math.round(config.kills));
-  return Math.max(floor, Math.ceil(count * config.killShare));
+  return Math.max(floor, Math.ceil(count * (share ?? config.killShare)));
 }

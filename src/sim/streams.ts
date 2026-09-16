@@ -14,6 +14,13 @@
  * stream starts when the squad is `spawnAhead` short of it, so its first body
  * appears exactly on the row.
  *
+ * A scripted road pours from portals instead (document 31, 3.2). A stream
+ * with `anchorZ` is a fixed place on the road: it opens when the squad is
+ * `openAt` short of it, releases every body there, and stops pouring once the
+ * squad is `enemies.portal.stopGap` short, whatever it has not yet sent. Its
+ * `z` on the state is the portal's, so the floating count and render's marker
+ * stand where the bodies come from.
+ *
  * This module also owns the corpse sweep: a dead body stays in `state.enemies`
  * for `balance.enemies.corpseSeconds` so render can play its death, and is then
  * compacted out and its object re-used. Nothing here allocates in steady state.
@@ -68,22 +75,27 @@ export class Streams {
     this.nextId = nextId;
   }
 
-  /** Registers one stream from the level and returns the state render reads. */
+  /**
+   * Registers one stream from the level and returns the state render reads.
+   * `z` is the row that carries it; a portal stands at its own `anchorZ`.
+   */
   add(def: StreamDef, z: number): StreamState {
+    const at = def.anchorZ ?? z;
     const state: StreamState = {
       id: this.runtimes.length,
       lane: def.lane,
-      z,
+      z: at,
       count: def.count,
       remaining: def.count,
       spawned: 0,
       alive: 0,
       killed: 0,
       leaked: 0,
-      headZ: z,
+      headZ: at,
       started: false,
       done: false,
     };
+    if (def.anchorZ !== undefined) state.anchorZ = def.anchorZ;
     this.runtimes.push({ def, state, owed: 0 });
     return state;
   }
@@ -104,25 +116,53 @@ export class Streams {
    */
   spawn(state: RunState, dt: number): void {
     const streams = this.balance.streams;
-    const trigger = state.squad.z + streams.spawnAhead;
+    const squadZ = state.squad.z;
+    const trigger = squadZ + streams.spawnAhead;
     const ceiling = this.balance.enemies.maxLive;
+    const stopGap = this.balance.enemies.portal.stopGap;
 
     for (const runtime of this.runtimes) {
       const stream = runtime.state;
       if (stream.done || stream.spawned >= stream.count) continue;
       // The same hold `contact.ts` puts on blocks: a river past the line the
       // squad stops at waits for that stop to be over (document 28).
-      if (trigger < stream.z || stream.z > state.arenaZ) continue;
+      if (stream.z > state.arenaZ) continue;
 
       const def = runtime.def;
+      const portal = def.anchorZ;
+      let from = trigger;
+      if (portal === undefined) {
+        if (trigger < stream.z) continue;
+      } else {
+        const gap = portal - squadZ;
+        if (gap > (def.openAt ?? streams.spawnAhead)) continue;
+        if (gap <= stopGap) {
+          this.cut(stream);
+          continue;
+        }
+        from = portal;
+      }
+
       runtime.owed += (def.count / Math.max(0.1, def.durationSeconds)) * dt;
       let burst = Math.min(MAX_SPAWN_BURST, Math.floor(runtime.owed));
       while (burst > 0 && stream.spawned < stream.count && this.live < ceiling) {
-        this.release(state, runtime, trigger);
+        this.release(state, runtime, from);
         runtime.owed--;
         burst--;
       }
     }
+  }
+
+  /**
+   * A portal the squad has closed on stops pouring. What it never sent is
+   * dropped from its count, so `remaining` is what is still on the road and
+   * the stream finishes when that is gone. A portal the squad reached before
+   * it sent a body never started and never will: it is simply done.
+   */
+  private cut(stream: StreamState): void {
+    stream.count = stream.spawned;
+    stream.cut = true;
+    if (!stream.started) stream.done = true;
   }
 
   /**

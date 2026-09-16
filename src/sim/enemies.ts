@@ -36,11 +36,13 @@ export function enemyFootprint(kind: EnemyKind, units: number, balance: Balance)
  * A stream body is one person, not a block of them: it carries its own small
  * footprint from `balance.streams` rather than the block rule, or a lane full
  * of them would read as a moving wall and a single shot would clear three of
- * them at once.
+ * them at once. A block a beat held to its lane (`maxHalf`) is never wider
+ * than that, whatever it is worth.
  */
 export function enemyHalfWidth(enemy: EnemyState, balance: Balance): number {
   if (enemy.streamId !== undefined) return balance.streams.footprint;
-  return enemyFootprint(enemy.kind, enemy.units, balance);
+  const half = enemyFootprint(enemy.kind, enemy.units, balance);
+  return enemy.maxHalf === undefined ? half : Math.min(half, enemy.maxHalf);
 }
 
 /**
@@ -57,6 +59,19 @@ export function activationRange(kind: EnemyKind, balance: Balance): number {
 }
 
 /**
+ * How far in front of the squad this one body wakes: its beat's own distance
+ * when a beat placed it (document 31, 3.2), else its kind's.
+ */
+export function wakeRange(enemy: EnemyState, balance: Balance): number {
+  return enemy.wake ?? activationRange(enemy.kind, balance);
+}
+
+/** Hit points per printed unit of this body: its beat's, else its kind's. */
+export function hpPerUnitOf(enemy: EnemyState, balance: Balance): number {
+  return enemy.hpPerUnit ?? enemyBalance(enemy.kind, balance).hpPerUnit;
+}
+
+/**
  * What a body is worth to a bot deciding whether it can be removed in time.
  *
  * `units` is what a contact *costs*; this is what the body takes to *clear*,
@@ -70,6 +85,6 @@ export function effectiveUnits(enemy: EnemyState, balance: Balance): number {
   const shield = enemy.shield ?? 0;
   if (shield <= 0) return enemy.units;
   const mul = Math.max(1e-6, balance.enemies.shield.damageMul);
-  const perUnit = Math.max(1e-6, enemyBalance(enemy.kind, balance).hpPerUnit);
+  const perUnit = Math.max(1e-6, hpPerUnitOf(enemy, balance));
   return enemy.units + shield / (mul * perUnit);
 }

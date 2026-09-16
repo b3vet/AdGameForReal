@@ -46,7 +46,7 @@ import { perfHost, runPerfCapture } from './perf';
 import type { RoomId } from './player';
 import { publishHandle } from './publishHandle';
 import { QualityLadder } from './quality';
-import { MAX_TURBO, parseQuery } from './query';
+import { MAX_TURBO, parseBeat, parseQuery } from './query';
 import type { QueryOptions } from './query';
 import type { RunSession } from './session';
 
@@ -243,6 +243,8 @@ export class App implements FrameHost, AppCommands {
     // `?endless=1`: onto the road with no end (D52), once Havok has landed —
     // the one thing in the app that waits for it (`RunStage.autoStartEndless`).
     if (this.options.endless) this.runs.autoStartEndless(physics, () => this.disposed);
+    // `?beat=`: one designed beat on its own road, the same way (document 31).
+    else if (this.options.beat !== null) this.runs.autoStartBeat(physics, () => this.disposed);
 
     this.driver.start();
 
@@ -289,6 +291,15 @@ export class App implements FrameHost, AppCommands {
   /** A walk of the endless road (D52), on `seed` or on the road's own. */
   startEndless(seed: number | null = null): void {
     this.runs.startEndless(seed);
+  }
+
+  /**
+   * One designed beat on its own road (`?beat=`'s run, document 31), for the
+   * debug handle: `beat` is written as the URL writes it, `ambush:3`.
+   */
+  startBeat(beat: string, count: number | null = null): void {
+    const pin = parseBeat(beat, count === null ? null : String(count));
+    if (pin !== null) this.runs.startBeat(pin);
   }
 
   /**

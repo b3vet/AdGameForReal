@@ -21,14 +21,14 @@
 
 import type { Crowd } from './characters';
 import { usesRagdoll } from './deathStyle';
-import { gateCoversLabel } from './labelClearance';
+import { gateCoversLabel, placeBlockLabel } from './labelClearance';
 import type { LabelView } from './labelClearance';
 import { labelPixels, type NumberLabels } from './labels';
 import { ShadowLayer } from './shadows';
 import {
+  ENEMY_LABEL_RANGE,
   GRUNT_SCALE,
   LABEL_BEHIND,
-  LABEL_RANGE,
   POOL,
   SHADOW,
   STREAM_LABEL_COLOR,
@@ -62,7 +62,10 @@ const LEAKED_CAPACITY = 256;
 
 export class StreamBodies {
   private readonly labels: NumberLabels;
-  /** One label id per stream slot, claimed at init and owned for the app's life. */
+  /**
+   * Label ids claimed at init and owned for the app's life, handed out a frame
+   * at a time to whichever rivers are printing (`writeLabels`).
+   */
   private readonly labelIds: number[] = [];
   /** Bodies that leaked rather than died: they are hidden, not animated. */
   private readonly leaked = new Set<number>();
@@ -168,20 +171,37 @@ export class StreamBodies {
   }
 
   /**
-   * The floating remaining-count over each live stream's head.
+   * The floating remaining-count over each live stream's head, and over each
+   * portal that has not opened yet.
    *
    * `headZ` is the nearest live body, so the number rides the front of the
-   * river and walks toward the player with it. A stream that has not started or
-   * has been cleared prints nothing: the count is a threat readout, and a zero
-   * hanging over an empty lane is noise.
+   * river and walks toward the player with it. A river that has been cleared
+   * prints nothing: the count is a threat readout, and a zero hanging over an
+   * empty lane is noise.
    *
-   * And a head standing on a gate panel prints nothing either. The count rides
-   * `STREAM_LABEL_HEIGHT` over the body rather than on it, which is exactly the
-   * band a panel occupies, so the river's number lands on the panel's own value
-   * for the second or so the head takes to walk through the row (Milestone 4
-   * Phase C caught it on `staff-l10.png`). The panel's box and nothing wider —
-   * a block's extra margin would cost the river its readout either side of
-   * every row; see `./labelClearance.ts`.
+   * A river poured from a portal (document 31, 3.2) prints its whole count
+   * over the portal while it waits, because the size of the river a lane will
+   * cost is part of the price the player is choosing on — from `THREAT_SIGHT`,
+   * well before it opens. A river that keeps pace with the squad has nowhere
+   * to print before it starts, so it prints nothing until then, as it always
+   * has.
+   *
+   * And a moving count standing on a gate panel prints nothing either. The
+   * count rides `STREAM_LABEL_HEIGHT` over the body rather than on it, which is
+   * exactly the band a panel occupies, so the river's number lands on the
+   * panel's own value for the second or so the head takes to walk through the
+   * row (Milestone 4 Phase C caught it on `staff-l10.png`). The panel's box and
+   * nothing wider — a block's placement rule would lift the count off every
+   * river either side of every row. A portal's waiting count stands still, as
+   * a block does, so it is placed as a block's number is — moved clear of the
+   * gate's rather than hidden for as long as the row is ahead; see
+   * `./labelClearance.ts`.
+   *
+   * Label ids are handed out in stream order to the rivers that print this
+   * frame rather than one per registered river: labels are immediate mode
+   * (`./labels.ts`), so an id means nothing past the frame it is set in, and a
+   * road with more rivers than the pool — the endless one — still numbers
+   * every river in sight.
    */
   writeLabels(
     streams: readonly StreamState[],
@@ -189,27 +209,31 @@ export class StreamBodies {
     gates: readonly GateState[],
     view: LabelView,
   ): void {
-    for (let i = 0; i < streams.length && i < this.labelIds.length; i++) {
+    let used = 0;
+    for (let i = 0; i < streams.length && used < this.labelIds.length; i++) {
       const stream = streams[i];
-      const label = this.labelIds[i];
-      if (stream === undefined || label === undefined) continue;
-      if (!stream.started || stream.done || stream.remaining <= 0) continue;
+      if (stream === undefined || stream.done || stream.remaining <= 0) continue;
+      const waiting = !stream.started;
+      // A river that keeps pace with the squad has no place until it starts.
+      if (waiting && stream.anchorZ === undefined) continue;
 
-      const ahead = stream.headZ - squadZ;
-      if (ahead >= LABEL_RANGE || ahead <= -LABEL_BEHIND) continue;
+      const z = waiting ? (stream.anchorZ ?? stream.z) : stream.headZ;
+      const ahead = z - squadZ;
+      if (ahead >= ENEMY_LABEL_RANGE || ahead <= -LABEL_BEHIND) continue;
 
       const x = laneCenter(stream.lane);
-      if (gateCoversLabel(gates, x, stream.headZ, STREAM_LABEL_HEIGHT, view)) continue;
+      const pixels = labelPixels(STREAM_LABEL_SIZE, STREAM_LABEL_MIN, ahead);
+      let y = STREAM_LABEL_HEIGHT;
+      if (waiting) {
+        y = placeBlockLabel(gates, x, z, STREAM_LABEL_HEIGHT, pixels, view);
+        if (Number.isNaN(y)) continue;
+      } else if (gateCoversLabel(gates, x, z, STREAM_LABEL_HEIGHT, view)) {
+        continue;
+      }
 
-      this.labels.set(
-        label,
-        countText(stream.remaining),
-        x,
-        STREAM_LABEL_HEIGHT,
-        stream.headZ,
-        STREAM_LABEL_COLOR,
-        labelPixels(STREAM_LABEL_SIZE, STREAM_LABEL_MIN, ahead),
-      );
+      const label = this.labelIds[used++];
+      if (label === undefined) break;
+      this.labels.set(label, countText(stream.remaining), x, y, z, STREAM_LABEL_COLOR, pixels);
     }
   }
 

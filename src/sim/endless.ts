@@ -48,7 +48,7 @@ import { countGateRows, GATE_ROW, MIXED_ROW } from './rowKinds';
 import type { RowDef } from './rows';
 import { generateWalls } from './walls';
 import { balance, endless } from '@/data';
-import type { LevelGenConfig, PlayerState, ValueRange } from '@/data/types';
+import type { DealtLevelConfig, PlayerState, ValueRange } from '@/data/types';
 
 export { dialAt } from './endlessLayout';
 
@@ -61,7 +61,7 @@ function virtualLevel(row: number): number {
  * The recipe one row is built from: a level of exactly one row, sized for the
  * squad this row's dials expect. See the file comment for why.
  */
-function rowConfig(row: number, seed: number): LevelGenConfig {
+function rowConfig(row: number, seed: number): DealtLevelConfig {
   const dials = endless.dials;
   const gen = balance.gen;
   const index = virtualLevel(row);
@@ -69,7 +69,7 @@ function rowConfig(row: number, seed: number): LevelGenConfig {
   const values = endless.gateValues;
   const floor = Math.max(1, Math.round(values.subFloor));
 
-  const config: LevelGenConfig = {
+  const config: DealtLevelConfig = {
     index,
     seed,
     rows: 1,
@@ -107,7 +107,7 @@ function rowConfig(row: number, seed: number): LevelGenConfig {
 }
 
 /** What the curve expects of one row: the same three numbers `level.ts` builds. */
-function rowBudget(config: LevelGenConfig, mul: ValueRange): RowBudget {
+function rowBudget(config: DealtLevelConfig, mul: ValueRange): RowBudget {
   const estimate = config.peakTarget;
   return {
     estimate,

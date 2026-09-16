@@ -224,6 +224,7 @@ export class Run {
         else this.arenas.opened(this.runState);
       },
       this.crowd,
+      level.squadRates === true,
     );
     this.firing = loadout.firing;
     this.burn = loadout.burn;
