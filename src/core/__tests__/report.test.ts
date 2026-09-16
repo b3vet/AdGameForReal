@@ -14,7 +14,14 @@ import { describe, expect, it } from 'vitest';
 import type { RunState } from '@/sim';
 import type { CaptureSummary, Spread } from '@/ui';
 
-import { APP_VERSION, BUILD_KIND, buildReport, collectReport, readGl } from '../report';
+import {
+  APP_VERSION,
+  BUILD_KIND,
+  buildReport,
+  collectReport,
+  readCanvas,
+  readGl,
+} from '../report';
 import type { ReportInput } from '../report';
 
 function spread(median: number, p95: number): Spread {
@@ -64,6 +71,14 @@ function full(): ReportInput {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X)',
     screen: { width: 390, height: 844, pixelRatio: 3 },
     gpu: { vendor: 'Apple Inc.', renderer: 'Apple GPU', version: 'WebGL 2.0' },
+    canvas: {
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 1320,
+      backingHeight: 2868,
+      bufferWidth: 1320,
+      bufferHeight: 2868,
+    },
     quality: { rung: 0, reason: 'start 3x', pixelRatio: 3, devicePixelRatio: 3, physics: 2 },
     capture: capture(),
     run: runState(),
@@ -83,7 +98,7 @@ describe('buildReport', () => {
     const report = buildReport(full());
 
     expect(report).toContain('arcane-rush 0.1.0 report');
-    for (const heading of ['device', 'quality', 'capture', 'run', 'save']) {
+    for (const heading of ['device', 'canvas', 'quality', 'capture', 'run', 'save']) {
       expect(report).toContain(`\n${heading}\n`);
     }
 
@@ -95,6 +110,12 @@ describe('buildReport', () => {
     expect(report).toContain('vendor     Apple Inc.');
     expect(report).toContain('gl         WebGL 2.0');
     expect(report).toContain('CPU iPhone OS 18_2');
+
+    // Canvas: the box, the backing store at its ratio, the buffer, the verdict.
+    expect(report).toContain('css        440x956');
+    expect(report).toContain('backing    1320x2868 (3x)');
+    expect(report).toContain('buffer     1320x2868\n');
+    expect(report).toContain('shape      ok');
 
     // Quality: the ladder's rung, what it renders at, what physics is on.
     expect(report).toContain('rung       0 (start 3x)');
@@ -139,6 +160,7 @@ describe('buildReport', () => {
       userAgent: '',
       screen: null,
       gpu: null,
+      canvas: null,
       quality: null,
       capture: null,
       run: null,
@@ -147,7 +169,7 @@ describe('buildReport', () => {
 
     // Every heading is still there: "no capture was taken" has to be legible,
     // and an absent section reads as an older build instead.
-    for (const heading of ['device', 'quality', 'capture', 'run', 'save']) {
+    for (const heading of ['device', 'canvas', 'quality', 'capture', 'run', 'save']) {
       expect(report).toContain(`\n${heading}\n`);
     }
     expect(report).toContain('arcane-rush - report');
@@ -171,6 +193,120 @@ describe('buildReport', () => {
 
     expect(report).not.toContain('NaN');
     expect(report).toContain('-x844');
+  });
+});
+
+/**
+ * The canvas section (docs/27-device-playtest-fixes.md, section A). The first
+ * device build is the fixture: a 440x956 box drawn from a 1320x1320 buffer.
+ */
+describe('the canvas section', () => {
+  it("calls the first device build's square buffer skewed, with the numbers", () => {
+    const input = full();
+    input.canvas = {
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 1320,
+      backingHeight: 1320,
+      bufferWidth: 1320,
+      bufferHeight: 1320,
+    };
+
+    const report = buildReport(input);
+
+    expect(report).toContain('backing    1320x1320 (3x)');
+    expect(report).toContain('shape      SKEWED w/h css 0.460 backing 1.000 buffer 1.000');
+  });
+
+  it('marks a buffer the browser clamped', () => {
+    const input = full();
+    input.canvas = {
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 1320,
+      backingHeight: 2868,
+      bufferWidth: 1320,
+      bufferHeight: 2048,
+    };
+
+    const report = buildReport(input);
+
+    expect(report).toContain('buffer     1320x2048 (clamped)');
+    expect(report).toContain('shape      SKEWED');
+  });
+
+  it('prints a lowered ratio as a fraction and a lost context as zeroes', () => {
+    const input = full();
+    input.canvas = {
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 942,
+      backingHeight: 2047,
+      bufferWidth: 0,
+      bufferHeight: 0,
+    };
+
+    const report = buildReport(input);
+
+    expect(report).toContain('backing    942x2047 (2.14x)');
+    expect(report).toContain('buffer     0x0 (no context)');
+    expect(report).toContain('buffer -');
+    expect(report).not.toContain('NaN');
+  });
+});
+
+describe('readCanvas', () => {
+  it('reads the box, the backing store and the screen buffer off an engine', () => {
+    const asked: unknown[] = [];
+    const engine = {
+      getRenderingCanvas: () => ({ clientWidth: 440, clientHeight: 956, width: 1320, height: 2868 }),
+      getRenderWidth: (useScreen: unknown) => {
+        asked.push(useScreen);
+        return 1320;
+      },
+      getRenderHeight: () => 2868,
+    };
+
+    expect(readCanvas(engine)).toEqual({
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 1320,
+      backingHeight: 2868,
+      bufferWidth: 1320,
+      bufferHeight: 2868,
+    });
+    // The screen's buffer, never a render target that happens to be bound.
+    expect(asked).toEqual([true]);
+  });
+
+  it('is null for no engine, a foreign one, no canvas, and one that throws', () => {
+    expect(readCanvas(null)).toBeNull();
+    expect(readCanvas({ getGlInfo: () => ({}) })).toBeNull();
+    const sizes = { getRenderWidth: () => 1, getRenderHeight: () => 1 };
+    expect(readCanvas({ ...sizes, getRenderingCanvas: () => null })).toBeNull();
+    expect(
+      readCanvas({
+        ...sizes,
+        getRenderingCanvas: () => {
+          throw new Error('disposed');
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('prints a dash rather than NaN for a size the canvas did not answer', () => {
+    const canvas = readCanvas({
+      getRenderingCanvas: () => ({ width: 1320, height: 2868 }),
+      getRenderWidth: () => 1320,
+      getRenderHeight: () => 2868,
+    });
+    const input = full();
+    input.canvas = canvas;
+
+    const report = buildReport(input);
+
+    expect(report).toContain('css        -x-');
+    expect(report).not.toContain('NaN');
   });
 });
 

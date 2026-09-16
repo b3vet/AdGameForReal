@@ -23,6 +23,9 @@ import type { Engine } from '@babylonjs/core/Engines/engine';
 import type { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Scene } from '@babylonjs/core/scene';
 
+import { clearReadout } from './backingFit';
+import type { CanvasReadout } from './backingFit';
+import { BackingStore } from './backingStore';
 import { biomeOfLevel } from './biome';
 import type { CameraRig } from './camera';
 import { reuploadThinInstances, watchContextLoss } from './contextLoss';
@@ -41,12 +44,7 @@ import {
 } from './rendererStats';
 import type { FeatureReadout, LabelReadout } from './rendererStats';
 import { RoadBiomes, applySpan, loadLevelInto } from './rendererLevel';
-import {
-  DEFAULT_MAX_PIXEL_RATIO,
-  applyPixelRatio,
-  clampPhysicsQuality,
-  effectivePixelRatio,
-} from './rendererQuality';
+import { DEFAULT_MAX_PIXEL_RATIO, clampPhysicsQuality, effectivePixelRatio } from './rendererQuality';
 import type { SceneViews } from './views';
 import { WarmUpTracker } from './warmup';
 import type { ShaderStats } from './warmup';
@@ -92,6 +90,14 @@ export class Renderer {
   private readonly biomes: RoadBiomes;
 
   private engine: Engine | null = null;
+  /**
+   * Keeps the backing store the canvas's shape (`./backingStore.ts`). Set the
+   * moment the engine exists, well before the other fields below: the boot is
+   * exactly the window it has to cover.
+   */
+  private backing: BackingStore | null = null;
+  /** Told when the backing store changes size; see `setResizeListener`. */
+  private resizeListener: (() => void) | null = null;
   private sceneRef: Scene | null = null;
   private rig: CameraRig | null = null;
   private instrumentation: SceneInstrumentation | null = null;
@@ -152,6 +158,15 @@ export class Renderer {
       biome,
       shake: (strength, seconds) => {
         this.shake(strength, seconds);
+      },
+      onEngine: (engine) => {
+        if (this.disposed) return;
+        this.backing = new BackingStore(this.canvas, engine, {
+          wantedRatio: () => effectivePixelRatio(this.maxPixelRatio),
+          onResized: () => {
+            this.resizeListener?.();
+          },
+        });
       },
     });
     this.engine = context.engine;
@@ -404,6 +419,9 @@ export class Renderer {
     const rig = this.rig;
     if (scene === null || views === null || rig === null) return;
 
+    // Before anything reads the render size: the labels size themselves off it
+    // inside `drawFrame`, and the camera takes its aspect from it.
+    this.backing?.check();
     const timeScale = timeScaleOf(this.engine, dt);
     drawFrame({ views, rig, preview: this.preview, timeScale }, state, events, dt);
 
@@ -427,9 +445,32 @@ export class Renderer {
     this.views?.events.apply(events);
   }
 
+  /**
+   * Looks at the canvas again and fits the backing store to it. The store
+   * already does this on its own for every change it can see; this is for a
+   * caller that knows of one it cannot.
+   */
   resize(): void {
-    this.engine?.resize();
-    this.applyPixelRatio();
+    this.backing?.refit();
+  }
+
+  /**
+   * Who to tell when the backing store changes size, which clears the canvas:
+   * the frame loop, which may be holding a settled frame it would otherwise
+   * never draw again. One listener; `null` takes it off.
+   */
+  setResizeListener(listener: (() => void) | null): void {
+    this.resizeListener = listener;
+  }
+
+  /**
+   * The canvas's CSS box, backing store and drawing buffer, and whether they
+   * are one shape, written into `out`; zeroes before `init`. The debug panel's
+   * per-frame copy, so nothing is allocated.
+   */
+  readCanvas(out: CanvasReadout): void {
+    if (this.backing === null) clearReadout(out);
+    else this.backing.readout(out);
   }
 
   dispose(): void {
@@ -438,6 +479,9 @@ export class Renderer {
 
     this.unwatchContext?.();
     this.unwatchContext = null;
+    this.backing?.dispose();
+    this.backing = null;
+    this.resizeListener = null;
     this.views?.dispose();
     this.views = null;
     this.rig?.dispose();
@@ -452,9 +496,10 @@ export class Renderer {
   }
 
   /** The backing store, at the screen's ratio under our cap
-   *  (`./rendererQuality.ts`). */
+   *  (`./rendererQuality.ts`) and under whatever the browser will allocate
+   *  (`./backingStore.ts`). */
   private applyPixelRatio(): void {
-    applyPixelRatio(this.engine, effectivePixelRatio(this.maxPixelRatio));
+    this.backing?.fit();
   }
 
   /**
@@ -474,7 +519,8 @@ export class Renderer {
   /**
    * Babylon has rebuilt its side (`./contextLoss.ts` lists what that covers).
    * Three things are left, and they are ours: the backing store's size, which
-   * is set through the engine rather than the canvas; every thin-instance
+   * is set through the engine rather than the canvas (and which the shell may
+   * have changed while the context was gone); every thin-instance
    * matrix buffer written once at a level load, which Babylon cannot restore at
    * all; and the materials, which it would otherwise recompile one at a time
    * inside the player's first frames back.
@@ -483,8 +529,7 @@ export class Renderer {
     if (!this.contextLost || this.disposed) return;
     this.contextLost = false;
 
-    this.engine?.resize();
-    this.applyPixelRatio();
+    this.backing?.refit();
     // The roadside, the arena walls and everything else whose matrices were
     // written once at a level load. Babylon cannot do this one; see
     // `reuploadThinInstances` for the measurement and the reason.

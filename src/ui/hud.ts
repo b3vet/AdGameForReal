@@ -1,5 +1,6 @@
 /**
- * The in-run HUD: squad count, level chip, staff badge, boss HP bar.
+ * The in-run HUD: squad count, level chip, staff badge, boss HP bar, and
+ * whether the pause button next to the sound is on offer.
  *
  * That is the whole list now (plan, "UI text, font"). The gate legend and the
  * full-screen staff-name flash were cut: the legend taught a rule the first
@@ -17,6 +18,7 @@ import { academy, fill } from '@/data/academy-types';
 import { weaponOf } from '@/sim';
 import type { BossKind, RunState, SimEvent, WeaponId } from '@/sim';
 
+import { requireElement } from './dom';
 import { setIcon, staffIcon } from './icons';
 
 import './hud.css';
@@ -54,6 +56,26 @@ export interface HudElements {
   bossBar: HTMLElement;
   bossValue: HTMLElement;
   bossLabel: HTMLElement;
+  /**
+   * The pause button (docs/27). Hidden once the run's end sequence starts: the
+   * beat before the result sheet is not a run anyone can pause.
+   */
+  pauseButton: HTMLElement;
+}
+
+/** The HUD's elements in `index.html`, by the ids the markup gives them. */
+export function hudElements(root: ParentNode): HudElements {
+  return {
+    levelLabel: requireElement(root, '#hud-level'),
+    count: requireElement(root, '#hud-count'),
+    plaque: requireElement(root, '#hud-plaque'),
+    staffIcon: requireElement(root, '#hud-staff-icon'),
+    staffBadge: requireElement(root, '#hud-staff'),
+    bossBar: requireElement(root, '#boss-bar'),
+    bossValue: requireElement(root, '#boss-bar-value'),
+    bossLabel: requireElement(root, '#boss-bar-label'),
+    pauseButton: requireElement(root, '#pause-hud'),
+  };
 }
 
 export class Hud {
@@ -76,6 +98,7 @@ export class Hud {
   private bossKind: BossKind = 'demon';
   private shownBossTitle = '';
   private lastBossShake = 0;
+  private pauseShown = true;
 
   constructor(elements: HudElements) {
     this.elements = elements;
@@ -104,10 +127,12 @@ export class Hud {
     // The fill is an inline custom property, so it outlives a run unless it is
     // taken off; a fresh bar would otherwise open on the last boss's HP.
     this.elements.bossBar.style.removeProperty('--boss-fill');
+    this.setPausable(true);
   }
 
   update(state: Readonly<RunState>, events: readonly SimEvent[]): void {
     if (this.endless) this.updateMetres(state);
+    this.setPausable(state.status === 'running');
     const count = Math.max(0, Math.round(state.squad.count));
     if (count !== this.shownCount) {
       this.elements.count.textContent = String(count);
@@ -245,6 +270,12 @@ export class Hud {
     this.elements.plaque.dataset['staff'] = staff;
     setIcon(this.elements.staffIcon, staffIcon(staff));
     if (announce) replayAnimation(badge, SWAP_CLASS);
+  }
+
+  private setPausable(pausable: boolean): void {
+    if (pausable === this.pauseShown) return;
+    this.pauseShown = pausable;
+    this.elements.pauseButton.hidden = !pausable;
   }
 
   private setBossVisible(visible: boolean): void {

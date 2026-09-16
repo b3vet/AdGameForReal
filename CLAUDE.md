@@ -15,7 +15,7 @@ iOS and Android later.
 - **At most five general-purpose Opus agents run in parallel** (D56). Plan
   every milestone's waves inside that cap.
 - Everything is documented in `docs/`. Read `docs/README.md` for the rules.
-  Read the current milestone plan before touching code. Current: `docs/25-milestone-9-plan.md`.
+  Read the current milestone plan before touching code. Current: `docs/27-device-playtest-fixes.md` (Milestone 9 follow-up; the last milestone plan is `docs/25-milestone-9-plan.md`).
 
 ## Stack
 

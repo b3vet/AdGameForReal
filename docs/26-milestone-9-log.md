@@ -139,3 +139,59 @@ severity and the secondary category marked in `docs/STORE.md`; the
 ladder's numbers live in code rather than data if the phone needs them
 moved; the generated Android landscape splash drawables are dead weight
 on a portrait app.
+
+## 2026-09-16 — After the close: the first device run (doc 27)
+
+- The owner ran the app on their iPhone (6.9-inch Pro Max, iOS 27.0 beta)
+  and reported a stretched scene and no way to pause. Before either, Xcode
+  refused `LaunchScreen.storyboard`: a comment held `--c-sky-mid`, and XML
+  forbids a double hyphen inside a comment. Reworded; every storyboard,
+  plist and XML file under `ios/` and `android/` checked with `xmllint`.
+- A, stretched scene: the screenshot's detail is native along x and about
+  a 2x upscale along y, which is a 1320×1320 backing store on a 440×956
+  canvas. Babylon sizes the store only when told; the only caller was a
+  window `resize` listener attached after the boot, seconds in on a phone.
+  No iOS 27 simulator exists here and iOS 26.3 launched correctly, so the
+  mechanism was reproduced instead: a window started square and resized a
+  second later fired its `resize` 270 ms before the app listened, and
+  the square store stayed for the whole session, matching the owner's
+  frame down to its spectrum. Fixed by `src/render/backingStore.ts`
+  (D58), started when the engine exists; the device report and the debug
+  panel now print the canvas's three sizes and a shape verdict. Why iOS 27
+  resizes the web view during launch is not established; the next report
+  says whether the shape is right.
+- B, pause: a round button under the sound button on a portrait phone
+  (beside it from 540 px up; side by side, the staff badge ran over it
+  with a three-digit count at 375 and 320 px), a menu with Resume,
+  Restart level and Home over the dimmed frozen frame, P and Escape on a
+  keyboard, and a return from the background mid-run landing on the menu
+  (D59). Abandoning pays nothing, held by `abandon.test.ts` with a
+  control case that does pay. The frozen frame survives a resize, a
+  return and a context restore; after a restore it is redrawn until the
+  scene is ready, because one redraw left the trees missing for 4 s.
+- C, sound (found on the way): all seventeen clips logged `failed to load
+  {}` in the simulator. The real error was `HTTP 0`: Capacitor's iOS file
+  server answers media extensions with a bare `URLResponse`, no status,
+  and Babylon's sound loader refuses anything not `ok`. Clips now come
+  through `assetBytes` (status 0 with a body accepted, one `Range` retry,
+  which that server answers as a proper 206) and reach Babylon as bytes;
+  failed clips retry once on unlock; warnings print `name: message`
+  (D60). In the simulator: 17 loaded, `play()` reached with the context
+  running. Heard on a phone: not yet.
+- Verified: typecheck 0 errors, lint clean, 649 tests (6 skipped), smoke
+  PASS in 460 s including the new pause check and the visibility check
+  now landing on the menu, preflight PASS after `cap:sync`. On the
+  simulator (iPhone 17 Pro Max, iOS 26.3) by the tech lead: a level 3 run
+  in the web build's proportions, Pause freezing the frame (two shots 3 s
+  apart byte-identical), Resume, background and return landing on the
+  menu over a correct frame, Home back to the Academy, no crashes and no
+  app errors in the log.
+- Environment: Playwright's browser cache under `~/Library/Caches`
+  vanished mid-session (not by an agent's command as far as the reports
+  show) and was reinstalled with `npx playwright install chromium`.
+- Left: the owner's next device run (shape line in the report, sound on
+  the phone, pause feel); `Renderer.ts` is 547 lines and `debug.ts` 440,
+  both past the file-size rule and due a split; at 320 px with a
+  three-digit count the level chip wraps and the sound button touches the
+  staff badge (older than this change). The owner's new art and their
+  Xcode signing changes are in the working tree and were not committed.

@@ -337,6 +337,14 @@
     "bossFallback": "Boss",
     "enraged": "Enraged"
   },
+  "pause": {
+    "button": "Pause",
+    "title": "Paused",
+    "resume": "Resume",
+    "restart": "Restart level",
+    "restartEndless": "Restart run",
+    "home": "Home"
+  },
   "buttons": {
     "buy": "Buy",
     "max": "Max",

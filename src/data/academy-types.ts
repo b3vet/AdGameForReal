@@ -210,6 +210,19 @@ export interface AcademyCopy {
     bossFallback: string;
     enraged: string;
   };
+  /**
+   * The pause button and the menu behind it (docs/27, section B). An endless
+   * run has no level to restart (D52), so its Restart button says so.
+   */
+  pause: {
+    /** The HUD button's accessible name; the button itself is a glyph. */
+    button: string;
+    title: string;
+    resume: string;
+    restart: string;
+    restartEndless: string;
+    home: string;
+  };
   buttons: {
     buy: string;
     max: string;

@@ -14,6 +14,7 @@
 import { academy, fill } from '@/data/academy-types';
 import type { PlayerState } from '@/core/player';
 
+import { requireElement } from './dom';
 import { ResultMeta } from './resultMeta';
 import type { ResultMetaElements } from './resultMeta';
 import { replay } from './widgets';
@@ -76,6 +77,32 @@ export interface ResultElements extends ResultMetaElements {
   total: HTMLElement;
   advance: HTMLButtonElement;
   levels: HTMLButtonElement;
+}
+
+/** The sheet's elements in `index.html`, by the ids the markup gives them. */
+export function resultElements(root: ParentNode): ResultElements {
+  return {
+    ribbon: requireElement(root, '#result-ribbon'),
+    kicker: requireElement(root, '#result-kicker'),
+    title: requireElement(root, '#result-title'),
+    badge: requireElement(root, '#result-first-clear'),
+    survivors: requireElement(root, '#result-survivors'),
+    peak: requireElement(root, '#result-peak'),
+    coins: requireElement(root, '#result-coins'),
+    total: requireElement(root, '#result-total'),
+    advance: requireElement<HTMLButtonElement>(root, '#next-button'),
+    levels: requireElement<HTMLButtonElement>(root, '#levels-button'),
+    metresRow: requireElement(root, '#result-metres-row'),
+    metres: requireElement(root, '#result-metres'),
+    bestMetres: requireElement(root, '#result-best-metres'),
+    bonuses: requireElement(root, '#result-bonuses'),
+    best: requireElement(root, '#result-best'),
+    next: requireElement(root, '#result-next'),
+    nextHeading: requireElement(root, '#result-next-heading'),
+    nextName: requireElement(root, '#result-next-name'),
+    nextPrice: requireElement(root, '#result-next-price'),
+    nextShort: requireElement(root, '#result-next-short'),
+  };
 }
 
 export interface ResultCallbacks {

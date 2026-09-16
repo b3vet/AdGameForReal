@@ -270,10 +270,37 @@
   }
 }
 
-/* The mute button takes the third column, opposite the level chip. */
-.mute--hud {
+/*
+ * Pause and mute take the third column together, opposite the level chip, with
+ * mute in the corner where it has always been (docs/27). One size for both, so
+ * the pair reads as a set.
+ *
+ * Stacked, pause under mute, on a phone held upright. Side by side they are
+ * 77 px wide, and the staff badge hangs off the plaque into this column:
+ * measured with a three-digit count, the badge ran over the pause button at 375
+ * and 320 px and cleared it by one pixel at 440, the owner's phone. A column of
+ * one button is as wide as mute always was, so the stack collides with nothing
+ * that mute alone did not. Where the screen is wide enough — every phone on its
+ * side — they sit in a row.
+ */
+.hud__buttons {
   grid-column: 3;
   justify-self: end;
+  display: flex;
+  /* Mute first on screen, in the corner; pause is first in the markup, so Tab
+     reaches it before the sound. */
+  flex-direction: column-reverse;
+  gap: 0.45rem;
+}
+
+@media (min-width: 540px) {
+  .hud__buttons {
+    flex-direction: row;
+  }
+}
+
+.mute--hud,
+.pause--hud {
   width: 2.2rem;
   height: 2.2rem;
 }

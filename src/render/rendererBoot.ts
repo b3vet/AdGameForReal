@@ -42,6 +42,14 @@ export interface BootOptions {
   biome: BiomeId;
   /** The renderer's own camera kick, which the views fire but do not own. */
   shake: (strength: number, seconds: number) => void;
+  /**
+   * Called with the engine the moment it exists, before the first await. The
+   * renderer starts keeping the backing store the canvas's shape here rather
+   * than once the boot is over: the boot is seconds on a phone, and a web view
+   * that changes size inside them is the fault that made the first device
+   * build draw a square frame (`./backingStore.ts`).
+   */
+  onEngine: (engine: Engine) => void;
 }
 
 /**
@@ -59,6 +67,7 @@ export async function bootScene(options: BootOptions): Promise<RenderContext> {
   // was rescaled at the end would rebuild what it had just made ready.
   // `Renderer.setMaxPixelRatio` owns every later change.
   engine.setHardwareScalingLevel(1 / options.effectivePixelRatio);
+  options.onEngine(engine);
 
   const scene = createScene(engine);
   const instrumentation = new SceneInstrumentation(scene);

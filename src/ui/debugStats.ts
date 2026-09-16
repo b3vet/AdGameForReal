@@ -12,6 +12,25 @@
  */
 
 /**
+ * The canvas three ways (docs/27-device-playtest-fixes.md, section A): the CSS
+ * box the player sees, the backing store Babylon sized from it, and the drawing
+ * buffer the browser actually allocated. The first device build drew a 440x956
+ * box over a 1320x1320 buffer; this is the line that shows it without a Mac.
+ * The same shape as `CanvasReadout` in `src/render/backingFit.ts`, which fills
+ * it in place.
+ */
+export interface DebugCanvas {
+  cssWidth: number;
+  cssHeight: number;
+  backingWidth: number;
+  backingHeight: number;
+  bufferWidth: number;
+  bufferHeight: number;
+  /** False when the backing store or the buffer is not the box's shape. */
+  inShape: boolean;
+}
+
+/**
  * What the app knows about the frame it just ran. The app owns one instance and
  * overwrites it every frame, so nothing here may hold on to it.
  */
@@ -67,6 +86,8 @@ export interface DebugStats {
   pixelRatio: number;
   /** What the screen offers, so a lowered `pixelRatio` reads as a decision. */
   devicePixelRatio: number;
+  /** The canvas's box, backing store and drawing buffer; one object, rewritten. */
+  canvas: DebugCanvas;
   /** `off`, `loading`, `locked` or `unlocked`, plus a mute marker. */
   audio: string;
   /** Clips decoded and playable, so a silent game says which kind of silent. */

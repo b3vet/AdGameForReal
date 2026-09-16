@@ -5,7 +5,8 @@
  * The debug panel already prints everything a *live* reading needs, but a photo
  * of a panel is not a number anyone can compare against the last build, and the
  * panel says nothing at all about the phone it is running on. This is the other
- * half: what the device is, what the ladder settled at, what the last capture
+ * half: what the device is, what shape the canvas is drawn at
+ * (`./reportCanvas.ts`), what the ladder settled at, what the last capture
  * measured, what the last run did, and where the save has got to — as text, so
  * it travels in a chat message.
  *
@@ -28,6 +29,12 @@
 
 import type { RunState } from '@/sim';
 import type { CaptureSummary } from '@/ui';
+
+import { canvasRows, readCanvas } from './reportCanvas';
+import type { ReportCanvas } from './reportCanvas';
+
+export type { ReportCanvas } from './reportCanvas';
+export { readCanvas } from './reportCanvas';
 
 /**
  * Stamped by the build (`vite.config.ts` and its two siblings). `dev` where it
@@ -82,6 +89,8 @@ export interface ReportInput {
   userAgent: string;
   screen: { width: number; height: number; pixelRatio: number } | null;
   gpu: ReportGpu | null;
+  /** The canvas's box, backing store and drawing buffer (`./reportCanvas.ts`). */
+  canvas: ReportCanvas | null;
   quality: ReportQuality | null;
   capture: CaptureSummary | null;
   /** The last run the panel saw, live or finished. */
@@ -98,6 +107,11 @@ const MISSING = '-';
 export function buildReport(input: ReportInput): string {
   const lines: string[] = [`arcane-rush ${text(input.version)} report`];
   pushSection(lines, 'device', deviceRows(input));
+  pushSection(
+    lines,
+    'canvas',
+    canvasRows(input.canvas).map(([label, value]) => row(label, value)),
+  );
   pushSection(lines, 'quality', qualityRows(input.quality));
   pushSection(lines, 'capture', captureRows(input.capture));
   pushSection(lines, 'run', runRows(input.run));
@@ -271,7 +285,8 @@ function readString(value: unknown): string {
 export interface ReportDeps {
   /** `ios`, `android` or `web` (`src/device/platform.ts`). */
   platform: () => string;
-  /** The engine, or null before `Renderer.init` has run; see `readGl`. */
+  /** The engine, or null before `Renderer.init` has run; see `readGl` and
+   *  `readCanvas`. */
   gl: () => unknown;
   quality: () => ReportQuality;
   save: () => ReportSave;
@@ -288,6 +303,8 @@ export function collectReport(
   state: Readonly<RunState> | null,
 ): string {
   const platform = attempt(deps.platform) ?? '';
+  // Asked once: the GPU strings and the canvas sizes both come off it.
+  const engine = attempt(deps.gl);
   return buildReport({
     version: APP_VERSION,
     // Inside the app the build kind is "native" whatever bundler made it: the
@@ -297,7 +314,8 @@ export function collectReport(
     platform,
     userAgent: browserAgent(),
     screen: browserScreen(),
-    gpu: readGl(attempt(deps.gl)),
+    gpu: readGl(engine),
+    canvas: readCanvas(engine),
     quality: attempt(deps.quality),
     capture,
     run: state,

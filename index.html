@@ -208,6 +208,14 @@
           />
         </symbol>
 
+        <!-- Pause (docs/27): two bars, filled like the sound button's horn
+             beside it and spanning the same height, so the pair reads as one
+             set of controls. -->
+        <symbol id="i-pause" viewBox="0 0 24 24">
+          <rect x="6" y="5" width="4.2" height="14" rx="1.4" />
+          <rect x="13.8" y="5" width="4.2" height="14" rx="1.4" />
+        </symbol>
+
         <symbol id="i-lock" viewBox="0 0 24 24">
           <rect x="4.6" y="10.4" width="14.8" height="10" rx="2.2" />
           <path
@@ -375,9 +383,10 @@
         </div>
       </section>
 
-      <!-- HUD: count, staff badge, boss bar, level chip, mute — and nothing
-           else (docs/09-milestone-3-plan.md, "UI text, font"). Informational
-           only, so it never eats a drag (pointer-events: none). -->
+      <!-- HUD: count, staff badge, boss bar, level chip, pause and mute —
+           and nothing else (docs/09-milestone-3-plan.md, "UI text, font").
+           Informational apart from the two buttons, so it never eats a drag
+           (pointer-events: none). -->
       <section id="hud" class="screen screen--hud" hidden>
         <div class="screen__inner">
           <div class="hud__stack">
@@ -398,20 +407,31 @@
                 <span id="hud-staff" class="hud__staff" data-staff="ember">Ember</span>
               </div>
 
-              <button
-                id="mute-hud"
-                class="mute mute--hud"
-                type="button"
-                aria-label="Sound"
-                aria-pressed="false"
-              >
-                <svg class="mute__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path class="mute__horn" d="M4 9h4l5-4v14l-5-4H4z" />
-                  <path class="mute__wave" d="M16.2 8.4a5 5 0 0 1 0 7.2" />
-                  <path class="mute__wave" d="M18.6 6a8.5 8.5 0 0 1 0 12" />
-                  <path class="mute__slash" d="M4 3.5 21 20.5" />
-                </svg>
-              </button>
+              <!-- Pause next to mute (docs/27): the same round plate, under it
+                   on an upright phone and beside it on a wide screen
+                   (src/ui/hud.css), and hidden by src/ui/hud.ts once the run's
+                   end sequence starts. -->
+              <div class="hud__buttons">
+                <button id="pause-hud" class="pause pause--hud" type="button" aria-label="Pause">
+                  <span class="icon pause__icon" aria-hidden="true"
+                    ><svg viewBox="0 0 24 24" focusable="false"><use href="#i-pause" /></svg
+                  ></span>
+                </button>
+                <button
+                  id="mute-hud"
+                  class="mute mute--hud"
+                  type="button"
+                  aria-label="Sound"
+                  aria-pressed="false"
+                >
+                  <svg class="mute__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path class="mute__horn" d="M4 9h4l5-4v14l-5-4H4z" />
+                    <path class="mute__wave" d="M16.2 8.4a5 5 0 0 1 0 7.2" />
+                    <path class="mute__wave" d="M18.6 6a8.5 8.5 0 0 1 0 12" />
+                    <path class="mute__slash" d="M4 3.5 21 20.5" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div id="boss-bar" class="boss frame frame--bar" hidden>
@@ -422,6 +442,37 @@
               <div class="boss__track">
                 <div id="boss-bar-fill" class="boss__fill"></div>
                 <span class="boss__gem" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The pause menu (docs/27, section B): over the HUD rather than
+           instead of it, so the frozen road and the count stay behind the
+           dim. src/ui/pause.ts owns it; the words come from academy.json. -->
+      <section
+        id="pause-screen"
+        class="screen screen--pause"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pause-title"
+        hidden
+      >
+        <div class="screen__inner">
+          <div class="pause__body">
+            <div class="screen__top">
+              <h2 id="pause-title" class="screen__title screen__title--panel">Paused</h2>
+              <div class="flourish" aria-hidden="true"></div>
+            </div>
+
+            <div class="screen__panel frame frame--panel pause__panel">
+              <div class="screen__actions">
+                <button id="pause-resume" class="button" type="button">Resume</button>
+                <button id="pause-restart" class="button button--ghost" type="button">
+                  Restart level
+                </button>
+                <button id="pause-home" class="button button--ghost" type="button">Home</button>
               </div>
             </div>
           </div>

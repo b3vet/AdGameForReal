@@ -42,6 +42,15 @@ function stats(): DebugStats {
     heapDrops: 0,
     pixelRatio: 3,
     devicePixelRatio: 3,
+    canvas: {
+      cssWidth: 440,
+      cssHeight: 956,
+      backingWidth: 1320,
+      backingHeight: 2868,
+      bufferWidth: 1320,
+      bufferHeight: 2868,
+      inShape: true,
+    },
     audio: 'unlocked',
     audioClips: 20,
   };

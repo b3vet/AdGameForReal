@@ -98,6 +98,12 @@ export const RUNS = [
     // (`checkVisibilityPause`). Two seconds of the smoke's budget, once, on a
     // run whose only picture is the sheet at the end of it.
     visibilityPause: true,
+    // The pause menu (docs/27, section B) rides the same run for the same
+    // reason, straight after it: the button pauses and the clock holds, the
+    // menu is photographed, Resume starts the clock again, and P and Escape
+    // toggle it (`./smoke-pause.mjs`). Another three seconds, once.
+    pauseMenu: true,
+    pauseShot: 'pause.png',
   },
   {
     /**

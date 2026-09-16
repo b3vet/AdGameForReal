@@ -2,8 +2,8 @@
  * What the overlay's buttons ask of the app.
  *
  * Split out of `App` in Milestone 4 Phase D, for the file-size rule and because
- * it is the one part of that file with no state in it at all: sixteen callbacks
- * that each turn a tap into one call. Keeping it here leaves `App` reading as a
+ * it is the one part of that file with no state in it at all: a list of
+ * callbacks that each turn a tap into one call. Keeping it here leaves `App` reading as a
  * state machine, and leaves the wiring somewhere it can be checked against
  * `OverlayCallbacks` in one screenful.
  *
@@ -16,6 +16,7 @@ import type { CosmeticSlot } from '@/data';
 import type { OverlayCallbacks } from '@/ui';
 
 import type { AcademyController } from './academy';
+import type { RunPause } from './pause';
 import type { RoomId } from './player';
 
 /** The app, as a tap sees it. */
@@ -23,6 +24,11 @@ export interface AppCommands {
   readonly audio: GameAudio;
   /** The meta layer: purchases go straight through (`./academy.ts`). */
   readonly academy: AcademyController;
+  /**
+   * The pause menu (docs/27): the button, Resume, Restart and Home go straight
+   * through, and each is a no-op when there is nothing to do (`./pause.ts`).
+   */
+  readonly pause: RunPause;
   /** Play: start the road the picker is pointed at. */
   startRun(): void;
   /**
@@ -110,6 +116,18 @@ export function overlayCallbacks(app: AppCommands): OverlayCallbacks {
     },
     onReplay: () => {
       app.replayRun();
+    },
+    onPause: () => {
+      app.pause.pause();
+    },
+    onResume: () => {
+      app.pause.resume();
+    },
+    onRestart: () => {
+      app.pause.restart();
+    },
+    onHome: () => {
+      app.pause.home();
     },
   };
 }

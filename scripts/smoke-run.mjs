@@ -29,6 +29,7 @@ import {
   armShotPlan,
   takeShots,
 } from './smoke-run-plan.mjs';
+import { checkPauseMenu } from './smoke-pause.mjs';
 import { checkVisibilityPause } from './smoke-visibility.mjs';
 
 /**
@@ -181,7 +182,7 @@ async function playRun(page, url, run, failures, outDir, say) {
   // run to be on the road and only then slowed down would already be measuring
   // a different part of the level. Handed back the moment the check is done.
   const heldTurbo =
-    run.visibilityPause === true
+    run.visibilityPause === true || run.pauseMenu === true
       ? await page.evaluate(() => {
           const before = globalThis.__arcane?.app.turbo ?? 1;
           globalThis.__arcane?.setTurbo(1);
@@ -207,8 +208,19 @@ async function playRun(page, url, run, failures, outDir, say) {
 
   // Definition of done 3: the sim clock stops while the page is away and starts
   // again when it comes back. On a run with no shot list, at the very start of
-  // it (`./smoke-runs.mjs` says which run and why).
-  if (heldTurbo !== null) await checkVisibilityPause(page, run, failures, say, heldTurbo);
+  // it (`./smoke-runs.mjs` says which run and why). The pause menu's own check
+  // (docs/27) rides the same stretch of real time, so the first check leaves
+  // the clock at real time and the last one hands the run's turbo back.
+  if (heldTurbo !== null) {
+    const pauseMenu = run.pauseMenu === true;
+    if (run.visibilityPause === true) {
+      await checkVisibilityPause(page, run, failures, say, pauseMenu ? 1 : heldTurbo);
+    }
+    if (pauseMenu) {
+      const pauseShot = await checkPauseMenu(page, run, failures, say, shot, heldTurbo);
+      if (pauseShot !== null) written.push(pauseShot);
+    }
+  }
 
   const startedAt = Date.now();
 

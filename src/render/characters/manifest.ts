@@ -95,13 +95,13 @@ function resolveUrl(url: string): string {
  * browser, but the single-file builds exist because the page host blocks
  * requests, and a request for a `data:` URI is still a request as far as a
  * strict host — or a Playwright route that aborts everything — is concerned.
+ *
+ * Anything else is fetched by `fetchBytes`, which does not trust status alone:
+ * the iOS app is not an HTTP server, and a sound's status there is 0.
  */
 export async function assetBytes(url: string): Promise<ArrayBuffer> {
   const base64 = base64Payload(url);
-  if (base64 === null) {
-    const response = await fetch(url);
-    return response.arrayBuffer();
-  }
+  if (base64 === null) return fetchBytes(url);
 
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -117,6 +117,63 @@ export async function assetJson<T>(url: string): Promise<T> {
     return (await response.json()) as T;
   }
   return JSON.parse(atob(base64)) as T;
+}
+
+/**
+ * The whole file as a byte range. Every server that honours `Range` answers it
+ * with 206 and the full body, and Capacitor's iOS handler answers it as HTTP.
+ */
+const WHOLE_FILE: RequestInit = { headers: { Range: 'bytes=0-' } };
+
+/**
+ * A file's bytes from a real request, judged by what came back.
+ *
+ * The Capacitor iOS shell serves the bundle through its own URL scheme, and its
+ * handler (`WebViewAssetHandler.swift`) answers a media file — `.wav`, `.mp3`,
+ * `.m4a` and the rest — with a bare `URLResponse` rather than an HTTP one, so
+ * WebKit hands the page status 0, no headers, and the whole file. Babylon's
+ * sound loader reads that as `HTTP 0` and gives up, which silenced every clip in
+ * the app while models and textures, which are not media, loaded beside them
+ * (measured in the iOS Simulator after the first device run, docs/27). Status 0
+ * with bytes is a local file, and is accepted; a real HTTP status still has to
+ * be a success.
+ *
+ * When the first request brings nothing back, it is asked once more as a byte
+ * range, because that same handler answers any request with a `Range` header as
+ * proper HTTP 206. The first request is enough on iOS 26; the retry is for a
+ * WebKit that stops handing status-0 bodies to the page, which the owner's beta
+ * phone may be and no simulator here can show. A browser only reaches the retry
+ * when its first request already failed, and an HTTP error is never retried.
+ */
+async function fetchBytes(url: string): Promise<ArrayBuffer> {
+  const plain = await attemptBytes(url);
+  if (typeof plain !== 'string') return plain;
+  const ranged = await attemptBytes(url, WHOLE_FILE);
+  if (typeof ranged !== 'string') return ranged;
+  throw new Error(`no bytes for ${url}: ${plain}; as a range: ${ranged}`);
+}
+
+/**
+ * One request: the bytes, or — when there was no HTTP answer to judge — why
+ * not, so the caller can ask again. Throws on an HTTP error status.
+ */
+async function attemptBytes(url: string, init?: RequestInit): Promise<ArrayBuffer | string> {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error: unknown) {
+    return String(error);
+  }
+  if (response.status !== 0 && !response.ok) {
+    throw new Error(`HTTP ${String(response.status)} for ${url}`);
+  }
+  try {
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > 0) return bytes;
+    return `status ${String(response.status)} and an empty body`;
+  } catch (error: unknown) {
+    return String(error);
+  }
 }
 
 /** The base64 payload of a `data:...;base64,` URI, or null for anything else. */

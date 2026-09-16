@@ -22,8 +22,14 @@ const VISIBILITY_HOLD_MS = 1000;
 const RUN_START_TIMEOUT_MS = 20_000;
 
 /**
- * The sim clock stops while the page is away, and starts again when it is back
- * (Milestone 9, definition of done 3).
+ * The sim clock stops while the page is away, and starts again when the player
+ * lets it (Milestone 9, definition of done 3).
+ *
+ * Since the pause menu (docs/27, section B) "when it is back" is not the
+ * moment the page is visible again: a run that was taken away comes back on
+ * the menu, still held, and it is Resume that starts the clock. So there are
+ * three readings, not two — held while hidden, still held once visible with the
+ * menu up, and moving after `resumeRun`.
  *
  * Run mid-road rather than on a menu, because the thing being proved is that a
  * *run* is where the player left it: a title screen has no sim clock to hold
@@ -88,23 +94,38 @@ export async function checkVisibilityPause(page, run, failures, say, restoreTurb
 
       setHidden(false);
       await wait(holdMs);
+      const back = clock();
+      const menu = handle?.isPaused() === true;
+
+      handle?.resumeRun();
+      await wait(holdMs);
       const after = clock();
 
-      if (before === null || held === null || after === null) {
+      if (before === null || held === null || back === null || after === null) {
         return { ok: false, why: 'the run ended during the check' };
       }
       if (before <= 0) return { ok: false, why: 'the sim clock had not started' };
       if (held !== before) {
         return { ok: false, why: `the sim ran while hidden: ${before}s -> ${held}s` };
       }
-      if (!(after > held)) {
-        return { ok: false, why: `the sim did not restart: still ${held}s` };
+      if (!menu) return { ok: false, why: 'the run came back without the pause menu' };
+      if (back !== held) {
+        return { ok: false, why: `the sim ran behind the pause menu: ${held}s -> ${back}s` };
       }
-      return { ok: true, why: `held at ${held.toFixed(2)}s, ran on to ${after.toFixed(2)}s` };
+      if (!(after > back)) {
+        return { ok: false, why: `the sim did not restart after Resume: still ${back}s` };
+      }
+      return {
+        ok: true,
+        why:
+          `held at ${held.toFixed(2)}s, back on the pause menu, ` +
+          `ran on to ${after.toFixed(2)}s after Resume`,
+      };
     } finally {
-      // Whatever happened above, the page is left with a real `visibilityState`
-      // and the run at the speed the plan expects.
+      // Whatever happened above, the page is left with a real `visibilityState`,
+      // no menu, and the run at the speed the plan expects.
       delete globalThis.document.visibilityState;
+      handle?.resumeRun();
       handle?.setTurbo(turbo);
     }
   }, { holdMs: VISIBILITY_HOLD_MS, turbo: restoreTurbo });

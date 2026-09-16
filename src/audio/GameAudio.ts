@@ -18,16 +18,18 @@
  * (`audio-types.ts` is the schema).
  */
 
-import { CreateAudioEngineAsync, CreateSoundAsync } from '@babylonjs/core/AudioV2';
+import { CreateAudioEngineAsync } from '@babylonjs/core/AudioV2';
 import type { AudioEngineV2, StaticSound } from '@babylonjs/core/AudioV2';
 
 import { audioMix } from '@/data';
-import { assetBytes, audioAssets, resolveAssetUrl } from '@/render/characters';
+import { audioAssets } from '@/render/characters';
+import type { AudioAsset } from '@/render/characters';
 import { mulberry32 } from '@/sim';
 import type { RunState, SimEvent } from '@/sim';
 
 import { EventVoices } from './audioEvents';
 import type { ClipPlayer } from './audioEvents';
+import { describeError, loadClip } from './clipLoader';
 
 /**
  * `off`   — no engine: construction failed, or the browser has no WebAudio.
@@ -81,9 +83,24 @@ export class GameAudio {
    * choice, or a run interrupted by a notification would come back silent for
    * good. Either one silences the engine (`silent` below); only the player's
    * one survives a return to the foreground.
+   *
+   * The pause menu holds it too (docs/27): `src/core/appLifecycle.ts` sets it
+   * while the app is away *or* the run is paused, for the same reason.
    */
   private suspendedFlag = false;
   private disposed = false;
+  /**
+   * Clips that failed at boot, tried once more from the first unlock.
+   *
+   * A clip can fail at boot for a reason a started context no longer has: a
+   * WebKit that will not decode for a context no gesture has started — which
+   * the beta iOS on the owner's phone may be — or a request the shell dropped
+   * while the app was still launching. Once, not on every tap: a clip that
+   * fails twice is missing from the build, and every Play would only repeat
+   * the warning.
+   */
+  private readonly failedClips = new Set<string>();
+  private clipsRetried = false;
 
   /** Last time each throttled event class played, in `now()` milliseconds. */
   private readonly lastPlayed = new Map<string, number>();
@@ -163,7 +180,7 @@ export class GameAudio {
     } catch (error: unknown) {
       // Not `console.error`: a browser that refuses audio is not a broken game,
       // and the smoke test fails on errors.
-      console.warn('[arcane-rush] audio unavailable', error);
+      console.warn(`[arcane-rush] audio unavailable: ${describeError(error)}`);
       this.engine = null;
     } finally {
       this.loading = false;
@@ -187,13 +204,14 @@ export class GameAudio {
     engine.unlockAsync().then(
       () => {
         this.unlocked = engine.state === 'running';
+        if (this.unlocked) this.retryFailedClips(engine);
         if (this.unlocked && this.revealOwed) {
           this.revealOwed = false;
           this.playCue(audioMix.ui.roomReveal);
         }
       },
       (error: unknown) => {
-        console.warn('[arcane-rush] audio could not be unlocked', error);
+        console.warn(`[arcane-rush] audio could not be unlocked: ${describeError(error)}`);
       },
     );
   }
@@ -298,31 +316,31 @@ export class GameAudio {
     this.engine = null;
   }
 
-  private async loadSounds(engine: AudioEngineV2): Promise<void> {
+  /** Every clip at boot; the ones that failed, once, from `retryFailedClips`. */
+  private async loadSounds(
+    engine: AudioEngineV2,
+    assets: readonly AudioAsset[] = audioAssets(),
+  ): Promise<void> {
     await Promise.all(
-      audioAssets().map(async (asset) => {
+      assets.map(async (asset) => {
         try {
-          const url = resolveAssetUrl(asset.id);
-          // A single-file build carries its clips as data URIs; those are
-          // decoded here rather than fetched, because that build exists for a
-          // host that blocks requests (`src/render/characters/manifest.ts`).
-          const source = url.startsWith('data:') ? await assetBytes(url) : url;
-          const sound = await CreateSoundAsync(
-            asset.id,
-            source,
-            {
-              volume: audioMix.volume[asset.id] ?? 0.5,
-              maxInstances: audioMix.maxInstances[asset.id] ?? audioMix.defaultMaxInstances,
-            },
-            engine,
-          );
+          const sound = await loadClip(engine, asset);
           if (this.disposed) sound.dispose();
           else this.sounds.set(asset.id, sound);
         } catch (error: unknown) {
-          console.warn(`[arcane-rush] sound "${asset.id}" failed to load`, error);
+          this.failedClips.add(asset.id);
+          console.warn(`[arcane-rush] sound "${asset.id}" failed to load: ${describeError(error)}`);
         }
       }),
     );
+  }
+
+  private retryFailedClips(engine: AudioEngineV2): void {
+    if (this.clipsRetried || this.loading || this.failedClips.size === 0) return;
+    this.clipsRetried = true;
+    const again = audioAssets().filter((asset) => this.failedClips.has(asset.id));
+    this.failedClips.clear();
+    void this.loadSounds(engine, again);
   }
 
   /** A reused clip at its own pitch and level (`audio-types.ts`, `Cue`). */
@@ -352,7 +370,7 @@ export class GameAudio {
       sound.volume = (audioMix.volume[id] ?? 0.5) * volumeScale;
       sound.play();
     } catch (error: unknown) {
-      console.warn(`[arcane-rush] sound "${id}" failed to play`, error);
+      console.warn(`[arcane-rush] sound "${id}" failed to play: ${describeError(error)}`);
     }
   }
 

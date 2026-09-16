@@ -27,9 +27,20 @@ const sounds = new Map<
   { play: ReturnType<typeof vi.fn>; playbackRate: number; volume: number }
 >();
 
+/**
+ * How many more times each clip's decode fails, as a WebKit that refuses to
+ * decode for a context no gesture has started would.
+ */
+const failures = new Map<string, number>();
+
 vi.mock('@babylonjs/core/AudioV2', () => ({
   CreateAudioEngineAsync: vi.fn(() => Promise.resolve(engine)),
   CreateSoundAsync: vi.fn((id: string) => {
+    const left = failures.get(id) ?? 0;
+    if (left > 0) {
+      failures.set(id, left - 1);
+      return Promise.reject(new DOMException('Decoding failed', 'EncodingError'));
+    }
     // `volume` as well as `playbackRate`: Milestone 4's cues set both on the
     // shared clip, so a mock without it would not catch a cue that leaves a
     // clip quiet for everything after it (`GameAudio.play`).
@@ -61,6 +72,8 @@ vi.mock('@/render/characters', () => ({
   assetBytes: () => Promise.resolve(new ArrayBuffer(0)),
 }));
 
+import { CreateSoundAsync } from '@babylonjs/core/AudioV2';
+
 import { GameAudio } from '../GameAudio';
 import type { RunState, SimEvent } from '@/sim';
 
@@ -71,6 +84,9 @@ const state = {
 } as unknown as RunState;
 
 const plays = (id: string): number => sounds.get(id)?.play.mock.calls.length ?? 0;
+
+/** Every pending promise callback, however deep the chain of awaits. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** An unlocked engine with every clip decoded — where a run actually is. */
 async function playing(): Promise<GameAudio> {
@@ -84,6 +100,8 @@ async function playing(): Promise<GameAudio> {
 
 beforeEach(() => {
   sounds.clear();
+  failures.clear();
+  vi.mocked(CreateSoundAsync).mockClear();
   engine.state = 'suspended';
   engine.volume = 1;
   engine.unlockAsync.mockReset();
@@ -106,6 +124,54 @@ describe('GameAudio', () => {
     await audio.load();
     expect(engine.unlockAsync).toHaveBeenCalledTimes(1);
     expect(audio.status).toBe('unlocked');
+  });
+
+  /**
+   * The iOS app, first run on a device (docs/27): Babylon fetches a URL itself
+   * and refuses the status 0 the Capacitor shell answers a `.wav` with, so all
+   * seventeen clips failed there. It is handed the bytes instead.
+   */
+  it('hands Babylon the bytes of every clip, never a URL', async () => {
+    const audio = new GameAudio();
+    await audio.load();
+
+    const calls = vi.mocked(CreateSoundAsync).mock.calls;
+    expect(calls).toHaveLength(10);
+    for (const call of calls) expect(call[1]).toBeInstanceOf(ArrayBuffer);
+    expect(audio.loadedCount).toBe(10);
+  });
+
+  /**
+   * The phone's console bridge prints an error object as `{}`, which is all
+   * that first report had. The warning carries the words itself.
+   */
+  it('warns in words, and tries a failed clip once more from the first unlock', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    failures.set('sfx_ui_tap', 1);
+    failures.set('sfx_shatter', 2);
+    const audio = new GameAudio();
+    await audio.load();
+
+    expect(audio.loadedCount).toBe(8);
+    expect(warn).toHaveBeenCalledWith(
+      '[arcane-rush] sound "sfx_ui_tap" failed to load: EncodingError: Decoding failed',
+    );
+
+    audio.unlock();
+    await settle();
+    expect(audio.loadedCount).toBe(9);
+    audio.playTap();
+    expect(plays('sfx_ui_tap')).toBe(1);
+
+    // The one that failed twice is missing from the build: later taps leave it.
+    audio.unlock();
+    await settle();
+    const shatterLoads = vi
+      .mocked(CreateSoundAsync)
+      .mock.calls.filter((call) => call[0] === 'sfx_shatter');
+    expect(shatterLoads).toHaveLength(2);
+    expect(audio.loadedCount).toBe(9);
+    warn.mockRestore();
   });
 
   it('leaves the context alone when nobody has tapped anything', async () => {

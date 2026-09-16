@@ -107,8 +107,11 @@ export interface ArcaneDebugHandle {
    * last picture and a wipe. A no-op outside the playing phase and on a run
    * that has already finished.
    *
-   * It is not a "give up" button and there is no way to reach it in play: the
-   * HUD has no way out of a run (`src/sim/rewards.ts`).
+   * It is not a "give up" button and there is no way to reach it in play. The
+   * pause menu's Restart and Home are the player's way out of a run, and they
+   * do something else: they drop the run unfinished, so it pays nothing at
+   * all, where a run ended here is a loss and is paid as one
+   * (`src/sim/rewards.ts`).
    */
   endRun: () => void;
   /**
@@ -144,6 +147,19 @@ export interface ArcaneDebugHandle {
    * a chosen squad size, which no bot will do on request.
    */
   steer: (x: number) => void;
+  /**
+   * The pause menu (docs/27, section B), from outside: `pauseRun` stops the run
+   * and puts the menu up exactly as the button does, and answers whether the
+   * run is paused now — false on every screen that is not a run being played,
+   * where it does nothing. `resumeRun` is the menu's Resume.
+   *
+   * Named apart from `app.stop` and `app.resume`, which are the smoke's way of
+   * holding a frame still for a picture and know nothing about the menu.
+   */
+  pauseRun: () => boolean;
+  resumeRun: () => void;
+  /** True while the menu is up and the run is held. */
+  isPaused: () => boolean;
 }
 
 declare global {

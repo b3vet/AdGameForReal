@@ -1,5 +1,5 @@
 /**
- * What a finger and a window resize do to a run.
+ * What a finger and a canvas resize do to a run.
  *
  * Split out of `App` in Milestone 8 for the file-size rule (CLAUDE.md), on a
  * seam the file already had: `./input.ts` is the *gesture* — pointers, drags,
@@ -21,7 +21,10 @@ export interface AppInputDeps {
   session: () => RunSession | null;
   /** True only while a run is being played by a finger rather than a bot. */
   steerable: () => boolean;
-  /** The canvas changed size, so whatever is on it is stale (`./frame.ts`). */
+  /**
+   * The canvas's backing store changed size, which clears it, so whatever is
+   * on it is stale (`./frame.ts`).
+   */
   markDirty: () => void;
 }
 
@@ -43,12 +46,14 @@ export function attachAppInput(deps: AppInputDeps): AppInput {
     session.run.setTargetX(session.state.squad.targetX + metres);
   };
 
-  const onResize = (): void => {
-    deps.renderer.resize();
-    deps.markDirty();
-  };
-
-  window.addEventListener('resize', onResize);
+  // The renderer keeps the backing store the canvas's shape on its own, from
+  // the moment its engine exists (`src/render/backingStore.ts`). It used to be
+  // this file's window `resize` listener that asked it to — attached only once
+  // the boot was over, which is how a web view resized during the boot left the
+  // first device build drawing a square frame for a whole session
+  // (docs/27-device-playtest-fixes.md). What is left here is the frame loop's
+  // half: a resized canvas is a cleared one.
+  deps.renderer.setResizeListener(deps.markDirty);
   // A scripted bot owns `targetX`; a stray drag must not fight it.
   const detachInput: DetachInput = attachInput(deps.canvas, onDrag, {
     enabled: deps.steerable,
@@ -57,7 +62,7 @@ export function attachAppInput(deps: AppInputDeps): AppInput {
   return {
     detach: () => {
       detachInput();
-      window.removeEventListener('resize', onResize);
+      deps.renderer.setResizeListener(null);
     },
   };
 }

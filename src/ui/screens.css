@@ -225,14 +225,19 @@
   }
 }
 
-/* --- Mute ----------------------------------------------------------------- */
+/* --- Mute, and the pause button beside it --------------------------------- */
 
 /*
  * Two instances of the same control: one on the Academy, one in the HUD's top
  * right. Both write `muted` to the save, so whichever the player finds first is
  * the one that matters. Both sit over the road, so both are dark plates.
+ *
+ * The HUD's pause button (docs/27) is the same plate by the same rule rather
+ * than a copy of it, so the pair can never drift apart; its own furniture is in
+ * `./pause.css`.
  */
-.mute {
+.mute,
+.pause {
   appearance: none;
   display: grid;
   place-items: center;
@@ -250,7 +255,8 @@
   pointer-events: auto;
 }
 
-.mute:active {
+.mute:active,
+.pause:active {
   transform: translateY(1px);
 }
 

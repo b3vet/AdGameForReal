@@ -10,6 +10,10 @@
  * stays what it has always been: which screen is up, and one place where every
  * listener is added and removed.
  *
+ * The pause menu (`./pause.ts`, docs/27) is not a sixth: it is laid over the
+ * HUD rather than swapped in for it, and every real screen switch takes it
+ * down.
+ *
  * Element ids are a contract with `scripts/smoke-run.mjs`, which clicks
  * `#academy-play` and then `#play-button` — do not rename either without
  * updating the smoke test.
@@ -35,8 +39,10 @@ import type { AcademyView } from './academy';
 import { Confetti } from './confetti';
 import { DebugPanel } from './debug';
 import type { DebugStats, ReportSource } from './debug';
-import { Hud } from './hud';
-import { ResultPanel } from './result';
+import { requireElement } from './dom';
+import { Hud, hudElements } from './hud';
+import { PauseMenu, pauseElements } from './pause';
+import { ResultPanel, resultElements } from './result';
 import type { ResultBonus, ResultView } from './result';
 import { Rooms } from './rooms';
 import type { RoomBump } from './rooms';
@@ -78,6 +84,14 @@ export interface OverlayCallbacks {
   onEndless: () => void;
   /** "Same road again" on the result sheet: the seed just walked (D52). */
   onReplay: () => void;
+  /**
+   * The pause button, and the menu's three (docs/27). The app decides whether
+   * a run can pause and what Restart and Home throw away (`src/core/pause.ts`).
+   */
+  onPause: () => void;
+  onResume: () => void;
+  onRestart: () => void;
+  onHome: () => void;
 }
 
 export type { AcademyView, ResultBonus, ResultView, RoomBump };
@@ -94,6 +108,7 @@ export class Overlay {
   private readonly rooms: Rooms;
   private readonly resultPanel: ResultPanel;
   private readonly hud: Hud;
+  private readonly pauseMenu: PauseMenu;
   private readonly debugPanel: DebugPanel;
   private readonly confetti: Confetti;
 
@@ -163,42 +178,18 @@ export class Overlay {
       bind,
     );
 
-    this.resultPanel = new ResultPanel(
-      {
-        ribbon: requireElement(root, '#result-ribbon'),
-        kicker: requireElement(root, '#result-kicker'),
-        title: requireElement(root, '#result-title'),
-        badge: requireElement(root, '#result-first-clear'),
-        survivors: requireElement(root, '#result-survivors'),
-        peak: requireElement(root, '#result-peak'),
-        coins: requireElement(root, '#result-coins'),
-        total: requireElement(root, '#result-total'),
-        advance: requireElement<HTMLButtonElement>(root, '#next-button'),
-        levels: requireElement<HTMLButtonElement>(root, '#levels-button'),
-        metresRow: requireElement(root, '#result-metres-row'),
-        metres: requireElement(root, '#result-metres'),
-        bestMetres: requireElement(root, '#result-best-metres'),
-        bonuses: requireElement(root, '#result-bonuses'),
-        best: requireElement(root, '#result-best'),
-        next: requireElement(root, '#result-next'),
-        nextHeading: requireElement(root, '#result-next-heading'),
-        nextName: requireElement(root, '#result-next-name'),
-        nextPrice: requireElement(root, '#result-next-price'),
-        nextShort: requireElement(root, '#result-next-short'),
-      },
-      { onCountTick: callbacks.onCountTick, onCoinTick: callbacks.onCoinTick },
-    );
-
-    this.hud = new Hud({
-      levelLabel: requireElement(root, '#hud-level'),
-      count: requireElement(root, '#hud-count'),
-      plaque: requireElement(root, '#hud-plaque'),
-      staffIcon: requireElement(root, '#hud-staff-icon'),
-      staffBadge: requireElement(root, '#hud-staff'),
-      bossBar: requireElement(root, '#boss-bar'),
-      bossValue: requireElement(root, '#boss-bar-value'),
-      bossLabel: requireElement(root, '#boss-bar-label'),
+    this.resultPanel = new ResultPanel(resultElements(root), {
+      onCountTick: callbacks.onCountTick,
+      onCoinTick: callbacks.onCoinTick,
     });
+
+    this.hud = new Hud(hudElements(root));
+    // The menu covers the HUD, and the HUD is the only screen up under it.
+    this.pauseMenu = new PauseMenu(
+      pauseElements(root, [this.hudRoot]),
+      { onResume: callbacks.onResume, onRestart: callbacks.onRestart, onHome: callbacks.onHome },
+      bind,
+    );
     this.debugPanel = new DebugPanel(
       {
         root: requireElement(root, '#debug-panel'),
@@ -241,6 +232,7 @@ export class Overlay {
     this.onTap(requireElement<HTMLButtonElement>(root, '#levels-back'), callbacks.onCloseRoom);
     this.onTap(requireElement<HTMLButtonElement>(root, '#room-back'), callbacks.onCloseRoom);
     for (const button of this.muteButtons) this.onTap(button, callbacks.onToggleMute);
+    this.onTap(requireElement<HTMLButtonElement>(root, '#pause-hud'), callbacks.onPause);
   }
 
   /** The Academy home: the purse, the five cards, and any reveal owed. */
@@ -279,6 +271,18 @@ export class Overlay {
     this.showOnly(this.result);
     this.resultPanel.show(view);
     if (view.won) this.confetti.burst();
+  }
+
+  /**
+   * The pause menu, over the HUD; `endless` names its Restart button (D52).
+   * The app has already held the run (`src/core/pause.ts`).
+   */
+  showPause(endless: boolean): void {
+    this.pauseMenu.open(endless);
+  }
+
+  hidePause(): void {
+    this.pauseMenu.close();
   }
 
   /** `?scene=render-test` and `?scene=stress` show the raw scene, no overlay. */
@@ -359,6 +363,9 @@ export class Overlay {
    * still be asking for tick sounds a minute later.
    */
   private showOnly(screen: HTMLElement | null): void {
+    // Belt and braces: the app takes the menu down on every change of phase
+    // (`RunPause.release`) before it switches screens.
+    this.pauseMenu.close();
     this.resultPanel.stop();
     if (screen !== this.result) this.confetti.stop();
     for (const candidate of [
@@ -383,15 +390,4 @@ export class Overlay {
       { signal: this.listeners.signal },
     );
   }
-}
-
-function requireElement<T extends HTMLElement = HTMLElement>(
-  root: ParentNode,
-  selector: string,
-): T {
-  const element = root.querySelector<T>(selector);
-  if (element === null) {
-    throw new Error(`Overlay is missing required element "${selector}" (see index.html)`);
-  }
-  return element;
 }

@@ -164,7 +164,9 @@ show the debug panel in the bottom-left corner. It has three buttons:
   Press it during a busy fight, not on a menu.
 - **Copy report** — puts the whole device report on the clipboard: the phone and
   iOS version, the screen size and pixel ratio, what the GPU calls itself, the
-  quality rung the game settled on, the last capture's numbers, the last run's
+  quality rung the game settled on, the canvas's three sizes (a `shape ok` line,
+  or the sizes that disagree if the scene ever looks stretched again —
+  `docs/27-device-playtest-fixes.md`), the last capture's numbers, the last run's
   summary, and where your save has got to. **Paste it at the top of the message
   you send us**, above anything you write. It is the one thing that makes every
   other answer comparable between builds.

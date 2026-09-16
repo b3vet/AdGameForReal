@@ -39,6 +39,7 @@ export type IconName =
   | 'star'
   | 'streak'
   | 'endless'
+  | 'pause'
   | 'lock';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

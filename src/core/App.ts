@@ -10,8 +10,8 @@
  * behind them are `./menus.ts`; what a tap asks for is `./controls.ts`; the
  * sound and the debug panel are `./appPrefs.ts`; what happens when the phone
  * takes the app away or the GPU takes the context away is `./appLifecycle.ts`;
- * and everything about the meta layer — the player, the purse and what a run
- * pays — is `./academy.ts` (D33).
+ * the pause menu is `./appPause.ts`; and everything about the meta layer — the
+ * player, the purse and what a run pays — is `./academy.ts` (D33).
  *
  * The `title` phase covers all of the Academy: which of its screens is up is
  * the menu stage's business, not the state machine's.
@@ -35,12 +35,14 @@ import { Juice } from './juice';
 import { attachAppInput } from './appInput';
 import type { AppInput } from './appInput';
 import { applyQuality, initPhysics } from './appLayers';
+import { createAppPause } from './appPause';
 import { AppPrefs } from './appPrefs';
 import { RunStage } from './appRun';
 import { startDevScene } from './devScenes';
 import type { DevScene } from './devScenes';
 import { MenuStage } from './menus';
-import { runPerfCapture } from './perf';
+import type { RunPause } from './pause';
+import { perfHost, runPerfCapture } from './perf';
 import type { RoomId } from './player';
 import { publishHandle } from './publishHandle';
 import { QualityLadder } from './quality';
@@ -88,6 +90,9 @@ export class App implements FrameHost, AppCommands {
    * context can be lost inside `Renderer.init`.
    */
   private readonly lifecycle: AppLifecycle;
+  /** The pause menu (docs/27, `./appPause.ts`), for the buttons and the handle. */
+  readonly pause: RunPause;
+  private readonly disposePause: () => void;
 
   /** Set by `dispose`, so the loads still in flight there hand back their work. */
   private disposed = false;
@@ -170,8 +175,12 @@ export class App implements FrameHost, AppCommands {
       physics: () => this.physicsLayer,
       onPhase: (phase) => {
         this.currentPhase = phase;
+        this.pause.release();
       },
     });
+    const pause = createAppPause(this, this.runs, this.lifecycle);
+    this.pause = pause.pause;
+    this.disposePause = pause.dispose;
   }
 
   /** Boots the renderer, then flips `window.__arcane.ready` for the smoke test. */
@@ -187,9 +196,14 @@ export class App implements FrameHost, AppCommands {
       renderer: this.renderer,
       session: () => this.runs.current,
       steerable: () =>
-        this.currentPhase === 'playing' && (this.runs.current?.bot ?? null) === null,
+        this.currentPhase === 'playing' &&
+        !this.pause.paused &&
+        (this.runs.current?.bot ?? null) === null,
+      // The held title backdrop and the frozen frame behind the pause menu
+      // are both stale after a resize; each is a no-op when it is not up.
       markDirty: () => {
         this.driver.markPreviewDirty();
+        this.pause.redraw();
       },
     });
     this.prefs.restore(this.options.debug);
@@ -235,7 +249,10 @@ export class App implements FrameHost, AppCommands {
     // `?perf`: the scripted capture (`./perf.ts`). After the loop is running,
     // because every wait in it is a wait for something the loop does — and
     // after Havok, so the run it measures is the run the phone actually plays.
-    if (this.options.perf) void physics.then(() => this.startPerfCapture());
+    if (this.options.perf) {
+      const host = perfHost(this, this.options.level, () => this.disposed);
+      void physics.then(() => runPerfCapture(host));
+    }
   }
 
   /** `'title' | 'playing' | 'result'` — the state machine's current node. */
@@ -302,6 +319,7 @@ export class App implements FrameHost, AppCommands {
     this.lifecycle.stop();
     this.input?.detach();
     this.input = null;
+    this.disposePause();
     this.devScene?.dispose();
     this.devScene = null;
     this.overlay.dispose();
@@ -361,6 +379,7 @@ export class App implements FrameHost, AppCommands {
    */
   showHome(): void {
     this.currentPhase = 'title';
+    this.pause.release();
     this.runs.clear();
     this.juice.reset();
     this.menus.showHome();
@@ -422,24 +441,6 @@ export class App implements FrameHost, AppCommands {
       openRoom: (room) => {
         this.openRoom(room);
       },
-    });
-  }
-
-  /** `?perf`: the scripted level-20 capture that ends in a report (`./perf.ts`). */
-  private startPerfCapture(): void {
-    if (this.disposed) return;
-    void runPerfCapture({
-      level: this.options.level,
-      startLevel: (level) => {
-        this.startLevel(level);
-      },
-      warming: () => this.renderer.shaderStats.warming,
-      startCapture: (seconds) => {
-        this.overlay.startCapture(seconds);
-      },
-      captureActive: () => this.overlay.captureActive,
-      finish: () => this.overlay.showAndCopyReport(),
-      disposed: () => this.disposed,
     });
   }
 

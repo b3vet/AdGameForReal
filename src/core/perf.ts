@@ -23,6 +23,8 @@
  * with a report, which is the one artefact this exists to produce.
  */
 
+import type { Renderer } from '@/render/Renderer';
+import type { Overlay } from '@/ui';
 import { MAX_CAPTURE_SECONDS } from '@/ui';
 
 /** How often a wait re-checks. Far below a frame, far above a busy loop. */
@@ -57,12 +59,41 @@ export interface PerfHost {
   disposed: () => boolean;
 }
 
+/** The part of the app `perfHost` builds a host from. Structural, like `PerfHost`. */
+export interface PerfApp {
+  readonly renderer: Renderer;
+  readonly overlay: Overlay;
+  startLevel: (level: number) => void;
+}
+
+/**
+ * The host for `app`: the level to capture, and a thunk that says the app has
+ * gone. Moved out of `App` with the pause menu (docs/27), for the file-size
+ * rule; the capture itself is unchanged.
+ */
+export function perfHost(app: PerfApp, level: number, disposed: () => boolean): PerfHost {
+  return {
+    level,
+    startLevel: (next) => {
+      app.startLevel(next);
+    },
+    warming: () => app.renderer.shaderStats.warming,
+    startCapture: (seconds) => {
+      app.overlay.startCapture(seconds);
+    },
+    captureActive: () => app.overlay.captureActive,
+    finish: () => app.overlay.showAndCopyReport(),
+    disposed,
+  };
+}
+
 /**
  * Runs the whole sequence. Resolves when the report is up; never rejects, and
  * never throws into the caller's boot path.
  */
 export async function runPerfCapture(host: PerfHost): Promise<void> {
   try {
+    if (host.disposed()) return;
     host.startLevel(host.level);
     await waitUntil(() => !host.warming(), WARM_UP_TIMEOUT_MS, host.disposed);
     await sleep(SETTLE_SECONDS * 1000);

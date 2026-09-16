@@ -32,7 +32,7 @@ import type { CaptureSummary } from './capture';
 import { browserSurface, copyText } from './clipboard';
 import type { CopySurface } from './clipboard';
 import { describeEvent } from './debugEvents';
-import type { DebugStats } from './debugStats';
+import type { DebugCanvas, DebugStats } from './debugStats';
 import './debug.css';
 
 /** How many event lines the panel keeps. */
@@ -352,6 +352,7 @@ export class DebugPanel {
         `  phys ${this.physicsMs.toFixed(2)}ms`,
       `draws ${String(stats.drawCalls)} peak ${String(stats.drawCallsPeak)}` +
         `  px ${stats.pixelRatio.toFixed(2)}/${stats.devicePixelRatio.toFixed(2)}`,
+      canvasLine(stats.canvas),
       `bodies ${String(stats.streamBodies)}  chg ${String(stats.chargers)}` +
         `  lbl ${String(stats.labels)}` +
         `/${String(stats.labelGlyphs)}g` +
@@ -415,6 +416,21 @@ export class DebugPanel {
     this.log.push({ text, repeats: 1 });
     if (this.log.length > LOG_LIMIT) this.log.shift();
   }
+}
+
+/**
+ * `css 440x956 bk 1320x2868 buf 1320x2868`: the box, the backing store and the
+ * drawing buffer (`./debugStats.ts`). `SKEW` only when they are not one shape,
+ * like `DROP` above — the one case that is a fault rather than a reading.
+ * Forty-odd characters, inside the panel's width at 10 px.
+ */
+function canvasLine(canvas: Readonly<DebugCanvas>): string {
+  return (
+    `css ${String(canvas.cssWidth)}x${String(canvas.cssHeight)}` +
+    ` bk ${String(canvas.backingWidth)}x${String(canvas.backingHeight)}` +
+    ` buf ${String(canvas.bufferWidth)}x${String(canvas.bufferHeight)}` +
+    (canvas.inShape ? '' : ' SKEW')
+  );
 }
 
 function countAlive(items: readonly { alive: boolean }[]): number {

@@ -151,6 +151,93 @@ describe('AppLifecycle', () => {
     app.stop();
   });
 
+  /** The pause menu is the third reason (docs/27, section B). */
+  it('holds the loop and the sound while the run is paused', () => {
+    const app = lifecycle();
+    app.start();
+
+    app.setRunPaused(true);
+    expect(driverCalls).toEqual(['pause']);
+    expect(suspendedAudio).toEqual([true]);
+    // Pausing writes nothing: the save has not changed.
+    expect(writes).toEqual([]);
+
+    app.setRunPaused(true);
+    expect(driverCalls).toEqual(['pause']);
+
+    app.setRunPaused(false);
+    expect(driverCalls).toEqual(['pause', 'resume']);
+    expect(suspendedAudio).toEqual([true, false]);
+
+    app.stop();
+  });
+
+  /** A phone call that ends while the menu is up must not start the run. */
+  it('keeps a paused run held when the app comes back', () => {
+    const app = lifecycle();
+    const heard: string[] = [];
+    app.listen({
+      onVisibility: (background) => {
+        heard.push(background ? 'away' : 'back');
+        // What `RunPause` does on the way out: the menu goes up.
+        if (background) app.setRunPaused(true);
+      },
+      redraw: () => {
+        heard.push('redraw');
+      },
+    });
+    app.start();
+
+    setVisibility('hidden');
+    expect(heard).toEqual(['away']);
+    expect(suspendedAudio).toEqual([true]);
+
+    setVisibility('visible');
+    expect(heard).toEqual(['away', 'back']);
+    // Still held, still quiet: the menu is what lets them go.
+    expect(driverCalls.at(-1)).toBe('pause');
+    expect(suspendedAudio).toEqual([true]);
+
+    app.setRunPaused(false);
+    expect(driverCalls.at(-1)).toBe('resume');
+    expect(suspendedAudio).toEqual([true, false]);
+
+    app.stop();
+  });
+
+  it('keeps a paused run held across a lost and restored context', () => {
+    const app = lifecycle();
+    let redraws = 0;
+    app.listen({
+      onVisibility: (): void => undefined,
+      redraw: () => {
+        redraws++;
+      },
+    });
+    app.start();
+
+    app.setRunPaused(true);
+    app.onContextLost();
+    app.onContextRestored();
+    // The frozen frame behind the menu is drawn again; the loop stays down.
+    expect(redraws).toBe(1);
+    expect(driverCalls).toEqual(['pause', 'pause', 'pause']);
+
+    app.setRunPaused(false);
+    expect(driverCalls.at(-1)).toBe('resume');
+
+    app.stop();
+  });
+
+  it('does not silence the sound for a lost context alone', () => {
+    const app = lifecycle();
+    app.start();
+    app.onContextLost();
+    app.onContextRestored();
+    expect(suspendedAudio).toEqual([]);
+    app.stop();
+  });
+
   it('ignores a repeated transition', () => {
     const app = lifecycle();
     app.start();

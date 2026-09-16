@@ -107,6 +107,11 @@ export function publishHandle(app: App, sources: HandleSources): ArcaneDebugHand
     setTurbo: (value: number) => {
       app.setTurbo(value);
     },
+    pauseRun: () => app.pause.pause(),
+    resumeRun: () => {
+      app.pause.resume();
+    },
+    isPaused: () => app.pause.paused,
   };
   globalThis.__arcane = handle;
   return handle;

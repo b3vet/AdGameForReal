@@ -1,0 +1,140 @@
+/*
+ * The pause button's glyph and the pause menu (docs/27, section B).
+ *
+ * The button's round plate is the mute button's rule (`./screens.css`) and its
+ * place in the HUD is `./hud.css`; this file is the glyph and the menu. Imported
+ * by `./pause.ts`, the way `./hud.css` is imported by `./hud.ts`.
+ */
+
+.pause__icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+/*
+ * The menu lays itself over the HUD rather than replacing it: the road the run
+ * stopped on and the count on its plaque stay where they were, dimmed. The
+ * frame behind is held, not redrawn (`src/core/heldFrame.ts`), so the dim costs
+ * one composite and nothing per frame.
+ *
+ * The dim is a layer with an opacity rather than a `color-mix` background, so
+ * the one phone generation without `color-mix` (D41) still sees the road
+ * through it instead of a solid sheet. It takes the taps, too: nothing under a
+ * paused run is there to be touched.
+ */
+.screen--pause {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.screen--pause::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--c-ink-base);
+  opacity: 0.55;
+  animation: pause-dim 160ms var(--ease) both;
+}
+
+/* Above the dim, which is positioned and would otherwise paint over it. */
+.screen--pause > .screen__inner {
+  position: relative;
+  justify-content: center;
+}
+
+/*
+ * Upright, the menu is centred in the space *under* the HUD's band — the count
+ * plaque and a boss bar come to about 9.4rem — rather than in the whole
+ * screen: measured at 320x568 in a boss fight, a menu centred on the screen put
+ * its title on the bar.
+ */
+@media (orientation: portrait) {
+  .screen--pause > .screen__inner {
+    padding-top: calc(var(--safe-top) + 9.75rem);
+  }
+}
+
+.pause__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(100%, 21rem);
+  animation: pause-in 200ms var(--ease) both;
+}
+
+.screen--pause .screen__top {
+  margin-top: 0;
+}
+
+.pause__panel {
+  padding: 0.9rem;
+}
+
+.pause__panel .screen__actions {
+  width: 100%;
+}
+
+/*
+ * A keyboard reaches the menu (P and Escape open it, Tab walks it), so the
+ * button that has focus says so. Only for the keyboard: a tap focuses too, and
+ * a ring left on the button a finger just pressed is noise.
+ */
+.pause:focus-visible,
+.screen--pause .button:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 3px;
+}
+
+@keyframes pause-dim {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+@keyframes pause-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen--pause::before,
+  .pause__body {
+    animation-duration: 1ms;
+  }
+}
+
+/*
+ * Landscape: the three buttons go side by side, as every other screen's do
+ * (`./styles.css`), and the panel widens until "Restart level" fits on one
+ * line. The menu sits at the foot of the screen rather than in the middle:
+ * measured at 568x320, a centred title landed on the boss bar, and the foot is
+ * where every other screen keeps its buttons anyway.
+ */
+@media (orientation: landscape) {
+  .screen--pause > .screen__inner {
+    justify-content: flex-end;
+  }
+
+  .pause__body {
+    width: min(100%, 36rem);
+    gap: 0.3rem;
+  }
+
+  .pause__panel {
+    padding: 0.5rem;
+  }
+
+  .pause__panel .button {
+    white-space: nowrap;
+  }
+}

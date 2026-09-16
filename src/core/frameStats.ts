@@ -76,6 +76,15 @@ export class FrameStatsCollector {
     heapDrops: 0,
     pixelRatio: 0,
     devicePixelRatio: 1,
+    canvas: {
+      cssWidth: 0,
+      cssHeight: 0,
+      backingWidth: 0,
+      backingHeight: 0,
+      bufferWidth: 0,
+      bufferHeight: 0,
+      inShape: false,
+    },
     audio: 'off',
     audioClips: 0,
   };
@@ -123,6 +132,7 @@ export class FrameStatsCollector {
     this.stats.physicsQuality = physics?.stats.quality ?? 0;
     this.stats.pixelRatio = host.renderer.pixelRatio;
     this.stats.devicePixelRatio = host.renderer.devicePixelRatio;
+    host.renderer.readCanvas(this.stats.canvas);
     this.stats.audio = host.audio.muted ? `${host.audio.status} muted` : host.audio.status;
     this.stats.audioClips = host.audio.loadedCount;
 

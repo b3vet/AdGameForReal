@@ -17,6 +17,12 @@
  * usually background, then loss, then foreground, then restore, and a restore
  * that arrived while the app was still away must not start the loop.
  *
+ * A third reason arrived with the pause menu (docs/27, section B): the player
+ * stopped the run. It is counted beside the other two rather than handled
+ * somewhere else, because all three drive the same two switches and a second
+ * owner of either would let one reason undo another — a phone call that ended
+ * while the menu was up must not start the loop the menu is holding.
+ *
  * What each one costs:
  *
  *   background   the loop stops (and drops the elapsed time rather than
@@ -24,9 +30,13 @@
  *                without touching the player's mute, and the save is written.
  *   context lost the loop stops. Nothing else: the run is numbers in `src/sim`
  *                and has no opinion about the GPU.
+ *   run paused   the loop stops and the sound goes quiet, exactly as for the
+ *                background. The save is not written: nothing about it changed.
  *
  * Nothing here knows which screen is up, and nothing here touches the session.
- * A run interrupted by a phone call is the same run when the player comes back.
+ * A run interrupted by a phone call is the same run when the player comes back;
+ * *whether* it comes back paused is the pause menu's rule (`./pause.ts`), which
+ * is handed the news once the loop and the sound are dealt with (`listen`).
  */
 
 import type { GameAudio } from '@/audio';
@@ -47,11 +57,29 @@ export interface AppLifecycleDeps {
   markDirty: () => void;
 }
 
+/**
+ * Told of every transition once the loop and the sound have been dealt with:
+ * the pause menu (`RunPause`), which is what decides that a run interrupted by
+ * the phone comes back paused, and which owes the frozen frame a redraw when
+ * the context comes back under it.
+ */
+export interface LifecycleListener {
+  /** The app went to the background (`true`) or came back. */
+  onVisibility: (background: boolean) => void;
+  /** The GPU context is back, and whatever the canvas held is gone. */
+  redraw: () => void;
+}
+
 export class AppLifecycle {
   private readonly deps: AppLifecycleDeps;
 
   private background = false;
   private contextLost = false;
+  /** The pause menu is up (`setRunPaused`). */
+  private runPaused = false;
+  /** What `GameAudio.setSuspended` was last told, so it is told only of a change. */
+  private silenced = false;
+  private listener: LifecycleListener | null = null;
 
   constructor(deps: AppLifecycleDeps) {
     this.deps = deps;
@@ -72,6 +100,18 @@ export class AppLifecycle {
     return this.background;
   }
 
+  /** The one listener; see `LifecycleListener`. */
+  listen(listener: LifecycleListener): void {
+    this.listener = listener;
+  }
+
+  /** The player paused the run, or resumed it (`./pause.ts`). */
+  setRunPaused(paused: boolean): void {
+    if (paused === this.runPaused) return;
+    this.runPaused = paused;
+    this.apply();
+  }
+
   /** The renderer lost the GPU context (`Renderer`'s `onContextLost`). */
   onContextLost(): void {
     if (this.contextLost) return;
@@ -86,6 +126,7 @@ export class AppLifecycle {
     // Before the loop is allowed to run again, so the first frame back is the
     // one that repaints the backdrop.
     this.deps.markDirty();
+    this.listener?.redraw();
     this.apply();
   }
 
@@ -94,15 +135,24 @@ export class AppLifecycle {
     if (background === this.background) return;
     this.background = background;
 
-    this.deps.audio.setSuspended(background);
     if (background) this.flushSave();
     this.apply();
+    this.listener?.onVisibility(background);
   };
 
-  /** Halted while either reason holds; both `pause` and `resume` are idempotent. */
+  /**
+   * Halted while any reason holds; both `pause` and `resume` are idempotent.
+   * Quiet while the app is away or the run is paused — not while the context
+   * is lost, which says nothing about whether the player is listening.
+   */
   private apply(): void {
+    const silenced = this.background || this.runPaused;
+    if (silenced !== this.silenced) {
+      this.silenced = silenced;
+      this.deps.audio.setSuspended(silenced);
+    }
     const driver = this.deps.driver;
-    if (this.background || this.contextLost) driver.pause();
+    if (this.background || this.contextLost || this.runPaused) driver.pause();
     else driver.resume();
   }
 
