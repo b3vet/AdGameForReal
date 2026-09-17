@@ -284,7 +284,7 @@ Before the first upload:
 
 - [ ] Bundle id decided and identical in `capacitor.config.ts` and Xcode.
 - [ ] `npm run cap:preflight` prints PASS and `next: npm run cap:open`.
-- [ ] Version and build stamped: `npm run cap:version` (`0.9.0`, build `900`).
+- [ ] Version and build stamped: `npm run cap:version` (`1.0.0`, build `10000`).
 - [ ] The owner's real icon and splash dropped in `assets/app/` and
       `npm run cap:assets` run — the placeholders are not a shippable icon.
 - [ ] Paid Apple Developer Program membership active.

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App Store / TestFlight export options.
+
+  Copy this into the app repo (conventionally ios/ExportOptions-appstore.plist),
+  replace U2WFNLXV3S with the team id, and commit it: it is build
+  configuration, and the Team ID is public. No secret ever goes in this file.
+
+  Flutter:
+    flutter build ipa --release [--flavor <f> -t lib/main_<f>.dart] \
+      --build-name=<version> --build-number=<n> \
+      --export-options-plist=ios/ExportOptions-appstore.plist
+
+  Native Xcode (export an archive you already made):
+    xcodebuild -exportArchive -archivePath build/App.xcarchive \
+      -exportPath build/export \
+      -exportOptionsPlist ios/ExportOptions-appstore.plist \
+      -allowProvisioningUpdates
+
+  Requires the Apple ID that owns the team to be signed in under
+  Xcode > Settings > Accounts, so automatic signing can mint and download the
+  distribution profile at export time. No hand-installed certificate is needed.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Xcode 15.3+ name for what used to be `app-store`. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+
+	<key>teamID</key>
+	<string>U2WFNLXV3S</string>
+
+	<!-- Xcode mints the distribution profile itself, so a new bundle id (a new
+	     flavor, a watch app, an extension) needs no change to this file. -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<!-- Ship dSYMs so TestFlight crash reports symbolicate. -->
+	<key>uploadSymbols</key>
+	<true/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+
+	<!-- Write the .ipa to disk; upload is a separate, verifiable step. -->
+	<key>destination</key>
+	<string>export</string>
+
+	<!-- THE IMPORTANT ONE. When true (Xcode's default for this method) Xcode
+	     picks its own version and build number, silently defeating
+	     --build-name / --build-number and whatever the Info.plist says. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>
