@@ -318,3 +318,21 @@ on a portrait app.
   hold at the bot; the prep ring is not visible behind a plaque inside
   45 m; 18 levels offer one staff; Phase 2 (set pieces, Endless on beats)
   when the owner asks.
+
+## 2026-09-17 — TestFlight: 1.0.0 (10000)
+
+- Built from 2b10ab2 after `npm run cap:sync` (preflight PASS) and a
+  Release simulator pass (level 3 cleared unsteered with 9 of 54, sheet and
+  sound fine, no app warnings, no crashes).
+- Archive signed with the team's development identity; the export used
+  Xcode's cloud-managed Apple Distribution certificate, so no certificate
+  was created (the account's list is unchanged: two development, one pass
+  type). The one new thing on the account is the automatic "iOS Team Store
+  Provisioning Profile: com.arcanerush.app".
+- The skill's pre-flight: 0 FAIL, 0 WARN. `altool` validate and upload
+  succeeded (delivery 3fe7073b-392c-4fd5-ba02-f6fa45b1be26, 37 MB); App
+  Store Connect reports build 10000 of 1.0.0 `VALID`, export compliance
+  exempt. Not submitted for review.
+- The app has no TestFlight group yet, so the owner creates an internal
+  group in App Store Connect and adds themselves before the build shows in
+  the TestFlight app.
