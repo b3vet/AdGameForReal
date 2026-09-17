@@ -9,11 +9,11 @@
  */
 
 import { FIRE_RATE_GATE_WORTH, gateCap, isShootable } from '../gates';
-import { portalWindow } from '../pressure';
+import { portalOpen, portalWindow } from '../pressure';
 import type { RowEnemyDef } from '../rows';
 import type { GateDef, Lane, StreamDef } from '../types';
 import { balance as shipped } from '@/data';
-import type { Balance, BeatEnemy, BeatLibrary, BeatRiver, GateSlot } from '@/data/types';
+import type { Balance, BeatEnemy, BeatLibrary, BeatRiver, GateSlot, RiverBunch } from '@/data/types';
 import { beatValues, within } from './library';
 
 /**
@@ -54,7 +54,14 @@ export function gateFor(
     case 'sub': {
       const value = printRound(e * within(beatValues(library, slot.size), u), balance);
       // The cap is what the curse pays once it has been shot green.
-      return { kind: 'sub', value, cap: gateCap('sub', value, balance) };
+      const cap = gateCap('sub', value, balance);
+      if (slot.size !== 'flip') return { kind: 'sub', value, cap };
+      // Document 32: the flip pays `gates.flip.payout` times its print, in
+      // `gates.flip.seconds` of the column's fire, so the red lane is sometimes
+      // the right one. A price curse keeps the road's cap: it is a price.
+      const flip = balance.gates.flip;
+      const payout = Math.max(cap, flip.payout * value);
+      return { kind: 'sub', value, cap: payout, flipGrowth: payout / Math.max(1e-6, flip.seconds) };
     }
     case 'fireRate': {
       // Priced as a mid plus: a bonus worth that share of the squad, in the
@@ -82,6 +89,11 @@ export function stopsShots(gate: GateDef | null): boolean {
  * rule), and a scripted brute prints it at `enemies.beat.bruteHpPerUnit`, so
  * a block that is hard to kill is also a block that hurts. `dz` is from the
  * row the block is filed under; `screened` holds an ambush to its own lane.
+ *
+ * `holdDz`, from the same row, is the hold line of a block that holds the
+ * gateway (`BeatEnemy.hold`). A holding block is held to its own lane too:
+ * it is the price of its lane's panel, so the lanes beside it stay clear of
+ * it and only its own lane's fire can take it down.
  */
 export function blockFor(
   enemy: BeatEnemy,
@@ -91,6 +103,7 @@ export function blockFor(
   dps: number,
   screened: boolean,
   balance: Balance = shipped,
+  holdDz?: number,
 ): RowEnemyDef {
   const enemies = balance.enemies;
   let hp = Math.max(0, enemy.killSeconds) * Math.max(1, e) * dps;
@@ -116,8 +129,54 @@ export function blockFor(
   // Shot plus radius exactly on the lane line files the block in its own lane
   // only (`targeting.ts`), so the panel in front of it is the nearest target
   // for every shot that could reach it.
-  if (screened) def.maxHalf = balance.road.laneWidth / 2 - balance.projectiles.radius;
+  if (screened || holdDz !== undefined) def.maxHalf = balance.road.laneWidth / 2 - balance.projectiles.radius;
+  if (holdDz !== undefined) def.holdDz = holdDz;
   return def;
+}
+
+/**
+ * Where a holding block's line stands, in metres from its gate row: the gap
+ * `enemies.beat.holdGap` in front of the panels. Null for a block that walks
+ * all the way.
+ */
+export function holdAt(enemy: BeatEnemy, balance: Balance = shipped): number | null {
+  return enemy.hold === true ? -Math.max(0, balance.enemies.beat.holdGap) : null;
+}
+
+/**
+ * How much more a lane clears of a river whose bodies walk `rho` to the metre
+ * than of one whose bodies walk alone (`RiverBunch`): a splash takes whatever
+ * stands inside its radius, and a portal's bodies all leave one place. Never
+ * below one.
+ */
+export function bunchFactor(rho: number, bunch: RiverBunch | undefined): number {
+  if (bunch === undefined || !(rho > 0)) return 1;
+  return Math.max(1, bunch.gain * Math.pow(rho, bunch.power));
+}
+
+/** Bodies per metre of lane a portal's river walks at: its pour over the road it covers. */
+export function riverDensity(def: StreamDef): number {
+  return def.count / Math.max(1e-6, Math.max(0.1, def.durationSeconds) * Math.max(0.1, def.speed));
+}
+
+/**
+ * A beat's river before its bodies are given their hit points: the def, and
+ * the hit points the whole river carries at a bunching factor of one. The
+ * count is still free to move (`capBodies`, `capLive`); `settleRiver` turns
+ * the budget into hit points per body at whatever count it ends on, so the
+ * pressure holds however the ceilings split it.
+ */
+export interface SizedRiver {
+  def: StreamDef;
+  budget: number;
+  bunch: RiverBunch | undefined;
+}
+
+/** Writes the per-body hit points a sized river's count and bunching leave. */
+export function settleRiver(river: SizedRiver, balance: Balance = shipped): void {
+  const def = river.def;
+  const total = river.budget * bunchFactor(riverDensity(def), river.bunch);
+  def.hpPerEnemy = clampHp(total / Math.max(1, def.count), balance);
 }
 
 /**
@@ -126,7 +185,14 @@ export function blockFor(
  *
  * `density * e` bodies, poured over the seconds the portal actually gets
  * before the squad is on top of it, carrying between them `pressure` times
- * what the lane's fire lands in the window the geometry leaves.
+ * what the lane's fire clears in the window the geometry leaves. What the
+ * lane clears is `dps` per unit for bodies walking alone, times the bunching
+ * factor for how close these walk (`bunchFactor`), so a pressure of one is the
+ * river a column standing in the lane just clears, at any squad size: a
+ * portal's bodies leave one place and walk bunched, and a splash staff takes
+ * several at a time (measured, Phase 1 wave two).
+ *
+ * The portal opens at `river.open`, or where its `tail` says (`portalOpen`).
  */
 export function riverFor(
   river: BeatRiver,
@@ -136,27 +202,42 @@ export function riverFor(
   dps: number,
   screened: boolean,
   balance: Balance = shipped,
+  bunch?: RiverBunch,
 ): StreamDef {
+  const sized = sizeRiver(river, lane, anchorZ, e, dps, screened, bunch, balance);
+  settleRiver(sized, balance);
+  return sized.def;
+}
+
+/** `riverFor` with the hit points left to `settleRiver`, for the ceilings to move the count first. */
+export function sizeRiver(
+  river: BeatRiver,
+  lane: Lane,
+  anchorZ: number,
+  e: number,
+  dps: number,
+  screened: boolean,
+  bunch: RiverBunch | undefined,
+  balance: Balance = shipped,
+): SizedRiver {
   const streams = balance.streams;
   const speed = streams.speed;
-  const shape = portalWindow(
-    { at: river.at, open: river.open, seconds: river.seconds, screened, speed },
-    balance,
-  );
+  const open = portalOpen(river, speed, balance);
+  const shape = portalWindow({ at: river.at, open, seconds: river.seconds, screened, speed }, balance);
   const count = Math.max(balance.enemies.portal.minBodies, Math.round(river.density * e));
   const laneDps = Math.max(1, e) * dps * streams.laneShare;
-  const budget = river.pressure * laneDps * shape.window;
-  return {
+  const def: StreamDef = {
     lane,
     kind: 'grunt',
     count,
     durationSeconds: Math.max(0.1, shape.pour),
-    hpPerEnemy: clampHp(budget / count, balance),
+    hpPerEnemy: 0,
     speed,
     jitter: streams.jitter,
     anchorZ,
-    openAt: river.open,
+    openAt: open,
   };
+  return { def, budget: river.pressure * laneDps * shape.window, bunch };
 }
 
 function clampHp(hp: number, balance: Balance): number {
@@ -166,21 +247,19 @@ function clampHp(hp: number, balance: Balance): number {
 
 /**
  * Holds one beat's rivers to `enemies.portal.maxBodiesPerBeat` bodies between
- * them. Fewer, tougher bodies: each river keeps the hit points it was sized
- * for, so the pressure is unchanged and only the peak of live bodies (and what
- * a leak costs) comes down (4.7).
+ * them. Fewer, tougher bodies: each river keeps the pressure it was sized for
+ * (`settleRiver` re-reads its bunching at the new count), so only the peak of
+ * live bodies (and what a leak costs) comes down (4.7).
  */
-export function capBodies(rivers: StreamDef[], balance: Balance = shipped): void {
+export function capBodies(rivers: readonly SizedRiver[], balance: Balance = shipped): void {
   let total = 0;
-  for (const river of rivers) total += river.count;
+  for (const river of rivers) total += river.def.count;
   const most = balance.enemies.portal.maxBodiesPerBeat;
-  if (total <= most) return;
-  const factor = most / total;
-  for (const river of rivers) {
-    const count = Math.max(1, Math.floor(river.count * factor));
-    river.hpPerEnemy = clampHp((river.hpPerEnemy * river.count) / count, balance);
-    river.count = count;
+  if (total > most) {
+    const factor = most / total;
+    for (const river of rivers) river.def.count = Math.max(1, Math.floor(river.def.count * factor));
   }
+  for (const river of rivers) settleRiver(river, balance);
 }
 
 /**
@@ -194,23 +273,23 @@ export function capBodies(rivers: StreamDef[], balance: Balance = shipped): void
  * The busiest point is found and every river live there is scaled down in
  * proportion, never below `portal.minBodies`, until no point is over the
  * ceiling: two beats that pour into the same stretch share it rather than the
- * later one losing its river. Like `capBodies`, each keeps its hit points.
+ * later one losing its river. Like `capBodies`, each keeps its pressure.
  */
-export function capLive(rivers: readonly StreamDef[], balance: Balance = shipped): void {
+export function capLive(rivers: readonly SizedRiver[], balance: Balance = shipped): void {
   const portal = balance.enemies.portal;
   const spans = rivers
-    .filter((river) => river.anchorZ !== undefined)
+    .filter((river) => river.def.anchorZ !== undefined)
     .map((river) => {
-      const at = river.anchorZ ?? 0;
+      const at = river.def.anchorZ ?? 0;
       // A body is retired `streams.despawnBehind` past the squad, so the last
       // of a river is still on the road a few metres after the portal.
-      return { river, start: at - (river.openAt ?? 0), end: at + balance.streams.despawnBehind };
+      return { river, start: at - (river.def.openAt ?? 0), end: at + balance.streams.despawnBehind };
     });
 
   // Coverage only rises where a span starts, so those are the points to test.
   const coverage = (at: number): number => {
     let live = 0;
-    for (const span of spans) if (span.start <= at && span.end >= at) live += span.river.count;
+    for (const span of spans) if (span.start <= at && span.end >= at) live += span.river.def.count;
     return live;
   };
   // Each round lowers a point to the ceiling or leaves it at the floor, so a
@@ -225,18 +304,18 @@ export function capLive(rivers: readonly StreamDef[], balance: Balance = shipped
         at = span.start;
       }
     }
-    if (busiest <= portal.maxLiveBodies) return;
+    if (busiest <= portal.maxLiveBodies) break;
     const factor = portal.maxLiveBodies / busiest;
     let moved = false;
     for (const span of spans) {
       if (span.start > at || span.end < at) continue;
-      const river = span.river;
-      const count = Math.max(portal.minBodies, Math.floor(river.count * factor));
-      if (count >= river.count) continue;
-      river.hpPerEnemy = clampHp((river.hpPerEnemy * river.count) / count, balance);
-      river.count = count;
+      const def = span.river.def;
+      const count = Math.max(portal.minBodies, Math.floor(def.count * factor));
+      if (count >= def.count) continue;
+      def.count = count;
       moved = true;
     }
-    if (!moved) return;
+    if (!moved) break;
   }
+  for (const river of rivers) settleRiver(river, balance);
 }

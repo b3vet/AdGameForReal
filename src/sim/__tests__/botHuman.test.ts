@@ -201,17 +201,20 @@ describe('bots at a fence', () => {
     // on the far side into a straggler group; from here it is simply that the
     // crowd was not all there yet.
     //
-    // A tenth rather than the quarter the dealt campaign measured: since the
-    // priced read (document 31, 4.4) the human settles its lane when it reads
-    // the row, which on most rows is before the fence, so what is left is the
-    // row it reads late — 4 of 27 entries on the scripted fences at the time.
+    // A twentieth rather than the quarter the dealt campaign measured: since
+    // the priced read (document 31, 4.4) the human settles its lane when it
+    // reads the row, which on most rows is before the fence, so what is left is
+    // the row it reads late — 4 of 27 entries on the scripted fences in wave
+    // one, and 2 of 27 once the fence beat's toll and inner guard were made to
+    // reach the row (Phase 1, wave two): neither pulls the column across the
+    // line mid-approach any more.
     const entries = campaignEntries('human');
     expect(entries.length).toBeGreaterThan(10);
     const astride = entries.filter((outside) => outside > 0).length;
     expect(`${String(astride)} of ${String(entries.length)} astride`).not.toBe(
       `0 of ${String(entries.length)} astride`,
     );
-    expect(astride / entries.length).toBeGreaterThan(0.1);
+    expect(astride / entries.length).toBeGreaterThan(0.05);
   }, 60_000);
 
   it('keeps greedy out of every fence in the campaign, not just the fixture', () => {

@@ -36,6 +36,9 @@ import {
 } from '../player';
 import { runRewards } from '../rewards';
 import { weaponIds } from '../weapons';
+// docs/18's cadence (D46): document 31 re-runs it on the scripted campaign
+// (4.5) and keeps its targets.
+import { EARLY, LATER, cadenceOf } from './cadence';
 import { levelCount } from '@/data';
 import type { PlayerState } from '@/data/types';
 
@@ -53,10 +56,6 @@ const CAMPAIGN_TIMEOUT_MS = 300_000;
  * playing one under the whole suite's load takes longer than that.
  */
 const LONG_CAMPAIGN_TIMEOUT_MS = 900_000;
-
-/** docs/18: two runs per purchase on levels 1 to 5, four by level 10. */
-const EARLY = { from: 1, to: 5, target: 2, tolerance: 0.7 };
-const LATER = { from: 6, to: 10, target: 4, tolerance: 1.5 };
 
 const REWARDS = progression.rewards;
 
@@ -140,13 +139,11 @@ describe('rewards', () => {
 
 describe('the campaign', () => {
   it('sells the human player an upgrade every two runs early, every four by level 10', () => {
-    for (const band of [EARLY, LATER]) {
-      const measured = meanRunsPerPurchase('human', band.from, band.to);
-      const where =
-        `L${String(band.from)}-${String(band.to)} runs per purchase ${measured.toFixed(2)}` +
-        ` (target ${String(band.target)} ± ${String(band.tolerance)})`;
-      expectTrue(where, Math.abs(measured - band.target) <= band.tolerance);
-    }
+    // Both bands in one message: a campaign is minutes, and the tuning pass
+    // that reads this wants both numbers and what they point at.
+    const campaigns = SEEDS.map((seed) => campaign('human', seed));
+    const bands = [EARLY, LATER].map((band) => cadenceOf(campaigns, band, ''));
+    expectTrue(bands.map((band) => band.where).join('\n'), bands.every((band) => band.ok));
   }, CAMPAIGN_TIMEOUT_MS);
 
   it('never leaves the greedy player with nothing to buy, or buying every run', () => {
@@ -221,15 +218,8 @@ describe('the campaign', () => {
     // into the same purse, so playing them twice would be ten campaigns for one
     // number and this file already plays ten.
     const walked = SEEDS.map((seed) => runCampaign({ bot: 'human', seed, meta: endlessWalk() }));
-    for (const band of [EARLY, LATER]) {
-      let total = 0;
-      for (const result of walked) total += runsPerPurchase(result, band.from, band.to);
-      const measured = total / SEEDS.length;
-      const where =
-        `L${String(band.from)}-${String(band.to)} with an endless walk a level ` +
-        `${measured.toFixed(2)} (target ${String(band.target)} ± ${String(band.tolerance)})`;
-      expectTrue(where, Math.abs(measured - band.target) <= band.tolerance);
-    }
+    const bands = [EARLY, LATER].map((band) => cadenceOf(walked, band, 'with an endless walk a level, '));
+    expectTrue(bands.map((band) => band.where).join('\n'), bands.every((band) => band.ok));
   }, LONG_CAMPAIGN_TIMEOUT_MS);
 });
 

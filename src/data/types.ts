@@ -66,7 +66,7 @@ export type { BotBalance, BotPriceBalance, HumanBotBalance } from './bot-types';
 
 import type { ValueRange } from './level-types';
 
-export type { DealtFields, DealtLevelConfig, LevelGenConfig, ValueRange } from './level-types';
+export type { DealtFields, DealtLevelConfig, ExpectedKit, LevelGenConfig, ValueRange } from './level-types';
 
 /**
  * The level-design grammar (document 31, D70): the beats a scripted level is
@@ -85,6 +85,7 @@ export type {
   GateSlot,
   LaneRole,
   PrizeOverride,
+  RiverBunch,
   ScriptBeat,
 } from './beat-types';
 
@@ -536,6 +537,13 @@ export interface Balance {
        */
       shares: { add: number; sub: number };
     };
+    /**
+     * Document 32, a flipped curse pays: on a scripted road a flip-sized
+     * curse that is shot through to green grows as a plus up to `payout`
+     * times its printed size, reaching that in `seconds` of the whole
+     * column's fire (`GateDef.flipGrowth`). Dealt roads keep `capShare`.
+     */
+    flip: { payout: number; seconds: number };
     /** A gate can be shot up by this share of its printed value... */
     capShare: number;
     /** ...or by this much, whichever is more. */
@@ -586,6 +594,22 @@ export interface Balance {
      * stretch: the panels would stop printing the sizes the beats name.
      */
     scale: { min: number; max: number };
+    /**
+     * What the level curve expects a scripted plus panel to be shot up by
+     * (Phase 1, wave two): `panelSeconds` of the whole column's fire on the
+     * prize panel over a beat's approach, less what the prize lane's threats
+     * take (`beatCurve.ts`). Without it the curve read every plus at its
+     * printed value and the measured squads ran far above it.
+     */
+    curve: {
+      panelSeconds: number;
+      /**
+       * Document 32, growth earlier: the share of the level's peak the column
+       * is expected to hold as it arrives at the script's middle beat
+       * (`solveGrowthCurve`).
+       */
+      midShare: number;
+    };
   };
   /**
    * Level generator tuning. The generator scales every number it writes by a

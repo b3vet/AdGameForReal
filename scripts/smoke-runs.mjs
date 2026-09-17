@@ -196,34 +196,56 @@ export const RUNS = [
      * down as each comes into reach, because at turbo 60 a frame is three
      * seconds of sim and none of those windows is a second long.
      *
-     * Level 23 because it is the first that carries both new kinds — one
-     * charger row and one shield row (`src/data/levels.json`) — and seed 1 puts
-     * the shielded brute at z 215 and the charger at z 342, so the road offers
-     * them in the order the shot list asks for.
+     * Level 27 since the scripted campaign (document 31): its script puts a
+     * tier-2 `shieldGuard` beat third (the guard holds its line at z 107, D73)
+     * and a `chargeFork` beat fifth (two chargers at z 170), so the road offers
+     * them in the order the shot list asks for, and its Rime Fiend lives long
+     * enough to charge. Level 23, which this was until Phase 1, has the same
+     * road shape but no longer makes the frames. With the save this run carried
+     * (a kit the re-priced campaign no longer reaches level 23 with) its Fiend
+     * enraged 7.4 s into the fight, before the first charge was due at 8, and
+     * an enraged Fiend never charges (D69), so `frost-boss-charge.png` waited
+     * for a charge that never came. On level 23's own campaign kit the Fiend
+     * does charge, but the guard's shield then holds until six or seven
+     * metres, which leaves a third of a second for `frost-shield-broken.png`;
+     * level 27's guard breaks at 10.5 m on its kit. The tier-3 guards of
+     * levels 24, 28 and on are no good either: on their campaign kits their
+     * shields hold until the column is at most six metres away, mostly under
+     * three, so a broken shield is inside `brokenShot` for a fifth of a second
+     * at best.
+     *
+     * Seed 29 rather than 1: the lanes are shuffled per seed, and on this one
+     * the greedy bot reaches the arena with 375 units, so the Fiend enrages
+     * 11.8 s into the fight, nearly four seconds after its first charge commits
+     * (seed 1 arrived bigger and left 1.3 s). Measured on the sim with the
+     * app's own stepping, with frame times from 16 to 50 ms: every frame of the
+     * plan is reached on every trial (`PACE` in `./smoke-run-plan.mjs` has the
+     * windows).
      *
      * Armed, because from level 21 the game is balanced for a player who has
-     * shopped (Milestone 7 Phase D): the save below is what the campaign says
-     * the human is holding when it first reaches level 23, read off
-     * `runCampaign` rather than invented. Bare, the greedy bot clears 37 of 100
-     * up here and this run would be a coin flip.
+     * shopped (Milestone 7 Phase D): the save below is what the human campaign
+     * (seed 1, no evolutions) is holding when it first reaches level 27, read
+     * off `runCampaign` rather than invented (`kitOf('kit', 27)` in
+     * `src/sim/__tests__/balanceRuns.ts`). The staff in hand is the last one
+     * that campaign bought, frost.
      *
      * Scale 1 like every other run: the boss's volley is additive fill, and
      * Phase C measured a fraction of a frame per second at 2x on this
      * rasteriser. The 2x pictures of all of this are the hero set's job.
      */
-    label: 'greedy frost level 23',
-    query: `?bot=greedy&level=23&seed=1&turbo=${TURBO}&screenshot=1`,
+    label: 'greedy frost level 27',
+    query: `?bot=greedy&level=27&seed=29&turbo=${TURBO}&screenshot=1`,
     save: {
       coins: 0,
-      upgrades: { damage: 2, fireRate: 2, startCount: 2, gateBonus: 2, bossDamage: 1 },
+      upgrades: { damage: 2, fireRate: 1, startCount: 1, gateBonus: 2, bossDamage: 0 },
       staffs: {
         ember: { unlocked: true, tier: 1 },
         storm: { unlocked: true, tier: 1 },
         frost: { unlocked: true, tier: 1 },
       },
       selectedStaff: 'frost',
-      familiar: { unlocked: false, tier: 0 },
-      unlockedLevel: 23,
+      familiar: { unlocked: true, tier: 1 },
+      unlockedLevel: 27,
     },
     shots: [
       { at: 'shield', name: 'frost-shield.png' },

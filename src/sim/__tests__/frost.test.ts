@@ -2,19 +2,24 @@
  * Frostfell's twenty levels (D49), and the promise that came with them: the
  * twenty levels before them did not move.
  *
- * The second half is the important one. Levels 21 to 40 were written as new
- * entries in `levels.json` and the generator learned two new row kinds, and
- * neither of those may reach back into the campaign Milestone 6 balanced. The
- * goldens in `./regression.test.ts` say the *runs* on levels 1 to 3 replay; the
- * table below says the *recipes* of all twenty are the bytes they were.
+ * The second half is the important one, and document 31 changed what it
+ * guards. Levels 21 to 40 were written as new entries in `levels.json` and the
+ * generator learned two new row kinds, and neither of those could reach back
+ * into the campaign Milestone 6 balanced; the table below says the *dealt*
+ * recipes of all twenty are still the bytes they were. Phase 1 then made every
+ * level of both biomes a script, and a script is tuned rather than frozen, so
+ * the shipped entries are pinned beside it in `./recipes.pins.json`, which one
+ * command re-records once the tuning has settled (`./pins.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
 
 import { dealtLevel } from './fixtures';
+import dealtRecipes from './dealtRecipes.json';
 import { createBot } from '../bots';
 import { generateLevel } from '../level';
 import { playLevel } from './harness';
+import { checkPins, hashOf } from './pins';
 import { Run } from '../Run';
 import { balance, levelConfig, levelCount, levels } from '@/data';
 
@@ -23,19 +28,11 @@ const SEEDS = [1, 2, 3];
 /** Where the first biome ends and Frostfell begins. */
 const BIOME_1 = 20;
 
-/** FNV-1a, 32 bit — the same hash `./regression.test.ts` records runs with. */
-function hashOf(text: string): string {
-  let hash = 0x81_1c_9d_c5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01_00_01_93) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
-
 /**
- * `levels.json` entries 1 to 20, hashed one by one so a failure names the level
- * that moved rather than saying "the file changed".
+ * The dealt recipes of levels 1 to 20 (`./dealtRecipes.json`, Milestone 9's
+ * `levels.json` frozen for the dealt fixtures), hashed one by one so a failure
+ * names the level that moved rather than saying "the file changed". Never
+ * re-recorded by the pin command: the dealt path must replay byte for byte.
  *
  * Recorded at the end of Milestone 6. Milestone 7 added `biome`, `chargerRows`,
  * `shieldRows` and `boss.kind` to the schema, and all four are optional for
@@ -56,6 +53,11 @@ function hashOf(text: string): string {
  * its human seeds a doubled gate, and the long fight that seed then won took
  * the level's mean boss fight past its band; the lighter bite is the only
  * field that changed, and the road itself is the one it was.
+ *
+ * Document 31 froze them: `levels.json` carries the scripts now, and the
+ * shared fields a script is tuned by (`startCount`, `peakTarget`, `boss`) are
+ * the tuners' to move, so the dealt fixtures read this frozen copy instead and
+ * these hashes are still the Milestone 8 ones.
  */
 const BIOME_1_CONFIGS: readonly string[] = [
   'e52737ba',
@@ -83,11 +85,16 @@ const BIOME_1_CONFIGS: readonly string[] = [
 ];
 
 describe('the first twenty levels', () => {
-  it('carry exactly the recipes they were balanced with', () => {
+  it('keep the dealt recipes they were balanced with', () => {
     const moved: string[] = [];
+    const frozen: readonly unknown[] = dealtRecipes;
     for (let index = 1; index <= BIOME_1; index++) {
-      const hash = hashOf(JSON.stringify(levels[index - 1]));
+      const hash = hashOf(JSON.stringify(frozen[index - 1]));
       if (hash !== BIOME_1_CONFIGS[index - 1]) moved.push(`  L${String(index)}: '${hash}',`);
+      // ...and the dealt fixture is that recipe, not a copy of it with drift.
+      expect(`L${String(index)} ${JSON.stringify(dealtLevel(index))}`).toBe(
+        `L${String(index)} ${JSON.stringify(frozen[index - 1])}`,
+      );
     }
     expect(moved.join('\n')).toBe('');
   });
@@ -106,6 +113,19 @@ describe('the first twenty levels', () => {
         `${where} gen meadow/demon`,
       );
     }
+  });
+});
+
+describe('the forty scripted recipes', () => {
+  it('carry exactly the recipes they were tuned to', () => {
+    // Document 31 (4.5): a data edit to a level is a visible change. Each
+    // entry whole — script, budgets, curveTrim, boss — so a failure names the
+    // level; the outline alone is pinned, readably, in `levelDesignRoads`.
+    const measured: Record<string, string> = {};
+    for (let index = 1; index <= levelCount; index++) {
+      measured[`L${String(index)}`] = hashOf(JSON.stringify(levels[index - 1]));
+    }
+    expect(checkPins('recipes.pins.json', measured)).toBe('');
   });
 });
 

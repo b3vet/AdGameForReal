@@ -139,7 +139,9 @@ export function applyGateGrowth(
   if (shotRate <= 0) return;
 
   const rates = balance.gates.growthPerSecond;
-  const addRate = rates.add + rates.shares.add * squad;
+  // A flipped curse on a scripted road grows at its own pace (document 32);
+  // every other plus, and every dealt road's flip, at the road's.
+  const addRate = Math.max(rates.add + rates.shares.add * squad, gate.flipGrowth ?? 0);
   const subRate = rates.sub + rates.shares.sub * squad;
   const share = hits / shotRate;
   const cap = capOf(gate, balance);

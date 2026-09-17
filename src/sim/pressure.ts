@@ -237,3 +237,39 @@ export function portalWindow(geometry: PortalGeometry, balanceData: Balance = ba
   }
   return { window, pour, tollShare: tolls / PORTAL_SAMPLES };
 }
+
+/**
+ * Squad-to-portal distance a river timed by its tail opens at (Phase 1, wave
+ * two): early enough that a pour of `seconds` has sent its last body by the
+ * time that body, walking at `speed`, will meet the column `tail` metres past
+ * the gate row. The portal stands `at` metres past the row.
+ *
+ * The last body leaves the portal as the squad stands at `s`, and meets it
+ * after `(portal - s - contact) / (run + speed)` seconds, the squad having
+ * walked `run` times that; solving for `s` puts the squad
+ * `((run + speed) * tail - run * (at - contact)) / speed` metres past the row
+ * when it is poured, and the pour opened `run * seconds` metres before that.
+ */
+export function openForTail(
+  at: number,
+  seconds: number,
+  tail: number,
+  speed: number,
+  balanceData: Balance = balance,
+): number {
+  const run = balanceData.squad.runSpeed;
+  const walk = Math.max(0.1, speed);
+  const contact = balanceData.enemies.contactDistance;
+  const lastPoured = ((run + walk) * tail - run * (at - contact)) / walk;
+  return at - lastPoured + run * Math.max(0, seconds);
+}
+
+/** A beat river's opening distance: its own, or the one its tail asks for. */
+export function portalOpen(
+  river: { at: number; seconds: number; open?: number; tail?: number },
+  speed: number,
+  balanceData: Balance = balance,
+): number {
+  if (river.tail !== undefined) return openForTail(river.at, river.seconds, river.tail, speed, balanceData);
+  return river.open ?? balanceData.streams.spawnAhead;
+}

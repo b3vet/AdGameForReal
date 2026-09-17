@@ -262,3 +262,59 @@ on a portrait app.
   lines, `crowd.ts` 406, `Renderer.ts` 514, `academy.ts` 403, `overlay.ts`
   408, `boss.ts` 397 are at or past the file-size rule. Phase 1 of document
   31 starts on this commit.
+
+## 2026-09-17 — Level design Phase 1 (docs 31 and 32), integrated
+
+- The owner answered document 30's questions with its defaults (hard road,
+  same clears; authored scripts; bests and stars kept; all 40 levels at
+  once) and asked for a TestFlight build when this lands, as version 1.0.
+  Release setup went in first (f81d1b7): 1.0.0, build 10000, the owner's
+  art, their signing team and the App Store export options.
+- Wave one (checkpoint 3328d22): the beat composer, portals, per-enemy wake
+  and share-of-squad rates (SIM-GRAMMAR); priced bots, the beat lab and the
+  design readout (BOTS-LAB); eight beats as eleven ids and 40 scripts held
+  by static tests (CONTENT); sight lines, portal rings, wake cues,
+  see-through plaques and `?beat=` (RENDER-CORE). Found on the way: the
+  staff pass took the designed plus (staffs now stand on open and rest
+  beats only; 18 levels offer one staff), and the new human bot plays the
+  old campaign as well as greedy (0.71 to 1.00 clears), its handicap now
+  timing and sight.
+- Wave two. BEAT-FIX: beats could be sidestepped (a column waited next door
+  and slid in behind a walking guard or a cut pour), so guards hold the
+  gateway and rivers are timed by their tail; the fork got a real choice;
+  river sizing counts bunching; the curve reads shot-up pluses (measured
+  arrival over E from up to 1.86 to at most 1.24). TESTS-BANDS: section 5
+  as tests, with rulings (sizes per used tier; greedy's worst under the top
+  band; the block end-gap row retired by the hold line). TUNE-SHARED: beat
+  lab Meadow 19 to 96 of 96 cells in band, Frostfell 20 to 121 of 123;
+  brute hit points per unit 12 to 120; a lab road that started inside
+  greedy's read fixed. RENDER-FIX: held blocks braced, label ink measured,
+  the beat hero page wired in.
+- The wall: TUNE-MEADOW showed no boss numbers hold clears, survivors and
+  road share together, because squads reached the boss at 0.92 to 1.00 of a
+  capped peak with a 5 to 15 percent spread. Ruling, document 32: growth
+  earlier, peaks under the cap, a prep gauntlet, a threat after the last
+  multiplier, a flipped curse that pays. Then D76: the priced bot is no
+  stand-in for 70 to 80 percent, so ordinary clears are held at 0.88 to
+  0.98 on it until the owner's device run. D77 re-priced the Yard.
+  TUNE-FROST put the Yard kit into the curve (arrival 1.09 to 1.23 of E
+  down to 0.87 to 1.13) and landed on one frontier a hair outside four
+  bands; D78 holds them at that edge.
+- Where it landed (human bot; Meadow / Frostfell): ordinary clears 0.976 /
+  0.988; road share of losses 0.454 / 0.450 (was 0.27 / 0.37 on the dealt
+  roads); survivors 0.425 / 0.501 (was 0.72 / 0.46); boss fights 22 to 28 s
+  / 20 to 29 s; dents per level 4.3 / 4.7; greedy takes a red lane 0.062 /
+  0.077 (was 0.004); milestones armed 0.5 to 0.6 and bare 0.0 to 0.2 on
+  every one; peak live enemies at most 122. Cadence 1.67 runs per purchase
+  on levels 1 to 5 and 2.6 to 3.7 on 6 to 10; the campaign reaches level 40.
+- SMOKE-FIX: three shot plans were pinned to the dealt levels (the Rime
+  Fiend enraged before its first charge on level 23; level 16 has no fence
+  now); the Frostfell run and hero page moved to level 27 seed 29 with the
+  campaign's real kit, the swipe page to level 15.
+- Verified: typecheck and lint clean; 961 tests (8 skipped) with the
+  scripted pins recorded by `RECORD=1` (dealt pins unmoved); smoke PASS in
+  374 s.
+- Left: the owner's device run is now the judge of every band D76 and D78
+  hold at the bot; the prep ring is not visible behind a plaque inside
+  45 m; 18 levels offer one staff; Phase 2 (set pieces, Endless on beats)
+  when the owner asks.

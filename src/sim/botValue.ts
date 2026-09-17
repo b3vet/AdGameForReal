@@ -61,15 +61,6 @@ export const lanes = {
 const projected: { kind: GateKind; value: number } = { kind: 'add', value: 0 };
 
 /**
- * Whether this road grows and shrinks its panels by a share of the squad as
- * well as by the flat rate (`LevelDef.squadRates`, document 31, 3.4). Read off
- * the state when the sim puts it there; a dealt road never does.
- */
-function squadRates(state: RunState): boolean {
-  return 'squadRates' in state && state.squadRates === true;
-}
-
-/**
  * What a shootable panel will print when the squad reaches it, after
  * `seconds` of the column's whole fire and the creep of the time it is in
  * range and not being shot (`gates.ts`). Writes `projected`.
@@ -78,9 +69,12 @@ function projectGate(gate: GateState, seconds: number, state: RunState, balance:
   const gates = balance.gates;
   const rates = gates.growthPerSecond;
   const count = state.squad.count;
-  const shares = squadRates(state);
+  // A road that grows and shrinks its panels by a share of the squad as well
+  // as by the flat rate (`RunState.squadRates`, document 31, 3.4).
+  const shares = state.squadRates === true;
   const cap = gate.cap ?? gateCap(gate.kind, gate.value, balance);
-  const addRate = rates.add + (shares ? rates.shares.add * count : 0);
+  // The pace a flipped curse grows at, as `applyGateGrowth` reads it (document 32).
+  const addRate = Math.max(rates.add + (shares ? rates.shares.add * count : 0), gate.flipGrowth ?? 0);
   projected.kind = gate.kind;
   projected.value = gate.value;
 

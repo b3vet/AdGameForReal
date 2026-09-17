@@ -27,7 +27,7 @@ import { describe, expect, it } from 'vitest';
 
 import { runCampaign } from '@/sim/campaign';
 import type { RunFacts } from '@/sim/campaign';
-import { runsPerPurchase } from '@/sim/campaignReport';
+import { EARLY, LATER, cadenceOf } from '@/sim/__tests__/cadence';
 import type { MissionsState } from '@/data';
 
 import { creditKills, emptyKills } from '../bestiary';
@@ -38,10 +38,6 @@ const SEEDS = [1, 2, 3];
 
 /** Three campaigns of sixty-odd runs each. Well past vitest's default, not a hang. */
 const CAMPAIGN_TIMEOUT_MS = 600_000;
-
-/** docs/18's curve, the band the prices are tuned against (D46). */
-const EARLY = { from: 1, to: 5, target: 2, tolerance: 0.7 };
-const LATER = { from: 6, to: 10, target: 4, tolerance: 1.5 };
 
 /** The plan's ceiling: the meta layer stays a garnish on what the road pays. */
 const META_SHARE_CEILING = 0.25;
@@ -124,14 +120,11 @@ describe('the meta layer against the road (D51, D53)', () => {
   }, CAMPAIGN_TIMEOUT_MS);
 
   it('leaves the runs-per-purchase curve where D46 put it', () => {
-    for (const band of [EARLY, LATER]) {
-      let total = 0;
-      for (const { result } of played) total += runsPerPurchase(result, band.from, band.to);
-      const measured = total / played.length;
-      const where =
-        `L${String(band.from)}-${String(band.to)} with the meta layer on ${measured.toFixed(2)}` +
-        ` (target ${String(band.target)} ± ${String(band.tolerance)})`;
-      expectTrue(where, Math.abs(measured - band.target) <= band.tolerance);
-    }
+    // docs/18's curve (D46), the band the prices are tuned against; the shared
+    // reading (`@/sim/__tests__/cadence`) says whether a miss is the road's or
+    // the shelf's.
+    const results = played.map(({ result }) => result);
+    const bands = [EARLY, LATER].map((band) => cadenceOf(results, band, 'with the meta layer on, '));
+    expectTrue(bands.map((band) => band.where).join('\n'), bands.every((band) => band.ok));
   }, CAMPAIGN_TIMEOUT_MS);
 });

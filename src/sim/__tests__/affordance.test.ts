@@ -161,13 +161,23 @@ describe('upgrade affordance', () => {
   it('leaves the upgraded player better off than the one who bought nothing', () => {
     // The bands are defined for a player with nothing (D35); this is the other
     // half of that promise — the money has to buy something you can feel.
-    const player = afterClearing(9);
+    //
+    // Felt on level 15, three past the twelve the purse was earned on, as the
+    // test above checks it: the scripted campaign's second milestone, which is
+    // where D45 says the kit must show (`balanceMilestones.test.ts`). It was
+    // level 12 on the dealt roads. On a script an ordinary level is sized for
+    // the bare hand, and when document 31's retune began its crowd reached the
+    // cap and its boss fell before a second stomp with or without the
+    // upgrades, so the two walks were the same walk to the unit.
+    const player = afterClearing(12);
     let upgraded = 0;
     let plain = 0;
     for (const seed of CHECK_SEEDS) {
-      upgraded += playLevel(12, seed, player).survivors;
-      plain += playLevel(12, seed).survivors;
+      upgraded += playLevel(15, seed, player).survivors;
+      plain += playLevel(15, seed).survivors;
     }
-    expect(upgraded).toBeGreaterThan(plain);
+    expect(`upgraded ${String(upgraded)} survivors over plain ${String(plain)}: ${String(upgraded > plain)}`).toBe(
+      `upgraded ${String(upgraded)} survivors over plain ${String(plain)}: true`,
+    );
   }, 300_000);
 });

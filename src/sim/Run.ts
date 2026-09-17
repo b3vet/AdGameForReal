@@ -203,6 +203,8 @@ export class Run {
     // roads apart everywhere outside the generator (D52) — the HUD's chip, the
     // result sheet and `runRewards`, which pays by distance when it is there.
     if (level.endless === true) this.runState.endless = { metres: 0 };
+    // Only when on, for the same reason: a dealt run's state is unchanged.
+    if (level.squadRates === true) this.runState.squadRates = true;
 
     this.streams = new Streams(balance, this.events, this.targets, level.seed, world.nextId);
     for (const row of level.rows) {

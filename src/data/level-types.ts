@@ -19,6 +19,16 @@ export interface ValueRange {
 }
 
 /**
+ * Yard rungs by upgrade: the kit a scripted level's curve expects. Only the
+ * two upgrades that shape a level are read (`startCount`, `gateBonus`; the
+ * rest shape the run, which the beats' measured fire already carries).
+ */
+export interface ExpectedKit {
+  startCount?: number;
+  gateBonus?: number;
+}
+
+/**
  * One entry of `levels.json`: the recipe `generateLevel` turns into a `LevelDef`.
  *
  * Two kinds of recipe since the level-design plan (document 31, D70). A level
@@ -44,6 +54,14 @@ export interface LevelGenConfig extends Partial<DealtFields> {
    * so the expectation matches the human bot's median count (3.4). Absent is 1.
    */
   curveTrim?: number;
+  /**
+   * The Yard rungs the composer's curve expects the player to hold on
+   * arriving (document 31, 3.4; D49): Frostfell is sized for the armed hand,
+   * so its curve starts from the start-count rung and reads each plus as the
+   * gate-bonus rung prints it. The player's own rungs are applied on top, as
+   * on every level. Absent is a hand that bought nothing.
+   */
+  kit?: ExpectedKit;
   startCount: number;
   /**
    * Squad size this level is designed to peak at — the top of `squadCurve` and

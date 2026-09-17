@@ -81,6 +81,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
         cap: def.cap ?? gateCap(def.kind, def.value, balance),
       };
       if (def.weaponId !== undefined) gate.weaponId = def.weaponId;
+      if (def.flipGrowth !== undefined) gate.flipGrowth = def.flipGrowth;
       gates.push(gate);
     }
 
@@ -113,6 +114,7 @@ export function buildWorld(level: LevelDef, balance: Balance): World {
       if (def.hpPerUnit !== undefined) enemy.hpPerUnit = def.hpPerUnit;
       if (def.killShare !== undefined) enemy.killShare = def.killShare;
       if (def.maxHalf !== undefined) enemy.maxHalf = def.maxHalf;
+      if (def.holdDz !== undefined) enemy.holdZ = row.z + def.holdDz;
       enemies.push(enemy);
     }
   }

@@ -121,37 +121,10 @@ export function playLevel(
   return playDef(level, kind, { player, botSeed: seed * 7919 + levelIndex });
 }
 
-/**
- * Writes onto a run's state the facts about its rivers and its road that a bot
- * prices from and the sim does not yet put there (`../botStreams.ts`): each
- * river's hit points per body, pour length and opening distance, and whether
- * the road grows its panels by the squad (`LevelDef.squadRates`). A player sees
- * a portal and its count before it opens; without these a bot cannot price the
- * river until its first body is on the road. Streams are registered in row
- * order, def by def (`Run`'s constructor), so the i-th def is the i-th state.
- *
- * Test-side only, and to be deleted once `Streams.add` and `Run` write them.
- */
-export function exposeRoad(run: Run, level: LevelDef): void {
-  const defs = level.rows.flatMap((row) => row.streams ?? []);
-  run.state.streams.forEach((stream, i) => {
-    const def = defs[i];
-    if (def === undefined) return;
-    const facts: { hpPerEnemy: number; durationSeconds: number; openAt?: number } = {
-      hpPerEnemy: def.hpPerEnemy,
-      durationSeconds: def.durationSeconds,
-    };
-    if (def.openAt !== undefined) facts.openAt = def.openAt;
-    Object.assign(stream, facts);
-  });
-  if (level.squadRates === true) Object.assign(run.state, { squadRates: true });
-}
-
 /** Plays a built level with one bot. See `PlayOptions`. */
 export function playDef(level: LevelDef, kind: BotKind, options: PlayOptions = {}): PlayResult {
   const tuning = options.balance ?? balance;
   const run = new Run(level, tuning, options.player);
-  exposeRoad(run, level);
   const bot = createBot(kind, options.botSeed ?? level.seed, tuning);
 
   let steps = 0;

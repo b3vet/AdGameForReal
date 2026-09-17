@@ -83,9 +83,9 @@ const RUN_CONCURRENCY = Number(process.env.SMOKE_RUN_CONCURRENCY ?? 1);
  * The review takes a frame again when it has fixed what was wrong with it
  * (docs/24-milestone-8-log.md), and the whole suite is half an hour of this
  * container's wall clock. A part is a run's label, `stress`, or one of the hero
- * set's pages (`hero-meadow`, `hero-frost`, `hero-endless`); anything the
- * filter does not name is skipped. Unset — the default, and the only thing a
- * green run may be claimed from — drives everything.
+ * set's pages (`hero-meadow`, `hero-frost`, `hero-endless`, `hero-beats`);
+ * anything the filter does not name is skipped. Unset — the default, and the
+ * only thing a green run may be claimed from — drives everything.
  */
 const ONLY = (process.env.SMOKE_ONLY ?? '')
   .split(',')

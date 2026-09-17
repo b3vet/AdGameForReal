@@ -2,15 +2,12 @@
  * What a bot knows about a river that has not finished pouring: how tough its
  * bodies are, how fast it pours, and where from (document 31, 4.4).
  *
- * `StreamState` is the live half of a river and carries its count, its portal
- * and its progress, but not the two numbers a price needs for the bodies still
- * to come — their hit points and the pour's length — nor the distance a portal
- * opens at. Until the sim writes them onto the state, this module reads them
- * where they may already be (an optional field of the same name as on
- * `StreamDef`) and otherwise off the river itself: a live body's hit points,
- * and the shared duration. A river with nothing on the road yet and no hit
- * points on its state is not priced, which is also what a player standing in
- * front of a portal with no bodies out of it knows.
+ * `StreamState` carries what a player reads off a river before it pours: its
+ * count, its portal, how tough a body is, how long the pour lasts and how far
+ * out the portal opens (`Streams.add` copies them from the def). A state built
+ * by hand may lack the last three, and then this module falls back on the
+ * river itself: a live body's hit points, and the shared duration. A river
+ * with nothing on the road yet and no hit points on its state is not priced.
  *
  * Read once per `pricePath` call, so the per-lane passes do not walk the
  * enemy list once per river.
@@ -56,8 +53,8 @@ export function gatherStreams(state: RunState): void {
   }
 }
 
-function optionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+function finite(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -67,12 +64,11 @@ function optionalNumber(value: unknown): number | undefined {
 export function streamFacts(state: RunState, stream: StreamState, balance: Balance): boolean {
   const id = stream.id;
   const live = id < state.streams.length ? (bodyHp[id] ?? 0) : 0;
-  const onState = 'hpPerEnemy' in stream ? optionalNumber(stream.hpPerEnemy) : undefined;
-  const hp = onState ?? (live > 0 ? live : undefined);
+  const hp = finite(stream.hpPerEnemy) ?? (live > 0 ? live : undefined);
   if (hp === undefined) return false;
   const duration = balance.streams.duration;
-  const seconds = 'durationSeconds' in stream ? optionalNumber(stream.durationSeconds) : undefined;
-  const openAt = 'openAt' in stream ? optionalNumber(stream.openAt) : undefined;
+  const seconds = finite(stream.durationSeconds);
+  const openAt = finite(stream.openAt);
   facts.hp = hp;
   facts.seconds = seconds ?? (duration.min + duration.max) / 2;
   facts.speed = live > 0 ? (bodySpeed[id] ?? balance.streams.speed) : balance.streams.speed;

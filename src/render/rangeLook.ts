@@ -140,9 +140,11 @@ export const GATE_DRAW_RANGE = 60;
 export const BLOCK_LABEL_LANE_CLEARANCE = 1.2;
 /**
  * Air between a block's number and the gate's number or plaque it is moved
- * clear of, in design pixels (`./labelClearance.ts`).
+ * clear of, in design pixels (`./labelClearance.ts`). Four rather than three
+ * since the guards moved to a metre in front of their panels: two stacked
+ * numbers need the air to read as two.
  */
-export const BLOCK_LABEL_GAP = 3;
+export const BLOCK_LABEL_GAP = 4;
 /**
  * The lowest a block's number may be moved to clear a gate's number above it,
  * in metres over the road. Below this it would be printed across the block's

@@ -13,8 +13,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { solveCurve } from '../beats/beatCurve';
 import { checkMultipliers, fundCurses, mulAllowance } from '../beats/budgets';
+import { middleBeat } from '../beats/beatCurve';
+import { levelCurve } from '../beats/compose';
 import { findBeat, resolveTier, withPrize } from '../beats/library';
 import type { ResolvedTier } from '../beats/library';
 import { FROST_FROM, MILESTONES, NOT_A_THREAT, PHASE_ONE, ROWS, blockBehind, curses, priced } from './levelDesignRules';
@@ -24,8 +25,17 @@ import type { LevelGenConfig, ScriptBeat } from '@/data/types';
 /** Section 5: gate beats that carry a curse, and prizes with nothing in their lane, per biome. */
 const CURSE_SHARE = [0.35, 0.55] as const;
 const UNPRICED_MAX = 0.3;
-/** 3.4: late multipliers stay decisions while the expected squad is under about this. */
-const EARLY_E_MAX = 350;
+/**
+ * Document 32, growth earlier, which replaces 3.4's "E under about 350 until
+ * the last two beats": the column arrives at the script's middle beat with
+ * about half the level's peak, and the peak sits under the pool's ceiling with
+ * room for a good road, so the cap never erases a mistake and a late
+ * multiplier is still a decision.
+ */
+const MID_SHARE = [0.4, 0.6] as const;
+const ORDINARY_PEAK_MAX = 420;
+/** Document 32: "the milestones' own figure", still clear of the ceiling for the kit's bigger prints. */
+const MILESTONE_PEAK_MAX = 450;
 /** 3.9: a rest after every two or three threat beats. */
 const MAX_THREAT_RUN = 3;
 /** 3.5: x3 on 13, 15, 18 and 20 in Meadow, and from 25 on Frostfell. */
@@ -279,25 +289,36 @@ describe('the forty scripts', () => {
     }
   });
 
-  it('keeps the expected squad under about 350 until the last two beats', () => {
+  it('grows early: half the peak by the middle beat, and the peak under the cap (document 32)', () => {
     for (const level of LEVELS) {
       const trim = level.config.curveTrim ?? 1;
-      // The composer's own target: never above the pool's ceiling.
+      // The composer's own target: the level's peak, never above the pool's ceiling.
       const target = Math.min(balance.squad.maxCount, level.config.peakTarget * trim);
-      const curve = solveCurve(
-        level.config.startCount,
-        level.beats.map((beat) => ({
-          prize: beat.funded.gates.prize,
-          prizeU: 0.5,
-          expectLoss: beat.tier.expectLoss,
-        })),
-        target,
+      // The composer's own curve (shoot-up and the expected kit included), at the middle of each prize's range.
+      const curve = levelCurve(
+        level.config,
+        level.beats.map((beat) => beat.funded),
+        level.beats.map(() => 0.5),
         beats,
       );
-      const last = curve.expected[curve.expected.length - 1] ?? 0;
-      expect(Math.abs(last - target) / target, `${where(level)} the gates carry the curve`).toBeLessThan(0.01);
-      const early = Math.max(...curve.expected.slice(0, -2));
-      expect(early, `${where(level)} E before the last two beats`).toBeLessThanOrEqual(EARLY_E_MAX);
+      expect(Math.abs(curve.peak - target) / target, `${where(level)} the gates carry the curve`).toBeLessThan(0.01);
+      const middle = (curve.expected[middleBeat(level.beats.length)] ?? 0) / target;
+      expect(middle, `${where(level)} E at the middle beat over the peak`).toBeGreaterThanOrEqual(MID_SHARE[0]);
+      expect(middle, `${where(level)} E at the middle beat over the peak`).toBeLessThanOrEqual(MID_SHARE[1]);
+      const ceiling = level.milestone ? MILESTONE_PEAK_MAX : ORDINARY_PEAK_MAX;
+      expect(target, `${where(level)} the peak target`).toBeLessThanOrEqual(ceiling);
+    }
+  });
+
+  it('follows the last multiplier with a rated threat before the prep (document 32)', () => {
+    // A mistake made after the big gain has to cost units the boss then misses.
+    for (const level of LEVELS) {
+      const ids = level.beats.map((beat) => beat.entry.prize);
+      const last = Math.max(ids.lastIndexOf('x2'), ids.lastIndexOf('x3'));
+      if (last < 0) continue;
+      const after = level.beats.slice(last + 1, -1);
+      const threat = after.some((beat) => beat.tier.rating > 0 && !NOT_A_THREAT.has(beat.entry.beat));
+      expect(threat, `${where(level)} a threat after the multiplier at beat ${String(last + 1)}`).toBe(true);
     }
   });
 });

@@ -6,6 +6,7 @@ import { composeLevel } from '../beats/compose';
 import { resolveTier } from '../beats/library';
 import { Run } from '../Run';
 import type { SimEvent } from '../types';
+import { portalOpen } from '../pressure';
 import { balance, beats, levelCount } from '@/data';
 
 const lab = { library: testLibrary };
@@ -54,7 +55,8 @@ describe('one beat on a boss-less road', () => {
         expect(gateZ + enemy.at - enemy.wake, id).toBeGreaterThanOrEqual(balance.level.rowSpacing);
       }
       for (const river of resolved.rivers) {
-        expect(gateZ + river.at - river.open, id).toBeGreaterThanOrEqual(balance.level.rowSpacing);
+        const open = portalOpen(river, balance.streams.speed, balance);
+        expect(gateZ + river.at - open, id).toBeGreaterThanOrEqual(balance.level.rowSpacing);
       }
       for (const wall of level.walls ?? []) expect(wall.zStart, id).toBeGreaterThan(balance.level.rowSpacing);
       expect(level.arenaZ).toBeGreaterThan(gateZ + Math.max(0, ...resolved.enemies.map((e) => e.at)));

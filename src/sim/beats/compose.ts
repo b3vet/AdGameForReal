@@ -18,18 +18,28 @@
 import type { LevelDef } from '../level';
 import { applyGateBonus, placeScriptStaffs } from '../levelPasses';
 import type { StaffOffer } from '../levelPasses';
-import { playerMods } from '../player';
+import { emptyPlayer, playerMods } from '../player';
 import { mulberry32 } from '../rng';
 import type { RowDef, RowEnemyDef } from '../rows';
-import type { GateDef, Lane, StreamDef } from '../types';
+import type { GateDef, Lane } from '../types';
 import type { WallDef } from '../walls';
 import { balance, beats as shippedLibrary, levels } from '@/data';
-import type { BeatLibrary, BiomeId, BossKind, LevelGenConfig, PlayerState, ScriptBeat } from '@/data/types';
-import { solveCurve } from './beatCurve';
-import { blockFor, capBodies, capLive, gateFor, riverFor, stopsShots } from './beatSize';
+import type {
+  BeatLibrary,
+  BiomeId,
+  BossKind,
+  ExpectedKit,
+  LevelGenConfig,
+  PlayerState,
+  ScriptBeat,
+} from '@/data/types';
+import { scaleAt, shotSeconds, solveGrowthCurve } from './beatCurve';
+import type { BeatCurve, CurveBeat, CurveScales } from './beatCurve';
+import { blockFor, capBodies, capLive, gateFor, holdAt, sizeRiver, stopsShots } from './beatSize';
+import type { SizedRiver } from './beatSize';
 import { checkMultipliers, fundCurses, staffDemand, staffHosts } from './budgets';
 import { checkFenceSides, fenceWalls } from './fences';
-import { beatDps, findBeat, resolveTier, ROLES, withPrize } from './library';
+import { beatBunch, beatDps, findBeat, resolveTier, ROLES, withPrize } from './library';
 import type { ResolvedTier } from './library';
 import type { BeatMark } from './marks';
 import { RolePicker } from './roles';
@@ -74,25 +84,29 @@ function emptyRow(z: number): RowDef {
 
 /**
  * Lays beats down the road from row slot `firstRow`. Rows are appended in
- * road order; `scale` is the curve's factor on every plus panel.
+ * road order; `scale` is the curve's factor on the plus panels, one for every
+ * beat or each beat its own (`BeatCurve.scales`).
  */
 export function layBeats(
   laid: readonly LaidBeat[],
   firstRow: number,
   seed: number,
   biome: BiomeId,
-  scale: number,
+  scale: CurveScales,
   library: BeatLibrary,
 ): Layout {
   const spacing = balance.level.rowSpacing;
   const picker = new RolePicker(seed);
   const blockDps = beatDps(library, 'block', biome, balance);
   const riverDps = beatDps(library, 'river', biome, balance);
+  const bunch = beatBunch(library, biome);
   const layout: Layout = { rows: [], walls: [], marks: [], offers: [] };
+  // Every river of the road, in the order laid, for the road-wide ceiling.
+  const rivers: SizedRiver[] = [];
 
   let slot = firstRow;
   let floorZ = 0;
-  for (const beat of laid) {
+  for (const [k, beat] of laid.entries()) {
     const id = beat.entry.beat;
     const tier = beat.tier;
     const roles = picker.pick(tier, id);
@@ -112,7 +126,7 @@ export function layBeats(
         tier.gates[role],
         e,
         beat.draws[index] ?? 0,
-        scale,
+        scaleAt(scale, k),
         library,
         balance,
       );
@@ -123,34 +137,40 @@ export function layBeats(
 
     for (const enemy of tier.enemies) {
       const spread = enemy.lanes !== undefined && enemy.lanes.length > 0 ? enemy.lanes : [enemy.lane];
+      // A block that holds the gateway never stands in front of its line.
+      const hold = holdAt(enemy, balance);
+      const at = hold === null ? enemy.at : Math.max(enemy.at, hold);
       for (const role of spread) {
         const lane = roles[role];
-        const row = rowFor(enemy.at);
+        const row = rowFor(at);
         const def: RowEnemyDef = blockFor(
           enemy,
           lane,
-          gateZ + enemy.at - row.z,
+          gateZ + at - row.z,
           e,
           blockDps,
-          screenedAt(lane, enemy.at),
+          screenedAt(lane, at),
           balance,
+          hold === null ? undefined : gateZ + hold - row.z,
         );
         row.enemies.push(def);
         threatened.add(lane);
       }
     }
 
-    const poured: Array<{ row: RowDef; def: StreamDef }> = [];
+    const poured: SizedRiver[] = [];
     for (const river of tier.rivers) {
+      const row = rowFor(river.at);
       for (const role of river.lanes) {
         const lane = roles[role];
-        const def = riverFor(river, lane, gateZ + river.at, e, riverDps, screenedAt(lane, river.at), balance);
-        poured.push({ row: rowFor(river.at), def });
+        const sized = sizeRiver(river, lane, gateZ + river.at, e, riverDps, screenedAt(lane, river.at), bunch, balance);
+        poured.push(sized);
+        rivers.push(sized);
+        (row.streams ??= []).push(sized.def);
         threatened.add(lane);
       }
     }
-    capBodies(poured.map((entry) => entry.def), balance);
-    for (const entry of poured) (entry.row.streams ??= []).push(entry.def);
+    capBodies(poured, balance);
 
     const fence = tier.fence;
     if (fence !== null && fence !== undefined) {
@@ -167,12 +187,74 @@ export function layBeats(
     floorZ = gateZ + balance.walls.gateClearance;
   }
 
-  capLive(
-    layout.rows.flatMap((row) => row.streams ?? []),
-    balance,
-  );
+  capLive(rivers, balance);
   layout.walls.sort((a, b) => a.zStart - b.zStart || a.boundary - b.boundary);
   return layout;
+}
+
+/**
+ * What the level curve reads of each beat (`beatCurve.ts`): the prize, its own
+ * value draw, the loss the tier expects, the fire its panel is expected to
+ * take and the gate bonus it is expected to be printed with (`bonus`, one for
+ * a bare hand).
+ */
+export function curveBeats(
+  tiers: readonly ResolvedTier[],
+  prizeDraws: readonly number[],
+  bonus = 1,
+): CurveBeat[] {
+  return tiers.map((tier, k) => {
+    const beat: CurveBeat = {
+      prize: tier.gates.prize,
+      prizeU: prizeDraws[k] ?? 0,
+      expectLoss: tier.expectLoss,
+      shotSeconds: shotSeconds(tier, balance),
+      bonus,
+    };
+    // A flip curse pays when shot green (document 32, `gateFor`).
+    if (ROLES.some((role) => tier.gates[role].kind === 'sub' && tier.gates[role].size === 'flip')) {
+      beat.flipPayout = balance.gates.flip.payout;
+    }
+    return beat;
+  });
+}
+
+/**
+ * The level-shaping half of `playerMods` for the kit a level's curve expects
+ * (`LevelGenConfig.kit`): read through `playerMods` itself, so the curve and
+ * the run can never disagree about what a rung is worth.
+ */
+export function expectedMods(kit: ExpectedKit | undefined): { startCount: number; gateBonus: number } {
+  if (kit === undefined) return { startCount: 0, gateBonus: 1 };
+  const player = emptyPlayer();
+  player.upgrades.startCount = kit.startCount ?? 0;
+  player.upgrades.gateBonus = kit.gateBonus ?? 0;
+  const mods = playerMods(player);
+  return { startCount: mods.startCount, gateBonus: mods.gateBonus };
+}
+
+/**
+ * The curve a script is sized on (3.4): walked from the count the expected
+ * kit starts with, every prize read as that kit prints it, and solved so the
+ * level peaks on `peakTarget * curveTrim` under the pool's ceiling with half
+ * of that grown by the middle beat (document 32, `solveGrowthCurve`). Shared
+ * with the static tests, so they check the curve the composer lays.
+ */
+export function levelCurve(
+  config: LevelGenConfig,
+  tiers: readonly ResolvedTier[],
+  prizeDraws: readonly number[],
+  library: BeatLibrary,
+): BeatCurve {
+  const kit = expectedMods(config.kit);
+  const target = Math.min(balance.squad.maxCount, config.peakTarget * (config.curveTrim ?? 1));
+  return solveGrowthCurve(
+    config.startCount + kit.startCount,
+    curveBeats(tiers, prizeDraws, kit.gateBonus),
+    target,
+    library,
+    balance,
+  );
 }
 
 /** A data error with the level it was found on in front of it. */
@@ -227,20 +309,11 @@ export function composeLevel(
 
   const values = valueStream(seed);
   const draws = resolved.map(() => drawValues(values));
-  const target = Math.min(
-    balance.squad.maxCount,
-    config.peakTarget * (config.curveTrim ?? 1),
-  );
-  const curve = solveCurve(
-    config.startCount,
-    resolved.map((beat, k) => ({
-      prize: beat.tier.gates.prize,
-      prizeU: draws[k]?.[0] ?? 0,
-      expectLoss: beat.tier.expectLoss,
-    })),
-    target,
+  const curve = levelCurve(
+    config,
+    resolved.map((beat) => beat.tier),
+    draws.map((draw) => draw[0]),
     library,
-    balance,
   );
 
   const laid: LaidBeat[] = resolved.map((beat, k) => ({
@@ -253,7 +326,7 @@ export function composeLevel(
 
   let layout: Layout;
   try {
-    layout = layBeats(laid, 0, seed, biome, curve.scale, library);
+    layout = layBeats(laid, 0, seed, biome, curve.scales, library);
   } catch (error) {
     throw levelError(index, error);
   }

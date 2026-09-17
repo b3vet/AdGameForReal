@@ -1,10 +1,11 @@
 {
   "upgrades": {
-    "baseCost": 1150,
+    "baseCost": 1850,
     "costGrowth": 1.6,
     "maxLevel": 10,
     "starterRung": {
-      "gateBonus": 250
+      "gateBonus": 250,
+      "fireRate": 650
     },
     "effects": {
       "damage": 0.08,
@@ -18,8 +19,8 @@
     "ember": {
       "unlock": 0,
       "evolve": [
-        2600,
-        3000,
+        3200,
+        3400,
         3800
       ],
       "worth": {
@@ -32,7 +33,7 @@
       }
     },
     "storm": {
-      "unlock": 400,
+      "unlock": 550,
       "evolve": [
         1500,
         2200,
@@ -48,7 +49,7 @@
       }
     },
     "frost": {
-      "unlock": 450,
+      "unlock": 1100,
       "evolve": [
         1200,
         1500,

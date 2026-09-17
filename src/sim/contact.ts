@@ -154,6 +154,11 @@ export function advanceEnemies(
 
     const wasAt = enemy.z;
     enemy.z -= effectiveSpeed(enemy, state.time) * dt;
+    // A beat's hold line (document 31): the block stops on it and stands, so
+    // it meets the column at the row it guards. One standing in front of its
+    // line from the start is held where it stands rather than pulled back.
+    const holdZ = enemy.holdZ;
+    if (holdZ !== undefined) enemy.z = Math.max(enemy.z, Math.min(wasAt, holdZ));
     // Frost tier 4 (D54): a wall of ice across one lane holds that lane's
     // bodies at the line. Only a body that was in *front* of it — a body that
     // spawned inside walks on, and one the wall went up behind is not dragged

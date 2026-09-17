@@ -42,6 +42,16 @@ export interface BeatEnemy {
   killSeconds: number;
   /** Chargers: how many, spread over the roles in `lanes`. */
   lanes?: LaneRole[];
+  /**
+   * Holds the gateway (Phase 1, wave two): the block walks no nearer than
+   * `enemies.beat.holdGap` in front of its gate row and stands there, so the
+   * column meets it at the row whatever its wake. A guard stands on that line
+   * from the start (`at` is minus the gap); an ambush walks through its panel
+   * to it. Without it a block in front of the panels meets the column rows
+   * before them, and a column that stepped aside to let it pass stepped back
+   * into the prize for nothing.
+   */
+  hold?: boolean;
 }
 
 /** A river poured from a fixed place on the road (a portal). */
@@ -49,8 +59,19 @@ export interface BeatRiver {
   lanes: LaneRole[];
   /** Metres from the beat's gate row the portal stands at. */
   at: number;
-  /** Squad-to-portal distance at which it starts pouring. */
-  open: number;
+  /**
+   * Squad-to-portal distance at which it starts pouring. Give this or `tail`,
+   * not both: a river timed by its tail has its opening solved from it.
+   */
+  open?: number;
+  /**
+   * Where the pour's last body meets the column, in metres past the gate row
+   * (Phase 1, wave two). The composer opens the portal early enough that the
+   * whole pour has run by then, so the river is still arriving as the column
+   * crosses the row: leaving its lane means leaving its panel. Needs the
+   * portal behind the panels (`at` well past the stop gap).
+   */
+  tail?: number;
   /** How long it pours, in seconds. */
   seconds: number;
   /** Hit points it brings over what the squad lands in its fire window. */
@@ -88,13 +109,30 @@ export interface BeatDef {
 /** The panel sizes a gate slot can name, as `[min, max]` shares of E. */
 export type BeatValueSize = 'small' | 'mid' | 'big' | 'flip' | 'price';
 
+/**
+ * How much more a column clears of a river whose bodies walk bunched: a splash
+ * takes every body inside its radius, so the fire a lane lands on a river
+ * grows with its bodies per metre, `rho`, as `max(1, gain * rho ^ power)`
+ * (measured in the beat lab per biome, Phase 1 wave two).
+ */
+export interface RiverBunch {
+  gain: number;
+  power: number;
+}
+
 /** `beats.json`, as the plan pins it. */
 export interface BeatsData {
   /**
    * Hit points per second one unit of the reference squad lands, measured in
-   * the beat lab per biome (Frostfell with the kit the campaign affords).
+   * the beat lab per biome (Frostfell with the kit the campaign affords). The
+   * river's is what a lane clears of bodies that walk alone; `bunch` is how
+   * that grows as they walk closer together.
    */
-  dps: { block: Record<BiomeId, number>; river: Record<BiomeId, number> };
+  dps: {
+    block: Record<BiomeId, number>;
+    river: Record<BiomeId, number>;
+    bunch: Record<BiomeId, RiverBunch>;
+  };
   values: Record<BeatValueSize, [number, number]>;
   defs: BeatDef[];
 }
@@ -109,6 +147,7 @@ export interface BeatLibrary {
   dps?: {
     block?: Partial<Record<BiomeId, number>>;
     river?: Partial<Record<BiomeId, number>>;
+    bunch?: Partial<Record<BiomeId, RiverBunch>>;
   };
   values?: Partial<Record<BeatValueSize, [number, number]>>;
   defs: readonly BeatDef[];
@@ -141,6 +180,19 @@ function readBiomeNumbers(raw: unknown): Partial<Record<BiomeId, number>> | unde
   return out;
 }
 
+/** The per-biome bunching curves of `dps.bunch` that are whole. */
+function readBunches(raw: unknown): Partial<Record<BiomeId, RiverBunch>> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const out: Partial<Record<BiomeId, RiverBunch>> = {};
+  for (const biome of ['meadow', 'frost'] as const) {
+    const entry = raw[biome];
+    if (isRecord(entry) && isFiniteNumber(entry.gain) && isFiniteNumber(entry.power)) {
+      out[biome] = { gain: entry.gain, power: entry.power };
+    }
+  }
+  return out;
+}
+
 const VALUE_SIZES: readonly BeatValueSize[] = ['small', 'mid', 'big', 'flip', 'price'];
 
 /**
@@ -160,8 +212,10 @@ export function readBeatLibrary(raw: unknown): BeatLibrary {
     const dps: NonNullable<BeatLibrary['dps']> = {};
     const block = readBiomeNumbers(raw.dps.block);
     const river = readBiomeNumbers(raw.dps.river);
+    const bunch = readBunches(raw.dps.bunch);
     if (block !== undefined) dps.block = block;
     if (river !== undefined) dps.river = river;
+    if (bunch !== undefined) dps.bunch = bunch;
     library.dps = dps;
   }
 

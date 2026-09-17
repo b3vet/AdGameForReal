@@ -3,12 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { beat, ORDINARY, scripted, testLibrary } from './beatFixtures';
 import { solveCurve, walkCurve } from '../beats/beatCurve';
 import type { CurveBeat } from '../beats/beatCurve';
-import { blockFor, capBodies, capLive, gateFor, printRound, riverFor } from '../beats/beatSize';
-import { composeLevel } from '../beats/compose';
+import { blockFor, capBodies, capLive, gateFor, printRound, riverFor, sizeRiver } from '../beats/beatSize';
+import type { SizedRiver } from '../beats/beatSize';
+import { composeLevel, drawValues, levelCurve, resolveScript, valueStream } from '../beats/compose';
 import { FIRE_RATE_GATE_WORTH, gateCap } from '../gates';
 import { portalWindow } from '../pressure';
 import { balance } from '@/data';
-import type { BeatEnemy, BeatRiver } from '@/data/types';
+import type { BeatEnemy, BeatLibrary, BeatRiver, LevelGenConfig } from '@/data/types';
+
+/** The curve `composeLevel` lays a recipe on, drawn as it draws it. */
+function composedCurve(index: number, config: LevelGenConfig, library: BeatLibrary): ReturnType<typeof levelCurve> {
+  const resolved = resolveScript(index, config.script ?? [], config.curses, library);
+  const values = valueStream(config.seed);
+  const draws = resolved.map(() => drawValues(values));
+  return levelCurve(config, resolved.map((b) => b.tier), draws.map((d) => d[0]), library);
+}
 
 describe('printed values', () => {
   it('round to a unit, then to fives above 20, then to tens above 100', () => {
@@ -32,7 +41,8 @@ describe('gate sizing', () => {
   it('does not scale a curse, so a flip stays shootable', () => {
     const flip = gateFor({ kind: 'sub', size: 'flip' }, 200, 0, 2.5, testLibrary);
     expect(flip?.value).toBe(printRound(200 * 0.07));
-    expect(flip?.cap).toBe(gateCap('sub', flip?.value ?? 0, balance));
+    // Document 32: a flip pays a multiple of its print once shot green (`flipPayout.test.ts`).
+    expect(flip?.cap).toBe(balance.gates.flip.payout * (flip?.value ?? 0));
   });
 
   it('prints a multiplier as it is, a fire rate as a mid plus and nothing for none', () => {
@@ -103,9 +113,13 @@ describe('river sizing', () => {
 
   it('holds a beat\'s rivers to the body ceiling and keeps their hit points', () => {
     const big = { ...river, density: 1 };
-    const rivers = [riverFor(big, -1, 300, 200, 0.8, false), riverFor(big, 1, 300, 200, 0.8, false)];
-    const before = rivers.map((r) => r.count * r.hpPerEnemy);
-    capBodies(rivers);
+    const sized = [
+      sizeRiver(big, -1, 300, 200, 0.8, false, undefined),
+      sizeRiver(big, 1, 300, 200, 0.8, false, undefined),
+    ];
+    const before = sized.map((r) => r.budget);
+    capBodies(sized);
+    const rivers = sized.map((r) => r.def);
     const most = balance.enemies.portal.maxBodiesPerBeat;
     expect(rivers[0]?.count ?? 0).toBeLessThanOrEqual(most / 2);
     expect((rivers[0]?.count ?? 0) + (rivers[1]?.count ?? 0)).toBeLessThanOrEqual(most);
@@ -118,13 +132,14 @@ describe('the road-wide body ceiling', () => {
   const most = balance.enemies.portal.maxLiveBodies;
 
   const shared = Math.floor(120 * (most / 240));
+  const sized = (lane: -1 | 0 | 1, z: number): SizedRiver => sizeRiver(river, lane, z, 120, 0.8, false, undefined);
 
   it('shares the ceiling between overlapping rivers and keeps their hit points', () => {
-    const first = riverFor(river, -1, 200, 120, 0.8, false);
-    const second = riverFor(river, 1, 230, 120, 0.8, false);
-    const apart = riverFor(river, 0, 400, 120, 0.8, false);
-    const hp = second.count * second.hpPerEnemy;
-    capLive([second, apart, first]);
+    const rivers = [sized(1, 230), sized(0, 400), sized(-1, 200)];
+    const [second, apart, first] = rivers.map((r) => r.def);
+    if (first === undefined || second === undefined || apart === undefined) throw new Error('three rivers');
+    const hp = rivers[0]?.budget ?? 0;
+    capLive(rivers);
     expect(first.count).toBe(shared);
     expect(second.count).toBe(shared);
     expect(first.count + second.count).toBeLessThanOrEqual(most);
@@ -134,20 +149,18 @@ describe('the road-wide body ceiling', () => {
   });
 
   it('counts a river as live a despawn distance past its portal', () => {
-    const first = riverFor(river, -1, 200, 120, 0.8, false);
-    const touching = riverFor(river, 1, 200 + 50 + balance.streams.despawnBehind, 120, 0.8, false);
-    capLive([first, touching]);
-    expect(touching.count).toBe(shared);
-    const again = riverFor(river, -1, 200, 120, 0.8, false);
-    const clear = riverFor(river, 1, 200 + 51 + balance.streams.despawnBehind, 120, 0.8, false);
-    capLive([again, clear]);
-    expect(clear.count).toBe(120);
+    const touching = [sized(-1, 200), sized(1, 200 + 50 + balance.streams.despawnBehind)];
+    capLive(touching);
+    expect(touching[1]?.def.count).toBe(shared);
+    const clear = [sized(-1, 200), sized(1, 200 + 51 + balance.streams.despawnBehind)];
+    capLive(clear);
+    expect(clear[1]?.def.count).toBe(120);
   });
 
   it('keeps the busiest stretch under the ceiling when three rivers meet', () => {
-    const rivers = [150, 170, 190].map((z, i) => riverFor(river, (i - 1) as -1 | 0 | 1, z, 120, 0.8, false));
+    const rivers = [150, 170, 190].map((z, i) => sized((i - 1) as -1 | 0 | 1, z));
     capLive(rivers);
-    expect(rivers.reduce((sum, r) => sum + r.count, 0)).toBeLessThanOrEqual(most);
+    expect(rivers.reduce((sum, r) => sum + r.def.count, 0)).toBeLessThanOrEqual(most);
   });
 });
 
@@ -190,16 +203,27 @@ describe('the level curve with losses', () => {
     expect(solveCurve(10, beats, 1, testLibrary).scale).toBe(balance.gates.scale.min);
   });
 
-  it('sizes a composed level against E with its losses, landing the prep beat on its target', () => {
-    const config = scripted(8, ORDINARY, { startCount: 12, peakTarget: 240, curveTrim: 0.9 });
+  it('sizes a composed level against E with its losses, peaking on its target', () => {
+    // Document 32: the target is the level's peak, the prep beat's prize taken.
+    // `ORDINARY` without its second open beat: five calm pluses after the middle
+    // grow more than twice the middle's squad on shoot-up alone.
+    const script = ORDINARY.filter((line, k) => !(line.beat === 'open' && k > 0));
+    const config = scripted(8, script, { startCount: 12, peakTarget: 240, curveTrim: 0.9 });
     const level = composeLevel(8, config, config.seed, undefined, testLibrary);
     const marks = level.beats ?? [];
-    expect(marks[marks.length - 1]?.expected).toBeCloseTo(240 * 0.9, 4);
+    const curve = composedCurve(8, config, testLibrary);
+    expect(curve.peak).toBeCloseTo(240 * 0.9, 4);
+    expect(marks[marks.length - 1]?.expected).toBeCloseTo(curve.expected[curve.expected.length - 1] ?? 0, 9);
+    expect(marks[marks.length - 1]?.expected ?? Infinity).toBeLessThan(240 * 0.9);
     expect(marks[0]?.expected).toBe(12);
     // The guard's block is sized for the squad expected at the guard.
     const guard = marks[1];
     const block = level.rows[2]?.enemies[0];
-    expect(block?.units).toBe(Math.round((2 * (guard?.expected ?? 0) * 1) / balance.enemies.beat.bruteHpPerUnit));
+    // At least one unit, as the composer prints it (`blockFor`): a block of
+    // two seconds' fire can be worth less than one unit at 120 hp a unit.
+    expect(block?.units).toBe(
+      Math.max(1, Math.round((2 * (guard?.expected ?? 0) * 1) / balance.enemies.beat.bruteHpPerUnit)),
+    );
     // A later beat is sized for more than an earlier one on a rising curve.
     const first = level.rows[1]?.gates.find((g) => g?.kind === 'add');
     const late = level.rows[9]?.gates.find((g) => g?.kind === 'add');
@@ -216,9 +240,10 @@ describe('the level curve with losses', () => {
     };
     const config = scripted(8, script, { startCount: 50, peakTarget: 50 });
     const marks = composeLevel(8, config, config.seed, undefined, heavy).beats ?? [];
-    // Open at scale s, then a guard that costs 60 percent: 50 at the prep
-    // needs the guard's plus to more than make up for its loss.
-    expect(marks[2]?.expected).toBeCloseTo(50, 3);
-    expect(marks[1]?.expected ?? 0).toBeGreaterThan(50);
+    // Open, then a guard that costs 60 percent: the level still peaks on 50
+    // (document 32), and the squad the guard is sized for stands above the
+    // one that leaves it.
+    expect(composedCurve(8, config, heavy).peak).toBeCloseTo(50, 3);
+    expect(marks[1]?.expected ?? 0).toBeGreaterThan(marks[2]?.expected ?? Infinity);
   });
 });

@@ -96,6 +96,10 @@ export class Streams {
       done: false,
     };
     if (def.anchorZ !== undefined) state.anchorZ = def.anchorZ;
+    // What a player reads off the river before it pours (document 31, 4.4).
+    state.hpPerEnemy = def.hpPerEnemy;
+    state.durationSeconds = def.durationSeconds;
+    if (def.openAt !== undefined) state.openAt = def.openAt;
     this.runtimes.push({ def, state, owed: 0 });
     return state;
   }

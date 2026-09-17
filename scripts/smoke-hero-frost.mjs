@@ -19,45 +19,58 @@ import {
 /**
  * The level the Frostfell frames come from, and the one seed they are shot on.
  *
- * 23 is the first level that carries both new kinds, and on seed 1 it deals
- * them in the order the shot list below asks for. The same level and seed the
- * smoke's own Frostfell run plays (`scripts/smoke.mjs`), so the pictures and
- * the assertions are of the same road.
+ * The same level and seed the smoke's own Frostfell run plays
+ * (`./smoke-runs.mjs`, which says why it is level 27 seed 29 since the
+ * scripted campaign), so the pictures and the assertions are of the same road:
+ * a shield guard at z 107, two chargers at z 170, and a Rime Fiend that lives
+ * long enough to charge.
  */
-export const FROST_LEVEL = 23;
-export const FROST_SEED = 1;
+export const FROST_LEVEL = 27;
+export const FROST_SEED = 29;
 
 /**
- * What the campaign says the player is holding when it first reaches level 23,
- * read off `runCampaign` rather than invented (Milestone 7 Phase D). From level
- * 21 the game is balanced for a player who has shopped, so a bare hero run
- * would photograph a squad being wiped rather than the biome.
+ * What the human campaign is holding when it first reaches level 27, read off
+ * `runCampaign` rather than invented (Milestone 7 Phase D; the same save as the
+ * smoke's Frostfell run). From level 21 the game is balanced for a player who
+ * has shopped, so a bare hero run would photograph a squad being wiped rather
+ * than the biome.
  */
 const FROST_SAVE = {
   coins: 0,
-  upgrades: { damage: 2, fireRate: 2, startCount: 2, gateBonus: 2, bossDamage: 1 },
+  upgrades: { damage: 2, fireRate: 1, startCount: 1, gateBonus: 2, bossDamage: 0 },
   staffs: {
     ember: { unlocked: true, tier: 1 },
     storm: { unlocked: true, tier: 1 },
     frost: { unlocked: true, tier: 1 },
   },
   selectedStaff: 'frost',
-  familiar: { unlocked: false, tier: 0 },
+  familiar: { unlocked: true, tier: 1 },
   unlockedLevel: FROST_LEVEL,
 };
 
 /**
  * The five Frostfell frames, in the order the road offers them.
  *
- * The first two are the meadow set's own two shots one biome over — the run and
- * a gate row close up — so the two biomes can be read side by side. The last
+ * Two of them are the meadow set's own two shots one biome over (the run and a
+ * gate row close up), so the two biomes can be read side by side. The other
  * three are the milestone's new content, and all three are *moments*: see
  * `FROST_PACE` for why each one names a sim speed.
+ *
+ * The broken shield comes first because the road offers it first. The guard
+ * holds its line at z 107, a metre in front of its own gate row. The row frames
+ * used to be taken on the first row past 70 m. At turbo 60 a frame is 15 m of
+ * road, so the first frame past 70 m was already beyond the row at 72, and the
+ * frames landed 10 and 6 m short of the guard's row at 108. That is just where
+ * the shield breaks and the block dies, so `hero-shield-broken` then waited
+ * for a broken guard that was already gone (level 23 had the same geometry).
+ * So the row frames now wait for the rest beat's row at 144 m (`after: 110`),
+ * where the column is about 150 strong, and the chargers behind it at 170 m are
+ * still two metres short of setting off when the close-up is taken.
  */
 const FROST_SHOTS = [
-  { at: 'row', value: 10, after: 70, name: 'hero-frost-run' },
-  { at: 'row', value: 6, after: 70, name: 'hero-frost-gate-closeup' },
   { at: 'shieldBroken', name: 'hero-shield-broken' },
+  { at: 'row', value: 10, after: 110, name: 'hero-frost-run' },
+  { at: 'row', value: 6, after: 110, name: 'hero-frost-gate-closeup' },
   { at: 'charge', name: 'hero-charger' },
   { at: 'bossCharge', name: 'hero-frost-boss' },
 ];
@@ -66,12 +79,13 @@ const FROST_SHOTS = [
  * How fast the sim may run as each Frostfell moment comes into reach.
  *
  * The same idea as the meadow page's row shots and the same numbers as the
- * smoke run's (`scripts/smoke-run.mjs`, `PACE`, which carries the working for
- * every rung), measured on the sim: the shielded brute's shield lasts a tenth
- * of a second inside the squad's range, the block lives 1.3 s broken, the
- * charger runs for 0.9 s, and the Fiend's first charge is 8 s into the fight
- * and 1.3 s long. At turbo 60 a frame is three seconds of sim, so without this
- * every one of them happens between two frames.
+ * smoke run's (`./smoke-run-plan.mjs`, `PACE`, which carries the working for
+ * every rung). Measured on the sim for this level and seed with the kit: the
+ * guard's shield holds until the column is 10.5 m from it, the broken block is
+ * inside `brokenShot` for 1.15 s, the chargers are inside `chargeShot` for
+ * 1.2 s, and the Fiend's first charge commits 8 s into the fight and is inside
+ * `bossGap` for about a second. At turbo 60 a frame is three seconds of sim, so
+ * without this every one of them happens between two frames.
  */
 const FROST_PACE = {
   /** What the sim runs at when this step's subject is out of reach; see `PACE`
@@ -95,8 +109,8 @@ const FROST_PACE = {
 };
 
 /**
- * The Frostfell page: boot straight into level 23 with the campaign's kit and
- * walk it, stopping on the five frames the biome is judged on.
+ * The Frostfell page: boot straight into `FROST_LEVEL` with the campaign's kit
+ * and walk it, stopping on the five frames the biome is judged on.
  *
  * Its own boot rather than a `startLevel` off the level-1 page, because it is
  * driven beside that page rather than after it — see `FROST_SCALES`. Everything
@@ -115,8 +129,8 @@ export async function driveFrost(browser, baseUrl, heroDir, failures, openPage, 
       '&turbo=60&screenshot=1&quality=0';
     await bootHeroPage(page, `${baseUrl}${query}`, failures, label);
 
-    // The kit first, then the picker: level 23 is locked to a new save, and an
-    // unarmed squad up here photographs a wipe rather than a biome.
+    // The kit first, then the picker: the level is locked to a new save, and
+    // an unarmed squad up here photographs a wipe rather than a biome.
     await page.evaluate((patch) => {
       globalThis.__arcane?.setPlayer(patch);
     }, FROST_SAVE);
@@ -214,7 +228,16 @@ async function armFrostPlan(page, shots, pace) {
         if (step.at === 'row') {
           // The same ladder the meadow rows use (`armHeroPlan`): fast until the
           // row is in reach, then two steps down so the stop lands on it.
-          if (state.squad.z < step.after) return false;
+          //
+          // Fast before `after` as well. The row frames follow the shield frame
+          // here, which leaves the clock at `near`'s crawl, and nothing is
+          // photographed until the squad passes `after`. A cruise frame is 15 m
+          // of road, so `after` has to sit at least 15 m plus the shot's gap
+          // short of the row it waits for: 110 against the row at 144.
+          if (state.squad.z < step.after) {
+            globalThis.__arcane?.setTurbo(clock.cruise);
+            return false;
+          }
           const gap = rowGap(state);
           if (gap === null) return false;
           const turbo = gap > step.value + 24 ? 60 : gap > step.value + 4 ? 6 : 3;

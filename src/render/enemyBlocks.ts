@@ -26,17 +26,48 @@ import {
   ENEMY_COLOR,
   ENEMY_MAX_INSTANCES,
   GRUNT_SCALE,
+  HOLD_BREATH,
+  HOLD_BREATH_HZ,
+  HOLD_FRAME,
+  HOLD_SLACK,
+  HOLD_SWAY,
+  HOLD_SWAY_HZ,
+  HOLD_YAW,
   POOL,
   SHADOW,
   WAKE_SQUASH_STAGGER,
   wakeSquash,
 } from './theme';
-import type { EnemyKind } from '@/sim';
+import type { EnemyKind, EnemyState } from '@/sim';
 
 /** Skeletons face the squad, which is behind them down the road. */
 const FACING = Math.PI;
 /** Corpses the baked-death fallback plays; the plan's cap when physics is off. */
 const DEATH_INSTANCES = 8;
+const TAU = Math.PI * 2;
+
+/**
+ * How a live block is standing: not woken yet (a waiting mob), walking at the
+ * squad, or on its beat's hold line (`HOLD_FRAME`, `./beatLook.ts`).
+ */
+export type BlockStance = 'waiting' | 'walking' | 'held';
+
+/**
+ * The stance the sim's state implies. A block on or in front of its hold line
+ * is held whether or not it has woken: the sim will not move it again
+ * (`src/sim/contact.ts`), so a guard braces from the first frame it is drawn
+ * rather than waiting like a mob that is about to set off.
+ *
+ * A held block also owes no wake cue (`./enemies.ts`). A guard wakes at the
+ * contact distance, on the step the column reaches it: in its lane the block
+ * dies on that same step and the contact's kill is the moment, and beside it
+ * the crouch, dust and alarm number would announce a charge that never comes.
+ * An ambush wakes behind its panel and walks, so its cue plays as it always did.
+ */
+export function stanceOf(enemy: Pick<EnemyState, 'active' | 'z' | 'holdZ'>): BlockStance {
+  if (enemy.holdZ !== undefined && enemy.z <= enemy.holdZ + HOLD_SLACK) return 'held';
+  return enemy.active ? 'walking' : 'waiting';
+}
 
 /** What `writeCluster` needs to know about a block. `./enemies.ts` owns the rest. */
 export interface ClusterSource {
@@ -170,16 +201,18 @@ function slotOf(kind: EnemyKind): 0 | 1 | 2 {
  * `woke` is the seconds since the block set off, or -1: the wake cue's squash
  * (`wakeSquash`, document 31, 4.1), played by each skeleton a little later the
  * further back in the block it stands, so the crouch ripples through the mob.
+ * `time` is the sim's clock, which only a held block's sway reads.
  */
 export function writeCluster(
   crowd: Crowd,
   base: number,
   slot: ClusterSource,
-  active: boolean,
+  stance: BlockStance,
   dying: number,
   shadows: ShadowLayer | null,
   shadowAlpha: number,
   woke = -1,
+  time = 0,
 ): number {
   const brute = slot.kind === 'brute' || slot.kind === 'shieldBrute';
   const scale = brute ? BRUTE_SCALE : GRUNT_SCALE;
@@ -202,15 +235,33 @@ export function writeCluster(
 
     if (blobs !== null) blobs.add(x, z, shadowRadius, shadowAlpha);
 
+    // The skeleton nearest the camera goes first: `along` is its place in the
+    // block, and the camera looks up the road at the block's front.
+    const squash = woke < 0 ? 0 : wakeSquash(woke - along * WAKE_SQUASH_STAGGER);
+
     if (dying >= 0) {
       crowd.setInstance(base + i, x, 0, z, FACING, scale, 'death', dying, 0);
-    } else if (active) {
+    } else if (stance === 'held') {
+      // The planted pose, rocked and breathing on each skeleton's own phase so
+      // the line never sways as one piece. Speed zero: the offset is the pose.
+      const sway = Math.sin((time * HOLD_SWAY_HZ + phase) * TAU);
+      const breath = HOLD_BREATH * Math.sin((time * HOLD_BREATH_HZ + along) * TAU);
+      crowd.setInstance(
+        base + i,
+        x,
+        0,
+        z,
+        FACING + (phase - 0.5) * HOLD_YAW,
+        scale * (1 + squash),
+        'walk',
+        HOLD_FRAME + sway * HOLD_SWAY,
+        0,
+        scale * (1 - squash) * (1 + breath),
+      );
+    } else if (stance === 'walking') {
       // One block in three runs at the squad rather than walking, which is the
       // second baked range Milestone 3 added earning its rows.
       const gait = slot.enemyId % 3 === 0 ? 'walk2' : 'walk';
-      // The skeleton nearest the camera goes first: `along` is its place in the
-      // block, and the camera looks up the road at the block's front.
-      const squash = woke < 0 ? 0 : wakeSquash(woke - along * WAKE_SQUASH_STAGGER);
       crowd.setInstance(
         base + i,
         x,

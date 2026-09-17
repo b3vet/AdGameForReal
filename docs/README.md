@@ -46,6 +46,7 @@ Index:
 | `29-playtest-round-3.md` | The owner's third round: a Rime Fiend charge that hurts nobody, a picker that forgets the newest level, and the request for a level-design plan (logged in 26) |
 | `30-level-design-plan-draft.md` | Level design and difficulty draft plan v1: beats instead of dice, measured on the bots; awaiting the owner's answers |
 | `31-level-design-plan.md` | Level design and difficulty plan, approved: authored beat scripts for levels 1 to 40, losses on the road, milestone spikes, three phases |
+| `32-phase-1-road-correction.md` | Tech-lead ruling in Phase 1 wave two: growth earlier, a real prep gauntlet, threats after the last multiplier, a flip payout, so the road decides the run and the bands can hold together |
 | `DEVICE.md` | Clone-to-phone guide for the owner's Mac: install, art, assets, sync, Xcode, signing, what to report, TestFlight, Android |
 | `ART.md` | App icon and splash: files, sizes, safe zones, the regenerate command, and the prompts for the owner's image generator |
 | `STORE.md` | App Store metadata draft and submission checklist |

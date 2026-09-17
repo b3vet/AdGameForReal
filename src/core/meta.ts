@@ -142,16 +142,22 @@ function better(candidate: LevelBest, previous: LevelBest): boolean {
 }
 
 /**
- * The share of the crowd a walk has to arrive with to earn the picker's star
- * (D45's own band: a good player ends with 35 to 65 percent of peak, so the
- * star is the top of it).
+ * The share of the crowd a walk has to arrive with to earn the picker's star.
+ *
+ * It was 0.6, the top of the survivor band the dealt roads left a good player.
+ * Document 31's roads take more on the way (4.6, D70): the reference thumb
+ * keeps a quarter to a half of its peak, so the star moved to about half the
+ * peak (the owner's answer 4), where about a third of the thumb's clears earn
+ * it (`./__tests__/stars.test.ts`). No save changes with it: a star is derived
+ * from the level's best walk, which is kept as earned, and a walk that kept
+ * 0.6 of its peak keeps more than 0.5, so every star already shown stays.
  *
  * Here rather than beside either of its two readers, because there are two —
  * the picker's marks (`./academy.ts`) and the result sheet's (`./resultView.ts`)
  * — and a star the sheet promised that the picker then did not draw is exactly
  * the kind of disagreement one copy of a number cannot have.
  */
-const STAR_SHARE = 0.6;
+export const STAR_SHARE = 0.5;
 
 /** True when this best walk earns the star. Null — a level never cleared — does not. */
 export function earnsStar(best: LevelBest | null): boolean {

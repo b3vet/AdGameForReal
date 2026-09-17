@@ -20,6 +20,7 @@ import type {
   GateSlot,
   LaneRole,
   PrizeOverride,
+  RiverBunch,
 } from '@/data/types';
 
 export const ROLES: readonly LaneRole[] = ['prize', 'safe', 'other'];
@@ -126,6 +127,15 @@ export function beatDps(
   const measured = library.dps?.[what]?.[biome];
   if (measured !== undefined && measured > 0) return measured;
   return dpsPerUnit(balance);
+}
+
+/**
+ * How a biome's river fire grows with bunching (`RiverBunch`), or undefined
+ * when the library does not say: a river sized without it is sized as if its
+ * bodies walked alone.
+ */
+export function beatBunch(library: BeatLibrary, biome: BiomeId): RiverBunch | undefined {
+  return library.dps?.bunch?.[biome];
 }
 
 /**

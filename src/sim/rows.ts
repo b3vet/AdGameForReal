@@ -45,6 +45,8 @@ export interface RowEnemyDef {
   killShare?: number;
   /** See `EnemyState.maxHalf`. */
   maxHalf?: number;
+  /** See `EnemyState.holdZ`; metres from the row's own `z`, like `dz`. */
+  holdDz?: number;
 }
 
 export interface RowDef {

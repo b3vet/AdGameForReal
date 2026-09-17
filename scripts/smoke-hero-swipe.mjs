@@ -37,12 +37,20 @@ const LANE_WIDTH = BALANCE.road.laneWidth;
  * The level these two frames come from: a whip at 400 units and the fence jam
  * behind it (Milestone 6 plan, definition of done 2 and 1).
  *
- * Level 16 seed 1 because that is where the two coincide — measured off the
- * sim, the greedy bot walks a full five hundred units into the wall at
- * z 237..252 — and level 1 has neither: it peaks at 105 units and carries no
- * walls at all (`src/data/levels.json`, `wallRows`).
+ * Level 15 seed 1 (the page's own seed; `startLevel` keeps it) because that is
+ * where the two coincide on the scripted campaign (document 31). A fence stands
+ * only where a `fence` beat does, and level 15's last one (`fence:5`, the
+ * eighth beat of its script) stands its wall on the right boundary at
+ * z 268..288. Measured on the sim with this page's save and the app's own
+ * stepping, the greedy bot walks 497 units, a column at the cap, up to it: the
+ * whip starts 7 m short of the wall at z 261, and the jam 1.4 s of sim later,
+ * as the column enters it. The level's first fence (z 52..72) comes with
+ * about thirty units and is walked past, because the whip waits for its count.
+ * Level 16, which this was until Phase 1, has no fence beat in its script any
+ * more, and level 1 has neither: no fence, and a peak of about 160 units on
+ * this save.
  */
-const EXTRA_LEVEL = 16;
+const EXTRA_LEVEL = 15;
 
 /**
  * The scales the extra run is driven at.

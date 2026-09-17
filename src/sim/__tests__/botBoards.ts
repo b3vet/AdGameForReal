@@ -14,7 +14,6 @@ import type { LevelDef, RowDef, RowEnemyDef } from '../level';
 import { Run } from '../Run';
 import type { GateDef, GateKind, Lane, StreamDef } from '../types';
 import { level } from './fixtures';
-import { exposeRoad } from './harness';
 import { balance } from '@/data';
 import type { Balance } from '@/data/types';
 
@@ -38,12 +37,22 @@ export function mul(value: number): GateDef {
 }
 
 /**
- * A brute `at` metres from the row, in `lane`, at a beat's hit points per
- * unit. `narrow` holds it to its own lane, as the composer holds an ambush, so
- * the panel in front of it screens all of it.
+ * Hit points per unit of a board's brute. Pinned rather than read from
+ * `enemies.beat.bruteHpPerUnit`: every board below is written in units whose
+ * fire time was worked out at twelve hit points each ("eighteen units is two
+ * seconds of sixty soldiers' fire"), and the tuning pass moves the beat number
+ * (Phase 1 wave two set it to 120), which would make every board a different
+ * question without touching the boards.
+ */
+const BOARD_HP_PER_UNIT = 12;
+
+/**
+ * A brute `at` metres from the row, in `lane`, at `BOARD_HP_PER_UNIT` hit
+ * points per unit. `narrow` holds it to its own lane, as the composer holds an
+ * ambush, so the panel in front of it screens all of it.
  */
 export function brute(lane: Lane, at: number, units: number, wake: number, narrow = false): RowEnemyDef {
-  const def: RowEnemyDef = { kind: 'brute', lane, units, dz: at, wake, hpPerUnit: balance.enemies.beat.bruteHpPerUnit };
+  const def: RowEnemyDef = { kind: 'brute', lane, units, dz: at, wake, hpPerUnit: BOARD_HP_PER_UNIT };
   if (narrow) def.maxHalf = 0.95;
   return def;
 }
@@ -100,7 +109,6 @@ export interface BoardPlay {
 
 function play(def: LevelDef, steer: (run: Run) => number, tuning: Balance): BoardPlay {
   const run = new Run(def, tuning);
-  exposeRoad(run, def);
   const first = new Map(run.state.gates.map((gate) => [gate.id, gate.kind]));
   let lane: Lane | null = null;
   let kind: GateKind | null = null;

@@ -34,7 +34,7 @@ import type { Scene } from '@babylonjs/core/scene';
 
 import { BeatCues } from './beatCues';
 import { ChargerBodies } from './chargers';
-import { BlockCrowds, writeCluster } from './enemyBlocks';
+import { BlockCrowds, stanceOf, writeCluster, type BlockStance } from './enemyBlocks';
 import { EnemySlotBook } from './enemySlots';
 import type { EnemySlot } from './enemySlots';
 import type { GroundDecals } from './groundDecals';
@@ -269,11 +269,13 @@ export class EnemyView {
 
       const ahead = enemy.z - squadZ;
       const inSight = ahead <= ENEMY_DRAW_RANGE && ahead >= -LABEL_BEHIND * 2;
-      if (this.book.wake(slot, enemy, dt, inSight)) {
+      // A guard wakes on its hold line, at contact: no run to cue (`stanceOf`).
+      const stance = stanceOf(enemy);
+      if (this.book.wake(slot, enemy, dt, inSight && stance !== 'held')) {
         this.cues.wake(enemy.x, enemy.z, slot.footprint);
       }
       if (!inSight) continue;
-      this.writeBody(slot, enemy, shadows, ShadowLayer.fade(ahead), state.time);
+      this.writeBody(slot, enemy, stance, shadows, ShadowLayer.fade(ahead), state.time);
     }
 
     this.sweep(dt, shadows);
@@ -317,11 +319,12 @@ export class EnemyView {
 
   /**
    * One live body into whichever crowd draws its kind. `time` is the sim's
-   * clock, which only the charger's dust reads (`./frostSpray.ts`).
+   * clock, for the charger's dust (`./frostSpray.ts`) and a held block's sway.
    */
   private writeBody(
     slot: EnemySlot,
     enemy: EnemyState,
+    stance: BlockStance,
     shadows: ShadowLayer | null,
     shadowAlpha: number,
     time: number,
@@ -345,11 +348,12 @@ export class EnemyView {
       crowd,
       this.crowds.writtenFor(enemy.kind),
       slot,
-      enemy.active,
+      stance,
       -1,
       shadows,
       shadowAlpha,
       slot.woke,
+      time,
     );
     this.crowds.advance(enemy.kind, written);
   }
@@ -391,7 +395,7 @@ export class EnemyView {
         crowd,
         this.crowds.writtenFor(slot.kind),
         slot,
-        true,
+        'walking',
         slot.dying,
         shadows,
         0,

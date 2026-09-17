@@ -1,6 +1,7 @@
 /**
- * How the level-design plan's two new moments are drawn (document 31, 4.1): a
- * block setting off, and a river pouring from a fixed place on the road.
+ * How the level-design plan's new moments are drawn (document 31, 4.1): a
+ * block setting off, a block holding its line, and a river pouring from a
+ * fixed place on the road.
  *
  * A table of its own beside `./monsterLook.ts`, which it borrows its marks from
  * and which is not this track's file; `./theme.ts` re-exports all of it, so
@@ -20,7 +21,8 @@ import { paletteColor } from './palette';
  * The squash a block plays the step it wakes: a crouch, then a rise onto its
  * toes, the size of a roar rather than of a jump. Blocks stood still for up
  * to seventy metres of approach, and this is what says "that one is coming
- * now" — the one moment of a guard or an ambush that has to be seen.
+ * now" — the one moment of an ambush that has to be seen. A guard, which
+ * wakes on its hold line at contact, plays none (`stanceOf`, `./enemyBlocks.ts`).
  *
  * `depth` is the crouch as a share of height (the width grows by the same
  * share), and the rise reaches `rise` of it the other way. The skeletons at
@@ -74,6 +76,33 @@ export function wakePop(seconds: number): number {
   if (seconds <= 0 || seconds >= WAKE_POP_SECONDS) return 1;
   return 1 + WAKE_POP * Math.sin((Math.PI * seconds) / WAKE_POP_SECONDS);
 }
+
+/**
+ * A block standing on its beat's hold line (`EnemyState.holdZ`): a guard from
+ * the first frame it is drawn, an ambush once it has walked through its panel.
+ * The sim holds it there until the column arrives, so its walk would march on
+ * the spot for seconds. The skeleton rigs bake no idle, so the stance is made
+ * of the walk: the pose `HOLD_FRAME` seconds into the clip, rocked `HOLD_SWAY`
+ * seconds either side at `HOLD_SWAY_HZ` and breathing by `HOLD_BREATH` of its
+ * height, and the mob faces the column squarely (`HOLD_YAW` of scatter, a third
+ * of a waiting block's): a line that is holding rather than a mob that is about
+ * to set off.
+ *
+ * The frame is measured off the rigs rather than picked by eye. Both walks
+ * (`Walking_C`, `Walking_D_Skeletons`) plant their feet on the same beat: at
+ * 0.685 s both feet are at their lowest together and the stride is at its
+ * widest (as far apart as the hips are high, arms swung fore and aft), the
+ * one pose of the cycle that stands. Rocked 0.045 s either side, one heel lifts as
+ * the other settles, which is the weight going from foot to foot.
+ */
+export const HOLD_FRAME = 0.685;
+export const HOLD_SWAY = 0.045;
+export const HOLD_SWAY_HZ = 0.55;
+export const HOLD_BREATH = 0.025;
+export const HOLD_BREATH_HZ = 0.9;
+export const HOLD_YAW = 0.2;
+/** How far behind its line a block still counts as standing on it, in metres. */
+export const HOLD_SLACK = 0.001;
 
 /**
  * The dust a waking block kicks up: a ring of marks thrown out from under its

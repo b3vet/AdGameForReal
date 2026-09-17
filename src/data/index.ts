@@ -36,6 +36,7 @@ export type {
   GateSlot,
   LaneRole,
   PrizeOverride,
+  RiverBunch,
   ScriptBeat,
 } from './beat-types';
 export { readBeatLibrary } from './beat-types';

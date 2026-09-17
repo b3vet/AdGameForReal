@@ -17,6 +17,7 @@
 import type { LevelDef } from '../level';
 import { applyGateBonus } from '../levelPasses';
 import { playerMods } from '../player';
+import { portalOpen } from '../pressure';
 import { balance, beats as shippedLibrary, levelCount } from '@/data';
 import type { BeatLibrary, BiomeId, PlayerState, PrizeOverride } from '@/data/types';
 import { drawValues, layBeats, valueStream } from './compose';
@@ -38,11 +39,20 @@ export interface BeatLevelOptions {
   library?: BeatLibrary;
 }
 
-/** How far before the gate row the beat's first threat can act, in metres. */
+/**
+ * How far before the gate row the beat's first threat can act, in metres. A
+ * block is in the fight from the moment the column's fire can reach it,
+ * asleep or not: a guard on its hold line wakes only on contact but is shot
+ * from `projectiles.range`, and a lab road that started the column inside that
+ * range measured a fight already under way.
+ */
 function reachOf(tier: ResolvedTier): number {
   let reach = 0;
-  for (const enemy of tier.enemies) reach = Math.max(reach, enemy.wake - enemy.at);
-  for (const river of tier.rivers) reach = Math.max(reach, river.open - river.at);
+  const range = balance.projectiles.range;
+  for (const enemy of tier.enemies) reach = Math.max(reach, Math.max(enemy.wake, range) - enemy.at);
+  for (const river of tier.rivers) {
+    reach = Math.max(reach, portalOpen(river, balance.streams.speed, balance) - river.at);
+  }
   if (tier.fence !== null && tier.fence !== undefined) {
     reach = Math.max(reach, tier.fence.from + balance.walls.approach);
   }

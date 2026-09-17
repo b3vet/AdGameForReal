@@ -227,4 +227,11 @@ export interface BeatEnemyBalance {
   bruteHpPerUnit: number;
   /** Share of the column a scripted charger takes on contact, above its floor. */
   chargerKillShare: number;
+  /**
+   * How far in front of its gate row a holding block stands (`BeatEnemy.hold`),
+   * in metres. No more than `contactDistance`, so a column crossing the row in
+   * the block's lane is still in reach of it: there is no stepping out of its
+   * way and back in time for the panel.
+   */
+  holdGap: number;
 }

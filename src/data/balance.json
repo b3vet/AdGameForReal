@@ -123,13 +123,14 @@
     "portal": {
       "stopGap": 6,
       "tollSeconds": 1.5,
-      "minBodies": 4,
+      "minBodies": 2,
       "maxBodiesPerBeat": 120,
       "maxLiveBodies": 170
     },
     "beat": {
-      "bruteHpPerUnit": 12,
-      "chargerKillShare": 0.1
+      "bruteHpPerUnit": 120,
+      "chargerKillShare": 0.1,
+      "holdGap": 1
     }
   },
   "level": {
@@ -171,6 +172,10 @@
         "sub": 0.018
       }
     },
+    "flip": {
+      "payout": 4,
+      "seconds": 2
+    },
     "capShare": 0.6,
     "capFloor": {
       "add": 4,
@@ -193,8 +198,12 @@
       "x3FromLevel": 13
     },
     "scale": {
-      "min": 0.5,
+      "min": 0.2,
       "max": 3
+    },
+    "curve": {
+      "panelSeconds": 5,
+      "midShare": 0.5
     }
   },
   "gen": {

@@ -4,7 +4,8 @@
  * (`./botTimeline.ts`) with when the lane's fire can first reach it and when it
  * arrives.
  *
- *   blocks    asleep until the squad is its `wake` short of it, then walking;
+ *   blocks    asleep until the squad is its `wake` short of it, then walking
+ *             until they reach their hold line, if a beat gave them one;
  *             what meets the column is the share of it `overlapShare` says;
  *   chargers  commit to the column's lane when they set off, if it is within
  *             `lanePick` of their own (`chargeLane`), and can be shot by a lane
@@ -59,14 +60,24 @@ export function addBlocks(state: RunState, lane: Lane, view: PriceView, balance:
     const closing = ctx.run + speed;
     const wake = enemy.active ? Math.max(0, gap) : Math.min(gap, enemy.wake ?? activationRange(enemy.kind, balance));
     const wakeAt = (gap - wake) / ctx.run;
-    const arrive = wakeAt + Math.max(0, wake - ctx.contact) / closing;
-    if (arrive > ctx.horizon || ctx.s + ctx.run * arrive > ctx.toZ + 0.5) continue;
-    const inRange =
+    let arrive = wakeAt + Math.max(0, wake - ctx.contact) / closing;
+    let inRange =
       gap <= ctx.range
         ? 0
         : ctx.range >= wake
           ? (gap - ctx.range) / ctx.run
           : wakeAt + (wake - ctx.range) / closing;
+    // A block on a hold line stops there (`EnemyState.holdZ`), so the column
+    // reaches it, and its range, no sooner than it would a block standing on
+    // the line. Walking, it is never nearer than the line, so the later of the
+    // two answers is the right one either way.
+    const holdZ = enemy.holdZ;
+    if (holdZ !== undefined) {
+      const line = Math.min(enemy.z, holdZ) - ctx.s;
+      arrive = Math.max(arrive, (line - ctx.contact) / ctx.run);
+      inRange = Math.max(inRange, (line - ctx.range) / ctx.run);
+    }
+    if (arrive > ctx.horizon || ctx.s + ctx.run * arrive > ctx.toZ + 0.5) continue;
 
     if (enemy.kind === 'charger') {
       addCharger(enemy, lane, gap, arrive, inRange, balance);

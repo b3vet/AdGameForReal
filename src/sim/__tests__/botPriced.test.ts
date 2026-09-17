@@ -18,7 +18,6 @@ import { Run } from '../Run';
 import { add, bestHeld, board, brute, mul, playBoard, portal, ROW_Z, sub } from './botBoards';
 import type { BoardSpec } from './botBoards';
 import { fenceEntries, humanBalance } from './botFixtures';
-import { exposeRoad } from './harness';
 import { balance } from '@/data';
 
 /** Greedy on a board, against the best a column held in one lane does there. */
@@ -156,8 +155,7 @@ describe('what the price sees', () => {
   function priceOf(spec: BoardSpec): { cost: number; after: number } {
     const def = board(spec);
     const run = new Run(def, balance);
-    exposeRoad(run, def);
-    // Walk the column to the read distance, holding the lane being priced.
+      // Walk the column to the read distance, holding the lane being priced.
     while (run.state.squad.z < ROW_Z - balance.bots.readDistance) {
       run.setTargetX(2);
       run.tick(1 / 60);

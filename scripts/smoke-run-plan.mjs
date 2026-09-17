@@ -52,11 +52,15 @@ const SHOT_TIMEOUT_MS = Number(process.env.SMOKE_SHOT_TIMEOUT_MS ?? 180_000);
  * share of the boss's health — and a place cannot be stepped over: the squad
  * walks past it and the condition stays true. The three Frostfell ones are
  * keyed to a *moment*, and every one of them is short. Measured on the sim for
- * level 23 seed 1 with the campaign's kit: the shielded brute at z 215 keeps
- * its shield for a tenth of a second once it is inside the squad's range (five
- * hundred armed mages break it on contact with the range), the block then lives
- * 1.3 s broken, the charger at z 342 runs for 0.9 s, and the Rime Fiend's first
- * charge comes 8 s into the fight.
+ * level 27 seed 29 with the campaign's kit (`./smoke-runs.mjs`), stepped the
+ * way the app steps it: the shielded brute is a `shieldGuard` beat's, holding
+ * its line at z 107 (D73), and keeps its shield until the column is 10.5 m
+ * from it; it is then broken and at least five metres out for 1.15 s, and dies
+ * on contact a metre out. The two chargers at z 170 (a `chargeFork` beat) are
+ * inside `chargeShot` for 1.2 s of their run. The Rime Fiend commits to its
+ * first charge 8 s into the fight, is inside `bossGap` and still running in
+ * for the second after 8.8 s, and enrages at 11.8 s, after which it charges no
+ * more (D69).
  *
  * At turbo 60 one frame is three seconds of sim, so none of those windows
  * exists between two frames. So this run *paces* itself: each step names how
@@ -65,9 +69,11 @@ const SHOT_TIMEOUT_MS = Number(process.env.SMOKE_SHOT_TIMEOUT_MS ?? 180_000);
  * wall-clock measurement — every one is a count — so slowing the sim down
  * cannot change an answer, it only costs frames.
  *
- * The shield's own frame is therefore taken *before* the squad is in range: 26
- * to 42 m out, where the block is small but its shield glyph and count are
- * still inside `LABEL_RANGE`. Nearer than that there is no such frame to take.
+ * The shield's own frame is taken 26 to 34 m out, where the block is small but
+ * its shield glyph and count are inside the number's sight line (D82). Until
+ * Phase 1 that was the only place it could be: a walking brute lost its shield
+ * about 29 m out. A guard that holds its line keeps it to 10.5 m, so the band
+ * is now a choice of framing rather than the last chance.
  */
 export const PACE = {
   /**
@@ -94,18 +100,30 @@ export const PACE = {
    * 6 and 50 m were about sixteen frames of a five-hundred-mage crowd, which is
    * half a minute of this container's wall clock for two frames of slack
    * nothing needed.
+   *
+   * The 11 m/s is a brute that walks. The shielded brute has held a line since
+   * Phase 1 (D73), so the gap closes only at the column's 5 m/s and every rung
+   * has about twice the margin worked out above. The rungs are left as they
+   * were: the frames they cost are of a column of about eighty, which draws
+   * fast.
    */
   far: { gap: 90, turbo: 10 },
   near: { gap: 44, turbo: 3 },
   /**
-   * A body about to move: the charger's trigger is at 22 m (D49), so the clock
-   * only has to be low for the last few metres before it. Measured once at
-   * `{34, 2}` and it cost thirteen frames of a five-hundred-mage crowd getting
-   * to the trigger — which is a minute of wall clock on this rasteriser and ran
-   * the shot's own timeout out. `{26, 4}` is two frames to the trigger and
-   * still four or five frames inside the 0.9 s the charge lasts. The outer rung
-   * runs at 5.4 m a frame, and a frame that lands past the trigger is safe:
-   * `setPace` sees the charge on the next one and drops straight to `charging`.
+   * A body about to move: the charger kind's own trigger is at 22 m (D49), so
+   * the clock only has to be low for the last few metres before it. Measured
+   * once at `{34, 2}` and it cost thirteen frames of a five-hundred-mage crowd
+   * getting to the trigger — which is a minute of wall clock on this rasteriser
+   * and ran the shot's own timeout out. `{26, 4}` is two frames to that trigger
+   * and still four or five frames inside the charge.
+   *
+   * A `chargeFork` beat's chargers wake at 30 m instead (their beat's `wake`,
+   * `src/data/beats.json`), so on the scripted campaign `chargerNear` is never
+   * reached before the charge: the approach runs at `charger`'s 12, which is
+   * 0.6 s a frame. That is still safe, because a charge closes on the column
+   * at about 12 m/s. The frame that lands past the trigger has carried the body
+   * at most seven metres, which leaves it outside `chargeShot`'s 17, and
+   * `setPace` sees the charge on that frame and drops straight to `charging`.
    */
   charger: { gap: 60, turbo: 12 },
   chargerNear: { gap: 26, turbo: 4 },
@@ -118,12 +136,14 @@ export const PACE = {
    * photographed at turbo 4 left marks five metres apart, a dotted line rather
    * than the track the game draws. The emitter now runs on the sim's own clock
    * (`src/render/frostSpray.ts`), so the trail is the same track at any turbo
-   * and this only has to leave frames inside the window — the charge covers the
-   * 14 m of `chargeShot` in about 0.78 s, which is three or four frames here.
+   * and this only has to leave frames inside the window. A `chargeFork` charge
+   * covers the 14 m of `chargeShot` in about 1.2 s, which is six frames here.
    */
   charging: 4,
-  /** The fight: 8 s of sim between charges, and a run in of about 1.5 s —
-   *  twenty frames of waiting and four inside the window at this speed. */
+  /** The fight: 8 s of sim before the first charge, and about a second of the
+   *  run in inside `bossGap`. That is twenty frames of waiting and two or three
+   *  inside the window at this speed, whose frames (0.4 s) are shorter than
+   *  the window, so the window cannot be stepped over. */
   boss: 8,
   /**
    * How near the column the Fiend has to be before its frame is taken, in
@@ -133,25 +153,30 @@ export const PACE = {
    * as the body moves (`src/render/frostSpray.ts`), so the first frame of a
    * charge is a boss with one mark under it and clean road behind — a frame of
    * the *start* of a move, where the picture wanted is the middle of one. It
-   * sets off about twelve metres out and a frame here is three or four of them,
-   * so six metres is two or three frames in: the column is bowing, the body is
-   * over it, and there are five metres of track behind it. Wider than one frame
-   * of travel, so the window cannot be stepped over (Milestone 7 review).
+   * sets off eight metres out (the arena's stand, measured on the scripted
+   * campaign) and runs to three metres past the column's front at 9 m/s. A
+   * frame here is 3.6 m of that run, so the first frame inside six metres is
+   * the column bowing with the body over it, somewhere between six and two and
+   * a half metres out (measured). The window is nine metres of run, more than
+   * two frames of travel, so it cannot be stepped over (Milestone 7 review).
    */
   bossGap: 6,
   /**
    * Where each body is photographed, in metres of road ahead of the squad.
    *
    * All three are as near as the moment allows, because near is what a frame
-   * is read on: 34 m is the last step before the squad's fire reaches the
-   * shielded brute and breaks it, 28 m is three metres after the break (the
-   * block then lives about twelve more), and a charger is inside 30 m from the
-   * step it commits — its trigger is at 22.
+   * is read on. The bands were set when a shielded brute walked: its shield
+   * broke about 29 m out and the block lived twelve metres more, and a charger
+   * was inside 30 m from the step it committed.
    *
-   * The shield's own window is narrower than the 26 to 34 it reads: measured on
-   * level 23 seed 1 with the kit, the shield breaks at a gap of 29.2 m, so the
-   * frames that can carry a *standing* shield are 29 to 34 — three of them at
-   * `near`'s speed. That is why `near.turbo` did not move with `far`'s.
+   * On the scripted campaign (measured on level 27 seed 29 with the kit) the
+   * guard stands on its line and keeps its shield until the column is 10.5 m
+   * from it, so a standing shield fills the whole of `shieldShot`, about eleven
+   * frames at `near`'s speed. The broken block is inside `brokenShot` from
+   * 10.5 m down to its floor for 1.15 s, seven or eight frames at `near`'s
+   * speed. It dies on contact a metre out, and the five-metre floor keeps the
+   * frame off the contact itself. The chargers set off 30 m out and are inside
+   * `chargeShot` from 17 m for 1.2 s.
    */
   shieldShot: { from: 26, to: 34 },
   brokenShot: { from: 5, to: 26 },

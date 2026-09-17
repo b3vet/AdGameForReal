@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ROLES, resolveTier } from '../beats/library';
 import type { ResolvedTier } from '../beats/library';
+import { portalOpen } from '../pressure';
 import { CHARGER_SECONDS, PHASE_ONE, SIGHT, SIGHT_SECONDS, curses } from './levelDesignRules';
 import { balance, beats } from '@/data';
 
@@ -106,12 +107,25 @@ describe('the beat library', () => {
 
   it('stands blocks and chargers where the grammar says, in sight for long enough', () => {
     const spacing = balance.level.rowSpacing;
+    const line = -balance.enemies.beat.holdGap;
     for (const { at, tier } of everyTier()) {
       for (const enemy of tier.enemies) {
         expect(enemy.at, at).toBeGreaterThanOrEqual(-spacing);
         expect(enemy.at, at).toBeLessThanOrEqual(AT_MAX);
-        expect(Math.abs(enemy.at), `${at} clear of the panels`).toBeGreaterThanOrEqual(balance.streams.gateClearance);
         expect(enemy.killSeconds, at).toBeGreaterThan(0);
+        if (enemy.hold === true && enemy.at <= 0) {
+          // A guard holds the gateway (Phase 1, wave two): it stands on its
+          // hold line, inside the panels' clearance, because only there does
+          // the column meet it as it crosses the row; and it wakes when the
+          // column reaches it, since a block that never walks has no run to
+          // start out of range (the 34 m rule below is for walkers).
+          expect(enemy.at, `${at} a guard stands on its line`).toBe(line);
+          expect(enemy.wake, `${at} a guard wakes on contact`).toBeLessThanOrEqual(balance.enemies.contactDistance);
+          expect(BLOCKS.has(enemy.kind), at).toBe(true);
+          expect(sightToContact(enemy.wake, 0), `${at} sight to contact`).toBeGreaterThanOrEqual(SIGHT_SECONDS);
+          continue;
+        }
+        expect(Math.abs(enemy.at), `${at} clear of the panels`).toBeGreaterThanOrEqual(balance.streams.gateClearance);
         expect(enemy.wake, `${at} wakes in sight`).toBeLessThanOrEqual(SIGHT);
         if (enemy.kind === 'charger') {
           expect(enemy.lanes?.[0], `${at} a charger's lane leads its lanes`).toBe(enemy.lane);
@@ -147,13 +161,43 @@ describe('the beat library', () => {
         expect(river.at, at).toBeLessThanOrEqual(AT_MAX);
         expect(Math.abs(river.at), `${at} clear of the panels`).toBeGreaterThanOrEqual(balance.streams.gateClearance);
         expect(Math.min(river.seconds, river.pressure, river.density), at).toBeGreaterThan(0);
-        expect(river.open, `${at} opens in sight`).toBeLessThanOrEqual(SIGHT);
-        expect(sightToContact(river.open, balance.streams.speed), `${at} sight to contact`).toBeGreaterThanOrEqual(
+        expect(`${at} open ${String(river.open !== undefined)} tail ${String(river.tail !== undefined)}`).toMatch(
+          / open (true tail false|false tail true)$/,
+        );
+        const open = portalOpen(river, balance.streams.speed, balance);
+        expect(open, `${at} opens in sight`).toBeLessThanOrEqual(SIGHT);
+        expect(sightToContact(open, balance.streams.speed), `${at} sight to contact`).toBeGreaterThanOrEqual(
           SIGHT_SECONDS,
         );
         // The pour runs its whole length before the squad closes to the stop gap (3.2 rule 4).
-        const window = (river.open - balance.enemies.portal.stopGap) / balance.squad.runSpeed;
+        const window = (open - balance.enemies.portal.stopGap) / balance.squad.runSpeed;
         expect(window, `${at} pour window`).toBeGreaterThanOrEqual(river.seconds);
+      }
+    }
+  });
+
+  it('leaves no cheap dodge: every block holds the gateway and every river is still arriving at the row', () => {
+    // Phase 1, wave two. A block that walks from in front of the panels meets
+    // the column rows before them, and a portal that stops pouring before its
+    // bodies reach the row has sent its last one long before the column gets
+    // there: a column that stepped aside let either pass and stepped back into
+    // the prize for nothing (both bots did, on every guard and fork).
+    const run = balance.squad.runSpeed;
+    const walk = balance.streams.speed;
+    const contact = balance.enemies.contactDistance;
+    for (const { at, tier } of everyTier()) {
+      for (const enemy of tier.enemies) {
+        if (enemy.kind === 'charger') continue;
+        expect(enemy.hold, `${at} ${enemy.kind} holds`).toBe(true);
+      }
+      for (const river of tier.rivers) {
+        expect(river.tail, `${at} a river timed by its tail`).toBeDefined();
+        // Where the pour's last body really meets the column: at or past the row.
+        const open = portalOpen(river, walk, balance);
+        const lastPoured = river.at - open + run * river.seconds;
+        const meets = lastPoured + (run * (river.at - lastPoured - contact)) / (run + walk);
+        expect(meets, `${at} the last body meets the column past the row`).toBeGreaterThanOrEqual(0);
+        expect(meets, at).toBeCloseTo(river.tail ?? Number.NaN, 6);
       }
     }
   });

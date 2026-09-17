@@ -28,6 +28,13 @@ export interface GateDef {
    * hand-made gates, which derive the same ceiling on the fly.
    */
   cap?: number;
+  /**
+   * Document 32, a flipped curse pays: units a second of the whole column's
+   * fire at which this curse, once shot green, grows as a plus (up to `cap`).
+   * Written by the composer on a scripted road's flip curse only; absent, a
+   * flipped curse grows at the road's plus rate, as every dealt road's does.
+   */
+  flipGrowth?: number;
   /** Set on `weapon` gates: the staff the squad leaves the row carrying. */
   weaponId?: WeaponId;
 }
@@ -44,6 +51,8 @@ export interface GateState {
   passed: boolean;
   /** See `GateDef.cap`. Undefined means "derive it from the printed value". */
   cap?: number;
+  /** See `GateDef.flipGrowth`. */
+  flipGrowth?: number;
   /** See `GateDef.weaponId`. */
   weaponId?: WeaponId;
 }
@@ -146,6 +155,12 @@ export interface EnemyState {
    * fat block would otherwise reach into the next lane, where nothing does.
    */
   maxHalf?: number;
+  /**
+   * A beat's hold line (Phase 1, wave two): the road `z` just in front of its
+   * panels that this block walks no nearer than, so the column meets it at the
+   * gate row and cannot step aside to let it pass. Absent on dealt blocks.
+   */
+  holdZ?: number;
 }
 
 /**
@@ -203,6 +218,13 @@ export interface StreamState {
   anchorZ?: number;
   /** A portal that stopped pouring before it had sent its whole `count`. */
   cut?: boolean;
+  /**
+   * What a player reads off a river before it pours (document 31, 4.4), from
+   * its `StreamDef`. Optional for hand-built states; `Run` writes the first two.
+   */
+  hpPerEnemy?: number;
+  durationSeconds?: number;
+  openAt?: number;
 }
 
 export interface ProjectileState {
@@ -384,6 +406,11 @@ export interface RunState {
    * Optional like `familiar` and `walls`; `Run` always writes it.
    */
   ice?: IceWall | null;
+  /**
+   * `LevelDef.squadRates`, for a bot projecting a panel. Written only when
+   * true, like `endless`, so a dealt run's state keeps its shape.
+   */
+  squadRates?: boolean;
 }
 
 /** Returned by `Run.tick`, consumed by render and UI, then discarded. */

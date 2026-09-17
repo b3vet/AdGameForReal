@@ -13,9 +13,10 @@
  * mid-run and hand back a soft frame).
  *
  * This file is the *set*: which pages are driven, at which scales, and the
- * meadow page itself. Four files sit behind it — `./smoke-hero-page.mjs` is
+ * meadow page itself. Five files sit behind it — `./smoke-hero-page.mjs` is
  * the plumbing every page shares, `./smoke-hero-frost.mjs` is the Frostfell
- * page (D49), `./smoke-hero-endless.mjs` is the endless one (D52, D54) and
+ * page (D49), `./smoke-hero-endless.mjs` is the endless one (D52, D54),
+ * `./smoke-hero-beats.mjs` is the level-design beats (document 31) and
  * `./smoke-hero-swipe.mjs` is the swipe run, which is the only one that takes
  * the wheel instead of watching.
  *
@@ -45,6 +46,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { sleep } from './smoke-browser.mjs';
+import { driveBeats } from './smoke-hero-beats.mjs';
 import { driveEndless } from './smoke-hero-endless.mjs';
 import { driveFrost } from './smoke-hero-frost.mjs';
 import {
@@ -92,6 +94,13 @@ const FROST_SCALES = readScales(process.env.SMOKE_HERO_FROST_SCALES, [2]);
  * here; `SMOKE_HERO_ENDLESS_SCALES=2,3` puts a second one back.
  */
 const ENDLESS_SCALES = readScales(process.env.SMOKE_HERO_ENDLESS_SCALES, [2]);
+
+/**
+ * The scales the beat page is taken at (document 31, Phase 1): four designed
+ * beats on their own roads, at the owner's 440x956. 2x only, like every other
+ * page; `SMOKE_HERO_BEATS_SCALES=2,3` adds the second.
+ */
+const BEAT_SCALES = readScales(process.env.SMOKE_HERO_BEATS_SCALES, [2]);
 
 /** One level, one seed, for every scale: the sets are the same run over. */
 const HERO_QUERY = '?bot=greedy&level=1&seed=1&turbo=60&screenshot=1&quality=0';
@@ -201,7 +210,8 @@ export async function driveHeroSet(browser, baseUrl, outDir, failures, openPage,
     `[smoke] hero set: ${SCALES.map((s) => `${String(s)}x`).join(' and ')}, one level each` +
       `, swipe frames at ${EXTRA_SCALES.map((s) => `${String(s)}x`).join(' and ')}` +
       `, Frostfell at ${FROST_SCALES.map((s) => `${String(s)}x`).join(' and ')}` +
-      `, endless at ${ENDLESS_SCALES.map((s) => `${String(s)}x`).join(' and ')}`,
+      `, endless at ${ENDLESS_SCALES.map((s) => `${String(s)}x`).join(' and ')}` +
+      `, beats at ${BEAT_SCALES.map((s) => `${String(s)}x`).join(' and ')}`,
   );
 
   // Each page can be driven on its own (`SMOKE_ONLY`, `scripts/smoke.mjs`),
@@ -222,6 +232,12 @@ export async function driveHeroSet(browser, baseUrl, outDir, failures, openPage,
     ...(wantedPart('hero-endless') ? ENDLESS_SCALES : []).map(async (scale) =>
       driveEndless(browser, baseUrl, heroDir, failures, openPage, scale).catch((error) => {
         failures.push(`hero endless ${String(scale)}x: ${error.message}`);
+        return [];
+      }),
+    ),
+    ...(wantedPart('hero-beats') ? BEAT_SCALES : []).map(async (scale) =>
+      driveBeats(browser, baseUrl, heroDir, failures, openPage, scale).catch((error) => {
+        failures.push(`hero beats ${String(scale)}x: ${error.message}`);
         return [];
       }),
     ),

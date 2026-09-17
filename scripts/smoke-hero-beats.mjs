@@ -14,16 +14,22 @@
  * The frames are *places* rather than moments: each is taken when the beat's
  * gate row is a set distance up the road, read off the road's own beat mark
  * (`LevelDef.beats`), so the picture is of the same instant on any machine.
- * The distances are where each beat's price is plainest:
+ * The distances are where each beat's price is plainest, on the geometry of
+ * Phase 1's second wave: a beat's block holds a line a metre in front of its
+ * row (`EnemyState.holdZ`) and its rivers pour from behind the panels. A beat
+ * road starts the column only just outside the beat's reach (`buildBeatLevel`),
+ * so a shot asks for a distance inside the fight rather than on the way to it.
  *
- *   guard   40 m out: the guard has woken and is walking into the prize lane's
- *           fire, its number on it, the row it guards behind it.
- *   ambush  20 m out: the block behind the plus panel has just set off; it
- *           shows through the see-through plaque, its number lifted over it.
+ *   guard   24 m out: the guard stands braced on its hold line in front of the
+ *           prize panel, the column committed and its fire landing, the
+ *           guard's number under the panel's.
+ *   ambush  20 m out: the block behind the plus panel has just set off for its
+ *           line; it shows through the see-through plaque, its number lifted
+ *           over it.
  *   toll    20 m out: the portal behind the panel is pouring, and the river is
- *           in the lane the column has to stand in for the prize.
- *   fence   18 m out: the column is committed inside the fence, the outer
- *           lane's portal pouring down it.
+ *           coming through the panel the column has to stand in for the prize.
+ *   fence   18 m out: the fence is up, the outer lane's portal pouring down
+ *           it.
  *
  * Shot at 440x956, the owner's phone (document 28), rather than the smoke's
  * 390x844, and at the scale the set is taken at. The page also asserts what a
@@ -31,8 +37,8 @@
  * compiled while the beats played, and the draw calls under the campaign's
  * ceiling (`scripts/smoke-run-checks.mjs`).
  *
- * Not yet driven by `./smoke-hero.mjs`: `driveBeats` has the signature of the
- * other pages' drivers, and wiring it in is one more entry in `driveHeroSet`.
+ * Driven by `./smoke-hero.mjs` beside the other pages (`SMOKE_ONLY=hero-beats`
+ * takes it alone).
  */
 
 import { sleep } from './smoke-browser.mjs';
@@ -54,7 +60,7 @@ const BEAT_COUNT = 100;
  * squad to the beat's gate row.
  */
 const BEAT_SHOTS = [
-  { beat: 'guard:2', gap: 40, name: 'hero-beat-guard' },
+  { beat: 'guard:2', gap: 24, name: 'hero-beat-guard' },
   { beat: 'ambush:3', gap: 20, name: 'hero-beat-ambush' },
   { beat: 'toll:3', gap: 20, name: 'hero-beat-toll' },
   { beat: 'fence:3', gap: 18, name: 'hero-beat-fence' },

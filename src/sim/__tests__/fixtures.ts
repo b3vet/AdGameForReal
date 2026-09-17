@@ -7,11 +7,13 @@ import type { LevelDef, RowDef, RowEnemyDef } from '../level';
 import { emptyPlayer } from '../player';
 import { Run } from '../Run';
 import type { GateDef, SimEvent, WallDef, WeaponId } from '../types';
-import { balance, levelConfig, requireDealt } from '@/data';
+import dealtRecipes from './dealtRecipes.json';
+import { balance, requireDealt } from '@/data';
 import type {
   Balance,
   DealtLevelConfig,
   FamiliarTier,
+  LevelGenConfig,
   PlayerState,
   StaffTier,
   UpgradeId,
@@ -36,8 +38,14 @@ export function staffRow(z: number, weaponId: WeaponId): RowDef {
 }
 
 /**
- * Level `index` as the dealer would build it: its recipe in `levels.json`
- * with the script left off (document 31, D70).
+ * The forty dealt recipes as Milestone 9 shipped them: `levels.json` at commit
+ * 3328d22's parent, byte for byte (`./frost.test.ts` pins the first twenty).
+ */
+const DEALT_RECIPES: readonly LevelGenConfig[] = dealtRecipes as readonly LevelGenConfig[];
+
+/**
+ * Level `index` as the dealer would build it: its Milestone 9 recipe, which
+ * has no script (document 31, D70).
  *
  * The campaign plays its scripts now, and the dealt generator lives on for the
  * render fixtures, the stress scene and the endless road. Its own rules — the
@@ -45,11 +53,23 @@ export function staffRow(z: number, weaponId: WeaponId): RowDef {
  * checked against the forty recipes they were written for, which is what
  * the tests that read this are about; the scripted rules are
  * `levelDesign.test.ts`'s.
+ *
+ * Read from a frozen copy rather than from `levels.json` with the script left
+ * off, because the fields the two paths share (`startCount`, `peakTarget`,
+ * `boss`) are the Phase 1 tuners' to move: a boss re-derived for a scripted
+ * road must not move a dealt-path test. The frozen copy keeps every dealt
+ * rule, and the dealt goldens in `./regression.test.ts`, on the numbers they
+ * were written against, whatever the scripts' tuning does.
  */
 export function dealtLevel(index: number): DealtLevelConfig {
-  const { script: _script, curses: _curses, curveTrim: _trim, ...recipe } = levelConfig(index);
+  const clamped = Math.min(Math.max(1, Math.floor(index)), DEALT_RECIPES.length);
+  const recipe = DEALT_RECIPES[clamped - 1];
+  if (recipe === undefined) throw new Error(`no dealt recipe for level ${String(index)}`);
   return requireDealt(recipe);
 }
+
+/** How many dealt recipes there are: the campaign's length when they were frozen. */
+export const dealtLevelCount = DEALT_RECIPES.length;
 
 export function level(overrides: Partial<LevelDef> = {}): LevelDef {
   return {

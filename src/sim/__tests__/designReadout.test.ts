@@ -292,6 +292,57 @@ function beatTable(runs: readonly Played[], lines: string[]): void {
   }
 }
 
+/**
+ * Section 5's per-beat rows on the campaign, as the balance files read them
+ * (`./balanceBands.ts`): a beat owns its threats and its curse
+ * (`DesignTrace`), a threat beat is one that stands a block or a river, and
+ * the prep beat is where `curveTrim` is fitted (3.4).
+ */
+function acceptanceTable(runs: readonly Played[], lines: string[]): void {
+  lines.push('', '== section 5 per beat (threat beats; loss over the squad when the beat woke) ==');
+  lines.push('biome   bot     beats  free  med   p90 | sight-min charger-min | prep E-fit  last-two max');
+  for (const frost of [false, true]) {
+    for (const bot of BOTS) {
+      const mine = runs.filter((run) => run.frost === frost && run.bot === bot);
+      if (mine.length === 0) continue;
+      const beats = mine.flatMap((run) => run.trace.beats.filter((beat) => beat.threat));
+      const loss = beats.map((beat) => beat.share);
+      const contacts = mine.flatMap((run) => run.trace.contacts);
+      const sight = Math.min(Infinity, ...contacts.map((contact) => contact.sightToContact));
+      const charger = Math.min(
+        Infinity,
+        ...contacts.filter((contact) => contact.kind === 'charger').map((contact) => contact.wakeToContact),
+      );
+      const fits: number[] = [];
+      let lastTwo = 0;
+      for (const run of mine) {
+        const marks = levelConfig(run.level).script?.length ?? 0;
+        const reached = run.trace.beats;
+        const prep = reached[reached.length - 1];
+        if (prep === undefined || prep.beat !== 'prep' || reached.length !== marks) continue;
+        if (prep.expected > 0) fits.push(prep.arrive / prep.expected);
+        lastTwo = Math.max(lastTwo, reached[reached.length - 2]?.arrive ?? 0);
+      }
+      lines.push(
+        [
+          (frost ? 'frost' : 'meadow').padEnd(7),
+          bot.padEnd(7),
+          String(beats.length).padStart(5),
+          f2(share(loss.filter((value) => value <= 0).length, loss.length)).padStart(5),
+          f2(quantile(loss, 0.5)).padStart(5),
+          f2(quantile(loss, 0.9)).padStart(5),
+          '|',
+          sight.toFixed(1).padStart(9),
+          charger.toFixed(1).padStart(11),
+          '|',
+          f2(quantile(fits, 0.5)).padStart(11),
+          String(lastTwo).padStart(13),
+        ].join(' '),
+      );
+    }
+  }
+}
+
 describe.skipIf(!ON)('design readout', () => {
   it('prints the diagnosis tables and the acceptance metrics', () => {
     const levels = range(process.env['DESIGN_LEVELS'] ?? `1-${String(levelCount)}`, levelCount);
@@ -326,6 +377,7 @@ describe.skipIf(!ON)('design readout', () => {
     rowTable(runs, lines);
     levelTable(runs, levels, lines);
     beatTable(runs, lines);
+    acceptanceTable(runs, lines);
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, `${lines.join('\n')}\n`);
     expect(runs.length).toBeGreaterThan(0);

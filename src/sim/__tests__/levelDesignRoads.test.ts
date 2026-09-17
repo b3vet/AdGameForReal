@@ -25,51 +25,60 @@ const SEEDS = [1, 2, 3];
  * - L5, L6: a C1 added, so one curse per level flips on levels 4 to 9 (3.5);
  *   both levels had room for a ninth beat.
  * - L7: the first T2 is a C2, for the same rule, keeping the level's weight.
- * - L23: W2x rather than W2, so a test level on Frostfell prints two
- *   multipliers (3.5: one on teach and release levels, else two).
- * - L32: the rest moved one beat later, so no four threats run unbroken.
+ * - L1 to L20 (document 32): every multiplier in the first half, so the
+ *   column is half grown by the middle beat and a rated threat follows the
+ *   last multiplier; milestone set pieces print a big plus.
+ * - L21 to L40 (document 32): every multiplier in the first four beats, the
+ *   first behind a toll so taking it is a close call, then a late half of
+ *   rated threats and a flip, on tiers light enough for section 5's per-beat
+ *   median (mostly 2 and 3, 4 on the last block and the milestones, the prep
+ *   at 2 until L34, a late fence at 4 rather than 3 and no late fork at 2,
+ *   whose Frostfell cells sit on their band edges at the late squad size);
+ *   milestones take their x3 early on a toll and end on a W4 set piece (W5 at
+ *   the late squad size costs greedy more than tier 5 allows). L21 opens with
+ *   two easy beats (it follows a milestone).
  */
 const OUTLINE: readonly string[] = [
   'O G1 O T1 G1 R G1 B1 / 0',
   'O C1 G1x R T1 G1 R B1 / 2',
-  'O C1 T2 R G1x T2 R B1 / 2',
-  'O G1 W1 R T2 C1 G2x B1 / 2',
-  'O A1 G2 R W2 C1 A2 G2x B2 / 2',
-  'O F1 G2x R A2 W2 C1 F2 B2 / 3',
-  'O C2 F2 A2 R W2x G3 T2 B2 / 3',
-  'O G2x A2 R F3 W2 C1 T3 B2 / 3',
-  'O C1 A2 W2 R F2 T3 G3x B2 / 3',
-  'O G2x W3 R A3 T3 R W4x B3 / 4',
-  'O O G2x T2 R A2 F2 B2 / 2',
-  'O T2x W3 R G3x A3 C1 F3 B2 / 4',
-  'O A2 F3 R W3x T3 R G3x3 B3 / 4',
-  'O G2x T3x W3 R F3 A3 C1 B3 / 4',
-  'O W3x A3 R F4 T3 R W4x3 B3 / 5',
-  'O O T2 G2x R A3 F3 B2 / 3',
-  'O A3 W3x R G3x T3 F3 C1 B3 / 4',
-  'O F3 W3x R A3 T4 R G3x3 B3 / 5',
-  'O T3x A3 W3 R F3 G4x C1 B3 / 5',
-  'O W3x A4 R F4 T4 R W5x3 B4 / 5',
-  'O G1 K1 R T2 G2x R K2 B2 / 2',
-  'O Gs1 T2 R K2 Gs2x R A2 B2 / 3',
-  'O K2 W2x R Gs2x T3 F2 C1 B2 / 3',
-  'O A2 K2 R W3x Gs3x T3 C1 B3 / 4',
-  'O Gs3x W3 R K3 A3 R W4x3 B4 / 4',
-  'O O K2 G2x R T3 A2 B2 / 3',
-  'O T2x K3 R A3 W3x Gs3 C1 B3 / 4',
-  'O Gs2x F3 R W3x K3 T3 R B3 / 4',
-  'O A3 W3x R K3 T3 Gs3x C1 B3 / 5',
-  'O W3x K4 R A4 T4 R W5x3 B4 / 5',
-  'O O Gs2x T3 R K2 A3 B3 / 3',
-  'O K3 W3x A3 R T3 F3 Gs3x B3 / 5',
-  'O T3 A3 R W4x K3 R Gs3x3 B3 / 5',
-  'O Gs3x K3 W3x R T4 A3 C1 B3 / 5',
-  'O W4x A4 R K4 T4 R W5x3 B4 / 6',
-  'O O T3 Gs3x R A3 K3 B3 / 4',
-  'O A3 W4x R K3 T4x Gs3 C1 B4 / 5',
-  'O K4 W4x R A4 T4 R Gs4x3 B4 / 6',
-  'O T4x A4 W4 R K4 Gs4x C1 B4 / 6',
-  'O W4x K5 R A5 T5 R W5x3 B5 / 6',
+  'O C1 G1x R T2 T2 R B1 / 2',
+  'O G2x T2 R W1 C1 G2 B3 / 2',
+  'O A1 G2x R W2 A3 C1 G3 B3 / 2',
+  'O A3 G2x R F1 W3 C1 F2 B3 / 3',
+  'O G3x A3 R F3 W2 C2 F3 B3 / 3',
+  'O G3x A3 R F3 F3 C1 W3 B3 / 3',
+  'O G3x T3 R W3 F3 C1 F3 B3 / 3',
+  'O G2x W3x A3 R F4 F4 W5 B5 / 4',
+  'O O G2x T3 R F3 C1 F3 B3 / 2',
+  'O G2x T3x R F4 W4 C1 F4 B4 / 4',
+  'O G3x3 W3x R F4 A3 C1 F4 B4 / 4',
+  'O G2x T3x R F4 F4 C1 W4 B4 / 4',
+  'O W3x T3x3 A4 R F4 F4 W5 B5 / 5',
+  'O O T3 G3x R F3 C1 F4 B4 / 3',
+  'O W3x G3x R F4 A4 C1 F4 B4 / 4',
+  'O W3x G3x3 R A4 F4 C1 F4 B4 / 5',
+  'O T3x G4x R F4 W4 C1 F4 B4 / 5',
+  'O W3x T4x3 A5 R F4 F4 W5 B5 / 5',
+  'O K1 T2x R G2 K2 A2 C1 B2 / 3',
+  'O Gs1 T3x R K2 Gs2 A2 C1 B2 / 3',
+  'O T3x Gs2x R K2 W4 F3 C1 B2 / 4',
+  'O T3x W2x R A3 K2 Gs3 C1 B2 / 4',
+  'O W4x T4x3 K4 R A4 T4 W4 B5 / 5',
+  'O O T2x R K2 A3 Gs2 B2 / 3',
+  'O T3x Gs2x R K2 A3 W4 C1 B2 / 5',
+  'O T3x W3x R F3 K2 Gs3 C1 B2 / 5',
+  'O Gs3x T3x R A3 K2 W4 C2 B2 / 5',
+  'O W4x T5x3 K5 R A5 T5 W4 B5 / 6',
+  'O O T3x R Gs3 K2 A3 B2 / 3',
+  'O T3x W3x R K2 A4 Gs3 C1 B2 / 5',
+  'O W3x T4x3 K2 R A3 Gs3 C2 B2 / 5',
+  'O Gs3x T3x R K3 A3 W4 C1 B2 / 5',
+  'O W4x T4x3 K4 R A4 T4 W4 B5 / 6',
+  'O O T3x R Gs3 K3 A4 B3 / 4',
+  'O T3x W4x R K3 A4 Gs3 C2 B3 / 5',
+  'O W4x T4x3 K3 R A4 Gs3 C2 B3 / 6',
+  'O T4x Gs3x R K3 A4 W4 C2 B3 / 6',
+  'O W5x T5x3 K5 R A5 T5 W4 B5 / 6',
 ];
 
 function compose(index: number, seed: number): LevelDef {

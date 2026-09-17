@@ -44,13 +44,13 @@
     "bruteRows": 2,
     "wallRows": 0,
     "startCount": 5,
-    "peakTarget": 105,
+    "peakTarget": 120,
     "hpScale": 0.25,
     "streamPressure": 0.45,
     "streamDensity": 0.8,
     "boss": {
-      "hp": 5200,
-      "bite": 0.46
+      "hp": 5000,
+      "bite": 0.25
     },
     "gateValues": {
       "mul": {
@@ -117,13 +117,13 @@
     "bruteRows": 2,
     "wallRows": 0,
     "startCount": 5,
-    "peakTarget": 130,
+    "peakTarget": 140,
     "hpScale": 0.3,
     "streamPressure": 0.5,
     "streamDensity": 0.8,
     "boss": {
-      "hp": 5300,
-      "bite": 0.46
+      "hp": 5400,
+      "bite": 0.25
     },
     "gateValues": {
       "mul": {
@@ -157,17 +157,17 @@
         "tier": 1
       },
       {
-        "beat": "toll",
-        "tier": 2
+        "beat": "guard",
+        "tier": 1,
+        "prize": "x2"
       },
       {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "guard",
-        "tier": 1,
-        "prize": "x2"
+        "beat": "toll",
+        "tier": 2
       },
       {
         "beat": "toll",
@@ -195,8 +195,8 @@
     "streamPressure": 0.55,
     "streamDensity": 0.93,
     "boss": {
-      "hp": 5600,
-      "bite": 0.51
+      "hp": 6200,
+      "bite": 0.25
     },
     "gateValues": {
       "mul": {
@@ -227,6 +227,15 @@
       },
       {
         "beat": "guard",
+        "tier": 2,
+        "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
         "tier": 1
       },
       {
@@ -234,25 +243,16 @@
         "tier": 1
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "toll",
-        "tier": 2
-      },
-      {
         "beat": "flip",
         "tier": 1
       },
       {
         "beat": "guard",
-        "tier": 2,
-        "prize": "x2"
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 1
+        "tier": 3
       }
     ],
     "curses": 2,
@@ -263,13 +263,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 6,
-    "peakTarget": 195,
+    "peakTarget": 190,
     "hpScale": 0.4,
     "streamPressure": 0.68,
     "streamDensity": 1,
     "boss": {
-      "hp": 6600,
-      "bite": 0.76
+      "hp": 6800,
+      "bite": 0.5
     },
     "gateValues": {
       "mul": {
@@ -304,7 +304,8 @@
       },
       {
         "beat": "guard",
-        "tier": 2
+        "tier": 2,
+        "prize": "x2"
       },
       {
         "beat": "rest",
@@ -315,21 +316,20 @@
         "tier": 2
       },
       {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
         "beat": "flip",
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 2
-      },
-      {
         "beat": "guard",
-        "tier": 2,
-        "prize": "x2"
+        "tier": 3
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 3
       }
     ],
     "curses": 2,
@@ -340,13 +340,13 @@
     "bruteRows": 2,
     "wallRows": 0,
     "startCount": 7,
-    "peakTarget": 225,
+    "peakTarget": 215,
     "hpScale": 0.5,
     "streamPressure": 0.75,
     "streamDensity": 1.15,
     "boss": {
-      "hp": 7900,
-      "bite": 0.62
+      "hp": 9300,
+      "bite": 0.5
     },
     "gateValues": {
       "mul": {
@@ -376,8 +376,8 @@
         "tier": 1
       },
       {
-        "beat": "fork",
-        "tier": 1
+        "beat": "ambush",
+        "tier": 3
       },
       {
         "beat": "guard",
@@ -389,12 +389,12 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 2
+        "beat": "fork",
+        "tier": 1
       },
       {
         "beat": "fence",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "flip",
@@ -406,7 +406,7 @@
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 3
       }
     ],
     "curses": 3,
@@ -417,13 +417,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 8,
-    "peakTarget": 260,
+    "peakTarget": 240,
     "hpScale": 0.55,
     "streamPressure": 0.86,
     "streamDensity": 1.15,
     "boss": {
-      "hp": 8000,
-      "bite": 0.74
+      "hp": 9300,
+      "bite": 0.5
     },
     "gateValues": {
       "mul": {
@@ -453,37 +453,37 @@
         "tier": 1
       },
       {
-        "beat": "flip",
-        "tier": 2
-      },
-      {
-        "beat": "fork",
-        "tier": 2
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "ambush",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "fence",
-        "tier": 2,
-        "prize": "x2"
-      },
-      {
-        "beat": "guard",
+        "beat": "fork",
         "tier": 3
       },
       {
-        "beat": "toll",
+        "beat": "fence",
         "tier": 2
       },
       {
-        "beat": "prep",
+        "beat": "flip",
         "tier": 2
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "prep",
+        "tier": 3
       }
     ],
     "curses": 3,
@@ -494,13 +494,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 9,
-    "peakTarget": 295,
+    "peakTarget": 265,
     "hpScale": 0.52,
     "streamPressure": 0.88,
     "streamDensity": 0.82,
     "boss": {
-      "hp": 10600,
-      "bite": 0.68
+      "hp": 9900,
+      "bite": 0.5
     },
     "gateValues": {
       "mul": {
@@ -531,12 +531,12 @@
       },
       {
         "beat": "guard",
-        "tier": 2,
+        "tier": 3,
         "prize": "x2"
       },
       {
         "beat": "ambush",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "rest",
@@ -547,20 +547,20 @@
         "tier": 3
       },
       {
-        "beat": "fence",
-        "tier": 2
+        "beat": "fork",
+        "tier": 3
       },
       {
         "beat": "flip",
         "tier": 1
       },
       {
-        "beat": "toll",
+        "beat": "fence",
         "tier": 3
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 3
       }
     ],
     "curses": 3,
@@ -571,13 +571,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 10,
-    "peakTarget": 325,
+    "peakTarget": 290,
     "hpScale": 0.62,
     "streamPressure": 0.9,
     "streamDensity": 0.82,
     "boss": {
-      "hp": 10800,
-      "bite": 0.45
+      "hp": 10100,
+      "bite": 0.5
     },
     "gateValues": {
       "mul": {
@@ -607,37 +607,37 @@
         "tier": 1
       },
       {
-        "beat": "flip",
-        "tier": 1
-      },
-      {
-        "beat": "ambush",
-        "tier": 2
-      },
-      {
-        "beat": "fence",
-        "tier": 2
-      },
-      {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "fork",
-        "tier": 2
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "toll",
         "tier": 3
       },
       {
-        "beat": "guard",
-        "tier": 3,
-        "prize": "x2"
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "fence",
+        "tier": 3
+      },
+      {
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 3
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 3
       }
     ],
     "curses": 3,
@@ -648,13 +648,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 11,
-    "peakTarget": 360,
+    "peakTarget": 315,
     "hpScale": 0.68,
     "streamPressure": 0.92,
     "streamDensity": 0.67,
     "boss": {
-      "hp": 11000,
-      "bite": 0.45
+      "hp": 11100,
+      "bite": 0.58
     },
     "gateValues": {
       "mul": {
@@ -691,32 +691,32 @@
       },
       {
         "beat": "fence",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "ambush",
         "tier": 3
       },
       {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
       },
       {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
         "beat": "fence",
-        "tier": 4,
-        "prize": "x2"
+        "tier": 5
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 5
       }
     ],
     "curses": 4,
@@ -727,13 +727,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 12,
-    "peakTarget": 390,
+    "peakTarget": 345,
     "hpScale": 0.75,
     "streamPressure": 0.9,
     "streamDensity": 0.81,
     "boss": {
-      "hp": 12300,
-      "bite": 0.7
+      "hp": 12400,
+      "bite": 1.5
     },
     "gateValues": {
       "mul": {
@@ -773,23 +773,27 @@
       },
       {
         "beat": "toll",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 2
+        "beat": "fork",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
       },
       {
         "beat": "fork",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 3
       }
     ],
     "curses": 2,
@@ -800,13 +804,13 @@
     "bruteRows": 2,
     "wallRows": 2,
     "startCount": 13,
-    "peakTarget": 415,
+    "peakTarget": 350,
     "hpScale": 0.76,
     "streamPressure": 0.9,
     "streamDensity": 1.08,
     "boss": {
-      "hp": 12500,
-      "bite": 0.52
+      "hp": 12900,
+      "bite": 0.42
     },
     "gateValues": {
       "mul": {
@@ -836,26 +840,26 @@
         "tier": 1
       },
       {
-        "beat": "toll",
+        "beat": "guard",
         "tier": 2,
         "prize": "x2"
       },
       {
-        "beat": "fence",
-        "tier": 3
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "guard",
-        "tier": 3,
-        "prize": "x2"
+        "beat": "fork",
+        "tier": 4
       },
       {
-        "beat": "ambush",
-        "tier": 3
+        "beat": "fence",
+        "tier": 4
       },
       {
         "beat": "flip",
@@ -863,11 +867,11 @@
       },
       {
         "beat": "fork",
-        "tier": 3
+        "tier": 4
       },
       {
         "beat": "prep",
-        "tier": 2
+        "tier": 4
       }
     ],
     "curses": 4,
@@ -878,13 +882,13 @@
     "bruteRows": 2,
     "wallRows": 2,
     "startCount": 14,
-    "peakTarget": 436,
+    "peakTarget": 360,
     "hpScale": 0.78,
     "streamPressure": 0.9,
     "streamDensity": 0.9,
     "boss": {
-      "hp": 14400,
-      "bite": 0.55
+      "hp": 12900,
+      "bite": 0.47
     },
     "gateValues": {
       "mul": {
@@ -914,16 +918,9 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 2
-      },
-      {
-        "beat": "fork",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
+        "beat": "guard",
+        "tier": 3,
+        "prize": "x3"
       },
       {
         "beat": "fence",
@@ -931,21 +928,28 @@
         "prize": "x2"
       },
       {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "guard",
-        "tier": 3,
-        "prize": "x3"
+        "beat": "fork",
+        "tier": 4
+      },
+      {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 4
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 4
       }
     ],
     "curses": 4,
@@ -956,13 +960,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 15,
-    "peakTarget": 453,
+    "peakTarget": 370,
     "hpScale": 0.8,
     "streamPressure": 0.91,
     "streamDensity": 0.78,
     "boss": {
-      "hp": 14600,
-      "bite": 0.46
+      "hp": 14100,
+      "bite": 0.47
     },
     "gateValues": {
       "mul": {
@@ -1002,28 +1006,28 @@
         "prize": "x2"
       },
       {
-        "beat": "fence",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
       },
       {
         "beat": "fork",
-        "tier": 3
+        "tier": 4
       },
       {
-        "beat": "ambush",
-        "tier": 3
+        "beat": "fork",
+        "tier": 4
       },
       {
         "beat": "flip",
         "tier": 1
       },
       {
+        "beat": "fence",
+        "tier": 4
+      },
+      {
         "beat": "prep",
-        "tier": 3
+        "tier": 4
       }
     ],
     "curses": 4,
@@ -1034,13 +1038,13 @@
     "bruteRows": 2,
     "wallRows": 2,
     "startCount": 16,
-    "peakTarget": 467,
+    "peakTarget": 380,
     "hpScale": 0.82,
     "streamPressure": 0.91,
     "streamDensity": 1.22,
     "boss": {
-      "hp": 17000,
-      "bite": 0.55
+      "hp": 15200,
+      "bite": 0.47
     },
     "gateValues": {
       "mul": {
@@ -1076,8 +1080,13 @@
         "prize": "x2"
       },
       {
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x3"
+      },
+      {
         "beat": "ambush",
-        "tier": 3
+        "tier": 4
       },
       {
         "beat": "rest",
@@ -1088,21 +1097,16 @@
         "tier": 4
       },
       {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
+        "beat": "fork",
+        "tier": 4
       },
       {
         "beat": "fence",
-        "tier": 4,
-        "prize": "x3"
+        "tier": 5
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 5
       }
     ],
     "curses": 5,
@@ -1113,13 +1117,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 17,
-    "peakTarget": 478,
+    "peakTarget": 400,
     "hpScale": 0.84,
     "streamPressure": 0.92,
     "streamDensity": 0.75,
     "boss": {
-      "hp": 17300,
-      "bite": 0.7
+      "hp": 15300,
+      "bite": 1.5
     },
     "gateValues": {
       "mul": {
@@ -1154,11 +1158,11 @@
       },
       {
         "beat": "toll",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "guard",
-        "tier": 2,
+        "tier": 3,
         "prize": "x2"
       },
       {
@@ -1166,16 +1170,20 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 3
-      },
-      {
         "beat": "fork",
         "tier": 3
       },
       {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
         "beat": "prep",
-        "tier": 2
+        "tier": 4
       }
     ],
     "curses": 3,
@@ -1186,13 +1194,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 18,
-    "peakTarget": 486,
+    "peakTarget": 400,
     "hpScale": 0.86,
     "streamPressure": 0.88,
     "streamDensity": 0.91,
     "boss": {
-      "hp": 17600,
-      "bite": 0.48
+      "hp": 15500,
+      "bite": 0.36
     },
     "gateValues": {
       "mul": {
@@ -1222,11 +1230,12 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 3
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
       },
       {
-        "beat": "fence",
+        "beat": "guard",
         "tier": 3,
         "prize": "x2"
       },
@@ -1235,25 +1244,24 @@
         "tier": 1
       },
       {
-        "beat": "guard",
-        "tier": 3,
-        "prize": "x2"
-      },
-      {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
         "beat": "fork",
-        "tier": 3
+        "tier": 4
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
       },
       {
         "beat": "flip",
         "tier": 1
       },
       {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
         "beat": "prep",
-        "tier": 3
+        "tier": 4
       }
     ],
     "curses": 4,
@@ -1264,13 +1272,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 19,
-    "peakTarget": 492,
+    "peakTarget": 405,
     "hpScale": 0.88,
     "streamPressure": 0.93,
     "streamDensity": 1,
     "boss": {
-      "hp": 17900,
-      "bite": 0.58
+      "hp": 16200,
+      "bite": 0.42
     },
     "gateValues": {
       "mul": {
@@ -1300,29 +1308,9 @@
         "tier": 1
       },
       {
-        "beat": "fork",
-        "tier": 3
-      },
-      {
         "beat": "fence",
         "tier": 3,
         "prize": "x2"
-      },
-      {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "ambush",
-        "tier": 3
-      },
-      {
-        "beat": "toll",
-        "tier": 4
-      },
-      {
-        "beat": "rest",
-        "tier": 1
       },
       {
         "beat": "guard",
@@ -1330,8 +1318,28 @@
         "prize": "x3"
       },
       {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
         "beat": "prep",
-        "tier": 3
+        "tier": 4
       }
     ],
     "curses": 5,
@@ -1342,13 +1350,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 20,
-    "peakTarget": 496,
+    "peakTarget": 410,
     "hpScale": 0.9,
     "streamPressure": 0.93,
     "streamDensity": 1.21,
     "boss": {
-      "hp": 18200,
-      "bite": 0.75
+      "hp": 16700,
+      "bite": 0.42
     },
     "gateValues": {
       "mul": {
@@ -1383,12 +1391,9 @@
         "prize": "x2"
       },
       {
-        "beat": "ambush",
-        "tier": 3
-      },
-      {
-        "beat": "fence",
-        "tier": 3
+        "beat": "guard",
+        "tier": 4,
+        "prize": "x2"
       },
       {
         "beat": "rest",
@@ -1396,20 +1401,23 @@
       },
       {
         "beat": "fork",
-        "tier": 3
+        "tier": 4
       },
       {
-        "beat": "guard",
-        "tier": 4,
-        "prize": "x2"
+        "beat": "fence",
+        "tier": 4
       },
       {
         "beat": "flip",
         "tier": 1
       },
       {
+        "beat": "fork",
+        "tier": 4
+      },
+      {
         "beat": "prep",
-        "tier": 3
+        "tier": 4
       }
     ],
     "curses": 5,
@@ -1420,13 +1428,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 21,
-    "peakTarget": 499,
+    "peakTarget": 420,
     "hpScale": 0.92,
     "streamPressure": 0.94,
     "streamDensity": 0.82,
     "boss": {
-      "hp": 18500,
-      "bite": 0.38
+      "hp": 17500,
+      "bite": 0.42
     },
     "gateValues": {
       "mul": {
@@ -1462,8 +1470,13 @@
         "prize": "x2"
       },
       {
+        "beat": "toll",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
         "beat": "ambush",
-        "tier": 4
+        "tier": 5
       },
       {
         "beat": "rest",
@@ -1474,21 +1487,16 @@
         "tier": 4
       },
       {
-        "beat": "toll",
+        "beat": "fork",
         "tier": 4
-      },
-      {
-        "beat": "rest",
-        "tier": 1
       },
       {
         "beat": "fence",
-        "tier": 5,
-        "prize": "x3"
+        "tier": 5
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 5
       }
     ],
     "curses": 5,
@@ -1499,13 +1507,13 @@
     "bruteRows": 2,
     "wallRows": 1,
     "startCount": 22,
-    "peakTarget": 500,
+    "peakTarget": 440,
     "hpScale": 0.94,
     "streamPressure": 0.94,
     "streamDensity": 1.19,
     "boss": {
-      "hp": 18800,
-      "bite": 0.7
+      "hp": 18200,
+      "bite": 1.3
     },
     "gateValues": {
       "mul": {
@@ -1536,23 +1544,11 @@
         "tier": 1
       },
       {
-        "beat": "guard",
-        "tier": 1
-      },
-      {
         "beat": "chargeFork",
         "tier": 1
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
         "beat": "toll",
-        "tier": 2
-      },
-      {
-        "beat": "guard",
         "tier": 2,
         "prize": "x2"
       },
@@ -1561,15 +1557,31 @@
         "tier": 1
       },
       {
+        "beat": "guard",
+        "tier": 2
+      },
+      {
         "beat": "chargeFork",
         "tier": 2
+      },
+      {
+        "beat": "ambush",
+        "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
       },
       {
         "beat": "prep",
         "tier": 2
       }
     ],
-    "curses": 2,
+    "curses": 3,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -1579,13 +1591,13 @@
     "shieldRows": 0,
     "wallRows": 1,
     "startCount": 23,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.948,
     "streamPressure": 0.9,
     "streamDensity": 0.85,
     "boss": {
-      "hp": 28000,
-      "bite": 0.55,
+      "hp": 15200,
+      "bite": 0.4,
       "kind": "rime"
     },
     "gateValues": {
@@ -1622,7 +1634,8 @@
       },
       {
         "beat": "toll",
-        "tier": 2
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "rest",
@@ -1634,16 +1647,15 @@
       },
       {
         "beat": "shieldGuard",
-        "tier": 2,
-        "prize": "x2"
-      },
-      {
-        "beat": "rest",
-        "tier": 1
+        "tier": 2
       },
       {
         "beat": "ambush",
         "tier": 2
+      },
+      {
+        "beat": "flip",
+        "tier": 1
       },
       {
         "beat": "prep",
@@ -1651,6 +1663,10 @@
       }
     ],
     "curses": 3,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -1660,13 +1676,13 @@
     "shieldRows": 0,
     "wallRows": 1,
     "startCount": 24,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.84,
     "streamPressure": 0.88,
     "streamDensity": 0.68,
     "boss": {
-      "hp": 28300,
-      "bite": 0.58,
+      "hp": 15500,
+      "bite": 0.4,
       "kind": "rime"
     },
     "gateValues": {
@@ -1698,11 +1714,12 @@
         "tier": 1
       },
       {
-        "beat": "chargeFork",
-        "tier": 2
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
       },
       {
-        "beat": "fence",
+        "beat": "shieldGuard",
         "tier": 2,
         "prize": "x2"
       },
@@ -1711,17 +1728,16 @@
         "tier": 1
       },
       {
-        "beat": "shieldGuard",
-        "tier": 2,
-        "prize": "x2"
+        "beat": "chargeFork",
+        "tier": 2
       },
       {
-        "beat": "toll",
-        "tier": 3
+        "beat": "fence",
+        "tier": 4
       },
       {
         "beat": "fork",
-        "tier": 2
+        "tier": 3
       },
       {
         "beat": "flip",
@@ -1732,7 +1748,11 @@
         "tier": 2
       }
     ],
-    "curses": 3,
+    "curses": 4,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -1742,13 +1762,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 25,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.964,
     "streamPressure": 0.9,
     "streamDensity": 0.85,
     "boss": {
-      "hp": 28400,
-      "bite": 0.7,
+      "hp": 15800,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -1780,29 +1800,29 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 2
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
       },
       {
-        "beat": "chargeFork",
-        "tier": 2
+        "beat": "fence",
+        "tier": 2,
+        "prize": "x2"
       },
       {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "fence",
-        "tier": 3,
-        "prize": "x2"
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
       },
       {
         "beat": "shieldGuard",
-        "tier": 3,
-        "prize": "x2"
-      },
-      {
-        "beat": "toll",
         "tier": 3
       },
       {
@@ -1811,10 +1831,14 @@
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 4,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -1824,13 +1848,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 26,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.92,
     "streamPressure": 0.91,
     "streamDensity": 1.15,
     "boss": {
-      "hp": 28700,
-      "bite": 0.72,
+      "hp": 16100,
+      "bite": 0.4,
       "kind": "rime"
     },
     "gateValues": {
@@ -1863,41 +1887,45 @@
         "tier": 1
       },
       {
-        "beat": "shieldGuard",
-        "tier": 3,
+        "beat": "fence",
+        "tier": 4,
         "prize": "x2"
       },
       {
-        "beat": "fence",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "chargeFork",
-        "tier": 3
-      },
-      {
-        "beat": "ambush",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "fence",
+        "beat": "toll",
         "tier": 4,
         "prize": "x3"
       },
       {
-        "beat": "prep",
+        "beat": "chargeFork",
         "tier": 4
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
+        "beat": "toll",
+        "tier": 4
+      },
+      {
+        "beat": "fence",
+        "tier": 4
+      },
+      {
+        "beat": "prep",
+        "tier": 5
       }
     ],
-    "curses": 4,
+    "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -1907,13 +1935,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 27,
-    "peakTarget": 500,
+    "peakTarget": 420,
     "hpScale": 0.98,
     "streamPressure": 0.9,
     "streamDensity": 0.78,
     "boss": {
-      "hp": 29700,
-      "bite": 0.74,
+      "hp": 16300,
+      "bite": 1.25,
       "kind": "rime"
     },
     "gateValues": {
@@ -1949,11 +1977,7 @@
         "tier": 1
       },
       {
-        "beat": "chargeFork",
-        "tier": 2
-      },
-      {
-        "beat": "guard",
+        "beat": "toll",
         "tier": 2,
         "prize": "x2"
       },
@@ -1962,11 +1986,15 @@
         "tier": 1
       },
       {
-        "beat": "toll",
-        "tier": 3
+        "beat": "chargeFork",
+        "tier": 2
       },
       {
         "beat": "ambush",
+        "tier": 3
+      },
+      {
+        "beat": "shieldGuard",
         "tier": 2
       },
       {
@@ -1975,6 +2003,10 @@
       }
     ],
     "curses": 3,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -1984,13 +2016,13 @@
     "shieldRows": 0,
     "wallRows": 1,
     "startCount": 28,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.988,
     "streamPressure": 0.92,
     "streamDensity": 0.95,
     "boss": {
-      "hp": 29700,
-      "bite": 0.57,
+      "hp": 16600,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -2023,16 +2055,21 @@
       },
       {
         "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "shieldGuard",
         "tier": 2,
         "prize": "x2"
       },
       {
-        "beat": "chargeFork",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
       },
       {
         "beat": "ambush",
@@ -2040,12 +2077,7 @@
       },
       {
         "beat": "fence",
-        "tier": 3,
-        "prize": "x2"
-      },
-      {
-        "beat": "shieldGuard",
-        "tier": 3
+        "tier": 4
       },
       {
         "beat": "flip",
@@ -2053,10 +2085,14 @@
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
-    "curses": 4,
+    "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -2066,13 +2102,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 29,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.93,
     "streamPressure": 0.93,
     "streamDensity": 0.98,
     "boss": {
-      "hp": 29700,
-      "bite": 0.62,
+      "hp": 16900,
+      "bite": 0.55,
       "kind": "rime"
     },
     "gateValues": {
@@ -2104,17 +2140,9 @@
         "tier": 1
       },
       {
-        "beat": "shieldGuard",
-        "tier": 2,
+        "beat": "toll",
+        "tier": 3,
         "prize": "x2"
-      },
-      {
-        "beat": "fork",
-        "tier": 3
-      },
-      {
-        "beat": "rest",
-        "tier": 1
       },
       {
         "beat": "fence",
@@ -2122,23 +2150,35 @@
         "prize": "x2"
       },
       {
-        "beat": "chargeFork",
-        "tier": 3
-      },
-      {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "prep",
+        "beat": "fork",
         "tier": 3
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
+      },
+      {
+        "beat": "prep",
+        "tier": 2
       }
     ],
-    "curses": 4,
+    "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -2148,13 +2188,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 30,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.004,
     "streamPressure": 0.9,
     "streamDensity": 0.92,
     "boss": {
-      "hp": 29700,
-      "bite": 0.64,
+      "hp": 16900,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -2186,11 +2226,12 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 3
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
       },
       {
-        "beat": "fence",
+        "beat": "toll",
         "tier": 3,
         "prize": "x2"
       },
@@ -2199,28 +2240,31 @@
         "tier": 1
       },
       {
+        "beat": "ambush",
+        "tier": 3
+      },
+      {
         "beat": "chargeFork",
-        "tier": 3
+        "tier": 2
       },
       {
-        "beat": "toll",
-        "tier": 3
-      },
-      {
-        "beat": "shieldGuard",
-        "tier": 3,
-        "prize": "x2"
+        "beat": "fence",
+        "tier": 4
       },
       {
         "beat": "flip",
-        "tier": 1
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -2230,13 +2274,13 @@
     "shieldRows": 0,
     "wallRows": 1,
     "startCount": 31,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.012,
     "streamPressure": 0.93,
     "streamDensity": 1.24,
     "boss": {
-      "hp": 30000,
-      "bite": 0.82,
+      "hp": 17500,
+      "bite": 0.55,
       "kind": "rime"
     },
     "gateValues": {
@@ -2270,12 +2314,17 @@
       },
       {
         "beat": "fence",
-        "tier": 3,
+        "tier": 4,
         "prize": "x2"
       },
       {
+        "beat": "toll",
+        "tier": 5,
+        "prize": "x3"
+      },
+      {
         "beat": "chargeFork",
-        "tier": 4
+        "tier": 5
       },
       {
         "beat": "rest",
@@ -2283,27 +2332,26 @@
       },
       {
         "beat": "ambush",
-        "tier": 4
+        "tier": 5
       },
       {
         "beat": "toll",
-        "tier": 4
-      },
-      {
-        "beat": "rest",
-        "tier": 1
+        "tier": 5
       },
       {
         "beat": "fence",
-        "tier": 5,
-        "prize": "x3"
+        "tier": 4
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 5
       }
     ],
-    "curses": 5,
+    "curses": 6,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 4,
@@ -2313,13 +2361,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 32,
-    "peakTarget": 500,
+    "peakTarget": 420,
     "hpScale": 1.02,
     "streamPressure": 0.91,
     "streamDensity": 0.76,
     "boss": {
-      "hp": 31100,
-      "bite": 0.76,
+      "hp": 17800,
+      "bite": 1.65,
       "kind": "rime"
     },
     "gateValues": {
@@ -2355,17 +2403,17 @@
         "tier": 1
       },
       {
-        "beat": "shieldGuard",
-        "tier": 2,
-        "prize": "x2"
-      },
-      {
         "beat": "toll",
-        "tier": 3
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "rest",
         "tier": 1
+      },
+      {
+        "beat": "shieldGuard",
+        "tier": 3
       },
       {
         "beat": "chargeFork",
@@ -2377,10 +2425,14 @@
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 3,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 5,
@@ -2390,13 +2442,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 33,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.028,
     "streamPressure": 0.92,
     "streamDensity": 0.98,
     "boss": {
-      "hp": 31100,
-      "bite": 0.7,
+      "hp": 18100,
+      "bite": 0.45,
       "kind": "rime"
     },
     "gateValues": {
@@ -2428,8 +2480,9 @@
         "tier": 1
       },
       {
-        "beat": "chargeFork",
-        "tier": 3
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "fence",
@@ -2437,32 +2490,35 @@
         "prize": "x2"
       },
       {
-        "beat": "ambush",
-        "tier": 3
-      },
-      {
         "beat": "rest",
         "tier": 1
       },
       {
-        "beat": "toll",
-        "tier": 3
+        "beat": "chargeFork",
+        "tier": 2
       },
       {
-        "beat": "fork",
-        "tier": 3
+        "beat": "ambush",
+        "tier": 4
       },
       {
         "beat": "shieldGuard",
-        "tier": 3,
-        "prize": "x2"
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 1
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 6,
@@ -2472,13 +2528,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 34,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.036,
     "streamPressure": 0.94,
     "streamDensity": 1.08,
     "boss": {
-      "hp": 31100,
-      "bite": 0.81,
+      "hp": 18300,
+      "bite": 0.55,
       "kind": "rime"
     },
     "gateValues": {
@@ -2510,41 +2566,45 @@
         "tier": 1
       },
       {
+        "beat": "fence",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
         "beat": "toll",
-        "tier": 3
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 2
+      },
+      {
+        "beat": "rest",
+        "tier": 1
       },
       {
         "beat": "ambush",
         "tier": 3
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "fence",
-        "tier": 4,
-        "prize": "x2"
-      },
-      {
-        "beat": "chargeFork",
+        "beat": "shieldGuard",
         "tier": 3
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "shieldGuard",
-        "tier": 3,
-        "prize": "x3"
+        "beat": "flip",
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 3,
@@ -2554,13 +2614,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 35,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.044,
     "streamPressure": 0.92,
     "streamDensity": 0.84,
     "boss": {
-      "hp": 31100,
-      "bite": 0.54,
+      "hp": 18600,
+      "bite": 0.65,
       "kind": "rime"
     },
     "gateValues": {
@@ -2597,11 +2657,7 @@
         "prize": "x2"
       },
       {
-        "beat": "chargeFork",
-        "tier": 3
-      },
-      {
-        "beat": "fence",
+        "beat": "toll",
         "tier": 3,
         "prize": "x2"
       },
@@ -2610,12 +2666,16 @@
         "tier": 1
       },
       {
-        "beat": "toll",
-        "tier": 4
+        "beat": "chargeFork",
+        "tier": 3
       },
       {
         "beat": "ambush",
         "tier": 3
+      },
+      {
+        "beat": "fence",
+        "tier": 4
       },
       {
         "beat": "flip",
@@ -2623,10 +2683,14 @@
       },
       {
         "beat": "prep",
-        "tier": 3
+        "tier": 2
       }
     ],
     "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 6,
@@ -2636,13 +2700,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 36,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 0.94,
     "streamPressure": 0.93,
     "streamDensity": 0.88,
     "boss": {
-      "hp": 31100,
-      "bite": 0.81,
+      "hp": 21900,
+      "bite": 0.4,
       "kind": "rime"
     },
     "gateValues": {
@@ -2680,7 +2744,12 @@
         "prize": "x2"
       },
       {
-        "beat": "ambush",
+        "beat": "toll",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "chargeFork",
         "tier": 4
       },
       {
@@ -2688,7 +2757,7 @@
         "tier": 1
       },
       {
-        "beat": "chargeFork",
+        "beat": "ambush",
         "tier": 4
       },
       {
@@ -2696,20 +2765,19 @@
         "tier": 4
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
         "beat": "fence",
-        "tier": 5,
-        "prize": "x3"
+        "tier": 4
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 5
       }
     ],
     "curses": 6,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 9,
@@ -2719,13 +2787,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 37,
-    "peakTarget": 500,
+    "peakTarget": 420,
     "hpScale": 1.06,
     "streamPressure": 0.92,
     "streamDensity": 0.8,
     "boss": {
-      "hp": 32300,
-      "bite": 0.73,
+      "hp": 22200,
+      "bite": 0.9,
       "kind": "rime"
     },
     "gateValues": {
@@ -2762,10 +2830,6 @@
       },
       {
         "beat": "toll",
-        "tier": 3
-      },
-      {
-        "beat": "shieldGuard",
         "tier": 3,
         "prize": "x2"
       },
@@ -2774,7 +2838,7 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
+        "beat": "shieldGuard",
         "tier": 3
       },
       {
@@ -2782,11 +2846,19 @@
         "tier": 3
       },
       {
+        "beat": "ambush",
+        "tier": 4
+      },
+      {
         "beat": "prep",
         "tier": 3
       }
     ],
     "curses": 4,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -2796,13 +2868,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 38,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.068,
     "streamPressure": 0.94,
     "streamDensity": 1.0,
     "boss": {
-      "hp": 32300,
-      "bite": 0.68,
+      "hp": 22600,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -2834,8 +2906,9 @@
         "tier": 1
       },
       {
-        "beat": "ambush",
-        "tier": 3
+        "beat": "toll",
+        "tier": 3,
+        "prize": "x2"
       },
       {
         "beat": "fence",
@@ -2851,9 +2924,8 @@
         "tier": 3
       },
       {
-        "beat": "toll",
-        "tier": 4,
-        "prize": "x2"
+        "beat": "ambush",
+        "tier": 4
       },
       {
         "beat": "shieldGuard",
@@ -2861,14 +2933,18 @@
       },
       {
         "beat": "flip",
-        "tier": 1
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 3
       }
     ],
     "curses": 5,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -2878,13 +2954,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 39,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.076,
     "streamPressure": 0.93,
     "streamDensity": 1.1,
     "boss": {
-      "hp": 32300,
-      "bite": 0.83,
+      "hp": 22900,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -2916,13 +2992,18 @@
         "tier": 1
       },
       {
-        "beat": "chargeFork",
-        "tier": 4
-      },
-      {
         "beat": "fence",
         "tier": 4,
         "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 4,
+        "prize": "x3"
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
       },
       {
         "beat": "rest",
@@ -2933,24 +3014,23 @@
         "tier": 4
       },
       {
-        "beat": "toll",
-        "tier": 4
-      },
-      {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
         "beat": "shieldGuard",
-        "tier": 4,
-        "prize": "x3"
+        "tier": 3
+      },
+      {
+        "beat": "flip",
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 3
       }
     ],
     "curses": 6,
+    "kit": {
+      "gateBonus": 2,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 7,
@@ -2960,13 +3040,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 40,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.084,
     "streamPressure": 0.95,
     "streamDensity": 0.77,
     "boss": {
-      "hp": 32300,
-      "bite": 0.64,
+      "hp": 23200,
+      "bite": 0.65,
       "kind": "rime"
     },
     "gateValues": {
@@ -3003,6 +3083,19 @@
         "prize": "x2"
       },
       {
+        "beat": "shieldGuard",
+        "tier": 3,
+        "prize": "x2"
+      },
+      {
+        "beat": "rest",
+        "tier": 1
+      },
+      {
+        "beat": "chargeFork",
+        "tier": 3
+      },
+      {
         "beat": "ambush",
         "tier": 4
       },
@@ -3011,28 +3104,19 @@
         "tier": 4
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
-        "beat": "chargeFork",
-        "tier": 4
-      },
-      {
-        "beat": "shieldGuard",
-        "tier": 4,
-        "prize": "x2"
-      },
-      {
         "beat": "flip",
-        "tier": 1
+        "tier": 2
       },
       {
         "beat": "prep",
-        "tier": 4
+        "tier": 3
       }
     ],
     "curses": 6,
+    "kit": {
+      "gateBonus": 3,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 9,
@@ -3042,13 +3126,13 @@
     "shieldRows": 1,
     "wallRows": 1,
     "startCount": 41,
-    "peakTarget": 500,
+    "peakTarget": 360,
     "hpScale": 1.092,
     "streamPressure": 0.93,
     "streamDensity": 1.16,
     "boss": {
-      "hp": 32600,
-      "bite": 0.78,
+      "hp": 23500,
+      "bite": 0.35,
       "kind": "rime"
     },
     "gateValues": {
@@ -3082,8 +3166,13 @@
       },
       {
         "beat": "fence",
-        "tier": 4,
+        "tier": 5,
         "prize": "x2"
+      },
+      {
+        "beat": "toll",
+        "tier": 5,
+        "prize": "x3"
       },
       {
         "beat": "chargeFork",
@@ -3102,13 +3191,8 @@
         "tier": 5
       },
       {
-        "beat": "rest",
-        "tier": 1
-      },
-      {
         "beat": "fence",
-        "tier": 5,
-        "prize": "x3"
+        "tier": 4
       },
       {
         "beat": "prep",
@@ -3116,6 +3200,10 @@
       }
     ],
     "curses": 6,
+    "kit": {
+      "gateBonus": 3,
+      "startCount": 1
+    },
     "rows": 19,
     "gateRows": 14,
     "mixedRows": 8,
@@ -3125,13 +3213,13 @@
     "shieldRows": 1,
     "wallRows": 2,
     "startCount": 42,
-    "peakTarget": 500,
+    "peakTarget": 420,
     "hpScale": 1.1,
     "streamPressure": 0.94,
     "streamDensity": 0.82,
     "boss": {
-      "hp": 33700,
-      "bite": 0.66,
+      "hp": 23800,
+      "bite": 1.2,
       "kind": "rime"
     },
     "gateValues": {

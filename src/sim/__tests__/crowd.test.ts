@@ -13,11 +13,12 @@ import { describe, expect, it } from 'vitest';
 import { createBot } from '../bots';
 import { formationOffsets } from '../formation';
 import { generateLevel } from '../level';
+import type { LevelDef } from '../level';
 import { Run } from '../Run';
 import { CROWD_SHOVED } from '../types';
 import type { CrowdState, StreamDef } from '../types';
 import { wallX } from '../walls';
-import { level, play, row, runOf, testBalance, wall } from './fixtures';
+import { dealtLevel, level, play, row, runOf, testBalance, wall } from './fixtures';
 import { balance, levelConfig } from '@/data';
 
 const DT = 1 / 60;
@@ -307,6 +308,16 @@ describe('the enemy shove', () => {
 });
 
 describe('the boss shove', () => {
+  /**
+   * Level 1 as the dealer builds it (`dealtLevel`), with its Milestone 9 boss
+   * (hp 5,200, bite 0.46): a fight of twenty-odd seconds whatever document
+   * 31's retune does to the shipped level 1. What is under test is the
+   * shove's wiring, and it needs a boss that lives long enough to walk in
+   * (on the untuned scripted level 1 the demon fell in eight seconds and the
+   * wiring went untested); a frozen dealt road gives that for good.
+   */
+  const arena = (): LevelDef => generateLevel(1, dealtLevel(1), 1);
+
   it('bows the crowd once the boss is close enough to stomp it', () => {
     // Phase A left this undone and Phase C2 wired it: the boss is not in
     // `state.enemies`, so the obstacle gatherer is offered it separately.
@@ -314,7 +325,7 @@ describe('the boss shove', () => {
     // because it never gets within a body's length of the column — it starts
     // `level.bossOffset` out and closes at half a metre a second — so without a
     // reach of its own the wiring is live and the crowd never feels a thing.
-    const run = new Run(generateLevel(1, levelConfig(1), 1), balance);
+    const run = new Run(arena(), balance);
     const bot = createBot('greedy', 1);
     const crowd = crowdOf(run);
     let bossSteps = 0;
@@ -343,7 +354,7 @@ describe('the boss shove', () => {
     const survivors = (reach: number): number => {
       const tuning = testBalance();
       tuning.enemies.boss.shoveReach = reach;
-      const run = new Run(generateLevel(1, levelConfig(1), 1), tuning);
+      const run = new Run(arena(), tuning);
       const bot = createBot('greedy', 1, tuning);
       for (let step = 0; step < 60 * 240 && run.state.status === 'running'; step++) {
         run.setTargetX(bot(run.state));

@@ -77,11 +77,16 @@ const GATE_LABEL_BAND = GATE_PLAQUE_HEIGHT * GATE_LABEL_BAND_MARGIN;
 const DESIGN_HEIGHT = 844;
 const TAN_PER_PIXEL = (2 * Math.tan(CAMERA.fov / 2)) / DESIGN_HEIGHT;
 /**
- * Half the height of a number's ink, as a share of its size: Cinzel's figures
- * are about 0.7 em tall, and the atlas strokes a 7 px outline round a 64 px
- * face (`./glyphAtlas.ts`), a little over a twentieth of an em each side.
+ * How far a number's ink reaches above and below the point it is anchored on,
+ * as a share of its size, outline included (`./glyphAtlas.ts` strokes 7 px
+ * round a 64 px face). Measured off the sheet rather than assumed symmetric:
+ * the figures sit a little low in their cell, and a 3, 5 or 9 hangs 0.47 em
+ * under the anchor where every figure's top is within 0.42 of it. With one
+ * half-height for both, a guard's number standing a metre in front of its
+ * panel was placed with its outline on the panel number's (Phase 1, wave two).
  */
-const INK_HALF = 0.42;
+const INK_ABOVE = 0.43;
+const INK_BELOW = 0.48;
 
 /**
  * Where the camera stands this frame. One per frame, re-used: the sim must not
@@ -201,7 +206,6 @@ export function placeBlockLabel(
 ): number {
   let lowest = Number.NEGATIVE_INFINITY;
   let highest = Number.POSITIVE_INFINITY;
-  const ink = INK_HALF * pixels;
 
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i];
@@ -211,7 +215,7 @@ export function placeBlockLabel(
       // Behind the row: the plaque is nearer the camera, so on screen it is
       // *in front of* the number, and the number goes over its top edge.
       const top = screenY(view, GATE_CENTER_Y + GATE_LABEL_BAND / 2, gate.z);
-      const clear = top + (ink + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
+      const clear = top + (INK_BELOW * pixels + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
       lowest = Math.max(lowest, heightAtScreen(view, clear, z));
       continue;
     }
@@ -220,7 +224,8 @@ export function placeBlockLabel(
     // this one goes far enough under it that the two inks do not touch.
     const gatePixels = labelPixels(GATE_LABEL_SIZE, GATE_LABEL_MIN, gate.z - view.squadZ);
     const number = screenY(view, GATE_CENTER_Y, gate.z);
-    const clear = number - (ink + INK_HALF * gatePixels + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
+    const inks = INK_ABOVE * pixels + INK_BELOW * gatePixels;
+    const clear = number - (inks + BLOCK_LABEL_GAP) * TAN_PER_PIXEL;
     highest = Math.min(highest, heightAtScreen(view, clear, z));
   }
 
