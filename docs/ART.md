@@ -176,6 +176,38 @@ this appended:
 > the wisp lights glow gold #ffd97a, and the wizards' hats stay violet. Same
 > framing, same safe area, no text.
 
+### Android adaptive icon layers (optional)
+
+iOS never looks at these two files; only the Android launcher does, and iOS
+ships first (D4), so the palette placeholders are good enough until an Android
+build matters. If you do generate them, they are the icon prompt split in two,
+and both must be generated separately from the icon rather than cut out of it:
+
+**Foreground** (`icon-foreground.png`, 1024×1024, transparent background):
+
+> The same violet wizard's hat and the same small gold wisp orb as the app icon
+> — violet #6d4fd6 hat with lighter violet #a48cff on the lit side, gold #f2b33d
+> band, buckle and orb with pale gold #ffd97a highlights, same stylised low-poly
+> or flat vector style with soft shading — isolated on a fully transparent
+> background, PNG with alpha. No background colour, no gradient, no bloom, no
+> shadow on the ground, no text, no border. The hat and the orb together fill
+> only the middle two thirds of the square; the outer third on every side stays
+> empty, because the launcher may crop it to a circle.
+
+**Background** (`icon-background.png`, 1024×1024, opaque):
+
+> A plain smooth vertical gradient from violet #6d4fd6 at the top to deep
+> indigo #3b2a7a at the bottom, filling the whole square edge to edge, with a
+> soft light bloom in the centre. No subject, no shapes, no text, no border, no
+> transparency.
+
+There is no foreground-and-background pair for the splash. The launch screen is
+one flat image per appearance (`splash.png`, `splash-dark.png`); the
+`--splashBackgroundColor` in `npm run cap:assets` is only the colour that fills
+the letterbox when a device's shape does not match the crop, which is why it is
+the same `#8fc6f2` the splash's edges are painted in. If you skip
+`splash-dark.png`, delete it and the light splash serves both modes.
+
 ### If your generator makes portrait images
 
 Most image generators offer 2:3 or 9:16 but not a true square at 2732. Generate
