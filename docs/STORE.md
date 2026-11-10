@@ -4,9 +4,9 @@ Everything App Store Connect will ask for, written down before it asks, so that
 nothing is invented at two in the morning with an upload waiting (Milestone 9,
 `docs/25-milestone-9-plan.md` section C).
 
-This is a **draft for the product owner to approve**, not a decision already
-taken. Two fields need a human judgement and are marked **[decide]**. Everything
-else is either a fact about the build or copy that can be used as it stands.
+The two fields that needed a human judgement (secondary category and the
+cartoon-violence row) were settled by the owner on 2026-11-10 (DEC-0008) and
+are written in below. Section 11 records what was entered in App Store Connect.
 
 `docs/DEVICE.md` is the other half: how to get a build onto a phone and into
 TestFlight. This file is only what goes *around* the build.
@@ -22,9 +22,9 @@ TestFlight. This file is only what goes *around* the build.
 | Bundle ID | `com.arcanerush.app` | The placeholder in `capacitor.config.ts`. If the owner changes it in Xcode it must change in both places — `docs/DEVICE.md` section 4. |
 | SKU | `arcane-rush-ios` | Never shown to anyone; it only has to be unique in the account. |
 | Primary language | English (U.S.) | The only language the game has. |
-| Copyright | `© 2026 <owner name>` | App Store Connect wants a legal name or company here, not a handle. |
+| Copyright | `© 2026 Berke Ucvet` | The same holder string as LS Gym Track's live listing. |
 | Primary category | Games → **Action** | The loop is a reflex loop: one thumb, a moving crowd, a lane to pick. |
-| Secondary category | Games → **Casual** | Where lane-runners are browsed. The App Store's Games list has no *Arcade* subcategory — that is Google Play's name, and it is what to pick there when Android's turn comes. The alternative here is *Family*, which widens the audience but only makes sense once the age rating in section 4 is settled at 9+. **[decide]** |
+| Secondary category | Games → **Casual** | Where lane-runners are browsed. The App Store's Games list has no *Arcade* subcategory — that is Google Play's name, and it is what to pick there when Android's turn comes. **Settled (DEC-0008).** In App Store Connect a game's two subcategories sit under the one Games category, so this is entered as Games with subcategories Action and Casual; the separate *secondary category* field is left empty. |
 | Price | Free | No ads, no IAP — a standing decision (D6), not an oversight. |
 | Age rating | see section 4 | |
 
@@ -114,7 +114,7 @@ Apple asks about the *worst* thing in the app, not the average. Answers:
 
 | Question | Answer | Why |
 |---|---|---|
-| Cartoon or Fantasy Violence | **Frequent/Intense** **[decide]** | The squad fires continuously for the whole run and enemies shatter. There is no blood, no injury and no human target — the enemies are numbered blocks, skeletons and monsters — so *Infrequent/Mild* is arguable and gives a 9+ rating instead of 13+. Answer it once, write the answer here, and never change it without a reason. |
+| Cartoon or Fantasy Violence | **Frequent/Intense** (settled, DEC-0008) | The squad fires continuously for the whole run and enemies shatter. There is no blood, no injury and no human target — the enemies are numbered blocks, skeletons and monsters — so *Infrequent/Mild* is arguable and gives a 9+ rating instead of 13+. Answer it once, write the answer here, and never change it without a reason. |
 | Realistic Violence | None | Nothing in the game is realistic, including the physics. |
 | Prolonged Graphic or Sadistic Realistic Violence | None | |
 | Profanity or Crude Humor | None | |
@@ -133,6 +133,22 @@ Apple asks about the *worst* thing in the app, not the average. Answers:
 | Age Assurance / parental gate needed | **No** | Follows from the five answers above. |
 
 Expected outcome: **9+ or 13+**, entirely decided by the first row.
+
+Settled 2026-11-10 at **Frequent/Intense**. DEC-0008's exception rule (answer
+Infrequent/Mild if at least two of three direct genre peers declare it) did not
+fire. The peers' own declarations, from the iTunes Search API that day:
+
+| Peer | Rating | Advisories |
+|---|---|---|
+| Archero (Habby) | 4+ | Loot Boxes only — no violence row declared |
+| Mob Control (Voodoo) | 12+ | Frequent/Intense Cartoon or Fantasy Violence; Frequent/Intense Contests; Loot Boxes |
+| Count Masters: Crowd Runner 3D (Freeplay) | 12+ | Infrequent/Mild Cartoon or Fantasy Violence (plus seven other Infrequent/Mild rows) |
+
+One of three declared Infrequent/Mild. App Store Connect computed **12+** from
+the answers (Korea 12, Brazil self-rated 12). The 2025 questionnaire's extra
+questions (guns or other weapons, loot boxes, messaging, user-generated content,
+social media, advertising, parental controls, age assurance, health and
+wellness, unrestricted web access) were all answered None/No.
 
 ---
 
@@ -204,8 +220,10 @@ get the real pixels, best first:
    needed; the frame rate is not real but a still does not care.
 3. **The hero capture at store size**, if we want them reproducible from a
    command. `VIEWPORT` in `scripts/smoke-browser.mjs` is 390 × 844 at scale 2;
-   a store run is 440 × 956 at scale 3. That is a small change to the capture
-   and a job for this side, not the owner.
+   a store run is 440 × 956 at scale 3. `scripts/store-shots.mjs` is that run
+   (`npx vite build && SMOKE_HERO_SCALES=3 node scripts/store-shots.mjs`); it
+   reuses the hero pages and writes 1320 × 2868 frames to `artifacts/store/hero/`.
+   This is the route the first submission's set came from (section 11).
 
 ### The set, in order
 
@@ -241,10 +259,10 @@ the app itself.
 
 | Field | Value | Required |
 |---|---|---|
-| Support URL | `https://<placeholder>/arcane-rush/support` | **Yes.** A page with an email address on it is enough. |
-| Privacy Policy URL | `https://<placeholder>/arcane-rush/privacy` | **Yes**, even with nothing collected. Section 5's paragraph is the whole page. |
-| Marketing URL | — | Optional, leave empty. |
-| Contact (review) | the owner's name, email and phone | Not published; only the review team sees it. |
+| Support URL | `https://b3vet.github.io/arcanerush-site/support.html` | **Yes.** A page with an email address on it is enough. Source: `github.com/b3vet/arcanerush-site`. |
+| Privacy Policy URL | `https://b3vet.github.io/arcanerush-site/privacy.html` | **Yes**, even with nothing collected. Section 5's paragraph is the whole page. |
+| Marketing URL | `https://b3vet.github.io/arcanerush-site/` | Optional; the site's short game page. |
+| Contact (review) | the owner's name, email and phone, as on LS Gym Track's review details | Not published; only the review team sees it. |
 
 A GitHub Pages site or a single Notion page serves for both, and the two URLs
 must resolve before the build is submitted — a 404 is a rejection.
@@ -260,6 +278,13 @@ so the triple tap is in here on purpose.
 Arcane Rush is a single-player offline game. There is no account, no login,
 no sign-in of any kind, and no demo credentials are needed — the whole game
 is available from the first launch.
+
+HOW TO PLAY
+Tap Play on the home screen, pick a level and tap Play. The squad of wizards
+fires automatically; drag a finger left and right to steer it across the road.
+Walk through gates to grow the squad, break the numbered enemies before they
+reach you, and defeat the boss at the end of the road to clear the level. Coins
+from clears are spent in the Academy rooms on the home screen.
 
 The app makes no network requests. Everything it displays is bundled in the
 app. Progress is stored on the device only.
@@ -303,3 +328,26 @@ Before the first upload:
 
 Between submissions, only two of these ever change again: the version and build
 number, and whatever the last rejection was about.
+
+---
+
+## 11. What App Store Connect holds (2026-11-10)
+
+Entered through the App Store Connect API; nothing was submitted for review.
+
+| Field | Value |
+|---|---|
+| Version | 1.0.0 (renamed from the record's default `1.0` to match the build), manual release |
+| Build | 1.0.0 (10000), `VALID`, export compliance answered by the Info.plist key, expires 2026-12-15 |
+| Name / subtitle | section 1 |
+| Description, keywords, promotional text | sections 2 and 3, unwrapped |
+| Category | Games; subcategories Action and Casual |
+| Age rating | section 4; computed 12+ |
+| Price / availability | Free, all 175 territories, new territories on |
+| Content rights | Uses third-party content, with the rights to it (CC0 packs and OFL fonts, `docs/ASSETS.md`) |
+| Copyright | `© 2026 Berke Ucvet` |
+| URLs | section 8 |
+| Review notes and contact | section 9; contact as on LS Gym Track |
+| Screenshots | the nine frames of section 7 at 1320 × 2868 (6.9" slot), from `scripts/store-shots.mjs`, uncaptioned |
+| TestFlight | internal group "arcane testers", all builds, the account holder in it |
+
